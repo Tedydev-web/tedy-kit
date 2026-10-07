@@ -1,4 +1,4 @@
-const RETRY_STATUSES = new Set([429, 500, 502, 503, 504]);
+const SERVER_ERRORS = new Set([500, 502, 503, 504]);
 
 function parse(text) {
   try {
@@ -19,7 +19,7 @@ export async function requestJson(url, { method = "GET", headers = {}, body, ret
       headers: body === undefined ? headers : { "Content-Type": "application/json", ...headers },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    if (RETRY_STATUSES.has(response.status) && attempt < retries) {
+    if ((response.status === 429 || (method === "GET" && SERVER_ERRORS.has(response.status))) && attempt < retries) {
       await wait(Number(response.headers.get("retry-after")) || 2 ** (attempt + 1));
       continue;
     }
