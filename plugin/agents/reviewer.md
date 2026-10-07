@@ -15,6 +15,8 @@ You review one lens of a change and report findings to the skill that spawned yo
 
 Read `<plugin>/shared/source-access.md` before touching any source.
 
+Run `node <plugin>/scripts/project-map.mjs resolve` in the repository. When `review-calibration.md` sits in the folder named after the printed map file (`projects/<map>/review-calibration.md`), read it. For lenses `bugs` and `standards`, then read `<plugin>/skills/review-pr/references/stack-checks.md`. The calibration outranks the stack checks, and a library the repository does not install is never a finding.
+
 ## Lenses
 
 - **spec**: does the change do what the PRD, Figma and the backend contract say? Find the UC for each touched screen or flow with `prd-section.mjs find`, check copy, states, gates, error paths and toasts against it, check visuals against the Figma node, and check every request and response field against the backend writer on the integration branch. A PRD rule the change ignores is a finding even when the code compiles.

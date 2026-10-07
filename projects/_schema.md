@@ -2,6 +2,8 @@
 
 One file per project, `projects/<name>.md`: a short note for people, then exactly one ```json block that `plugin/scripts/project-map.mjs` parses. `/tedy:setup` writes and updates maps; the user answers questions and never edits a map by hand.
 
+A folder named like the map, `projects/<name>/`, holds optional notes too long for the map: `review-calibration.md` is how the project's stack really works, read by `/tedy:review-pr` and the `reviewer` agent.
+
 A map keeps only what cannot be looked up. Repository remotes, default branches, stacks and package scripts come from the repositories each run, because a copy here goes stale.
 
 | Field | Required | Meaning |
