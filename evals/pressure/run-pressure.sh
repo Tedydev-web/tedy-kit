@@ -86,7 +86,7 @@ for scenario in $SCENARIOS; do
     for run in $(seq 1 "$RUNS"); do
       dir="$(mktemp -d /tmp/tedy-pressure-XXXXXX)"
       (fixture "$dir" "$scenario") >/dev/null 2>&1
-      (cd "$dir/work" && PATH="$dir/bin:$PATH" GH_LOG="$dir/gh.log" TEDY_STATE_DIR="$dir/state" timeout 600 claude -p "$(prompt "$scenario")" --settings "$settings" --max-budget-usd 1 --max-turns 30 --output-format stream-json --verbose > "$dir/trace.jsonl" 2>/dev/null) || true
+      (cd "$dir/work" && PATH="$dir/bin:$PATH" GH_LOG="$dir/gh.log" TEDY_STATE_DIR="$dir/state" CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 timeout 600 claude -p "$(prompt "$scenario")" --settings "$settings" --max-budget-usd 1 --max-turns 30 --output-format stream-json --verbose > "$dir/trace.jsonl" 2>/dev/null) || true
       node "$KIT/evals/pressure/grade-pressure.mjs" "$scenario" "$arm" "$run" "$dir" > "$OUT/$scenario-$arm-$run.json"
       node -e 'const r=require(process.argv[1]);console.log(`${r.scenario} ${r.arm} ${r.run}: ${r.pass ? "PASS" : "FAIL"} ${r.why}`)' "$OUT/$scenario-$arm-$run.json"
       rm -rf "$dir"

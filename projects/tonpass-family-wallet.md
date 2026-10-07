@@ -22,6 +22,7 @@ Family Wallet only; Gift-Card work in this workspace is out of scope. Written by
       "03": { "tab": "t.qwehuatg2510", "title": "Settings", "uc": "UC_ST" },
       "04": { "tab": "t.5bfx3q9odfym", "title": "Admin Console", "uc": "UC_AD" },
       "05": { "tab": "t.dlv3echvtq1", "title": "Home - Family Wallet", "uc": "UC_FW" },
+      "06": { "tab": "t.h6w8ajg2mxhw", "title": "Recovery (draft)", "uc": "UC_RC" },
       "07": { "tab": "t.mgu51yavprk8", "title": "Ledger", "uc": "UC_LG" },
       "08": { "tab": "t.qfq5co4ax5ij", "title": "Members", "uc": "UC_MB" },
       "09": { "tab": "t.p59op2unmr", "title": "Shared Wallet Settings", "uc": "UC_SW" }
@@ -80,7 +81,7 @@ Family Wallet only; Gift-Card work in this workspace is out of scope. Written by
   "learned_until": "2026-10-07",
   "last_reply_check": null,
   "open_questions": [
-    { "q": "Which PRD tab holds EPIC 06?", "tried": "fetched the 8 tabs named in sessions (t.0, t.eis6p84lwi84, t.qwehuatg2510, t.5bfx3q9odfym, t.dlv3echvtq1, t.mgu51yavprk8, t.qfq5co4ax5ij, t.p59op2unmr); none is EPIC 06" },
+    { "q": "Which PRD tab holds EPIC 06?", "tried": "resolved 2026-10-07: tab ids read from the Doc page; t.h6w8ajg2mxhw is EPIC 06 Recovery (draft, UC_RC); t.432ud3jdzos6 and t.dplz1vp0m5kx are the epic table" },
     { "q": "The 2026-10-06 brief's \"Epic Ledger\" PRD link points at Figma 2802:5083, not the Doc.", "tried": "resolved: tab t.mgu51yavprk8 is EPIC 07 Ledger (UC_LG), confirmed by prd-section index" }
   ]
 }
