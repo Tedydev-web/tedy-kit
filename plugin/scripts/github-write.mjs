@@ -67,8 +67,8 @@ export function verifyComment(comment, { prd, diff, inRepo }) {
   }
   for (const [, copy] of first.replace(/`[^`]*`/g, "").matchAll(/"([^"]+)"/g)) {
     if (diff.includes(copy) || inRepo(copy) || Object.values(prd).some((text) => quoteInText(copy, text))) continue;
-    const figma = first.match(/Figma (\d+:\d+)/);
-    if (figma) unverified.push(`"${copy}" (Figma ${figma[1]})`);
+    const figma = first.match(/figma\.com\/design\/[^\s)]*[?&]node-id=(\d+)-(\d+)/);
+    if (figma) unverified.push(`"${copy}" (Figma ${figma[1]}:${figma[2]})`);
     else refusals.push(`"${copy}" is not in the diff, the repository at the pinned head, or the PRD; quote it exactly or cite its Figma node`);
   }
   return { refusals, unverified };

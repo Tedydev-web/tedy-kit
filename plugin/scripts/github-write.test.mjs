@@ -41,8 +41,10 @@ test("a paraphrased quote, an unknown use case or a missing PRD tab is refused",
   assert.match(verifyComment(c("a.ts", 1, body("PRD EPIC 07 · UC_LG_01 step 1:", "x")), sources).refusals[0], /EPIC 07/);
 });
 
-test("quoted copy must come from the diff, the repository or the PRD unless the sentence cites a Figma node", () => {
+test("quoted copy must come from the diff, the repository or the PRD unless the sentence links its Figma frame", () => {
+  const frame = "https://www.figma.com/design/LcVgoxchcAU5J4TYLa3AQ8/Family-Wallet-UI?node-id=3846-8503&m=dev";
   assert.deepEqual(verifyComment(c("a.ts", 1, 'Câu lỗi lại ghi "propose" ạ.'), sources).refusals, []);
   assert.match(verifyComment(c("a.ts", 1, 'Nút đang là "Ask the crew" ạ.'), sources).refusals[0], /Ask the crew/);
-  assert.deepEqual(verifyComment(c("a.ts", 1, 'Ô tên chưa có counter, Figma 3846:8503 có "10/30" ạ.'), sources), { refusals: [], unverified: ['"10/30" (Figma 3846:8503)'] });
+  assert.deepEqual(verifyComment(c("a.ts", 1, `Ô tên chưa có counter, [Figma](${frame}) có "10/30" ạ.`), sources), { refusals: [], unverified: ['"10/30" (Figma 3846:8503)'] });
+  assert.match(verifyComment(c("a.ts", 1, 'Ô tên chưa có counter, Figma 3846:8503 có "10/30" ạ.'), sources).refusals[0], /10\/30/);
 });

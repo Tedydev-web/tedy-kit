@@ -20,7 +20,9 @@ The detailed diagnosis (why, how sure, how to fix) lives in the report to the us
 | Body length (characters) | median 165, max 335 | 360 |
 | Code block | 0 | none allowed |
 
-Identifiers, file names, endpoints, and library or runtime messages go in backticks: `` `PUT spending-vaults` ``, `` `Invalid address: 0` ``. Straight double quotes are only for UI copy and PRD wording, `"Ask the family"`, because the post step checks each quoted string against the diff, the repository at the pinned head, and the PRD, and refuses a miss. Copy that only Figma shows passes when the same sentence cites the node: `Figma 3846:8503 có "10/30"`.
+Identifiers, file names, endpoints, and library or runtime messages go in backticks: `` `PUT spending-vaults` ``, `` `Invalid address: 0` ``. Straight double quotes are only for UI copy and PRD wording, `"Ask the family"`, because the post step checks each quoted string against the diff, the repository at the pinned head, and the PRD, and refuses a miss. Copy that only Figma shows passes when the same sentence links the frame: `[Figma](https://www.figma.com/design/LcVgoxchcAU5J4TYLa3AQ8/Family-Wallet-UI?node-id=3846-8503&m=dev) có "10/30"`.
+
+A Figma reference is always the frame link, written as a markdown link `[Figma](<url>)` with `node-id=<a>-<b>&m=dev`, never a bare node id such as `Figma 3846:8503`: Figma cannot search by node id, so the reader needs the click (user rule, 2026-10-07).
 
 ## Samples (verbatim)
 
@@ -45,12 +47,12 @@ PRD EPIC 09 · UC_SW_08 step 3:
 PIN gate đang bị comment lại, mở app vào thẳng mà không hỏi PIN ạ.
 ```
 
-### 3. Figma node plus PRD (PR #702, `review-261005-1639-pr702-line-comments.md`)
+### 3. Figma frame link plus PRD (PR #702, `review-261005-1639-pr702-line-comments.md`, link form applied 2026-10-07)
 
 `apps/family/app/features/shared-wallet/components/settings/settings-space-edit-info.tsx:111`
 
 ```text
-Ô tên chưa có counter {n}/30, Figma 3846:8503 có "10/30" căn phải dưới field ạ.
+Ô tên chưa có counter {n}/30, [Figma](https://www.figma.com/design/LcVgoxchcAU5J4TYLa3AQ8/Family-Wallet-UI?node-id=3846-8503&m=dev) có "10/30" căn phải dưới field ạ.
 
 PRD EPIC 09 · UC_SW_02 Ordinary Sequence step 1:
 > Name field pre-filled, counter {n}/30; Save disabled.
@@ -97,3 +99,4 @@ PRD EPIC 08 · UC_MB_09 Ordinary Sequence step 1:
 | A paraphrased or translated PRD quote | The quote is checked verbatim against the full PRD tab at post time; a paraphrase fails the post |
 | Comments on a `TODO` the author left, or on Figma-identical placeholder data in a UI-only PR | User rule on #701, 2026-10-05: flag only what is wrong or unknown to the author |
 | A finding that already existed before the PR | Separate it with `git log` / `git blame`; it goes to the report, not the PR |
+| A bare Figma node id ("Figma 3411:6219") instead of the frame link | User rule 2026-10-07: Figma cannot search by node id; link the frame so one click opens it |
