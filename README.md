@@ -24,6 +24,7 @@ Plan and evidence: `~/Documents/workspace/plans/261006-1429-personal-working-sty
 | `/tedy:reconcile <scope>` | User only | Cross-checks PRD, Figma, backend, contract, frontend and demo for one scope; writes a mismatch table and raise list |
 | `/tedy:dev <task> \| rebut <review>` | User only | Builds one task (reconcile, branch, verify on the commit, two reviewer lenses, commit, report) or rebuts an external review claim by claim before any edit |
 | `/tedy:pm <scope> \| replies \| tasks <scope>` | User or model | Gaps ledger, Doc and Figma comment drafts and OpenProject task drafts in the user's style; posts after approval; checks replies |
+| `/tedy:learn [project path]` | User only | Promotes repeated corrections from a project's auto memory and the edit log into rules, role references, style samples or the project map, and deletes what they replace |
 
 ## Install
 

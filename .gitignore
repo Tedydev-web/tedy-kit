@@ -4,3 +4,6 @@ node_modules/
 !*.test.mjs
 !README.md
 plugin/evals/results/
+!plans/
+!plans/**/*
+!reports/
