@@ -16,11 +16,11 @@ The detailed diagnosis (why, how sure, how to fix) lives in the report to the us
 |---|---|---|
 | First line is one sentence ending `ạ.` | 31/31 | required |
 | PRD quote block present | 21/31 | header must be followed by `> ` |
-| Header matches `^PRD EPIC \d{2} · UC_[A-Z]{2}_\d{2} .+:$` | 21/21 | required |
+| Header matches `^PRD EPIC \d{2} · UC_[A-Z]{2}_[A-Z0-9]+ .+:$` (ids such as `UC_MB_S01`, `UC_FW_04A` exist) | 21/21 | required |
 | Body length (characters) | median 165, max 335 | 360 |
 | Code block | 0 | none allowed |
 
-Identifiers, file names, endpoints and UI copy go in backticks or straight quotes inside the sentence: `` `PUT spending-vaults` ``, `"Ask the family"`. Figma references cite the node id: `Figma 3846:8503`.
+Identifiers, file names, endpoints, and library or runtime messages go in backticks: `` `PUT spending-vaults` ``, `` `Invalid address: 0` ``. Straight double quotes are only for UI copy and PRD wording, `"Ask the family"`, because the post step checks each quoted string against the diff, the repository at the pinned head, and the PRD, and refuses a miss. Copy that only Figma shows passes when the same sentence cites the node: `Figma 3846:8503 có "10/30"`.
 
 ## Samples (verbatim)
 

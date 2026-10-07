@@ -1,0 +1,234 @@
+import { execFileSync } from "node:child_process";
+import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { pathToFileURL } from "node:url";
+import { lintComment, lintDraft, parseDraft, readDiff } from "./draft-lint.mjs";
+import { STATE_DIR } from "./hook-io.mjs";
+import { fetchTab, indexTab, quoteInText, UC_ID } from "./prd-section.mjs";
+import { resolveMap } from "./project-map.mjs";
+
+const EDIT_LOG = join(STATE_DIR, "edit-log.jsonl");
+const normalise = (text) => text.replace(/\s+/g, " ").trim();
+
+function keyed(comments) {
+  const seen = new Map();
+  return comments.map((comment) => {
+    const base = `${comment.path}:${comment.line}`;
+    const count = (seen.get(base) ?? 0) + 1;
+    seen.set(base, count);
+    return [count > 1 ? `${base}#${count}` : base, comment.body];
+  });
+}
+
+export function labelEdits(draft, final) {
+  const before = new Map(keyed(draft));
+  const after = new Map(keyed(final));
+  const entries = [];
+  for (const [key, drafted] of before) {
+    const posted = after.get(key);
+    if (posted === undefined) {
+      entries.push({ key, label: "cut", draft: drafted, posted: null });
+      continue;
+    }
+    const draftLines = new Set(drafted.split("\n").map(normalise).filter(Boolean));
+    const kept = posted.split("\n").map(normalise).filter(Boolean).every((line) => draftLines.has(line));
+    const label = normalise(posted) === normalise(drafted) ? "unchanged" : kept ? "trimmed" : "edited";
+    entries.push({ key, label, draft: drafted, posted });
+  }
+  for (const [key, posted] of after) if (!before.has(key)) entries.push({ key, label: "added", draft: null, posted });
+  return entries;
+}
+
+export function buildReviewPayload(comments, commitId) {
+  return { commit_id: commitId, event: "COMMENT", comments: comments.map(({ path, line, body }) => ({ path, line, side: "RIGHT", body })) };
+}
+
+function prdBlocks(lines) {
+  const blocks = [];
+  for (const line of lines) {
+    if (line.startsWith("PRD ")) blocks.push({ header: line, quote: [] });
+    else if (line.startsWith("> ") && blocks.length) blocks[blocks.length - 1].quote.push(line.slice(2));
+  }
+  return blocks;
+}
+
+export function verifyComment(comment, { prd, diff, inRepo }) {
+  const refusals = [];
+  const unverified = [];
+  const [first, ...rest] = comment.body.split("\n");
+  for (const { header, quote } of prdBlocks(rest)) {
+    const epic = header.match(/^PRD EPIC (\d{2}) · /)?.[1];
+    const id = header.match(UC_ID)?.[0];
+    const text = prd[epic] ?? prd["*"];
+    if (!text) {
+      refusals.push(`PRD EPIC ${epic} has no source in the project map; add it with /tedy:setup update`);
+      continue;
+    }
+    const known = prd[epic] ? indexTab(text).some((entry) => entry.id === id) : text.includes(id);
+    if (!known) refusals.push(`${id} is not a use case in PRD EPIC ${epic}`);
+    const quoted = quote.join(" ");
+    if (!quoteInText(quoted, text)) refusals.push(`the quote under "${header}" is not verbatim in the PRD: "${quoted.slice(0, 80)}"`);
+  }
+  for (const [, copy] of first.replace(/`[^`]*`/g, "").matchAll(/"([^"]+)"/g)) {
+    if (diff.includes(copy) || inRepo(copy) || Object.values(prd).some((text) => quoteInText(copy, text))) continue;
+    const figma = first.match(/Figma (\d+:\d+)/);
+    if (figma) unverified.push(`"${copy}" (Figma ${figma[1]})`);
+    else refusals.push(`"${copy}" is not in the diff, the repository at the pinned head, or the PRD; quote it exactly or cite its Figma node`);
+  }
+  return { refusals, unverified };
+}
+
+function gh(args, input) {
+  return execFileSync("gh", args, { encoding: "utf8", input, maxBuffer: 64 * 1024 * 1024, stdio: ["pipe", "pipe", "pipe"] });
+}
+
+function currentRepo(flags) {
+  return flags.repo ?? gh(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]).trim();
+}
+
+function inRepoAt(head) {
+  return (text) => {
+    try {
+      execFileSync("git", ["grep", "-F", "-q", "-e", text, head, "--"], { stdio: "ignore" });
+      return true;
+    } catch (error) {
+      if (error.status === 1) return false;
+      throw new Error(`git grep at ${head.slice(0, 8)} failed; fetch the PR head first (git fetch origin pull/<n>/head)`);
+    }
+  };
+}
+
+async function loadPrd(comments) {
+  const map = resolveMap(process.cwd())?.map;
+  const prd = {};
+  if (!map?.prd) return prd;
+  if (map.prd.files?.length) prd["*"] = map.prd.files.map((file) => readFileSync(resolve(map.paths[0], file), "utf8")).join("\n");
+  const epics = new Set(comments.flatMap((comment) => [...comment.body.matchAll(/^PRD EPIC (\d{2}) · /gm)].map((match) => match[1])));
+  for (const epic of epics) {
+    const tab = map.prd.tabs?.[epic]?.tab;
+    if (map.prd.doc && tab) prd[epic] = await fetchTab(map.prd.doc, tab);
+  }
+  return prd;
+}
+
+function logEdits(entries) {
+  mkdirSync(STATE_DIR, { recursive: true });
+  for (const entry of entries) appendFileSync(EDIT_LOG, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`);
+}
+
+async function post(file, flags) {
+  const draftText = readFileSync(file, "utf8");
+  const finalText = flags.final ? readFileSync(flags.final, "utf8") : draftText;
+  const repo = currentRepo(flags);
+  const draft = parseDraft(draftText);
+  const final = lintDraft(finalText, readDiff(parseDraft(finalText).pr, repo));
+  if (final.pr !== draft.pr || final.sha !== draft.sha) throw new Error("the final file names a different PR or head than the draft");
+  if (final.problems.length) {
+    for (const item of final.problems) console.log(`${item.index}. ${item.location}: ${item.problem}`);
+    return 1;
+  }
+  const head = gh(["pr", "view", String(final.pr), "--repo", repo, "--json", "headRefOid", "-q", ".headRefOid"]).trim();
+  if (!head.startsWith(final.sha)) {
+    console.log(`refused: PR head moved from ${final.sha} to ${head.slice(0, 8)}; review the new commits and redraft`);
+    return 1;
+  }
+  const sources = { prd: await loadPrd(final.comments), diff: readDiff(final.pr, repo), inRepo: inRepoAt(head) };
+  let refused = false;
+  for (const comment of final.comments) {
+    const { refusals, unverified } = verifyComment(comment, sources);
+    for (const reason of refusals) console.log(`refused ${comment.index}. ${comment.path}:${comment.line}: ${reason}`);
+    for (const note of unverified) console.log(`unverified ${comment.index}. ${comment.path}:${comment.line}: ${note}`);
+    refused ||= refusals.length > 0;
+  }
+  if (refused) return 1;
+  const payload = buildReviewPayload(final.comments, head);
+  console.log(`WRITE → ${repo}#${final.pr} : 1 review · ${final.comments.length} comments`);
+  if (flags["dry-run"]) {
+    console.log(JSON.stringify(payload, null, 2));
+    return 0;
+  }
+  const review = JSON.parse(gh(["api", "-X", "POST", `repos/${repo}/pulls/${final.pr}/reviews`, "--input", "-"], JSON.stringify(payload)));
+  const posted = JSON.parse(gh(["api", "--paginate", "--slurp", `repos/${repo}/pulls/${final.pr}/reviews/${review.id}/comments`])).flat();
+  for (const comment of posted) console.log(`${comment.id} ${comment.path}:${comment.line ?? comment.original_line} ${comment.side ?? "RIGHT"} ${comment.commit_id.slice(0, 8)}`);
+  logEdits(labelEdits(draft.comments, final.comments).map((entry) => ({ repo, pr: final.pr, sha: final.sha, review: review.id, ...entry })));
+  if (posted.length !== final.comments.length) {
+    console.log(`posted ${posted.length} of ${final.comments.length} comments; open the PR and check`);
+    return 1;
+  }
+  console.log(`posted ${posted.length}/${final.comments.length}: ${review.html_url}`);
+  return 0;
+}
+
+function readBody(flags) {
+  const body = (flags["body-file"] ? readFileSync(flags["body-file"], "utf8") : flags.body ?? "").trim();
+  const problems = lintComment(body);
+  if (!body || problems.length) throw new Error(`body not posted: ${problems.join("; ") || "empty"}`);
+  return body;
+}
+
+function edit(id, flags) {
+  const repo = currentRepo(flags);
+  const body = readBody(flags);
+  console.log(`WRITE → ${repo} : edit review comment ${id}`);
+  const updated = JSON.parse(gh(["api", "-X", "PATCH", `repos/${repo}/pulls/comments/${id}`, "--input", "-"], JSON.stringify({ body })));
+  logEdits([{ repo, key: String(id), label: "post-edit", draft: null, posted: body }]);
+  if (normalise(updated.body) !== normalise(body)) throw new Error(`comment ${id} body differs after PATCH`);
+  console.log(`edited ${id}: ${updated.html_url}`);
+  return 0;
+}
+
+function minimize(nodeId) {
+  console.log(`WRITE → minimize ${nodeId} as OUTDATED`);
+  const query = "mutation($id: ID!) { minimizeComment(input: {subjectId: $id, classifier: OUTDATED}) { minimizedComment { isMinimized } } }";
+  const result = JSON.parse(gh(["api", "graphql", "-f", `query=${query}`, "-f", `id=${nodeId}`]));
+  if (result.data?.minimizeComment?.minimizedComment?.isMinimized !== true) throw new Error(`${nodeId} is not minimized: ${JSON.stringify(result.errors ?? result)}`);
+  console.log(`minimized ${nodeId}`);
+  return 0;
+}
+
+function reply(pr, id, flags) {
+  const repo = currentRepo(flags);
+  const body = readBody(flags);
+  console.log(`WRITE → ${repo}#${pr} : reply to ${id}`);
+  const created = JSON.parse(gh(["api", "-X", "POST", `repos/${repo}/pulls/${pr}/comments/${id}/replies`, "--input", "-"], JSON.stringify({ body })));
+  logEdits([{ repo, pr: Number(pr), key: String(id), label: "reply", draft: null, posted: body }]);
+  console.log(`replied ${created.id}: ${created.html_url}`);
+  return 0;
+}
+
+function parseFlags(args) {
+  const positional = [];
+  const flags = {};
+  for (let index = 0; index < args.length; index += 1) {
+    if (!args[index].startsWith("--")) positional.push(args[index]);
+    else if (args[index] === "--dry-run") flags["dry-run"] = true;
+    else flags[args[index].slice(2)] = args[(index += 1)];
+  }
+  return { positional, flags };
+}
+
+const USAGE = `usage:
+  github-write.mjs post <draft.md> [--final <final.md>] [--repo <owner/repo>] [--dry-run]
+  github-write.mjs edit <comment-id> --body-file <file> [--repo <owner/repo>]
+  github-write.mjs minimize <node-id>
+  github-write.mjs reply <pr> <comment-id> --body-file <file> [--repo <owner/repo>]`;
+
+async function main([command, ...args]) {
+  const { positional, flags } = parseFlags(args);
+  if (command === "post" && positional[0]) return post(positional[0], flags);
+  if (command === "edit" && positional[0]) return edit(positional[0], flags);
+  if (command === "minimize" && positional[0]) return minimize(positional[0]);
+  if (command === "reply" && positional[1]) return reply(positional[0], positional[1], flags);
+  console.error(USAGE);
+  return 2;
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main(process.argv.slice(2)).then(
+    (code) => process.exit(code),
+    (error) => {
+      console.error(`github-write: ${error.message}`);
+      process.exit(1);
+    },
+  );
+}

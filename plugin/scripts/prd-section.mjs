@@ -3,7 +3,7 @@ import { pathToFileURL } from "node:url";
 export const MAX_WORDS = 400;
 const MAX_TEXT_HITS = 10;
 const FIELDS = ["Dependencies", "Description", "Precondition", "Actors", "Trigger", "Ordinary Sequence", "Postcondition", "Exceptions", "Alternate Flows", "Business Rules", "UI Components & Rules", "Error States"];
-const UC_ID = /UC_[A-Z]{2}_[A-Z0-9]+/;
+export const UC_ID = /UC_[A-Z]{2}_[A-Z0-9]+/;
 const HEADING = /^(UC_[A-Z]{2}_[A-Z0-9]+): (\S.*)$/;
 
 function cleanLines(text) {
