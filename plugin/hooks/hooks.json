@@ -1,0 +1,35 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/no-comments-gate.mjs\"", "timeout": 15 }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          { "type": "command", "if": "Bash(git *)", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/git-gate.mjs\"", "timeout": 60 },
+          { "type": "command", "if": "Bash(gh *)", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/git-gate.mjs\"", "timeout": 60 },
+          { "type": "command", "if": "Bash(rtk *)", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/git-gate.mjs\"", "timeout": 60 }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "compact",
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-hooks.mjs\" role-reminder", "timeout": 15 }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-hooks.mjs\" decision-nudge", "timeout": 15 }
+        ]
+      }
+    ]
+  }
+}
