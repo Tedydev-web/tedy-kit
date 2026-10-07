@@ -81,6 +81,7 @@ async function apply(client, project, drafts, file) {
     } else {
       const current = await client.request(`/api/v3/work_packages/${step.id}`);
       saved = await client.request(`/api/v3/work_packages/${step.id}`, { method: "PATCH", body: buildPayload({ ...draft, parent }, refs, current.lockVersion) });
+      if (step.adopt) writeSidecar(path, addSlugs(readSidecar(path), { [draft.slug]: step.id }));
     }
     for (const [type, targets] of [["relates", draft.relates ?? []], ["blocks", draft.blocks ?? []]]) {
       for (const target of targets) {

@@ -36,11 +36,13 @@ export function buildPayload(draft, refs, lockVersion) {
 
 export function planWrites(drafts, mapping) {
   const seen = new Set();
-  return drafts.map(({ slug }) => {
+  return drafts.map(({ slug, id }) => {
     if (!slug || RESERVED.test(slug)) throw new Error(`slug "${slug}" is missing or reserved (keys starting with _ belong to the sidecar)`);
     if (seen.has(slug)) throw new Error(`duplicate slug "${slug}" in the drafts`);
     seen.add(slug);
-    return mapping[slug] ? { slug, action: "update", id: mapping[slug] } : { slug, action: "create", id: null };
+    if (id && mapping[slug] && mapping[slug] !== id) throw new Error(`slug "${slug}" maps to #${mapping[slug]} in the sidecar, not #${id}`);
+    if (mapping[slug]) return { slug, action: "update", id: mapping[slug] };
+    return id ? { slug, action: "update", id, adopt: true } : { slug, action: "create", id: null };
   });
 }
 

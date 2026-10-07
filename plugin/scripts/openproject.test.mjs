@@ -41,6 +41,15 @@ test("planWrites updates mapped slugs, creates the rest and refuses meta keys", 
   assert.throws(() => planWrites([{ slug: "x" }, { slug: "x" }], mapping), /duplicate/);
 });
 
+test("a draft with an id updates a work package the sidecar does not know yet, and adopts its slug on apply", () => {
+  const mapping = { "task-a": 101 };
+  assert.deepEqual(planWrites([{ slug: "task-c", id: 21185 }, { slug: "task-a", id: 101 }], mapping), [
+    { slug: "task-c", action: "update", id: 21185, adopt: true },
+    { slug: "task-a", action: "update", id: 101 },
+  ]);
+  assert.throws(() => planWrites([{ slug: "task-a", id: 202 }], mapping), /maps to #101 in the sidecar, not #202/);
+});
+
 test("addSlugs appends new keys in pg-project-management's format and keeps meta keys untouched", () => {
   const before = JSON.stringify({ _relations: [], _merged: { "epic-a": 1 }, "epic-a": 1, _last_apply: "2026-10-05" }, null, 2);
   const after = addSlugs(before, { "task-b": 2, "epic-a": 1 });

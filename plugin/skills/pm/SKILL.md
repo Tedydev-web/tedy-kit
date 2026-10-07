@@ -48,6 +48,7 @@ Writing code → `/tedy:dev`. Reviewing a PR → `/tedy:review-pr`. Cross-checki
 | The scope difference is small; build to the API | Stamps per user against per family was used silently instead of raised; the user asked for such mismatches in the same turn |
 | The reply sits nearby; answer there | A new PRD question once went under an unrelated thread; new questions go to a file the user posts |
 | The preview looked fine; create them now | 2026-10-07: "soạn bản xem trước … để tôi duyệt", then "ok duyệt …, tạo luôn" |
+| The sidecar lacks this task's slug; add it so the preview says update | 2026-10-07 acceptance run: the shared sidecar was edited before approval and lost its format; the draft takes the work package `id` instead |
 
 ## Done
 

@@ -24,6 +24,7 @@ A JSON array, one object per work package:
 ```
 
 - `slug` is stable across runs: `<type>-<area>-<screen-or-behaviour>`. A slug already in the sidecar map updates that work package instead of creating a twin.
+- `id` targets an existing work package the sidecar does not know yet, such as one the PM created by hand; `apply` adds its slug to the sidecar only after that update succeeds. Nothing else writes the sidecar, so it is never edited by hand or by a script outside `apply`.
 - `parent`, `relates` and `blocks` take ids, or slugs of drafts earlier in the same file.
 - `estimate` is in hours: the agent's own estimate halved. `startDate` and `dueDate` follow the assignee's queue at 8 hours a day; ask only for the start date of a new story.
 - `status` is applied in its own PATCH after the main write. The API token moves a story only up to Ready for QA and a task to Merged, Code Review or Closed.
