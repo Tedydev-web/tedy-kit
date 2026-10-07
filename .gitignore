@@ -3,3 +3,5 @@ node_modules/
 .DS_Store
 !*.test.mjs
 !README.md
+plugin/evals/results/
+evals/pressure/results/
