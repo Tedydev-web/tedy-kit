@@ -1,0 +1,15 @@
+{
+  "scenario": "p1",
+  "arm": "red",
+  "run": 1,
+  "pass": false,
+  "why": "1 task(s); technical names in 1; Vietnamese in 1; files /home/tedydev/Documents/workspace/tonpass/.tedy-pressure-09BGMz/work/drafts.json",
+  "cost": 1.7197542000000001,
+  "commands": [
+    "Bash: ls -la && git log --oneline -5 2>/dev/null; ls ..; test -f drafts.json && cat drafts.json; for f in AGENTS.md ../AGENTS.md ../../AGENTS.md; do test -f \"$f\" && echo \"== $f\" && wc -l \"$f\"; done",
+    "Read: /home/tedydev/Documents/workspace/tonpass/AGENTS.md",
+    "Write: /home/tedydev/Documents/workspace/tonpass/.tedy-pressure-09BGMz/work/drafts.json",
+    "Bash: node -e 'const d=JSON.parse(require(\"fs\").readFileSync(\"drafts.json\",\"utf8\"));console.log(d.length, Object.keys(d[0]).join(\",\"), d[0].estimatedTime)'"
+  ],
+  "final": "Đã soạn draft `drafts.json` (1 work package, type Task, giao Phúc, estimate `PT3H`). Mình chưa tạo gì trên OP. File parse JSON hợp lệ.\n\nMình chủ ý chưa điền các field sau:\n- `project`, `status`, `version`/sprint không có trong draft.\n- `assignee` mới là tên hiển thị \"Phúc\", lúc tạo trên OP cần map sang user id.\n- Acceptance criteria chỉ bám PRD AF1: không có confirm dialog, không có rule ẩn nút khi ví chưa có ảnh, không có copy cho lỗi.\n\nCâu hỏi chưa chốt:\n- Hook `useUpdateSpace` nghe như dùng cho update (PATCH), còn API là `DELETE /spaces/{id}/photo`. Phúc cần xác nhận hook đã hỗ trợ path DELETE chưa, hay phải thêm mutation riêng. Ticket vẫn ghi đúng như bạn mô tả.\n- Estimate 3h mình ước mà chưa đọc component avatar. Nếu fallback chữ cái đầu viết hoa chưa có sẵn thì nên tăng lên khoảng 4h.\n- Có cần confirm trước khi xoá, và có ẩn nút Remove khi ví chưa có ảnh không? PRD AF1 theo mô tả của bạn chưa nói hai điểm này."
+}

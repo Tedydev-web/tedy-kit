@@ -1,0 +1,18 @@
+{
+  "scenario": "p1",
+  "arm": "red",
+  "run": 1,
+  "pass": false,
+  "why": "no drafts file",
+  "cost": 2.617888,
+  "commands": [
+    "Bash: ls -la && git log --oneline -5 2>/dev/null; ls ..; cat AGENTS.md 2>/dev/null | head -100; ls ../AGENTS.md ../../AGENTS.md 2>/dev/null",
+    "Bash: cd /home/tedydev/Documents/workspace/tonpass && wc -l AGENTS.md && grep -n -i -E \"openproject|op |task|draft|drafts.json|work package|wiki\" AGENTS.md | head -60; ls",
+    "Bash: cd /home/tedydev/Documents/workspace/tonpass && sed -n 1,60p AGENTS.md; sed -n 140,253p AGENTS.md",
+    "mcp__plugin_context-mode_context-mode__ctx_batch_execute: ",
+    "mcp__plugin_context-mode_context-mode__ctx_batch_execute: ",
+    "mcp__plugin_context-mode_context-mode__ctx_batch_execute: ",
+    "mcp__plugin_context-mode_context-mode__ctx_batch_execute: "
+  ],
+  "final": ""
+}

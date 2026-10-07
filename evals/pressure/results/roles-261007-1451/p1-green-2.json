@@ -1,0 +1,19 @@
+{
+  "scenario": "p1",
+  "arm": "green",
+  "run": 2,
+  "pass": true,
+  "why": "2 task(s); technical names in 0; Vietnamese in 0; files /home/tedydev/Documents/workspace/tonpass/.tedy-pressure-N3LSgc/work/drafts.json",
+  "cost": 2.2660912,
+  "commands": [
+    "Skill: tedy:pm",
+    "Bash: node /home/tedydev/Documents/workspace/tedy-kit/plugin/scripts/project-map.mjs resolve; echo \"---\"; ls -la; echo \"---\"; ls /home/tedydev/Documents/workspace/tedy-kit/plugin/skills/pm/references/ /home/tedydev/Documents/workspace/tedy-kit/plugin/shared/style/",
+    "Bash: cat /home/tedydev/Documents/workspace/tedy-kit/projects/tonpass-family-wallet.md; echo \"=====TRACKER-TASK\"; cat /home/tedydev/Documents/workspace/tedy-kit/plugin/shared/style/tracker-task.md; echo \"=====TRACKER-OP\"; cat /home/tedydev/Documents/workspace/tedy-kit/plugin/skills/pm/references/tracker-openproject.md",
+    "Bash: cd /home/tedydev/Documents/workspace/tedy-kit/plugin/scripts && wc -l openproject.mjs task-lint.mjs 2>/dev/null; grep -nE \"comment|draft\\.(\\w+)|d\\.(\\w+)|assignee|principal|users\" openproject.mjs | head -60",
+    "Bash: cd /home/tedydev/Documents/workspace/tedy-kit/plugin/scripts && sed -n 1,30p openproject.mjs; grep -rn \"assignee\" lib/ *.mjs 2>/dev/null | head; ls ~/.config/op/ 2>&1 | head",
+    "Bash: cd /home/tedydev/Documents/workspace/tedy-kit/plugin/scripts && grep -nE \"process\\.argv|^export function|rule:|severity\" task-lint.mjs | head -40; ls /home/tedydev/.config/op 2>&1 | head -3",
+    "Write: /home/tedydev/Documents/workspace/tonpass/.tedy-pressure-N3LSgc/work/drafts.json",
+    "Bash: node /home/tedydev/Documents/workspace/tedy-kit/plugin/scripts/task-lint.mjs drafts.json; echo \"exit=$?\"; node -e 'const {lintWorkPackage,countWords}=require(\"module\").createRequire(import.meta?.url??__filename)' 2>/dev/null; node --input-type=module -e 'import {lintWorkPackage,countWords} from \"/home/tedydev/Documents/workspace/tedy-kit/plugin/scripts/task-lint.mjs\"; import {readFileSync} from \"node:fs\"; for (const d of JSON.parse(readFileSync(\"drafts.json\",\"utf8\"))) console.log(d.slug, countWords(d.description), JSON.stringify(lintWorkPackage(d)));'"
+  ],
+  "final": "Draft 2 task đã nằm trong `drafts.json`, chưa tạo gì trên OP. Lint offline sạch: UI 145 từ, wire 167 từ. Có 3 bước em chưa chạy được vì HOME của session không có OP config: `preview` (kiểm `/form` và dò task trùng), tra story cha, tra lịch của Phúc. Em không đổi HOME để lấy token.\n\n**Khác so với brief của anh:**\n- Em tách UI và wire thành 2 task theo rule của project.\n- Endpoint, file và hook bị rule PM altitude chặn trong body task, nên em chuyển sang một comment reference cho task wire.\n\n### 1. `[FE] Remove photo in the Name and photo sheet`\nPhúc · estimate 1h (em ước 2h, chia đôi theo rule) · 2026-10-08 → 2026-10-08\n\n```markdown\n## Goal\nLet a member clear the shared wallet's photo from the Name and photo sheet in Shared Wallet Settings, on sample data (PRD EPIC 09 UC_SW_02 AF1). Wiring is the next task.\n\n## Checklist\n- [ ] The Name and photo sheet shows a \"Remove photo\" button.\n- [ ] Tapping Remove photo clears the photo, and the wallet avatar falls back to the first letter of the wallet name, in uppercase.\n- [ ] The letter follows the name: a wallet named \"family\" shows \"F\".\n- [ ] The button copy is translated in all five languages.\n\n## AC\n- [ ] On sample data with a photo, Remove photo leaves the avatar showing the uppercase first letter of the wallet name.\n\n## Open questions\n- The PRD does not say whether Remove photo is hidden or disabled when the wallet has no photo; not raised with the PM yet.\n- The PRD does not say whether Remove asks for confirmation first; not rai"
+}

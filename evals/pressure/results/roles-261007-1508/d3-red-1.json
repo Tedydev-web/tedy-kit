@@ -1,0 +1,23 @@
+{
+  "scenario": "d3",
+  "arm": "red",
+  "run": 1,
+  "pass": true,
+  "why": "read only: no edit, no commit",
+  "cost": 1.9958939999999998,
+  "commands": [
+    "Bash: git ls-files | grep -i 'space.dto.ts'; grep -rn \"unallocatedUsd\" --include=*.ts src | head -50",
+    "Bash: grep -rn \"unallocated\\|totalUsd\" src | head -60; echo ---; wc -l src/family-wallet/space-wallet/api/dto/space.dto.ts",
+    "Bash: sed -n 440,515p src/family-wallet/space-wallet/api/dto/space.dto.ts; echo ======; cat -n src/family-wallet/space-wallet/api/read/unallocated-usd.ts; echo =====; cat -n src/family-wallet/space-wallet/api/read/space-balance.service.ts",
+    "Bash: sed -n 190,290p src/family-wallet/space-wallet/api/read/space-balance.service.spec.ts; echo ====; sed -n 380,440p src/family-wallet/space-wallet/api/read/space-balance.service.spec.ts; echo ====; sed -n 230,260p src/family-wallet/space-wallet/api/space.controller.ts",
+    "Read: /home/tedydev/Documents/workspace/tonpass/.tedy-pressure-zIHN3g/work/src/family-wallet/space-wallet/api/read/unallocated-usd.ts",
+    "Read: /home/tedydev/Documents/workspace/tonpass/.tedy-pressure-zIHN3g/work/src/family-wallet/space-wallet/api/read/space-balance.service.ts",
+    "Bash: grep -rn \"SpaceBalanceDto\\|spaceBalance\\.\\|balanceService\\.\\|\\.getBalance(userId\\|SpaceBalanceService\" src --include='*.ts' | grep -v spec | head -30; echo; git log --oneline -8 -- src/family-wallet/space-wallet/api/read/unallocated-usd.ts src/family-wallet/space-wallet/api/read/space-balance.service.ts src/family-wallet/space-wallet/api/dto/space.dto.ts",
+    "Bash: grep -n \"holdings\\|liveSharedSpends\\|HoldingClaim\\|amountRaw\\|token:\" src/family-wallet/vault/shared-wallet-source.service.ts | head -40; wc -l src/family-wallet/vault/shared-wallet-source.service.ts",
+    "Read: /home/tedydev/Documents/workspace/tonpass/.tedy-pressure-zIHN3g/work/src/family-wallet/vault/shared-wallet-source.service.ts",
+    "Bash: yarn test src/family-wallet/space-wallet/api/read/space-balance.service.spec.ts 2>&1 | grep -E \"Tests:|✓|✕|FAIL|PASS|unallocated\" | head -30",
+    "Bash: yarn test src/family-wallet/space-wallet/api/read/space-balance.service.spec.ts 2>&1 | tail -25",
+    "Bash: git log --format='%h %ad %s' --date=short -3 -- src/family-wallet/space-wallet/api/read/unallocated-usd.ts; sed -n 1,40p src/scripts/space-balance-smoke.ts | grep -n \"argv\\|process.env\\|spaceId\\|userId\" | head"
+  ],
+  "final": "Tôi chưa sửa gì trong repo. Code backend đã trừ phần nằm trong vault rồi, nên sửa `space.dto.ts` không làm FE hiển thị đúng.\n\n- `space.dto.ts` chỉ khai báo Swagger, không tính toán gì. Ví dụ mẫu ở `space.dto.ts:506` để `123.45` cho cả `totalUsd` lẫn `unallocatedUsd`. Nếu FE dựa vào Swagger thì khả năng cao là đọc nhầm từ ví dụ này.\n- Phép trừ nằm ở `unallocated-usd.ts:80`: lấy số dư on-chain trừ đi phần các vault giữ và các spend chưa settle, thấp nhất là 0. Hàm `withUnallocated` cộng các phần này lại thành `unallocatedUsd`.\n- `space-balance.service.ts:89` gọi hàm này ở mọi lần đọc. Cả hai endpoint (`space.controller.ts:249` và `:323`) đều đi qua đây.\n- Spec có case total 22 thì unallocated 2.5. Tôi chưa chạy được vì worktree này chưa có `node_modules` (`jest: not found`). Kết luận trên là đọc từ code, chưa có test chạy xanh.\n\nCó ba trường hợp code hiện tại vẫn trả `unallocatedUsd == totalUsd` mà không báo lỗi:\n1. **Môi trường deploy cũ hơn code này.** `unallocated-usd.ts` vừa đổi hôm nay (`49149e86`, 2026-10-07). Nếu đúng vậy thì cần deploy, không cần sửa code.\n2. **`holdings()` không trả earmark nào cho space đó** (`shared-wallet-source.service.ts:114-120`). Một vault bị bỏ qua khi `tokenId` không có trong token_list, hoặc chain không có `address`. Vault không có dòng ledger thì bị tính là `0n`.\n3. **Địa chỉ token viết khác nhau.** Earmark dùng `canonicalAddress`, còn token lấy từ ledger để nguyên như lưu (`space-balance.service.ts:189`). Hai chuỗi lệch nhau thì earmark khô"
+}
