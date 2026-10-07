@@ -21,13 +21,13 @@ function lastAssistantText(turn) {
   return "";
 }
 
-export function decideNudge(entries, stopHookActive) {
+export function decideNudge(entries, stopHookActive, lastMessage) {
   if (stopHookActive) return { nudge: false, why: "stop-hook-active" };
   const turn = currentTurn(entries);
   const entrypoint = [...turn].reverse().find((entry) => entry.entrypoint)?.entrypoint;
   if (entrypoint && entrypoint !== "cli") return { nudge: false, why: `entrypoint-${entrypoint}` };
   if (toolUses(turn).some((use) => use.name === "AskUserQuestion")) return { nudge: false, why: "asked" };
-  const tail = visibleTail(lastAssistantText(turn));
+  const tail = visibleTail(lastMessage ?? lastAssistantText(turn));
   if (!tail) return { nudge: false, why: "no-text" };
   return PROSE_QUESTION.test(tail) ? { nudge: true, why: "prose-question", tail: tail.slice(-120) } : { nudge: false, why: "no-question" };
 }
@@ -42,7 +42,7 @@ export function activeRole(entries) {
 function runDecisionNudge() {
   const input = readHookInput();
   try {
-    const decision = decideNudge(readTranscriptTail(input.transcript_path), input.stop_hook_active === true);
+    const decision = decideNudge(readTranscriptTail(input.transcript_path), input.stop_hook_active === true, input.last_assistant_message);
     logGate({ hook: "decision-nudge", decision: decision.nudge ? "nudge" : "pass", why: decision.why, tail: decision.tail, session: input.session_id });
     if (decision.nudge) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "Stop", additionalContext: NUDGE } }));
   } catch (error) {

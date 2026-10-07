@@ -17,6 +17,13 @@ test("nudges on numbered decision lists that end with a question mark", () => {
   assert.equal(decideNudge(entries, false).nudge, true);
 });
 
+test("reads the reply from the hook input, because the transcript does not hold it yet when Stop fires", () => {
+  const entries = [prompt("đổi tên hằng số")];
+  assert.equal(decideNudge(entries, false).why, "no-text");
+  assert.equal(decideNudge(entries, false, "Anh muốn em đổi tên hằng số thành MAX_WALLET_NAME_LENGTH không?").nudge, true);
+  assert.equal(decideNudge(entries, false, "Đã đổi tên và chạy test xanh.").nudge, false);
+});
+
 test("does not nudge twice for the same stop", () => {
   assert.equal(decideNudge([prompt("x"), say("Anh chọn cách nào?")], true).nudge, false);
 });
