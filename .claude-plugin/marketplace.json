@@ -1,0 +1,14 @@
+{
+  "name": "tedy-kit",
+  "description": "Personal Claude Code kit: working style, role skills and mechanical gates.",
+  "owner": {
+    "name": "tedydev"
+  },
+  "plugins": [
+    {
+      "name": "tedy",
+      "source": "./plugin",
+      "description": "Personal working style for PR review, development and project management: role skills, output style samples, reconciliation and mechanical gates."
+    }
+  ]
+}
