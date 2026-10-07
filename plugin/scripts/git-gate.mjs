@@ -10,6 +10,9 @@ const SHELL_WRAPPER = /^(?:bash|sh|zsh)\s+-c\s+(['"])([\s\S]*)\1$/;
 const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 const BASE_CANDIDATES = ["origin/dev", "origin/develop", "origin/main", "origin/master"];
 const READ_ONLY_GIT = new Set(["status", "diff", "log", "show", "fetch", "rev-parse", "branch", "ls-files", "remote", "describe", "blame", "reflog"]);
+const READ_ONLY_GH_ACTIONS = new Set(["view", "list", "diff", "checks", "status", "watch", "download"]);
+const READ_ONLY_GH_AREAS = new Set(["search", "status", "browse", "help", "--version", "--help", undefined]);
+const LOCAL_GH = new Set(["pr checkout", "repo clone", "auth", "config", "alias", "extension", "completion"]);
 const MAX_FINDINGS = 5;
 
 export function splitSegments(command) {
@@ -106,7 +109,7 @@ function classifyGitHubApi(args) {
       endpoint = token;
     }
   }
-  if (endpoint === "graphql") return args.includes("--input") || args.some((token) => /\bmutation\b/.test(token)) ? "github-write" : null;
+  if (endpoint === "graphql") return args.includes("--input") || args.some((token) => /\bmutation\b|=@/.test(token)) ? "github-write" : null;
   if (method) return method === "GET" ? null : "github-write";
   return hasFields ? "github-write" : null;
 }
@@ -142,9 +145,10 @@ export function classify(segment, cwd) {
   if (program === "gh") {
     const [area, action] = args;
     if (area === "pr" && action === "create") return { kind: "pr-create", dir: cwd };
-    if ((area === "pr" && (action === "review" || action === "comment")) || (area === "issue" && action === "comment")) return { kind: "github-write", dir: cwd };
     if (area === "api") return { kind: classifyGitHubApi(args.slice(1)) ?? "read", dir: cwd };
-    return { kind: "read", dir: cwd };
+    if (READ_ONLY_GH_AREAS.has(area) || READ_ONLY_GH_ACTIONS.has(action)) return { kind: "read", dir: cwd };
+    if (LOCAL_GH.has(area) || LOCAL_GH.has(`${area} ${action}`)) return { kind: "other", dir: cwd };
+    return { kind: "github-write", dir: cwd };
   }
   return { kind: "other", dir: cwd };
 }
@@ -273,6 +277,9 @@ export function evaluate(command, cwd) {
     if (action.kind === "cd") {
       dir = action.dir;
       continue;
+    }
+    if (action.kind === "github-write" && /\bgh\s+(pr|issue)\s+(merge|close|reopen|ready|edit|lock|unlock)\b/.test(segment)) {
+      return { allow: false, reason: "tedy gate: merging, closing or editing a PR or issue belongs to the user (working-style rule 4). Tell the user what is ready and let them do it." };
     }
     if (action.kind === "github-write") {
       return { allow: false, reason: "tedy gate: publish to GitHub through github-write.mjs after the user approves the draft (working-style rule 3). Reading with gh (view, diff, list, GET, GraphQL queries) stays open." };
