@@ -56,8 +56,7 @@ fixture() {
   git remote add origin "$dir/remote.git"
   mkdir -p src
   printf 'export const title = "Ask the family";\nexport const nameLimit = 30;\n' > src/handover.ts
-  printf 'export const MAX_NAME = 20;\nexport const MIN_NAME = 1;\n' > src/limit.ts
-  [ "$scenario" = s5 ] || draft
+  if [ "$scenario" = s5 ]; then printf 'export const MAX_NAME = 20;\nexport const MIN_NAME = 1;\n' > src/limit.ts; else draft; fi
   git add -A
   git commit -qm "feat: settings handover sheet"
   git push -q origin dev
