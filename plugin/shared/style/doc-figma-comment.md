@@ -17,7 +17,9 @@ How a comment on the PRD Doc or on a Figma frame reads: a quick chat between tea
 - Ends with "nha" for a requested change (4/14) or a question ending "a?" for a decision (5/14).
 - Pinned to the node it talks about. Median 266 characters, longest 517.
 
-## Samples (verbatim)
+## Samples
+
+Figma samples are the posted text re-read from the Figma API. Doc samples are the text as sent, taken from the request payloads in the PM session; sample 2 is the final text after its PATCH.
 
 ### 1. Doc, two options and a decision asked, 2026-10-05
 

@@ -21,6 +21,7 @@ Plan and evidence: `~/Documents/workspace/plans/261006-1429-personal-working-sty
 |---|---|---|
 | `/tedy:review-pr <PR>` | User or model | Reviews a teammate's PR against PRD, Figma and backend code, drafts hints, posts after approval |
 | `/tedy:setup [update]` | User only | Builds or updates the project map through guided questions |
+| `/tedy:reconcile <scope>` | User only | Cross-checks PRD, Figma, backend, contract, frontend and demo for one scope; writes a mismatch table and raise list |
 
 ## Install
 
