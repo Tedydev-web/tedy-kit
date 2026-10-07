@@ -18,6 +18,11 @@ export function rootOf(comments, id) {
   return comment;
 }
 
+const squash = (text) => text.replace(/\s+/g, " ").trim();
+
+export const duplicateOnNode = (comments, node, body) =>
+  comments.find((comment) => !comment.parent_id && !comment.resolved_at && comment.client_meta?.node_id === node && squash(comment.message) === squash(body));
+
 export function threadsSince(comments, since) {
   const roots = comments.filter((comment) => !comment.parent_id);
   return roots
@@ -65,6 +70,8 @@ async function main([command, target, ...rest]) {
     const nodes = await figma.request(`/files/${figma.file}/nodes?ids=${encodeURIComponent(node)}`);
     const box = nodes.nodes?.[node]?.document?.absoluteBoundingBox;
     if (!box) throw new Error(`node ${node} not found in ${figma.file}`);
+    const twin = duplicateOnNode((await figma.request(`/files/${figma.file}/comments`)).comments, node, body);
+    if (twin) throw new Error(`comment ${twin.id} on node ${node} already says this; nothing posted`);
     console.log(`WRITE → Figma ${figma.file} node ${node} : 1 comment`);
     const created = await figma.request(`/files/${figma.file}/comments`, { method: "POST", body: { message: body, client_meta: { node_id: node, node_offset: pinOffset(box) } } });
     await verify(figma, created.id, body);

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pinOffset, rootOf, threadsSince } from "./figma-comments.mjs";
+import { duplicateOnNode, pinOffset, rootOf, threadsSince } from "./figma-comments.mjs";
 import { findQuoteRange, tokenFromDump } from "./gdoc-comments.mjs";
 
 test("a Figma pin sits at half the width and three quarters of the height of the node", () => {
@@ -53,4 +53,14 @@ test("findQuoteRange maps a quote across text runs to UTF-16 document indexes in
   assert.deepEqual(findQuoteRange(document, "t.p59op2unmr", "Tiếp"), { startIndex: 31, endIndex: 35, tabId: "t.p59op2unmr" });
   assert.throws(() => findQuoteRange(document, "t.p59op2unmr", "Ask the family"), /not found/);
   assert.throws(() => findQuoteRange(document, "t.p59op2unmr", "t"), /appears \d+ times/);
+});
+
+test("a Figma post that repeats an open comment on the same node is caught; another node or a resolved thread is not", () => {
+  const comments = [
+    { id: "1", parent_id: "", resolved_at: null, client_meta: { node_id: "3445:6702" }, message: "@PM_leon  nút này\nđổi tên chưa a?" },
+    { id: "2", parent_id: "", resolved_at: "2026-10-01T00:00:00Z", client_meta: { node_id: "3445:6703" }, message: "@PM_leon nút này đổi tên chưa a?" },
+  ];
+  assert.equal(duplicateOnNode(comments, "3445:6702", "@PM_leon nút này đổi tên chưa a?").id, "1");
+  assert.equal(duplicateOnNode(comments, "3445:6703", "@PM_leon nút này đổi tên chưa a?"), undefined);
+  assert.equal(duplicateOnNode(comments, "3445:6702", "@PM_leon câu khác nha"), undefined);
 });
