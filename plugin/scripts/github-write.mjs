@@ -181,6 +181,17 @@ function minimize(nodeId) {
   return 0;
 }
 
+function resolveThreads(threadIds) {
+  const query = "mutation($id: ID!) { resolveReviewThread(input: {threadId: $id}) { thread { isResolved } } }";
+  for (const threadId of threadIds) {
+    console.log(`WRITE → resolve review thread ${threadId}`);
+    const result = JSON.parse(gh(["api", "graphql", "-f", `query=${query}`, "-f", `id=${threadId}`]));
+    if (result.data?.resolveReviewThread?.thread?.isResolved !== true) throw new Error(`${threadId} is not resolved: ${JSON.stringify(result.errors ?? result)}`);
+    console.log(`resolved ${threadId}`);
+  }
+  return 0;
+}
+
 function reply(pr, id, flags) {
   const repo = currentRepo(flags);
   const body = readBody(flags);
@@ -206,6 +217,7 @@ const USAGE = `usage:
   github-write.mjs post <draft.md> [--repo <owner/repo>] [--dry-run]
   github-write.mjs edit <comment-id> --body-file <file> [--repo <owner/repo>]
   github-write.mjs minimize <node-id>
+  github-write.mjs resolve <thread-node-id>...
   github-write.mjs reply <pr> <comment-id> --body-file <file> [--repo <owner/repo>]`;
 
 async function main([command, ...args]) {
@@ -213,6 +225,7 @@ async function main([command, ...args]) {
   if (command === "post" && positional[0]) return post(positional[0], flags);
   if (command === "edit" && positional[0]) return edit(positional[0], flags);
   if (command === "minimize" && positional[0]) return minimize(positional[0]);
+  if (command === "resolve" && positional.length) return resolveThreads(positional);
   if (command === "reply" && positional[1]) return reply(positional[0], positional[1], flags);
   console.error(USAGE);
   return 2;
