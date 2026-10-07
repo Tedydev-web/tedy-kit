@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { addSlugs, buildPayload, loadConfig, loadRefs, planWrites, readSidecar, sidecarPath, writeSidecar } from "./openproject-client.mjs";
+import { closestWorkPackage, listWorkPackages } from "./openproject-dedup.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { snapshotOnce, snapshotPath } from "./draft-lint.mjs";
 import { appendEditLog, frozenOriginal, labelText } from "./edit-log.mjs";
@@ -18,11 +19,15 @@ async function check(client, project, drafts) {
   const mapping = JSON.parse(readSidecar(sidecarPath(client.host, project)));
   const plan = planWrites(drafts, mapping);
   const refs = await loadRefs(client, project);
+  const existing = plan.some((step) => step.action === "create") ? await listWorkPackages(client, project) : [];
   let failed = false;
   const locks = {};
   for (const [index, draft] of drafts.entries()) {
     const step = plan[index];
-    const blocks = lintWorkPackage(draft).filter((finding) => finding.severity === "BLOCK");
+    const findings = lintWorkPackage(draft);
+    const blocks = findings.filter((finding) => finding.severity === "BLOCK");
+    const warns = findings.filter((finding) => finding.severity === "WARN").map((finding) => finding.rule);
+    const similar = step.action === "create" ? closestWorkPackage(draft, existing) : null;
     let form = "form skipped: parent not created yet";
     const parent = resolveParent(draft, mapping, {});
     if (!(typeof draft.parent === "string" && !parent)) {
@@ -36,7 +41,8 @@ async function check(client, project, drafts) {
     }
     failed ||= blocks.length > 0;
     const lint = blocks.length ? `lint ${blocks.map((finding) => finding.rule).join(", ")}` : `lint clean (${countWords(draft.description ?? "")} words)`;
-    console.log(`${step.action}${step.id ? ` #${step.id}` : ""} ${draft.slug} | ${lint} | ${form}`);
+    const notes = `${warns.length ? ` | warn ${warns.join(", ")}` : ""}${similar ? ` | similar #${similar.id} ${similar.score.toFixed(2)} "${similar.subject}"` : ""}`;
+    console.log(`${step.action}${step.id ? ` #${step.id}` : ""} ${draft.slug} | ${lint} | ${form}${notes}`);
   }
   const creates = plan.filter((step) => step.action === "create").length;
   console.log(`WRITE → ${client.host} · project ${project} : ${creates} create · ${plan.length - creates} update`);

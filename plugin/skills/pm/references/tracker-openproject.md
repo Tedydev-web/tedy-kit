@@ -33,7 +33,7 @@ A JSON array, one object per work package:
 | Command | Writes | What it does |
 |---|---|---|
 | `get <api path>` | no | Any GET, for example `/api/v3/work_packages/21298` |
-| `preview <drafts.json>` | no | `task-lint` on every draft, then the `/form` endpoint validates each payload; prints create or update per slug and the `WRITE →` line |
+| `preview <drafts.json>` | no | `task-lint` on every draft, then the `/form` endpoint validates each payload; prints create or update per slug, lint warnings, the closest existing work package of the same type (`similar #id score`, from 0.60) for each create, and the `WRITE →` line. A `similar` row is linked or updated instead, or the ledger says why it is new |
 | `apply <drafts.json>` | yes | Refuses unless preview is clean; creates or updates, adds relations and status, adds new slugs to the sidecar, reads every work package back and prints `verified N/N` |
 
 `apply` triggers the permission prompt. The sidecar `~/.config/op/sync/<host>__<project>.map.json` is shared with `pg-project-management`: `apply` only appends new slug keys in the same format and never touches `_relations`, `_merged`, `_last_apply` or `_forced_pushes`.

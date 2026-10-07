@@ -24,6 +24,7 @@ const BARE_NODE_ID = /(?<![\w:/=.-])\d{3,6}:\d{3,6}(?![\w:])/g;
 const WORD = /[\p{L}\p{M}\p{N}_]+/gu;
 const PARAM_SEGMENT_WORDS = 6;
 const LINE_WORD_CEILING = 30;
+const OVERSIZE_HOURS = 16;
 
 const readable = (text) => text.replace(LINK_TARGET, "]").replace(BARE_URL, " ");
 const prose = (text) => readable(text.replace(CODE_SPAN, " "));
@@ -61,7 +62,7 @@ function findSection(found, alternatives) {
 
 const checkboxes = (body) => (body.match(CHECKBOX) ?? []).length;
 
-export function lintWorkPackage({ type, subject = "", description = "" }) {
+export function lintWorkPackage({ type, subject = "", description = "", estimate }) {
   const kind = String(type ?? "").trim().toLowerCase();
   if (!REQUIRED[kind]) return [];
   const findings = [];
@@ -96,6 +97,7 @@ export function lintWorkPackage({ type, subject = "", description = "" }) {
   if (fat.length) warn("line-oversize", `${fat.length} checklist line(s) over ${LINE_WORD_CEILING} words: ${fat[0].trim().slice(0, 70)}…`);
   const bare = prose(description).match(BARE_NODE_ID) ?? [];
   if (bare.length) warn("design-ref-bare", `bare design node id(s) ${bare.slice(0, 3).join(", ")}; link the on-screen title to the frame`);
+  if ((kind === "task" || kind === "bug") && estimate > OVERSIZE_HOURS) warn("estimate-oversize", `${estimate} h > ${OVERSIZE_HOURS} h; a task this big hides unknowns, split it`);
   return findings;
 }
 

@@ -50,3 +50,8 @@ test("a task subject without a component tag and a bare node id are warnings onl
   const findings = lintWorkPackage({ ...task, subject: "Vault limit pop-up", description: `${task.description}\nSee 4408:8157.` });
   assert.deepEqual(findings.map((finding) => `${finding.severity} ${finding.rule}`).sort(), ["WARN design-ref-bare", "WARN subject-tag"]);
 });
+
+test("a task estimated over 16 hours is a warning to split it; 16 hours passes", () => {
+  assert.deepEqual(lintWorkPackage({ ...task, estimate: 20 }).map((finding) => `${finding.severity} ${finding.rule}`), ["WARN estimate-oversize"]);
+  assert.deepEqual(lintWorkPackage({ ...task, estimate: 16 }), []);
+});
