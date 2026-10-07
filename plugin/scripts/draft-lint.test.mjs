@@ -86,3 +86,15 @@ test("lintDraft asks new drafts to use the colon header", () => {
   const { problems } = lintDraft(draft([{ path: "src/a.ts", line: 12, body: "Giá trị đang là 3 ạ." }], "# PR #1 — comment line by line (head abcdef12)"), DIFF);
   assert.ok(problems.some((problem) => /header/.test(problem.problem)));
 });
+
+test("the first clean lint freezes the original once, so later edits by the user stay measurable", async () => {
+  const { mkdtempSync, readFileSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const { join } = await import("node:path");
+  const { snapshotOnce, snapshotPath } = await import("./draft-lint.mjs");
+  const dir = mkdtempSync(join(tmpdir(), "tedy-snap-"));
+  const first = snapshotOnce("/w/plans/reports/review-x.md", "original", dir);
+  assert.equal(first, snapshotPath("/w/plans/reports/review-x.md", dir));
+  assert.equal(snapshotOnce("/w/plans/reports/review-x.md", "edited by the user", dir), null);
+  assert.equal(readFileSync(first, "utf8"), "original");
+});

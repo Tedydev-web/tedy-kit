@@ -1,6 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { STATE_DIR } from "./hook-io.mjs";
 import { UC_ID } from "./prd-section.mjs";
 
 export const MAX_BODY = 360;
@@ -99,6 +101,18 @@ export function lintDraft(text, diffText) {
   return { ...parsed, problems };
 }
 
+export function snapshotPath(file, dir = join(STATE_DIR, "drafts")) {
+  return join(dir, resolve(file).replace(/\//g, "_"));
+}
+
+export function snapshotOnce(file, text, dir) {
+  const path = snapshotPath(file, dir);
+  if (existsSync(path)) return null;
+  mkdirSync(join(path, ".."), { recursive: true });
+  writeFileSync(path, text);
+  return path;
+}
+
 export function readDiff(pr, repo) {
   const args = ["pr", "diff", String(pr), ...(repo ? ["--repo", repo] : [])];
   return execFileSync("gh", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
@@ -116,6 +130,8 @@ function main([kind, file, ...flags]) {
   const result = lintDraft(text, diffText);
   if (!result.problems.length) {
     console.log(`clean: ${result.comments.length} comments, PR #${result.pr}, head ${result.sha}`);
+    const frozen = snapshotOnce(file, text);
+    if (frozen) console.log(`original frozen for the edit log: ${frozen}`);
     return 0;
   }
   for (const item of result.problems) console.log(`${item.index}. ${item.location}: ${item.problem}`);

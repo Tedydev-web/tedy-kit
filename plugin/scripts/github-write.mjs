@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { appendFileSync, mkdirSync, readFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { lintComment, lintDraft, parseDraft, readDiff } from "./draft-lint.mjs";
+import { lintComment, lintDraft, parseDraft, readDiff, snapshotPath } from "./draft-lint.mjs";
 import { STATE_DIR } from "./hook-io.mjs";
 import { fetchTab, indexTab, quoteInText, UC_ID } from "./prd-section.mjs";
 import { resolveMap } from "./project-map.mjs";
@@ -117,12 +117,12 @@ function logEdits(entries) {
 }
 
 async function post(file, flags) {
-  const draftText = readFileSync(file, "utf8");
-  const finalText = flags.final ? readFileSync(flags.final, "utf8") : draftText;
+  const finalText = readFileSync(file, "utf8");
+  const original = existsSync(snapshotPath(file)) ? readFileSync(snapshotPath(file), "utf8") : finalText;
   const repo = currentRepo(flags);
-  const draft = parseDraft(draftText);
+  const draft = parseDraft(original);
   const final = lintDraft(finalText, readDiff(parseDraft(finalText).pr, repo));
-  if (final.pr !== draft.pr || final.sha !== draft.sha) throw new Error("the final file names a different PR or head than the draft");
+  if (final.pr !== draft.pr || final.sha !== draft.sha) throw new Error(`the draft now names a different PR or head than the frozen original at ${snapshotPath(file)}`);
   if (final.problems.length) {
     for (const item of final.problems) console.log(`${item.index}. ${item.location}: ${item.problem}`);
     return 1;
@@ -208,7 +208,7 @@ function parseFlags(args) {
 }
 
 const USAGE = `usage:
-  github-write.mjs post <draft.md> [--final <final.md>] [--repo <owner/repo>] [--dry-run]
+  github-write.mjs post <draft.md> [--repo <owner/repo>] [--dry-run]
   github-write.mjs edit <comment-id> --body-file <file> [--repo <owner/repo>]
   github-write.mjs minimize <node-id>
   github-write.mjs reply <pr> <comment-id> --body-file <file> [--repo <owner/repo>]`;
