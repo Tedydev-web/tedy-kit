@@ -39,10 +39,10 @@ A statement taken from prose (README, AGENTS.md, a PR description, a memory note
    Conclusion is `khớp`, `lệch`, or `thiếu nguồn`. Owner is the PM, the designer, the backend team, the blockchain team or the frontend.
 6. **Raise list.** Every `lệch` without a documented reason and every `đoán` row, each with both sides quoted and the owner named. Name the side the truth ladder favours when it does; when it does not (PRD against Figma), say so.
 7. **Independent lens.** When the scope has more than 8 items, spawn the `reviewer` agent with lens `spec` on the frontend repository and wait for its completion notice before writing the table. One rule or one use case needs no lens.
-8. **Report.** `<paths[0]>/plans/reports/reconcile-<yymmdd-hhmm>-<slug>.md`: scope, item list, sources read and skipped, the table, the raise list. Quote the table and the raise list in the reply.
+8. **Report.** `<paths[0]>/plans/reports/reconcile-<yymmdd-hhmm>-<slug>.md`: scope, item list, coverage (how many of the requirements in the scoped PRD sections, counting steps, BRs, AFs, EFs and UI rules, have a row or a stated reason to skip), sources read and skipped, the table, the raise list. Quote the coverage, the table and the raise list in the reply.
 
 ## Done
 
 Every item has a conclusion from every source that exists, every `đọc thấy` cell can be re-checked from its citation, and every unexplained `lệch` is in the raise list with an owner.
 
-Drafting Doc or Figma comments and tracker tasks from the raise list belongs to the PM role, which arrives in a later slice; say so in the report's next steps.
+Drafting Doc or Figma comments and tracker tasks from the raise list belongs to `/tedy:pm`; building the frontend side of a fix belongs to `/tedy:dev`.

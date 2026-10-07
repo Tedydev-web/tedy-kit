@@ -23,6 +23,7 @@ Plan and evidence: `~/Documents/workspace/plans/261006-1429-personal-working-sty
 | `/tedy:setup [update]` | User only | Builds or updates the project map through guided questions |
 | `/tedy:reconcile <scope>` | User only | Cross-checks PRD, Figma, backend, contract, frontend and demo for one scope; writes a mismatch table and raise list |
 | `/tedy:dev <task> \| rebut <review>` | User only | Builds one task (reconcile, branch, verify on the commit, two reviewer lenses, commit, report) or rebuts an external review claim by claim before any edit |
+| `/tedy:pm <scope> \| replies \| tasks <scope>` | User or model | Gaps ledger, Doc and Figma comment drafts and OpenProject task drafts in the user's style; posts after approval; checks replies |
 
 ## Install
 

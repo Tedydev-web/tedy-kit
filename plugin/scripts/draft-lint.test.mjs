@@ -98,3 +98,13 @@ test("the first clean lint freezes the original once, so later edits by the user
   assert.equal(snapshotOnce("/w/plans/reports/review-x.md", "edited by the user", dir), null);
   assert.equal(readFileSync(first, "utf8"), "original");
 });
+
+test("chat comments: Figma opens with a handle, Doc tags nobody, both stay short and plain", async () => {
+  const { lintChatComment } = await import("./draft-lint.mjs");
+  assert.deepEqual(lintChatComment('@mckinsie.donyle63 Hint đổi "The family votes on it." thành "The group votes on it." nha', "figma"), []);
+  assert.deepEqual(lintChatComment("Thêm 1 ý ở UC_LG_01 BR8: e đang hiểu là gồm cả 2, a xác nhận giúp e nha", "doc"), []);
+  assert.ok(lintChatComment("Hint đổi thành group nha", "figma").some((problem) => /@handle/.test(problem)));
+  assert.ok(lintChatComment("@PM_leon chốt giúp e nha", "doc").some((problem) => /tags nobody/.test(problem)));
+  assert.ok(lintChatComment(`@a ${"x ".repeat(400)}`, "figma").some((problem) => /600/.test(problem)));
+  assert.ok(lintChatComment("@a Anh ơi xem giúp e", "figma").some((problem) => /openers/.test(problem)));
+});

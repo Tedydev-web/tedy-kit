@@ -14,13 +14,13 @@ How an OpenProject work package reads. Measured on the 82 work packages created 
 
 | Type | Count | Words, median / max | Checklist max | AC max |
 |---|---|---|---|---|
-| Task [FE] | 40 | 145 / 243 | 8 | 2 |
-| Task [BE] | 16 | 135 / 211 | 8 | 3 |
-| Task [Admin-FE], [Admin-BE] | 6 | 153–184 / 214 | 6 | 1 |
-| Bug | 12 | 75 / 131 | none | 2 |
-| User story | 5 | 85 / 123 | none | 3 |
+| Task [FE] | 40 | 144 / 232 | 8 | 2 |
+| Task [BE] | 16 | 143 / 218 | 8 | 3 |
+| Task [Admin-FE], [Admin-BE] | 6 | 152–184 / 209 | 6 | 1 |
+| Bug | 12 | 74 / 136 | none | 2 |
+| User story | 5 | 86 / 126 | none | 3 |
 
-Word count leaves out headings, checkbox markers and URLs. Limits: a task at most 220 words (a few reached 243–255 and were the exception, not the target), Checklist at most 8, AC at most 6.
+Words are counted the way `task-lint.mjs` counts them: word characters only, with headings, checkbox markers and URLs left out. Limits, enforced by `task-lint.mjs` (a port of `pg-project-management`'s `op_lint.py`): task at most 220 words, story 180, epic 300; Checklist at most 8; AC at most 6. Two published tasks went over (#21266 at 228, #21157 at 232); the limit stays, they are the exception. People's names and quoted Figma frame titles keep their Vietnamese spelling; any other Vietnamese prose is blocked.
 
 ## Rules the samples carry
 

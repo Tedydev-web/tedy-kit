@@ -6,6 +6,7 @@ import { STATE_DIR } from "./hook-io.mjs";
 import { UC_ID } from "./prd-section.mjs";
 
 export const MAX_BODY = 360;
+export const MAX_CHAT = 600;
 const HEADER = /^# PR #(\d+)(:| —) comment line by line \(head ([0-9a-f]{7,40})\)\s*$/m;
 const SECTION = /^## (\d+)\. `([^`]+):(\d+)`\s*$/gm;
 const PRD_HEADER = new RegExp(`^PRD EPIC \\d{2} · ${UC_ID.source} .+:$`);
@@ -80,6 +81,19 @@ export function lintComment(body) {
   return problems;
 }
 
+export function lintChatComment(text, channel) {
+  const problems = [];
+  const body = text.normalize("NFC").trim();
+  if (!body) return ["the comment is empty"];
+  if (body.includes("```")) problems.push("no code block in a comment");
+  if (body.length > MAX_CHAT) problems.push(`comment is ${body.length} characters; keep it at or under ${MAX_CHAT}`);
+  if (/anh ơi|cảm ơn|thank/i.test(body)) problems.push('drop openers and fillers such as "Anh ơi" or "cảm ơn"');
+  if (FOREIGN_SCRIPT.test(body.replace(/`[^`]*`/g, ""))) problems.push("non-Latin characters outside backticks");
+  if (channel === "figma" && !/^@\S/.test(body)) problems.push("a Figma comment opens with the @handle of whoever owns the fix");
+  if (channel === "doc" && /(^|\s)@\S/.test(body)) problems.push("a Doc comment tags nobody");
+  return problems;
+}
+
 export function lintDraft(text, diffText) {
   const parsed = parseDraft(text);
   const problems = [];
@@ -119,8 +133,14 @@ export function readDiff(pr, repo) {
 }
 
 function main([kind, file, ...flags]) {
+  if ((kind === "doc-comment" || kind === "figma-comment") && file) {
+    const problems = lintChatComment(readFileSync(file, "utf8"), kind.replace("-comment", ""));
+    for (const problem of problems) console.log(problem);
+    if (!problems.length) console.log(`clean: ${kind}`);
+    return problems.length ? 1 : 0;
+  }
   if (kind !== "pr-comment" || !file) {
-    console.error("usage: draft-lint.mjs pr-comment <draft.md> [--diff <file>] [--repo <owner/repo>]");
+    console.error("usage: draft-lint.mjs pr-comment <draft.md> [--diff <file>] [--repo <owner/repo>] | doc-comment <body.txt> | figma-comment <body.txt>");
     return 2;
   }
   const flag = (name) => (flags.includes(name) ? flags[flags.indexOf(name) + 1] : undefined);

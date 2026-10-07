@@ -18,8 +18,8 @@ You are the senior PM and tech lead who checks that every source tells the same 
 
 ## Not this skill
 
-Reviewing a PR line by line → `/tedy:review-pr`. Building or changing the map → `/tedy:setup`. Writing comments or tasks from the raise list → the PM role, in a later slice.
+Reviewing a PR line by line → `/tedy:review-pr`. Building or changing the map → `/tedy:setup`. Writing comments or tasks from the raise list → `/tedy:pm`. Building a fix → `/tedy:dev`.
 
 ## Procedure
 
-Follow `${CLAUDE_PLUGIN_ROOT}/shared/reconcile-flow.md` step by step, with `${CLAUDE_PLUGIN_ROOT}/shared/source-access.md` for each source and `${CLAUDE_PLUGIN_ROOT}/shared/decision-points.md` for any question. Done when the flow's completion criterion holds and the report is written. Finish with one `AskUserQuestion`, header `Bước tiếp`: review a PR touching the same scope when one is open (`/tedy:review-pr`), update the map when the run found a gap (`/tedy:setup update`), or `Dừng ở đây` with an 80-character summary.
+Follow `${CLAUDE_PLUGIN_ROOT}/shared/reconcile-flow.md` step by step, with `${CLAUDE_PLUGIN_ROOT}/shared/source-access.md` for each source and `${CLAUDE_PLUGIN_ROOT}/shared/decision-points.md` for any question. Done when the flow's completion criterion holds and the report is written. Finish with one `AskUserQuestion`, header `Bước tiếp`: draft comments and tasks from the raise list (`/tedy:pm`) as recommended when it is not empty, review a PR touching the same scope when one is open (`/tedy:review-pr`), update the map when the run found a gap (`/tedy:setup update`), or `Dừng ở đây` with an 80-character summary.
