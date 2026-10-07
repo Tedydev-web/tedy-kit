@@ -55,7 +55,7 @@ Family Wallet only; Gift-Card work in this workspace is out of scope. Written by
     "project": 183,
     "rules": [
       "One task is one branch and one PR into dev; never merge.",
-      "Create FE tasks only, never [BE]; a missing API goes into the FE wire task.",
+      "Write [FE] tasks by default; write [BE] or [Admin-BE] tasks only when the user asks (2026-10-05, 2026-10-06), checked against PRD and design with extra care, and never for the backend team's own queue (Tân, 2026-10-05). A missing API otherwise goes into the FE wire task's open questions.",
       "Always split UI and wire into two tasks, even when one person does both.",
       "Write at PM altitude: no function, file or endpoint names in the task; technical notes go in a reference comment; at most 220 words.",
       "Every new task carries an estimate (the agent's estimate halved) and start and due dates scheduled at 8 hours a day per assignee; ask only for the start date of a new story.",
