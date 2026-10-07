@@ -100,3 +100,4 @@ PRD EPIC 08 · UC_MB_09 Ordinary Sequence step 1:
 | Comments on a `TODO` the author left, or on Figma-identical placeholder data in a UI-only PR | User rule on #701, 2026-10-05: flag only what is wrong or unknown to the author |
 | A finding that already existed before the PR | Separate it with `git log` / `git blame`; it goes to the report, not the PR |
 | A bare Figma node id ("Figma 3411:6219") instead of the frame link | User rule 2026-10-07: Figma cannot search by node id; link the frame so one click opens it |
+| A second or third reply stacked on one thread | User rule 2026-10-07 (#681): edit the existing reply into one sentence covering what is still open; minimize extras |

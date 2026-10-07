@@ -27,6 +27,7 @@ node <plugin>/scripts/github-write.mjs resolve <thread-node-id>...
 ```
 
 - `reply`: one Vietnamese sentence ending `ạ.`, same lint as a review comment; for "not fixed yet" or a rebuttal.
+- One reply per thread: if the user already replied on the thread, `edit` that reply into one sentence covering everything still open instead of adding another; if extra replies exist, merge them and `minimize` the rest (user rule 2026-10-07, PR #681: "nhiều quá vậy, trùng như vậy sẽ khó cho Tín").
 - `edit`: rewording a comment the user asked to change; the old text stays in the edit log.
 - `minimize`: hides an outdated comment as OUTDATED instead of deleting it, for "xoá các comment cũ".
 - `resolve <thread-node-id>...`: only when the user asks in that turn to resolve, and only threads whose fix you verified in code at the current head (or whose question was answered and checked); list them with the evidence first, then resolve. Threads waiting on BE/PM or on an open reply stay open.
