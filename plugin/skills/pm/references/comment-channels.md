@@ -18,14 +18,15 @@ Every write below prints a `WRITE →` line, triggers the permission prompt, lin
 `node <plugin>/scripts/gdoc-comments.mjs` with the map's `prd.doc`; the token comes from the `gdrive` rclone remote.
 
 - `list [--since <ISO>]`: comments with their replies and quoted text.
-- `post --body-file <f>`: an unanchored comment through the Drive API. The opening "Thêm 1 ý ở UC_xx BRn:" tells the reader where it belongs.
-- `reply <comment-id> --body-file <f>`: a reply in that thread, only when the reply is on the thread's topic. A new question opens a new comment.
-- `anchor --tab <t.id> --quote "<exact text>" --body-file <f>`: a comment anchored on that passage through the Docs API. The quote must appear exactly once in the tab.
+- `reply <comment-id> --body-file <f>`: a reply in that thread, only when it is on the thread's topic. A reply placed under an unrelated thread hides the question from the PM; on 2026-10-07 nine such replies had to be re-anchored.
+- `anchor --tab <t.id> --quote "<exact text>" --body-file <f>`: a new question anchored on the passage it is about, through the Docs API. The quote must appear exactly once in the tab.
 
-`anchor` needs the user's own OAuth client, because rclone's shared client cannot call the Docs API and is being retired during 2026:
+A new question is always anchored. Without the user's own OAuth client, `anchor` refuses, and the question goes into an HTML hand-off file instead: `plans/reports/pm-comments-<yymmdd-hhmm>-<slug>.html`, one item per question with the exact text to highlight (checked with `prd-section.mjs find` to appear exactly once in the current tab) and the comment text, so the user highlights and posts it.
+
+When the PM answers in a thread but the PRD text still says the old thing, add a question asking the PM to write the decision into the PRD.
+
+Enabling `anchor` (rclone's shared client cannot call the Docs API and is being retired during 2026):
 
 1. In Google Cloud Console, create a project, enable the Google Drive API and the Google Docs API.
 2. Create an OAuth client of type Desktop app. Set the consent screen to Internal for a Workspace account, or publish it to Production; a Testing consent screen expires the refresh token after 7 days.
 3. `rclone config update gdrive client_id=<id> client_secret=<secret>`, then `rclone config reconnect gdrive:` and sign in again.
-
-Until then `anchor` refuses with these steps, and `post` stays available.

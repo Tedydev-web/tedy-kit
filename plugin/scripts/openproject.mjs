@@ -1,7 +1,9 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { addSlugs, buildPayload, loadConfig, loadRefs, planWrites, readSidecar, sidecarPath, writeSidecar } from "./openproject-client.mjs";
 import { resolveMap } from "./project-map.mjs";
+import { snapshotOnce, snapshotPath } from "./draft-lint.mjs";
+import { appendEditLog, frozenOriginal, labelText } from "./edit-log.mjs";
 import { countWords, lintWorkPackage } from "./task-lint.mjs";
 
 function projectOf(flags) {
@@ -17,6 +19,7 @@ async function check(client, project, drafts) {
   const plan = planWrites(drafts, mapping);
   const refs = await loadRefs(client, project);
   let failed = false;
+  const locks = {};
   for (const [index, draft] of drafts.entries()) {
     const step = plan[index];
     const blocks = lintWorkPackage(draft).filter((finding) => finding.severity === "BLOCK");
@@ -25,6 +28,7 @@ async function check(client, project, drafts) {
     if (!(typeof draft.parent === "string" && !parent)) {
       const target = step.action === "create" ? `/api/v3/projects/${project}/work_packages/form` : `/api/v3/work_packages/${step.id}/form`;
       const lockVersion = step.action === "update" ? (await client.request(`/api/v3/work_packages/${step.id}`)).lockVersion : undefined;
+      if (lockVersion !== undefined) locks[draft.slug] = lockVersion;
       const result = await client.request(target, { method: "POST", body: buildPayload({ ...draft, parent }, refs, lockVersion) });
       const errors = Object.values(result?._embedded?.validationErrors ?? {}).map((error) => error.message);
       form = errors.length ? `form errors: ${errors.join("; ")}` : "form ok";
@@ -36,13 +40,25 @@ async function check(client, project, drafts) {
   }
   const creates = plan.filter((step) => step.action === "create").length;
   console.log(`WRITE → ${client.host} · project ${project} : ${creates} create · ${plan.length - creates} update`);
-  return { failed, plan, refs, mapping };
+  return { failed, plan, refs, mapping, locks };
 }
 
-async function apply(client, project, drafts) {
-  const { failed, plan, refs, mapping } = await check(client, project, drafts);
+const locksPath = (file) => `${snapshotPath(file)}.locks.json`;
+
+async function apply(client, project, drafts, file) {
+  const { failed, plan, refs, mapping, locks } = await check(client, project, drafts);
   if (failed) {
     console.log("refused: fix the lint and form findings above, then preview again");
+    return 1;
+  }
+  if (!existsSync(locksPath(file))) {
+    console.log("refused: run preview on this drafts file first");
+    return 1;
+  }
+  const previewed = JSON.parse(readFileSync(locksPath(file), "utf8"));
+  const moved = Object.entries(locks).filter(([slug, version]) => previewed[slug] !== version);
+  if (moved.length) {
+    for (const [slug] of moved) console.log(`refused: ${slug} changed in OpenProject since the preview; read its activity, then preview again`);
     return 1;
   }
   const path = sidecarPath(client.host, project);
@@ -94,8 +110,26 @@ async function main([command, target, ...rest]) {
   if ((command === "preview" || command === "apply") && target) {
     const drafts = JSON.parse(readFileSync(target, "utf8"));
     const project = projectOf(flags);
-    if (command === "preview") return (await check(client, project, drafts)).failed ? 1 : 0;
-    return apply(client, project, drafts);
+    if (command === "preview") {
+      const { failed, locks } = await check(client, project, drafts);
+      if (!failed && snapshotOnce(target, readFileSync(target, "utf8"))) console.log("original drafts frozen for the edit log");
+      if (!failed) writeFileSync(locksPath(target), JSON.stringify(locks));
+      return failed ? 1 : 0;
+    }
+    const original = frozenOriginal(target);
+    const originals = original ? Object.fromEntries(JSON.parse(original).map((draft) => [draft.slug, draft])) : {};
+    const code = await apply(client, project, drafts, target);
+    if (code !== 0) return code;
+    const text = (item) => `${item.subject}\n${item.description}`;
+    const kept = new Set(drafts.map((draft) => draft.slug));
+    appendEditLog([
+      ...drafts.map((draft) => {
+        const before = originals[draft.slug];
+        return { channel: "tracker-task", key: draft.slug, label: before ? labelText(text(before), text(draft)) : original ? "added" : "no-original", draft: before ? text(before) : null, posted: text(draft) };
+      }),
+      ...Object.values(originals).filter((draft) => !kept.has(draft.slug)).map((draft) => ({ channel: "tracker-task", key: draft.slug, label: "cut", draft: text(draft), posted: null })),
+    ]);
+    return code;
   }
   console.error("usage: openproject.mjs get <api path> | preview <drafts.json> [--project <id>] | apply <drafts.json> [--project <id>]");
   return 2;

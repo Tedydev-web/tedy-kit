@@ -3,12 +3,13 @@ import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { requestJson } from "./api-request.mjs";
 import { lintChatComment } from "./draft-lint.mjs";
+import { logPostedText } from "./edit-log.mjs";
 import { resolveMap } from "./project-map.mjs";
 
 const DRIVE = "https://www.googleapis.com/drive/v3";
 const DOCS = "https://docs.googleapis.com/v1";
 const COMMENT_FIELDS = "id,content,createdTime,modifiedTime,resolved,author(displayName,me),quotedFileContent(value),replies(id,content,createdTime,author(displayName,me))";
-const OWN_CLIENT_STEPS = "anchored comments need your own Google OAuth client: create a Desktop OAuth client with the Drive and Docs APIs enabled, then `rclone config update gdrive client_id=… client_secret=…` and `rclone config reconnect gdrive:` (plugin/skills/pm/references/comment-channels.md)";
+const OWN_CLIENT_STEPS = "anchored comments need your own Google OAuth client; until then write the question into the HTML hand-off file described in comment-channels.md. To enable anchoring: create a Desktop OAuth client with the Drive and Docs APIs enabled, then `rclone config update gdrive client_id=… client_secret=…` and `rclone config reconnect gdrive:` (plugin/skills/pm/references/comment-channels.md)";
 
 export function tokenFromDump(dumpText, remote) {
   const config = JSON.parse(dumpText)[remote];
@@ -93,14 +94,11 @@ async function main([command, target, ...rest]) {
     }
     return 0;
   }
-  if (command === "post" || (command === "reply" && target) || command === "anchor") {
+  if ((command === "reply" && target) || command === "anchor") {
     const body = readBody(flags);
     const google = await session(flags, command === "anchor");
     let id;
-    if (command === "post") {
-      console.log(`WRITE → Google Doc ${google.doc} : 1 unanchored comment`);
-      id = (await google.request(`${DRIVE}/files/${google.doc}/comments?fields=id`, { method: "POST", body: { content: body } })).id;
-    } else if (command === "reply") {
+    if (command === "reply") {
       console.log(`WRITE → Google Doc ${google.doc} thread ${target} : 1 reply`);
       await google.request(`${DRIVE}/files/${google.doc}/comments/${target}/replies?fields=id`, { method: "POST", body: { content: body } });
       id = target;
@@ -114,9 +112,10 @@ async function main([command, target, ...rest]) {
     const found = comments.some((comment) => (command === "reply" ? comment.id === id && comment.replies.some((reply) => reply.content.trim() === body) : comment.content.trim() === body));
     if (!found) throw new Error("the comment could not be read back with the same text");
     console.log("posted and read back unchanged");
+    logPostedText(command === "reply" ? "doc-reply" : "doc-comment", flags["body-file"], id ?? "anchored", body);
     return 0;
   }
-  console.error("usage: gdoc-comments.mjs list [--since <ISO>] [--doc <id>] | post --body-file <f> | reply <comment-id> --body-file <f> | anchor --tab <t.id> --quote <exact text> --body-file <f>");
+  console.error("usage: gdoc-comments.mjs list [--since <ISO>] [--doc <id>] | reply <comment-id> --body-file <f> | anchor --tab <t.id> --quote <exact text> --body-file <f>");
   return 2;
 }
 

@@ -1,13 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { lintComment, lintDraft, parseDraft, readDiff, snapshotPath } from "./draft-lint.mjs";
-import { STATE_DIR } from "./hook-io.mjs";
+import { appendEditLog, labelText } from "./edit-log.mjs";
 import { fetchTab, indexTab, quoteInText, UC_ID } from "./prd-section.mjs";
 import { resolveMap } from "./project-map.mjs";
 
-const EDIT_LOG = join(STATE_DIR, "edit-log.jsonl");
 const normalise = (text) => text.replace(/\s+/g, " ").trim();
 
 function keyed(comments) {
@@ -30,10 +29,7 @@ export function labelEdits(draft, final) {
       entries.push({ key, label: "cut", draft: drafted, posted: null });
       continue;
     }
-    const draftLines = new Set(drafted.split("\n").map(normalise).filter(Boolean));
-    const kept = posted.split("\n").map(normalise).filter(Boolean).every((line) => draftLines.has(line));
-    const label = normalise(posted) === normalise(drafted) ? "unchanged" : kept ? "trimmed" : "edited";
-    entries.push({ key, label, draft: drafted, posted });
+    entries.push({ key, label: labelText(drafted, posted), draft: drafted, posted });
   }
   for (const [key, posted] of after) if (!before.has(key)) entries.push({ key, label: "added", draft: null, posted });
   return entries;
@@ -112,8 +108,7 @@ async function loadPrd(comments) {
 }
 
 function logEdits(entries) {
-  mkdirSync(STATE_DIR, { recursive: true });
-  for (const entry of entries) appendFileSync(EDIT_LOG, `${JSON.stringify({ ts: new Date().toISOString(), ...entry })}\n`);
+  appendEditLog(entries.map((entry) => ({ channel: "pr-comment", ...entry })));
 }
 
 async function post(file, flags) {

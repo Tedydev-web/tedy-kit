@@ -136,7 +136,11 @@ function main([kind, file, ...flags]) {
   if ((kind === "doc-comment" || kind === "figma-comment") && file) {
     const problems = lintChatComment(readFileSync(file, "utf8"), kind.replace("-comment", ""));
     for (const problem of problems) console.log(problem);
-    if (!problems.length) console.log(`clean: ${kind}`);
+    if (!problems.length) {
+      console.log(`clean: ${kind}`);
+      const frozen = snapshotOnce(file, readFileSync(file, "utf8"));
+      if (frozen) console.log(`original frozen for the edit log: ${frozen}`);
+    }
     return problems.length ? 1 : 0;
   }
   if (kind !== "pr-comment" || !file) {

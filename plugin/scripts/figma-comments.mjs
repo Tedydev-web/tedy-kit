@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { requestJson } from "./api-request.mjs";
 import { lintChatComment } from "./draft-lint.mjs";
+import { logPostedText } from "./edit-log.mjs";
 import { resolveMap } from "./project-map.mjs";
 
 const API = "https://api.figma.com/v1";
@@ -67,6 +68,7 @@ async function main([command, target, ...rest]) {
     console.log(`WRITE → Figma ${figma.file} node ${node} : 1 comment`);
     const created = await figma.request(`/files/${figma.file}/comments`, { method: "POST", body: { message: body, client_meta: { node_id: node, node_offset: pinOffset(box) } } });
     await verify(figma, created.id, body);
+    logPostedText("figma-comment", flags["body-file"], created.id, body);
     return 0;
   }
   if (command === "reply" && target) {
@@ -76,6 +78,7 @@ async function main([command, target, ...rest]) {
     console.log(`WRITE → Figma ${figma.file} thread ${root.id} : 1 reply`);
     const created = await figma.request(`/files/${figma.file}/comments`, { method: "POST", body: { message: body, comment_id: root.id } });
     await verify(figma, created.id, body);
+    logPostedText("figma-reply", flags["body-file"], created.id, body);
     return 0;
   }
   if (command === "delete" && target) {
