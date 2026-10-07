@@ -21,6 +21,7 @@ node <plugin>/scripts/prd-section.mjs find <doc> <tab> "UC_SW_08 BR3"
 
 ## Figma
 
+- Without the Figma MCP tools in the session, read through the REST token: `node <plugin>/scripts/figma-read.mjs text <node>` prints frames with ids and the exact copy of every text layer, and `figma-read.mjs image <node>` saves a PNG under `/tmp` to open with Read. Figma is never skipped for lack of MCP.
 - `mcp__figma__get_metadata` with the file key and node id gives structure and layer names; `mcp__figma__get_screenshot` gives the visual; `mcp__figma__get_design_context` only when exact copy, spacing or tokens matter, because its output is large.
 - A URL `node-id=3846-8503` is node `3846:8503` for the MCP tools. Anything a person reads (PR comments, Doc or Figma comments, tracker tasks, reports) cites the frame as its link, `https://www.figma.com/design/<file>/<file-name>?node-id=3846-8503&m=dev`, plus the label visible on screen; a bare node id is not searchable in Figma (user rule, 2026-10-07).
 - HTTP 429 carries `Retry-After`; wait that long once, then report the limit instead of looping.

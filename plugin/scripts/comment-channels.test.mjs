@@ -64,3 +64,9 @@ test("a Figma post that repeats an open comment on the same node is caught; anot
   assert.equal(duplicateOnNode(comments, "3445:6703", "@PM_leon nút này đổi tên chưa a?"), undefined);
   assert.equal(duplicateOnNode(comments, "3445:6702", "@PM_leon câu khác nha"), undefined);
 });
+
+test("figma-read lists frames with ids and the exact copy of every text layer, indented by depth", async () => {
+  const { textLines } = await import("./figma-read.mjs");
+  const tree = { type: "FRAME", name: "Name and photo", id: "3846:8420", children: [{ type: "TEXT", characters: "Change  photo\n" }, { type: "GROUP", name: "Actions", id: "3846:9", children: [{ type: "TEXT", characters: "Save" }] }] };
+  assert.deepEqual(textLines(tree), ['frame Name and photo (3846:8420)', '  "Change photo"', "  group Actions (3846:9)", '    "Save"']);
+});

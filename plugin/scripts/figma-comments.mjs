@@ -30,7 +30,7 @@ export function threadsSince(comments, since) {
     .filter(({ root, replies }) => !since || [root, ...replies].some((comment) => comment.created_at >= since));
 }
 
-function client(flags) {
+export function client(flags) {
   const token = readFileSync(join(homedir(), ".config", "figma", "token"), "utf8").trim();
   const file = flags.file ?? resolveMap(process.cwd())?.map.figma?.file;
   if (!file) throw new Error("no --file and no figma.file in the project map");
