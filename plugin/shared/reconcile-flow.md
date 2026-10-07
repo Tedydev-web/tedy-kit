@@ -33,7 +33,7 @@ A statement taken from prose (README, AGENTS.md, a PR description, a memory note
 4. **Compare** along the truth ladder, item by item.
 5. **Table.** One row per item and side that disagrees, in this shape:
 
-   | Item | PRD (locator: quote) | Figma (node: label or copy) | Backend / contract (`path:line@branch`) | Frontend (`path:line`) | Conclusion | Label | Owner of the fix |
+   | Item | PRD (locator: quote) | Figma (frame link: label or copy) | Backend / contract (`path:line@branch`) | Frontend (`path:line`) | Conclusion | Label | Owner of the fix |
    |---|---|---|---|---|---|---|---|
 
    Conclusion is `khớp`, `lệch`, or `thiếu nguồn`. Owner is the PM, the designer, the backend team, the blockchain team or the frontend.
