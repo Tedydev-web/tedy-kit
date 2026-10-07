@@ -12,12 +12,12 @@ How `/tedy:setup` builds and updates a project map. This file is the single sour
 
 1. `node <plugin>/scripts/project-map.mjs doctor` in the current directory.
 2. `READY`: show the result, then offer the update menu below.
-3. No map, or `NOT_READY`: gather candidates before asking anything.
-   - Git repositories under the workspace: remote, `origin/HEAD`, and the base branch of the last 30 merged PRs (`gh pr list --repo <owner>/<repo> --state merged --limit 30 --json baseRefName`).
-   - Stack markers: `package.json`, `nest-cli.json`, `foundry.toml`, `tact.config.json`, `go.mod`.
-   - Instruction files: `AGENTS.md`, `CLAUDE.md`, and the project's auto memory under `~/.claude/projects/<path-with-dashes>/memory/`.
-   - Links: `docs.google.com/document/d/…` and `figma.com/design/…` in those files and in `docs/`; PRD markdown under `docs/prd/`. Reading old session transcripts for links happens only after the user says yes in this flow.
-   - For each Google Doc tab found, `prd-section.mjs index <doc> <tab>` to learn its epic and use case prefix.
+3. No map, or `NOT_READY`: run `node <plugin>/scripts/project-map.mjs discover` from the workspace root before asking anything. It prints JSON with:
+   - `repos[]`: remote, `origin/HEAD`, the integration branch with its evidence (base of the last 30 merged PRs, else `dev`/`develop`/`staging`), stack markers, and the package scripts that check code.
+   - `instructions[]`: `AGENTS.md` and `CLAUDE.md` at the root and in each repository.
+   - `prdFiles[]`: PRD markdown under `docs/`.
+   - `links`: Google Doc ids with tabs and Figma files with nodes, each with the files it came from (instruction files, READMEs, `docs/`, the project's auto memory).
+   Then, for each Doc tab found, `prd-section.mjs index <doc> <tab>` to learn its epic and use case prefix. Old session transcripts are read for links only after the user says yes in this flow.
 4. Ask the tier-3 gaps, one topic per call, grouped: repositories (role, readonly), languages, PRD and Figma per epic, tracker, then optional team, gotchas and truth overrides. Offer "bỏ qua" for optional groups.
 5. Write `projects/<name>.md` with Write: a two-line note for people, then the ```json block. Run `doctor` again until `READY`.
 6. Commit the map in the kit repository (`git -C <plugin>/.. add projects/<name>.md`, then commit with `feat: add <name> project map` or `feat: update <name> project map`). Push only after the user approves it through the push prompt.

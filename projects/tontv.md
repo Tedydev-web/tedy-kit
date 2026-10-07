@@ -19,6 +19,10 @@ TonTV Telegram Mini App, backend and admin. Written by `/tedy:setup`; edit throu
       "docs/prd/PRD_TonTV_Ads_Platform.md"
     ]
   },
+  "figma": {
+    "file": "JDcE1IjytGhR4Dd8ecBCup",
+    "nodes": { "all": [{ "node": "0:1", "label": "TONtv_Design_2" }] }
+  },
   "verify_gotchas": [
     "tontv-be production deploys only through a manual Jenkins build with DEPLOY=true; land production config in a PR to production first, then back-merge production into dev with a merge commit."
   ],
@@ -26,7 +30,7 @@ TonTV Telegram Mini App, backend and admin. Written by `/tedy:setup`; edit throu
   "learned_until": "2026-10-07",
   "last_reply_check": null,
   "open_questions": [
-    { "q": "Is there a Figma file for TONtv?", "tried": "AGENTS.md, CLAUDE.md, README.md, docs/ and each repo's README and docs; docs/design holds only .pen files" }
+    { "q": "Is there a Figma file for TONtv?", "tried": "resolved 2026-10-07: the TMA PRD (docs/TonTV - Telegram Mini App - Product Requirements Document.md:8027) links TONtv_Design_2; epic-level nodes are still unmapped" }
   ]
 }
 ```

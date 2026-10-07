@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { fetchTab } from "./prd-section.mjs";
+import { discover } from "./project-discover.mjs";
 
 export const PROJECTS_DIR = fileURLToPath(new URL("../../projects/", import.meta.url));
 
@@ -124,6 +125,10 @@ async function doctor(cwd) {
 
 async function main([command, cwd = process.cwd()]) {
   if (command === "doctor") return doctor(cwd);
+  if (command === "discover") {
+    console.log(JSON.stringify(discover(cwd), null, 1));
+    return 0;
+  }
   if (command === "resolve" || command === "missing") {
     const resolved = resolveMap(cwd);
     if (!resolved) {
@@ -138,7 +143,7 @@ async function main([command, cwd = process.cwd()]) {
     console.log(`required: ${gaps.required.join(", ") || "none"}\noptional: ${gaps.optional.join(", ") || "none"}`);
     return gaps.required.length ? 1 : 0;
   }
-  console.error("usage: project-map.mjs doctor|resolve|missing [cwd]");
+  console.error("usage: project-map.mjs doctor|resolve|missing|discover [cwd]");
   return 2;
 }
 
