@@ -117,7 +117,6 @@ function classifyGitHubApi(args) {
 export function classify(segment, cwd) {
   let tokens = tokenize(segment);
   while (tokens.length && ENV_ASSIGNMENT.test(tokens[0])) tokens = tokens.slice(1);
-  if (tokens[0] === "rtk") tokens = tokens.slice(1);
   const [program, ...args] = tokens;
   if (program === "cd") return { kind: "cd", dir: resolve(cwd, args[0] ?? homedir()) };
   if (program === "git") {

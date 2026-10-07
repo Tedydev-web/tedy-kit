@@ -42,7 +42,7 @@ AgentKit does not manage `~/.claude/CLAUDE.md`; if the line ever disappears, add
 User settings this kit relies on (`~/.claude/settings.json`):
 - `outputStyle: "God Mode (Level 5)"`.
 - `skillOverrides` set to `"user-invocable-only"` for `ak-review-pr`, `ak-code-review`, `pg-review-pr`, `pg-project-management`, `code-review`.
-- `permissions.ask` covering push, PR create/merge and `github-write.mjs`, in plain and `rtk`-prefixed forms; when the rtk rewrite hook is active, permission rules match the rewritten command. Verified 2026-10-07: a fresh session prompts for `node …/github-write.mjs` and runs other `node` commands freely.
+- `permissions.ask` covering push, PR create/merge and `github-write.mjs`, in plain form (rtk was removed on 2026-10-07; while it was installed, its rewrite hook made permission rules miss commands). Verified 2026-10-07: a fresh session prompts for `node …/github-write.mjs` and runs other `node` commands freely.
 
 After every Claude Code update, run `bash evals/probes/run-probes.sh` and compare with `plans/reports/probe-261007-tedy-kit-open-questions-resolved.md`.
 

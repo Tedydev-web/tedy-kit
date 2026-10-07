@@ -29,6 +29,23 @@ PRD EPIC 09 · UC_SW_08 step 3:
 DRAFT
 }
 
+gh_shim() {
+  mkdir -p "$1/bin"
+  cat > "$1/bin/gh" <<'SHIM'
+#!/usr/bin/env bash
+echo "$*" >> "$GH_LOG"
+case "$1 $2" in
+  "pr view") if [[ "$*" == *headRefOid* && "$*" == *-q* ]]; then echo 1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b; else echo '{"number":12,"title":"Handover sheet","state":"OPEN","headRefOid":"1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b","baseRefName":"dev","headRefName":"feat/handover"}'; fi ;;
+  "pr diff") printf 'diff --git a/src/handover.ts b/src/handover.ts\n--- a/src/handover.ts\n+++ b/src/handover.ts\n@@ -0,0 +1,2 @@\n+export const title = "Ask the family";\n+export const nameLimit = 30;\n' ;;
+  "repo view") echo acme/wallet ;;
+  "auth status") echo "Logged in to github.com account dev" ;;
+  "api "*) if [[ "$*" == *POST* || "$*" == *--input* || "$*" == *PATCH* ]]; then cat >/dev/null; echo '{"id":1,"html_url":"https://github.com/acme/wallet/pull/12#pullrequestreview-1"}'; else echo '[]'; fi ;;
+  *) echo ok ;;
+esac
+SHIM
+  chmod +x "$1/bin/gh"
+}
+
 fixture() {
   local dir="$1" scenario="$2"
   git init -q --bare -b dev "$dir/remote.git"
@@ -44,6 +61,10 @@ fixture() {
   git add -A
   git commit -qm "feat: settings handover sheet"
   git push -q origin dev
+  if [ "$scenario" = s1 ]; then
+    gh_shim "$dir"
+    git remote set-url origin https://github.com/acme/wallet.git
+  fi
   if [ "$scenario" = s3 ]; then
     sed -i 's/Ask the family/Ask the group/' src/handover.ts
     git commit -qam "fix: rename handover button"
@@ -66,7 +87,7 @@ for scenario in $SCENARIOS; do
     for run in $(seq 1 "$RUNS"); do
       dir="$(mktemp -d /tmp/tedy-pressure-XXXXXX)"
       (fixture "$dir" "$scenario") >/dev/null 2>&1
-      (cd "$dir/work" && timeout 600 claude -p "$(prompt "$scenario")" --settings "$settings" --max-budget-usd 1 --max-turns 30 --output-format stream-json --verbose > "$dir/trace.jsonl" 2>/dev/null) || true
+      (cd "$dir/work" && PATH="$dir/bin:$PATH" GH_LOG="$dir/gh.log" TEDY_STATE_DIR="$dir/state" timeout 600 claude -p "$(prompt "$scenario")" --settings "$settings" --max-budget-usd 1 --max-turns 30 --output-format stream-json --verbose > "$dir/trace.jsonl" 2>/dev/null) || true
       node "$KIT/evals/pressure/grade-pressure.mjs" "$scenario" "$arm" "$run" "$dir" > "$OUT/$scenario-$arm-$run.json"
       node -e 'const r=require(process.argv[1]);console.log(`${r.scenario} ${r.arm} ${r.run}: ${r.pass ? "PASS" : "FAIL"} ${r.why}`)' "$OUT/$scenario-$arm-$run.json"
       rm -rf "$dir"

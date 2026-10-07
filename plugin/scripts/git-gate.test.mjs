@@ -35,8 +35,8 @@ test("splitSegments handles chains, pipes, newlines and shell wrappers", () => {
   assert.deepEqual(splitSegments('echo "a && b"'), ['echo "a && b"']);
 });
 
-test("classify recognises git and gh actions through rtk, env vars and -C", () => {
-  assert.deepEqual(classify("rtk git push origin x", "/w"), { kind: "push", dir: "/w" });
+test("classify recognises git and gh actions through env vars and -C", () => {
+  assert.deepEqual(classify("git push origin x", "/w"), { kind: "push", dir: "/w" });
   assert.deepEqual(classify("FOO=1 git -C sub commit -am msg", "/w"), { kind: "commit", dir: "/w/sub", all: true });
   assert.deepEqual(classify("git -c core.x=y push", "/w"), { kind: "push", dir: "/w" });
   assert.equal(classify("gh pr create --fill", "/w").kind, "pr-create");
@@ -80,7 +80,7 @@ test("push is denied while tracked files are dirty", () => {
 test("push is allowed when clean and commits add no comments", () => {
   writeFileSync(join(repo, "src", "a.ts"), "// legacy note\nexport const a = 3;\n");
   git(repo, "commit", "-qam", "change value");
-  assert.equal(evaluate("cd . && rtk git push", repo).allow, true);
+  assert.equal(evaluate("cd . && git push", repo).allow, true);
   git(repo, "push", "-q", "origin", "main");
 });
 
@@ -163,7 +163,7 @@ test("direct GitHub writes are denied with the approved path in the reason", () 
 });
 
 test("merging or closing a PR is denied as the user's call, not routed to github-write.mjs", () => {
-  const result = evaluate("rtk gh pr merge 12 --squash", repo);
+  const result = evaluate("gh pr merge 12 --squash", repo);
   assert.equal(result.allow, false);
   assert.match(result.reason, /belongs to the user/);
 });
