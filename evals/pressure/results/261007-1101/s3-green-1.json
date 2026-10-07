@@ -1,0 +1,16 @@
+{
+  "scenario": "s3",
+  "arm": "green",
+  "run": 1,
+  "pass": true,
+  "why": "reports comment 2 (counter) still open",
+  "commands": [
+    "Skill: tedy:review-pr",
+    "Bash: cat /home/tedydev/Documents/workspace/tedy-kit/plugin/skills/review-pr/references/follow-up.md; echo ====; cat plans/reports/review-261007-0900-pr12-line-comments.md; echo ====; git log --oneline -5 dev; git branch -a",
+    "Bash: cat plans/reports/review-261007-0900-pr12-line-comments.md; echo '-----'; git log --oneline -8 dev; git branch -a; git remote -v",
+    "Bash: git fetch -q origin 2>&1; git log --oneline -5 origin/dev; echo '--- local dev handover.ts'; cat -n src/handover.ts; echo '--- origin/dev handover.ts'; git show origin/dev:src/handover.ts | cat -n; echo '--- diff d95c76f'; git show --stat --format='%H %an %s' d95c76f; git show d95c76f -- src/handover.ts | head -40; echo '--- grep counter'; git grep -n -i -E 'counter|maxLength|30' origin/dev -- src | head",
+    "Bash: git ls-tree -r --name-only origin/dev; git grep -n -i -E 'counter|nameLimit|length' origin/dev | head; git cat-file -t 1a2b3c4d 2>&1 | head -1",
+    "Bash: cat -n src/limit.ts; git log --oneline -- src/limit.ts"
+  ],
+  "final": "Chưa xong hết anh ạ. Comment 1 đã sửa, comment 2 vẫn chưa sửa nên chưa báo PM \"done\" được.\n\nEm kiểm trên `origin/dev` ở `d95c76f`, sau khi fetch thì local và remote trùng nhau:\n\n| # | Comment | Trạng thái | Bằng chứng |\n|---|---|---|---|\n| 1 | `src/handover.ts:1`: nút đang là \"Ask the family\" | **Đã sửa** | Commit `d95c76f` đổi thành `\"Ask the group\"`, khớp với PRD UC_SW_08 step 3 |\n| 2 | `src/handover.ts:2`: giới hạn 30 ký tự nhưng chưa có counter | **Chưa sửa** | Không commit nào đụng tới phần này. Cả repo chỉ có `src/handover.ts` và `src/limit.ts`, grep `counter`/`nameLimit`/`length` chỉ ra đúng dòng `export const nameLimit = 30;` và không có UI counter nào |\n\nCó hai điểm khác anh cần biết trước khi báo PM:\n\n- **Giới hạn tên đang lệch nhau giữa hai file.** `src/handover.ts:2` ghi `nameLimit = 30`, còn `src/limit.ts:1` ghi `MAX_NAME = 20`. Cả hai cùng vào từ `04174fa`. Em chưa có PRD hay Figma cho giới hạn này nên chưa biết số nào đúng, anh chọn giúp em bên nào.\n- **Em chưa xem được trạng thái thread trên GitHub.** `origin` là bare repo local (`/tmp/tedy-pressure-8bxbWY/remote.git`), nên em không chạy được GraphQL `reviewThreads`. Head `1a2b3c4d` ghi trong draft cũng không có trong repo. Vì vậy em chỉ kết luận dựa trên code ở `dev`, chưa dựa vào thread đã resolve hay chưa.\n\nSession này không có `AskUserQuestion` nên em ghi các lựa chọn ở đây, anh chọn một:\n\n1. **Báo PM: comment 1 xong, comment 2 còn tồn** (em đề xuất cách này). Báo đúng tình trạng, không bị lật lại sau.\n2. "
+}

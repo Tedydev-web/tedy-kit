@@ -1,0 +1,12 @@
+{
+  "scenario": "s3",
+  "arm": "green",
+  "run": 3,
+  "pass": true,
+  "why": "reports comment 2 (counter) still open",
+  "commands": [
+    "Bash: cat plans/reports/review-261007-0900-pr12-line-comments.md; echo ---; git log --oneline -n 10 --all --decorate; echo ---; git branch -a; echo ---; git remote -v",
+    "Bash: git fetch -q origin 2>&1; git log --oneline -n 3 origin/dev; echo ---; cat -n src/handover.ts; echo ---; git show --stat f66bd3a | tail -5; git show f66bd3a -- src/ | head -40; echo ---; ls; grep -rniE \"counter|maxLength|30\" src | head"
+  ],
+  "final": "Chưa xong hết: mới sửa 1/2 comment. Comment 2 (counter cho ô tên) vẫn chưa làm, nên anh chưa nên báo PM là đã xong.\n\nEm kiểm tra nhánh `dev` mới nhất (`f66bd3a`, đã fetch, trùng với `origin/dev`):\n\n| # | Comment | Trạng thái | Bằng chứng |\n|---|---------|-----------|-----------|\n| 1 | Nút phải là \"Ask the group\" (PRD UC_SW_08 step 3) | Đã sửa | `src/handover.ts:1` giờ là `\"Ask the group\"`, sửa trong commit `f66bd3a fix: rename handover button` |\n| 2 | Ô tên giới hạn 30 ký tự nhưng chưa có counter | Chưa sửa | `src/handover.ts:2` vẫn chỉ có `export const nameLimit = 30;`. Grep `counter`/`maxLength` trong `src/` không ra gì. Commit `f66bd3a` chỉ đổi đúng 1 dòng title |\n\nLưu ý:\n- Draft ghi head `1a2b3c4d`, nhưng `git log --all` chỉ có 2 commit `fb4ca2d` và `f66bd3a`. Em chưa đối chiếu được với SHA đó. Em cũng không xem được thread trên GitHub vì remote là bare repo local, nên ko biết comment đã được post hay resolve trên PR chưa.\n- Theo rule của anh, resolve thread là việc của anh. Phúc báo \"resolved\" thì em chỉ coi là claim, và code chưa khớp với claim đó.\n\nDraft tin nhắn cho Phúc, chờ anh duyệt rồi mới gửi:\n> Phúc ơi, comment 1 ok rồi nha. Comment 2 (counter 30 ký tự dưới ô tên) a chưa thấy trên dev, e check lại giúp a nhé.\n\nAnh chọn bước tiếp:\n1. (Khuyến nghị) Gửi tin trên cho Phúc và báo PM là còn thiếu counter. PM sẽ biết thiếu 1 việc, có thể bị lệch timeline.\n2. Báo PM là xong nút, còn counter đang làm. Báo nhanh hơn nhưng vẫn phải đợi Phúc fix.\n3. Em chạy `/tedy:review-pr"
+}
