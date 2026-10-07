@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tedy-kit · Hướng dẫn sử dụng</title>
+<style>
+  :root { --ink:#1d2330; --muted:#5b6475; --line:#e3e6ec; --bg:#f7f8fa; --card:#fff; --accent:#2f6fde; --ok:#1f8a4c; --warn:#b26a00; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.6 -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; color:var(--ink); background:var(--bg); }
+  main { max-width: 980px; margin: 0 auto; padding: 32px 20px 64px; }
+  h1 { font-size: 28px; margin: 0 0 4px; }
+  h2 { font-size: 20px; margin: 40px 0 12px; padding-top: 8px; border-top: 1px solid var(--line); }
+  h3 { font-size: 16px; margin: 0 0 6px; }
+  p { margin: 6px 0 10px; }
+  .lead { color: var(--muted); font-size: 16px; }
+  code { font: 13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background:#eef1f6; padding:1px 5px; border-radius:4px; }
+  pre { font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background:#1d2330; color:#e9edf5; padding:12px 14px; border-radius:8px; overflow-x:auto; }
+  .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
+  .card .cmd { font-weight:600; color:var(--accent); }
+  .tag { display:inline-block; font-size:12px; padding:1px 8px; border-radius:999px; background:#eef1f6; color:var(--muted); margin-left:6px; }
+  table { width:100%; border-collapse: collapse; background:var(--card); border:1px solid var(--line); border-radius:10px; overflow:hidden; }
+  th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align: top; }
+  th { background:#f0f2f6; font-size:13px; color:var(--muted); }
+  tr:last-child td { border-bottom:0; }
+  ol, ul { margin: 6px 0 10px 20px; padding:0; }
+  li { margin: 3px 0; }
+  .flow { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin: 8px 0; }
+  .step { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:6px 10px; font-size:14px; }
+  .arrow { color: var(--muted); }
+  .you { border-color: var(--accent); color: var(--accent); font-weight:600; }
+  .note { border-left: 3px solid var(--warn); background:#fff8ec; padding:10px 14px; border-radius:6px; }
+  .okbox { border-left: 3px solid var(--ok); background:#eefaf3; padding:10px 14px; border-radius:6px; }
+  nav a { color: var(--accent); text-decoration:none; margin-right:14px; font-size:14px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>tedy-kit</h1>
+  <p class="lead">Plugin Claude Code mang cách làm việc của anh (review PR, làm task, vai PM) vào mọi phiên và mọi dự án. Cài một lần, tự nạp ở mọi phiên mới.</p>
+  <nav>
+    <a href="#tu-dong">Phần tự chạy</a><a href="#lenh">6 lệnh</a><a href="#hang-ngay">Hằng ngày</a><a href="#ket-qua">Xem kết quả</a><a href="#bi-chan">Khi bị chặn</a><a href="#bao-tri">Bảo trì</a>
+  </nav>
+
+  <h2 id="tu-dong">1. Phần tự chạy: anh không cần gõ gì</h2>
+  <div class="grid">
+    <div class="card">
+      <h3>17 luật làm việc</h3>
+      <p>File <code>rules/working-style.md</code> nạp vào mọi phiên qua <code>~/.claude/CLAUDE.md</code>.</p>
+      <ul>
+        <li>Xưng "em", gọi "anh".</li>
+        <li>Mọi thứ đăng dưới tên anh đều qua draft trước, đăng sau khi anh duyệt.</li>
+        <li>Không push hay mở PR khi chưa được bảo. "Noted lại cho tôi biết" nghĩa là chỉ báo cáo.</li>
+        <li>Không viết comment trong code.</li>
+        <li>PRD, Figma và BE lệch nhau thì nêu ra ngay, trích cả hai bên.</li>
+        <li>Cần anh quyết thì hiện menu chọn, không hỏi bằng văn xuôi.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Gate tự chặn</h3>
+      <ul>
+        <li>Sửa file mà thêm comment vào code: bị chặn.</li>
+        <li><code>git commit</code> hoặc <code>push</code> khi diff có comment mới, hoặc cây chưa sạch: bị chặn.</li>
+        <li>Ghi thẳng lên GitHub (<code>gh pr review</code>, <code>merge</code>, <code>close</code>…): bị chặn. Đăng chỉ đi qua script sau khi anh duyệt.</li>
+        <li>Kết lượt bằng câu hỏi văn xuôi: em bị nhắc phải chuyển thành menu.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Luôn hỏi trước khi ghi ra ngoài</h3>
+      <p>Các lệnh sau luôn hiện prompt để anh bấm cho phép, kể cả ở chế độ bypass:</p>
+      <ul>
+        <li>push, tạo PR, merge</li>
+        <li>đăng hoặc trả lời comment GitHub, Figma, Google Doc</li>
+        <li>apply task lên OpenProject</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Biết sẵn dự án</h3>
+      <p>Map ở <code>projects/</code>: <b>tonpass Family Wallet</b> và <b>TONtv</b>. Mở phiên trong thư mục dự án là kit biết các repo, repo nào chỉ đọc, PRD tab nào, Figma node nào và tracker nào. Anh không cần dán link.</p>
+    </div>
+  </div>
+
+  <h2 id="lenh">2. Sáu lệnh anh gõ</h2>
+  <table>
+    <tr><th style="width:26%">Lệnh</th><th>Dùng khi</th><th style="width:30%">Anh nhận được</th></tr>
+    <tr><td><code>/tedy:review-pr 703</code><br><span class="tag">hoặc nói "review PR 703"</span></td><td>Review PR của đồng đội. Em đối chiếu PRD, Figma, BE, chạy typecheck/lint/test trên worktree riêng, PR lớn hoặc đụng tiền/auth thì chạy thêm 3 reviewer độc lập.</td><td>Draft comment tiếng Việt, mỗi comment một câu gợi ý kết bằng "ạ." kèm trích PRD. Menu <b>Đăng review</b>.</td></tr>
+    <tr><td><code>/tedy:pm UC_SW_02</code><br><code>/tedy:pm replies</code><br><code>/tedy:pm tasks &lt;scope&gt;</code></td><td>Việc PM: rà PRD với Figma và code, hỏi designer/PM, lên task OpenProject, check reply.</td><td>Ledger các chỗ lệch, draft comment Figma/Doc kiểu chat, draft task tiếng Anh tách UI và wire. Menu <b>Duyệt</b>.</td></tr>
+    <tr><td><code>/tedy:dev &lt;task #id hoặc mô tả&gt;</code></td><td>Làm một task từ đầu đến cuối.</td><td>Đối soát, branch, code, verify trên commit, 2 reviewer, commit, report. Không push nếu anh không bảo. Menu <b>Bước tiếp</b>.</td></tr>
+    <tr><td><code>/tedy:dev rebut</code> + dán review</td><td>Có review từ Gemini, bot hoặc đồng nghiệp trên PR của anh.</td><td>Bảng <i>Đúng / Sai / Đúng một phần</i> kèm bằng chứng. Menu <b>Sửa gì</b>; chưa sửa gì trước khi anh chọn.</td></tr>
+    <tr><td><code>/tedy:reconcile &lt;epic hoặc UC&gt;</code></td><td>Chỉ muốn đối chiếu, chưa làm gì.</td><td>Bảng lệch PRD/Figma/BE/FE, độ phủ và danh sách cần raise kèm người chịu trách nhiệm.</td></tr>
+    <tr><td><code>/tedy:setup</code><br><code>/tedy:setup update</code></td><td>Dự án mới, hoặc cần thêm Figma node, PRD tab, tracker.</td><td>Vài câu hỏi dạng menu, rồi map được ghi và commit vào kit.</td></tr>
+    <tr><td><code>/tedy:learn</code></td><td>Cuối epic, hoặc khi thấy mình hay phải sửa cùng một kiểu.</td><td>Những chỗ anh sửa lặp lại được đưa thành luật hoặc mẫu trong kit; memory cũ được dọn.</td></tr>
+  </table>
+
+  <h2 id="hang-ngay">3. Luồng hằng ngày</h2>
+  <h3>Review PR của đồng đội</h3>
+  <div class="flow">
+    <span class="step you">Anh: "review PR 703"</span><span class="arrow">→</span>
+    <span class="step">Em đọc diff, PRD, Figma, BE</span><span class="arrow">→</span>
+    <span class="step">Draft + lint</span><span class="arrow">→</span>
+    <span class="step you">Menu Đăng review: đăng / bỏ bớt / sửa / chưa đăng</span><span class="arrow">→</span>
+    <span class="step">Đăng, đọc lại, báo K/K</span>
+  </div>
+  <h3>Làm PM cho một use case</h3>
+  <div class="flow">
+    <span class="step you">Anh: /tedy:pm UC_SW_02</span><span class="arrow">→</span>
+    <span class="step">Ledger chỗ lệch</span><span class="arrow">→</span>
+    <span class="step">Draft comment Figma/Doc + task OP, preview trên OP</span><span class="arrow">→</span>
+    <span class="step you">Menu Duyệt</span><span class="arrow">→</span>
+    <span class="step">Đăng, đọc lại, báo id</span>
+  </div>
+  <h3>Có review của Gemini trên PR của anh</h3>
+  <div class="flow">
+    <span class="step you">Anh: /tedy:dev rebut + dán review</span><span class="arrow">→</span>
+    <span class="step">Kiểm từng claim với code, PRD, dependency</span><span class="arrow">→</span>
+    <span class="step">Bảng Đúng / Sai</span><span class="arrow">→</span>
+    <span class="step you">Menu Sửa gì</span><span class="arrow">→</span>
+    <span class="step">Chỉ sửa phần anh chọn</span>
+  </div>
+  <div class="note"><b>Một phiên, một vai.</b> Phiên PM là phiên duy nhất ghi lên OpenProject, Doc và Figma. Phiên Dev hay Review gặp việc PM thì để lại draft trong <code>plans/reports/</code> và chuyển sang phiên PM.</div>
+
+  <h2 id="ket-qua">4. Xem kết quả ở đâu</h2>
+  <table>
+    <tr><th style="width:34%">Cái gì</th><th>Ở đâu</th></tr>
+    <tr><td>Draft review, findings</td><td><code>&lt;repo&gt;/plans/reports/review-&lt;yymmdd-hhmm&gt;-pr&lt;n&gt;-line-comments.md</code>, <code>…-findings.md</code></td></tr>
+    <tr><td>Ledger PM, câu hỏi PRD chờ anh tự đăng</td><td><code>&lt;workspace&gt;/plans/reports/pm-….md</code>, <code>pm-comments-….html</code></td></tr>
+    <tr><td>Report task Dev, bảng đối chiếu</td><td><code>plans/reports/dev-….md</code>, <code>reconcile-….md</code></td></tr>
+    <tr><td>Anh phải sửa nháp bao nhiêu (theo kênh, theo tuần)</td><td><pre>node ~/Documents/workspace/tedy-kit/plugin/scripts/edit-rate.mjs</pre></td></tr>
+    <tr><td>Nhật ký gate (chặn hay cho qua, vì sao)</td><td><code>~/.local/state/tedy/gate-log.jsonl</code></td></tr>
+  </table>
+
+  <h2 id="bi-chan">5. Khi bị chặn</h2>
+  <table>
+    <tr><th style="width:42%">Thông báo bắt đầu bằng</th><th>Nghĩa là gì, làm gì</th></tr>
+    <tr><td><code>tedy gate: this edit adds comments to …</code></td><td>Em vừa định thêm comment vào code. Em sẽ tự viết lại không có comment; phần giải thích đưa vào commit message.</td></tr>
+    <tr><td><code>tedy gate: the code being committed/pushed adds comments</code></td><td>Diff có comment mới. Nếu đó là comment của đồng đội cần giữ, anh tự chạy lệnh bằng <code>! git …</code>.</td></tr>
+    <tr><td><code>tedy gate: tracked files have uncommitted changes</code></td><td>Cây chưa sạch. Commit hoặc khôi phục các file đó rồi push.</td></tr>
+    <tr><td><code>tedy gate: publish to GitHub through github-write.mjs …</code></td><td>Đăng lên GitHub chỉ đi qua draft đã duyệt. Bảo em "đăng draft".</td></tr>
+    <tr><td><code>tedy gate: merging, closing or editing a PR … belongs to the user</code></td><td>Merge, close, resolve là việc của anh, em không làm thay.</td></tr>
+    <tr><td>Prompt cho phép khi push/đăng/apply</td><td>Đó là bước chốt cuối cùng. Bấm cho phép nếu đúng là anh muốn ghi ra ngoài.</td></tr>
+  </table>
+
+  <h2 id="bao-tri">6. Bảo trì</h2>
+  <ul>
+    <li>Kit chạy thẳng từ <code>~/Documents/workspace/tedy-kit</code>. Sửa kit thì mở phiên mới hoặc gõ <code>/reload-plugins</code>.</li>
+    <li>Dòng <code>@~/Documents/workspace/tedy-kit/rules/working-style.md</code> phải luôn có trong <code>~/.claude/CLAUDE.md</code>.</li>
+    <li>Sau mỗi lần Claude Code tự cập nhật: <code>bash evals/probes/run-probes.sh</code>.</li>
+    <li>Test của kit: <code>node --test plugin/scripts/*.test.mjs</code>.</li>
+    <li>Chưa có: neo comment vào đoạn văn trong Google Doc cần một OAuth client riêng. Trước khi có, câu hỏi PRD nằm trong file HTML để anh tự đăng.</li>
+  </ul>
+  <div class="okbox">Muốn đổi một luật, một mẫu comment hay thêm dự án: nói với em trong phiên làm kit, hoặc chạy <code>/tedy:learn</code>. Không cần sửa file tay.</div>
+</main>
+</body>
+</html>

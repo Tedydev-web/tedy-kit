@@ -17,6 +17,8 @@ Plan and evidence: `~/Documents/workspace/plans/261006-1429-personal-working-sty
 
 ## Commands
 
+A one-page guide in Vietnamese for daily use: [`docs/user-guide.html`](docs/user-guide.html).
+
 | Command | Invocation | Does |
 |---|---|---|
 | `/tedy:review-pr <PR>` | User or model | Reviews a teammate's PR against PRD, Figma and backend code, drafts hints, posts after approval |

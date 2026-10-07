@@ -7,3 +7,5 @@ plugin/evals/results/
 !plans/
 !plans/**/*
 !reports/
+!docs/
+!docs/**
