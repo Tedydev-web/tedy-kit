@@ -8,6 +8,8 @@ import { discover } from "./project-discover.mjs";
 
 export const PROJECTS_DIR = join(profileDir(), "projects");
 
+const SUPPORTED_TRACKERS = ["openproject"];
+
 export function parseMap(text) {
   const block = text.match(/```json\n([\s\S]*?)\n```/);
   if (!block) throw new Error("no ```json block in the map file");
@@ -49,6 +51,13 @@ export function missingFields(map) {
     .filter(([, value]) => !value)
     .map(([field]) => field);
   return { required, optional };
+}
+
+export function trackerCheck(map) {
+  const type = map.tracker?.type;
+  if (!type) return null;
+  if (SUPPORTED_TRACKERS.includes(type)) return { check: "tracker type", status: "ok", detail: type };
+  return { check: "tracker type", status: "fail", detail: `${type} has no adapter; supported: ${SUPPORTED_TRACKERS.join(", ")} (see plugin/shared/tracker-contract.md)` };
 }
 
 function git(dir, ...args) {
@@ -110,6 +119,8 @@ async function doctor(cwd) {
     }
   }
   results.push(...checkRepos(map));
+  const tracker = trackerCheck(map);
+  if (tracker) results.push(tracker);
   if (map.tracker?.instance) {
     try {
       const response = await fetch(map.tracker.instance, { method: "HEAD", redirect: "manual" });

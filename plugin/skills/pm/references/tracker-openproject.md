@@ -1,5 +1,7 @@
 # OpenProject
 
+This adapter implements the tracker contract in `<plugin>/shared/tracker-contract.md`: the commands, the drafts file, the sidecar and the guarantees every adapter shares. What follows is specific to OpenProject.
+
 `node <plugin>/scripts/openproject.mjs` reads `~/.config/op/config.json` and the map's `tracker.project`; the token never leaves the process.
 
 ## Drafts file
