@@ -11,7 +11,7 @@ Run these on `gh pr diff <n>` before the full read; each hit is a lead to verify
 - `console.log`, `debugger`, `<<<<<<<` conflict markers, or a block of commented-out code.
 - A secret-shaped value: `VITE_*SECRET*`, `*PASSPHRASE*`, `*PRIVATE_KEY*`, a mnemonic, a bearer token. Quote the variable name, never the value.
 - `package.json` or a lockfile changed: a new dependency doing what an installed one or a few lines already do.
-- A comment added to source (working-style rule 10).
+- A comment added to source, when the profile config turns on `gates.noComments`.
 
 ## Prior work and need
 

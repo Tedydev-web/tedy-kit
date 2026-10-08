@@ -7,7 +7,7 @@ How to cross-check one scope across the PRD, Figma, the backend and contract, th
 - In form (fields, endpoints, states, errors), the frontend follows the backend and contract.
 - In behaviour and copy, the backend and contract follow the PRD and Figma.
 - The map's `truth_overrides` adjust this per project; cite the override a conclusion relies on.
-- PRD against Figma is never settled by guessing which is newer. Put both sides in the table, quoted, with any override that applies, and raise it; the user picks (working-style rule 7).
+- PRD against Figma is never settled by guessing which is newer. Put both sides in the table, quoted, with any override that applies, and raise it; the user picks.
 
 ## Evidence labels
 

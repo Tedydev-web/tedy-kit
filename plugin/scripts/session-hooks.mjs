@@ -9,7 +9,7 @@ export const PROSE_QUESTION = /(\?\s*$)|(anh (muốn|chọn|có muốn|thấy sa
 
 const HOOKS_FILE = fileURLToPath(new URL("../hooks/hooks.json", import.meta.url));
 
-const NUDGE = "The last reply ended with a prose question. If it asks the user for a decision, call AskUserQuestion now with options drawn from what you found, the recommended option first (working-style rules 13–15). If it was not a decision, end the turn as it is.";
+const NUDGE = "The last reply ended with a prose question. If it asks the user for a decision, call AskUserQuestion now with options drawn from what you found, the recommended option first. If it was not a decision, end the turn as it is.";
 
 function visibleTail(text) {
   const withoutCode = text.replace(/```[\s\S]*?```/g, "");

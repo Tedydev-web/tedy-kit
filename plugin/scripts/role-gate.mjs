@@ -84,7 +84,7 @@ export function decide(map, name, action) {
   if (!role || !action || !FORBIDDEN[role]?.has(action.kind)) return null;
   const owner = OWNER[action.kind];
   const target = ownerSession(map, owner, action.repo);
-  return `tedy role gate: this is "${name}", the ${role} session; ${WHAT[action.kind]} belongs to the ${owner} session${target ? ` "${target}"` : ""}. Hand it over with what you found and where, per ${fileURLToPath(new URL("../shared/handoff.md", import.meta.url))}, unless the user allows this one here (working-style rule 18).`;
+  return `tedy role gate: this is "${name}", the ${role} session; ${WHAT[action.kind]} belongs to the ${owner} session${target ? ` "${target}"` : ""}. Hand it over with what you found and where, per ${fileURLToPath(new URL("../shared/handoff.md", import.meta.url))}, unless the user allows this one here.`;
 }
 
 export function roleCard(map, name) {

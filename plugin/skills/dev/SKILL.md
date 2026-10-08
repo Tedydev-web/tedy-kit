@@ -29,7 +29,7 @@ Reviewing a teammate's PR → `/tedy:review-pr`. Writing tracker tasks or Doc an
 
 ## Task procedure
 
-1. **Context.** `node ${CLAUDE_PLUGIN_ROOT}/scripts/project-map.mjs resolve`, then read the map, `${CLAUDE_PLUGIN_ROOT}/shared/source-access.md`, `${CLAUDE_PLUGIN_ROOT}/shared/style/commit-pr.md` and `${CLAUDE_PLUGIN_ROOT}/shared/decision-points.md`. Read the task: `node ${CLAUDE_PLUGIN_ROOT}/scripts/openproject.mjs get /api/v3/work_packages/<id>` for an OpenProject id, otherwise the user's text.
+1. **Context.** `node ${CLAUDE_PLUGIN_ROOT}/scripts/project-map.mjs resolve`, then read the map, `${CLAUDE_PLUGIN_ROOT}/shared/source-access.md`, the file `node ${CLAUDE_PLUGIN_ROOT}/scripts/profile.mjs path style/commit-pr.md` prints and `${CLAUDE_PLUGIN_ROOT}/shared/decision-points.md`. Read the task: `node ${CLAUDE_PLUGIN_ROOT}/scripts/openproject.mjs get /api/v3/work_packages/<id>` for an OpenProject id, otherwise the user's text.
 2. **Reconcile.** Run the steps of `${CLAUDE_PLUGIN_ROOT}/shared/reconcile-flow.md` with the task's Checklist and AC as the items. Present the table; a mismatch that changes what to build is one `AskUserQuestion` before any code.
 3. **Branch.** From the map's integration branch: `git fetch -q origin`, then a branch named after the work (`fix/family-<slug>`, `feat/family-<slug>`) in a worktree where `git worktree list` keeps them, so the user's main checkout keeps its branch.
 4. **Build.** Follow the repository's own conventions a few files away. Visuals and copy come from the Figma node in the map; icons and images are exported from Figma, never redrawn. Shared components change only when every caller still fits.

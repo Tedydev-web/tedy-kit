@@ -10,9 +10,10 @@ The engine (this plugin) holds no personal or project data. Everything that belo
   projects/<name>.md     project maps (fields in plugin/shared/project-map-schema.md)
   projects/<name>/       notes too long for a map, such as review-calibration.md
   public-denylist.txt    terms public-scan.mjs must never find in a public repository
+  reports/               /tedy:learn reports
 ```
 
-Any file at `<profile>/<path>` overrides `plugin/shared/<path>`. Skills read shared files through `node <plugin>/scripts/profile.mjs path <path>`, which prints the profile copy when it exists and the engine copy otherwise.
+A file at `<profile>/style/<name>.md` overrides `plugin/shared/style/<name>.md`. Skills read style samples through `node <plugin>/scripts/profile.mjs path style/<name>.md`, which prints the profile copy when it exists and the engine copy otherwise.
 
 Runtime state (gate log, edit log, draft snapshots, last check times) lives in `TEDY_STATE_DIR`, default `~/.local/state/tedy`, never in the profile, so a profile kept in git does not churn.
 

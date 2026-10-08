@@ -11,4 +11,4 @@ You are setting up the project map for the current workspace. The user answers q
 
 1. Read `${CLAUDE_PLUGIN_ROOT}/shared/setup-flow.md` and `${CLAUDE_PLUGIN_ROOT}/shared/decision-points.md`, and `${CLAUDE_PLUGIN_ROOT}/shared/project-map-schema.md` for the fields.
 2. Argument `update` → the update branch of the flow. No argument → the bare run, starting with `node ${CLAUDE_PLUGIN_ROOT}/scripts/project-map.mjs doctor`.
-3. Done when `doctor` prints `READY` for this directory and the map change is committed in the kit repository. Finish with the `Bước tiếp` menu: run the role the user came for, or stop.
+3. Done when `doctor` prints `READY` for this directory and the map change is committed in the profile when it is a git repository. Finish with the `Bước tiếp` menu: run the role the user came for, or stop.

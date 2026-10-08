@@ -1,6 +1,6 @@
 # Decision points
 
-How every `/tedy:*` skill hands a decision to the user. Working-style rules 13–15 say when; this file says how. The user should never have to type a command or compose an answer.
+How every `/tedy:*` skill hands a decision to the user. The user's rules say when to ask; this file says how. The user should never have to type a command or compose an answer.
 
 ## Asking
 

@@ -245,18 +245,18 @@ export function evaluate(command, cwd) {
     }
     if (action.kind === "push") {
       const risk = pushRisk(action.args, action.dir);
-      if (risk) return { allow: false, ask: true, reason: `tedy gate: ${risk}, which belongs to the user (working-style rule 5). Allow it only if the user asked for this push.` };
+      if (risk) return { allow: false, ask: true, reason: `tedy gate: ${risk}, which belongs to the user. Allow it only if the user asked for this push.` };
       continue;
     }
     if (action.kind === "pr-create") {
-      if (!action.args.some((arg) => arg === "--draft" || arg === "-d")) return { allow: false, reason: "tedy gate: open the PR as a draft with `--draft`; the user marks it ready (working-style rule 5)." };
+      if (!action.args.some((arg) => arg === "--draft" || arg === "-d")) return { allow: false, reason: "tedy gate: open the PR as a draft with `--draft`; the user marks it ready." };
       continue;
     }
     if (action.kind !== "github-write") continue;
     if (/\bgh\s+(pr|issue)\s+(merge|close|reopen|ready|edit|lock|unlock)\b/.test(segment)) {
-      return { allow: false, reason: "tedy gate: merging, closing or editing a PR or issue belongs to the user (working-style rule 4). Tell the user what is ready and let them do it." };
+      return { allow: false, reason: "tedy gate: merging, closing or editing a PR or issue belongs to the user. Tell the user what is ready and let them do it." };
     }
-    return { allow: false, reason: "tedy gate: publish to GitHub through github-write.mjs after the user approves the draft (working-style rule 3). Reading with gh (view, diff, list, GET, GraphQL queries) stays open." };
+    return { allow: false, reason: "tedy gate: publish to GitHub through github-write.mjs after the user approves the draft. Reading with gh (view, diff, list, GET, GraphQL queries) stays open." };
   }
   return { allow: true };
 }

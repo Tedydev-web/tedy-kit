@@ -65,8 +65,8 @@ export const pushFailed = (output) => /failed to push|\[rejected\]|^fatal:/m.tes
 export function reportText(dir, { dirty, comments }) {
   if (!dirty.length && !comments.length) return null;
   const parts = [`tedy report: what was just pushed from ${dir} needs a line in this reply to the user.`];
-  if (comments.length) parts.push(`- It adds code comments (working-style rule 10):\n${listed(comments)}\n  Move each explanation into the commit message or PR description and push a follow-up commit, unless the user keeps them.`);
-  if (dirty.length) parts.push(`- Tracked files were left uncommitted, so the pushed commit may differ from what was built and tested (working-style rule 11):\n${listed(dirty)}`);
+  if (comments.length) parts.push(`- It adds code comments:\n${listed(comments)}\n  Move each explanation into the commit message or PR description and push a follow-up commit, unless the user keeps them.`);
+  if (dirty.length) parts.push(`- Tracked files were left uncommitted, so the pushed commit may differ from what was built and tested:\n${listed(dirty)}`);
   return parts.join("\n");
 }
 

@@ -4,7 +4,7 @@ The user runs one session per role and project (PM, Dev, Review PR), named `<Rol
 
 ## This session's role
 
-`ListAgents` prints "This session is <name>". Match that name against the map's `sessions`. A session whose name is not in the map, or that builds or tests tedy-kit, has no role: it hands every role task over and publishes nothing.
+`ListAgents` prints "This session is <name>". Match that name against the map's `sessions`. A session whose name is not in the map, or that builds or tests this plugin, has no role: it hands every role task over and publishes nothing.
 
 ## Sending: the request belongs to another role
 
