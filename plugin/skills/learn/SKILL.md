@@ -23,7 +23,7 @@ Building or editing the map's sources → `/tedy:setup`. Changing a role's proce
 ## Procedure
 
 1. **Inputs.**
-   - The project's auto memory: `~/.claude/projects/<project path with / as ->/memory/`, every file modified after the map's `learned_until`.
+   - The project's auto memory: `~/.claude/projects/<project path with / as ->/memory/`, every file modified after `learned_until` (`node ${CLAUDE_PLUGIN_ROOT}/scripts/project-state.mjs get learned_until`; empty means every file).
    - The edit log: `node ${CLAUDE_PLUGIN_ROOT}/scripts/edit-rate.mjs`, then the `edited`, `cut` and `added` entries of `~/.local/state/tedy/edit-log.jsonl` since `learned_until`: what the user changed is what the samples get wrong.
 2. **Classify each memory** in a table: memory | destination | action | evidence.
    - Personal working rule, true in every project → `${CLAUDE_PLUGIN_ROOT}/../rules/working-style.md`.
@@ -36,9 +36,9 @@ Building or editing the map's sources → `/tedy:setup`. Changing a role's proce
 3. **Subtract.** Delete promoted memories and their `MEMORY.md` lines. Merge rules to stay under the cap. Replace a style sample the edit log shows the user keeps rewriting.
 4. **Report.** Write `plans/reports/learn-<yymmdd-hhmm>-<project>.md` in the kit: the table, the full proposed diff, line counts before and after, and broken links in `MEMORY.md` (reported only; the user decides). Quote the table in the reply.
 5. **Approve.** One `AskUserQuestion`, header `Học`: `Áp dụng tất cả (Recommended)`, `Chọn từng mục` (a multiSelect follow-up by row number), `Chưa áp dụng`.
-6. **Apply** the approved rows, set the map's `learned_until` to today, run `claude -p "/doctor prompt-audit"` and fix any new conflict it names, then commit and push the kit (`feat: fold <project> lessons into the kit`).
+6. **Apply** the approved rows, record today with `project-state.mjs set learned_until <YYYY-MM-DD>`, run `claude -p "/doctor prompt-audit"` and fix any new conflict it names, then commit and push the kit (`feat: fold <project> lessons into the kit`).
 7. **Next step.** `Bước tiếp`: run the role whose material changed on real work, or `Dừng ở đây` with an 80-character summary.
 
 ## Done
 
-Every memory newer than `learned_until` has a row and an action, each promotion removed its source, the rules file is within its cap, the prompt audit is clean, and the map's `learned_until` moved.
+Every memory newer than `learned_until` has a row and an action, each promotion removed its source, the rules file is within its cap, the prompt audit is clean, and `learned_until` moved.

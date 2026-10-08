@@ -1,6 +1,6 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { checkRepos, missingFields, parseMap, resolveMap } from "./project-map.mjs";
@@ -51,4 +51,14 @@ test("checkRepos reports a missing directory and a missing integration branch", 
   assert.match(results[1].detail, /origin\/dev/);
   assert.match(results[2].detail, /not a git repository/);
   assert.match(results[3].detail, /does not exist/);
+});
+
+test("maps are read from the profile's projects folder, and a miss names that folder", () => {
+  const profile = tempDir("tedy-maps-profile-");
+  const env = { ...process.env, TEDY_PROFILE_DIR: profile };
+  const printed = spawnSync("node", ["--input-type=module", "-e", "import { PROJECTS_DIR } from './project-map.mjs'; console.log(PROJECTS_DIR);"], { encoding: "utf8", env, cwd: new URL(".", import.meta.url).pathname });
+  assert.equal(printed.stdout.trim(), join(profile, "projects"));
+  const missing = spawnSync("node", [new URL("./project-map.mjs", import.meta.url).pathname, "resolve", "/elsewhere"], { encoding: "utf8", env });
+  assert.equal(missing.status, 1);
+  assert.equal(missing.stdout.trim(), `no project map in ${join(profile, "projects")} covers /elsewhere; run /tedy:setup`);
 });

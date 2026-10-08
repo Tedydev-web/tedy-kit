@@ -12,7 +12,7 @@ Plan and evidence: `~/Documents/workspace/plans/261006-1429-personal-working-sty
 | `plugin/skills/` | Role skills (`/tedy:review-pr`, …) | On invocation |
 | `plugin/shared/` | Procedures and style samples the skills read | When a skill reads them |
 | `plugin/hooks/`, `plugin/scripts/` | Mechanical gates and helpers (Node, `node:test`) | On hook events |
-| `projects/` | Project maps written by `/tedy:setup`; fields in `projects/_schema.md` | When a skill resolves the current project |
+| `<profile>/projects/` | Project maps written by `/tedy:setup`, in the user's profile (`plugin/shared/profile-layout.md`); fields in `plugin/shared/project-map-schema.md` | When a skill resolves the current project |
 | `evals/` | Probes for platform assumptions, pressure tests, plugin evals | Manual |
 
 ## Commands

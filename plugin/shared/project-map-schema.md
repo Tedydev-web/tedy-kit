@@ -1,8 +1,8 @@
 # Project map schema
 
-One file per project, `projects/<name>.md`: a short note for people, then exactly one ```json block that `plugin/scripts/project-map.mjs` parses. `/tedy:setup` writes and updates maps; the user answers questions and never edits a map by hand.
+One file per project, `<profile>/projects/<name>.md` (profile layout: `plugin/shared/profile-layout.md`): a short note for people, then exactly one ```json block that `plugin/scripts/project-map.mjs` parses. `/tedy:setup` writes and updates maps; the user answers questions and never edits a map by hand.
 
-A folder named like the map, `projects/<name>/`, holds optional notes too long for the map: `review-calibration.md` is how the project's stack really works, read by `/tedy:review-pr` and the `reviewer` agent.
+A folder named like the map, `<profile>/projects/<name>/`, holds optional notes too long for the map: `review-calibration.md` is how the project's stack really works, read by `/tedy:review-pr` and the `reviewer` agent.
 
 A map keeps only what cannot be looked up. Repository remotes, default branches, stacks and package scripts come from the repositories each run, because a copy here goes stale.
 
@@ -19,8 +19,15 @@ A map keeps only what cannot be looked up. Repository remotes, default branches,
 | `tracker` | no | `{ type, instance, project, rules: [] }` |
 | `truth_overrides` | no | Sentences that change the default truth order, each with its date and source |
 | `team` | no | `{ "<area>": "<person>" }` assignment split |
-| `learned_until` | no | Date up to which `/tedy:learn` has folded corrections in |
-| `last_reply_check` | no | ISO timestamp of the last reply sweep |
 | `open_questions[]` | no | `{ q, tried }`: what is unknown and what was already searched |
 | `sessions[]` | no | `{ name, role, repos? }`: the user's session per role, `name` exactly as `ListAgents` prints it, `role` one of `pm`, `dev`, `review`, `devops`, `repos` the repositories it owns when one role has several sessions. Hand-offs route through it (`plugin/shared/handoff.md`), and `role-gate.mjs` asks the user before a session writes for another role: tracker, Doc and Figma belong to `pm`, posted PR review comments to `review`, product code and its commits to `dev` (`devops` may change code too) |
 | `glossary` | no | `{ "<preferred term>": ["<term to avoid>", …] }`: one concept, one word in tracker tasks. `task-lint` and `openproject.mjs preview` warn on an avoided term in a subject or description, outside code spans, quoted copy and `{placeholders}` |
+
+## Runtime state
+
+Times that change on every run stay out of the map, so a profile kept in git does not churn. `node plugin/scripts/project-state.mjs get|set <field> [<value>]` keeps them in `$TEDY_STATE_DIR/projects/<name>.json` (default `~/.local/state/tedy`), finding the map from the working directory or `--map <name>`. `project-state.mjs migrate` copies them once from maps that still carry them.
+
+| Field | Meaning |
+|---|---|
+| `learned_until` | Date (YYYY-MM-DD) up to which `/tedy:learn` has folded corrections in |
+| `last_reply_check` | ISO timestamp of the last reply sweep by `/tedy:pm` |

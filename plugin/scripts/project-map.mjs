@@ -1,11 +1,12 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import { fetchTab } from "./prd-section.mjs";
+import { profileDir } from "./profile.mjs";
 import { discover } from "./project-discover.mjs";
 
-export const PROJECTS_DIR = fileURLToPath(new URL("../../projects/", import.meta.url));
+export const PROJECTS_DIR = join(profileDir(), "projects");
 
 export function parseMap(text) {
   const block = text.match(/```json\n([\s\S]*?)\n```/);
@@ -85,7 +86,7 @@ export function checkRepos(map) {
 async function doctor(cwd) {
   const resolved = resolveMap(cwd);
   if (!resolved) {
-    console.log(`NOT_READY\nfail map: no project map covers ${cwd}; run /tedy:setup`);
+    console.log(`NOT_READY\nfail map: no project map in ${PROJECTS_DIR} covers ${cwd}; run /tedy:setup`);
     return 1;
   }
   const { file, map } = resolved;
@@ -132,7 +133,7 @@ async function main([command, cwd = process.cwd()]) {
   if (command === "resolve" || command === "missing") {
     const resolved = resolveMap(cwd);
     if (!resolved) {
-      console.log(`no project map covers ${cwd}; run /tedy:setup`);
+      console.log(`no project map in ${PROJECTS_DIR} covers ${cwd}; run /tedy:setup`);
       return 1;
     }
     if (command === "resolve") {
