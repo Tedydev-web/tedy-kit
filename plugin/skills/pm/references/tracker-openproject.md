@@ -15,7 +15,7 @@ A JSON array, one object per work package:
   "subject": "[FE] Vault limit pop-up on Free",
   "description": "## Goal\n…\n\n## Checklist\n- [ ] …\n\n## AC\n- [ ] …",
   "estimate": 1.5,
-  "assignee": "Hieu Dat",
+  "assignee": "Lâm Trần",
   "startDate": "2026-10-08",
   "dueDate": "2026-10-08",
   "parent": 21270,

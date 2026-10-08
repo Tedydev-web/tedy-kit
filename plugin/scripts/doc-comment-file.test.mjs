@@ -20,7 +20,7 @@ test("checkItems passes a passage found exactly once and a clean comment", () =>
 
 test("checkItems refuses passages found zero or several times, tagged comments, unknown epics and groups", () => {
   const problems = checkItems(
-    [item({ quote: "The fee is shown once." }), item({ quote: "not in the PRD" }), item({ comment: "@Hương xem giúp e" }), item({ epic: "99" }), item({ group: "C" })],
+    [item({ quote: "The fee is shown once." }), item({ quote: "not in the PRD" }), item({ comment: "@Hùng xem giúp e" }), item({ epic: "99" }), item({ group: "C" })],
     { "t.9": TAB },
     tabOf,
   );

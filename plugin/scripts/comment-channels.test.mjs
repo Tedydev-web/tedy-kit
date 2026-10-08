@@ -16,9 +16,9 @@ test("replies go to the root of a thread, never to a reply", () => {
 
 test("threadsSince groups replies under their root and keeps threads touched after the mark", () => {
   const comments = [
-    { id: "1", parent_id: "", created_at: "2026-10-01T00:00:00Z", user: { handle: "Hieu Dat" }, message: "@a x nha", client_meta: { node_id: "1:2" } },
-    { id: "2", parent_id: "1", created_at: "2026-10-06T00:00:00Z", user: { handle: "PM_leon" }, message: "ok" },
-    { id: "3", parent_id: "", created_at: "2026-09-01T00:00:00Z", user: { handle: "Hieu Dat" }, message: "old" },
+    { id: "1", parent_id: "", created_at: "2026-10-01T00:00:00Z", user: { handle: "Lâm Trần" }, message: "@a x nha", client_meta: { node_id: "1:2" } },
+    { id: "2", parent_id: "1", created_at: "2026-10-06T00:00:00Z", user: { handle: "pm_minh" }, message: "ok" },
+    { id: "3", parent_id: "", created_at: "2026-09-01T00:00:00Z", user: { handle: "Lâm Trần" }, message: "old" },
   ];
   const threads = threadsSince(comments, "2026-10-05T00:00:00Z");
   assert.equal(threads.length, 1);
@@ -57,12 +57,12 @@ test("findQuoteRange maps a quote across text runs to UTF-16 document indexes in
 
 test("a Figma post that repeats an open comment on the same node is caught; another node or a resolved thread is not", () => {
   const comments = [
-    { id: "1", parent_id: "", resolved_at: null, client_meta: { node_id: "3445:6702" }, message: "@PM_leon  nút này\nđổi tên chưa a?" },
-    { id: "2", parent_id: "", resolved_at: "2026-10-01T00:00:00Z", client_meta: { node_id: "3445:6703" }, message: "@PM_leon nút này đổi tên chưa a?" },
+    { id: "1", parent_id: "", resolved_at: null, client_meta: { node_id: "3445:6702" }, message: "@pm_minh  nút này\nđổi tên chưa a?" },
+    { id: "2", parent_id: "", resolved_at: "2026-10-01T00:00:00Z", client_meta: { node_id: "3445:6703" }, message: "@pm_minh nút này đổi tên chưa a?" },
   ];
-  assert.equal(duplicateOnNode(comments, "3445:6702", "@PM_leon nút này đổi tên chưa a?").id, "1");
-  assert.equal(duplicateOnNode(comments, "3445:6703", "@PM_leon nút này đổi tên chưa a?"), undefined);
-  assert.equal(duplicateOnNode(comments, "3445:6702", "@PM_leon câu khác nha"), undefined);
+  assert.equal(duplicateOnNode(comments, "3445:6702", "@pm_minh nút này đổi tên chưa a?").id, "1");
+  assert.equal(duplicateOnNode(comments, "3445:6703", "@pm_minh nút này đổi tên chưa a?"), undefined);
+  assert.equal(duplicateOnNode(comments, "3445:6702", "@pm_minh câu khác nha"), undefined);
 });
 
 test("figma-read lists frames with ids and the exact copy of every text layer, indented by depth", async () => {

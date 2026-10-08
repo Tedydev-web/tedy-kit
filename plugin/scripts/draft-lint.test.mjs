@@ -4,11 +4,11 @@ import { diffLines, lintComment, lintDraft, parseDraft } from "./draft-lint.mjs"
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const REAL = [
-  { path: "store/members-store.ts", line: 220, body: "Toast đang là câu chung, chưa đúng copy PRD ạ.\n\nPRD EPIC 08 · UC_MB_09 BR7:\n> BR7 (Toast): \"{Name} spends from {vault list}\", or \"{Name} has no vault to spend from\"." },
-  { path: "components/members/members-page.tsx", line: 347, body: "Sheet đóng trước khi gọi API, nên lỗi thì chỉ còn toast ạ.\n\nPRD EPIC 08 · UC_MB_09 Error States:\n> Backend unavailable → retry line in the sheet; the old scope stands." },
-  { path: "apps/family/app/features/shared-wallet/lib/send-gate.ts", line: 29, body: "Có Must include là FE coi luôn như Always ask, trong khi PRD không tính đây là một gate ạ.\n\nPRD EPIC 05 · UC_FW_03 BR1:\n> Nothing else gates a spend — no per-member limit, no app-wide ceiling." },
-  { path: "apps/family/app/features/shared-wallet/components/settings/settings-space-handover-ownership-sheet.tsx", line: 62, body: "Hint đang ghi \"The family votes on it.\", PM đã chốt dùng \"group\" thay \"family\" cho toàn app ạ.\n\nPRD EPIC 09 · UC_SW_08 step 1:\n> The group votes on it." },
-  { path: "apps/family/app/features/shared-wallet/hooks/use-shared-assets.ts", line: 40, body: "BE dev chưa trả `inVaultAmount` / `inVaultFormatted` / `vaultCount`, nên coin nào cũng hiện \"All unallocated\", kể cả coin đang nằm trong vault ạ." },
+  { path: "src/cart/cart-store.ts", line: 120, body: "Toast đang là câu chung, chưa đúng copy PRD ạ.\n\nPRD EPIC 03 · UC_CT_04 BR2:\n> BR2 (Toast): \"{Item} added to your cart\", or \"{Item} is out of stock\"." },
+  { path: "src/cart/components/cart-sheet.tsx", line: 88, body: "Sheet đóng trước khi gọi API, nên lỗi thì chỉ còn toast ạ.\n\nPRD EPIC 03 · UC_CT_04 Error States:\n> Backend unavailable → retry line in the sheet; the cart stays as it was." },
+  { path: "src/checkout/lib/pay-gate.ts", line: 29, body: "FE coi thẻ quà tặng là một bước chặn, trong khi PRD không tính đây là bước chặn ạ.\n\nPRD EPIC 05 · UC_PY_03 BR1:\n> Nothing else blocks a payment — no per-order limit, no store-wide ceiling." },
+  { path: "src/settings/components/settings-store-handover-sheet.tsx", line: 62, body: "Hint đang ghi \"The owner decides.\", PM đã chốt dùng \"shop\" thay \"store\" cho toàn app ạ.\n\nPRD EPIC 09 · UC_ST_08 step 1:\n> The shop decides." },
+  { path: "src/orders/hooks/use-order-totals.ts", line: 40, body: "BE dev chưa trả `paidAmount` / `paidFormatted`, nên đơn nào cũng hiện \"Unpaid\", kể cả đơn đã trả ạ." },
 ];
 
 const draft = (comments, header = "# PR #703: comment line by line (head 22288559)") =>
@@ -40,7 +40,7 @@ test("parseDraft reads the header, sections and bodies, and accepts the older em
   const parsed = parseDraft(draft(REAL.slice(0, 2)));
   assert.equal(parsed.pr, 703);
   assert.equal(parsed.sha, "22288559");
-  assert.deepEqual(parsed.comments.map((comment) => `${comment.index} ${comment.path}:${comment.line}`), ["1 store/members-store.ts:220", "2 components/members/members-page.tsx:347"]);
+  assert.deepEqual(parsed.comments.map((comment) => `${comment.index} ${comment.path}:${comment.line}`), ["1 src/cart/cart-store.ts:120", "2 src/cart/components/cart-sheet.tsx:88"]);
   assert.equal(parsed.comments[1].body, REAL[1].body);
   assert.equal(parseDraft(draft(REAL.slice(0, 1), "# PR #697 — comment line by line (head da61282d)")).pr, 697);
 });
@@ -100,10 +100,10 @@ test("the first clean lint freezes the original once, so later edits by the user
 
 test("chat comments: Figma opens with a handle, Doc tags nobody, both stay short and plain", async () => {
   const { lintChatComment } = await import("./draft-lint.mjs");
-  assert.deepEqual(lintChatComment('@mckinsie.donyle63 Hint đổi "The family votes on it." thành "The group votes on it." nha', "figma"), []);
+  assert.deepEqual(lintChatComment('@designer.lan Hint đổi "The family votes on it." thành "The group votes on it." nha', "figma"), []);
   assert.deepEqual(lintChatComment("Thêm 1 ý ở UC_LG_01 BR8: e đang hiểu là gồm cả 2, a xác nhận giúp e nha", "doc"), []);
   assert.ok(lintChatComment("Hint đổi thành group nha", "figma").some((problem) => /@handle/.test(problem)));
-  assert.ok(lintChatComment("@PM_leon chốt giúp e nha", "doc").some((problem) => /tags nobody/.test(problem)));
+  assert.ok(lintChatComment("@pm_minh chốt giúp e nha", "doc").some((problem) => /tags nobody/.test(problem)));
   assert.ok(lintChatComment(`@a ${"x ".repeat(400)}`, "figma").some((problem) => /600/.test(problem)));
   assert.ok(lintChatComment("@a Anh ơi xem giúp e", "figma").some((problem) => /openers/.test(problem)));
 });
