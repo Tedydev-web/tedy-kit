@@ -1,6 +1,6 @@
 {
   "name": "tedy-kit",
-  "description": "Personal Claude Code kit: working style, role skills and mechanical gates.",
+  "description": "Marketplace for the tedy plugin: drafted reviews, tasks and comments behind approval gates.",
   "owner": {
     "name": "tedydev"
   },
@@ -8,7 +8,7 @@
     {
       "name": "tedy",
       "source": "./plugin",
-      "description": "Personal working style for PR review, development and project management: role skills, output style samples, reconciliation and mechanical gates."
+      "description": "Pull request review, development and project management with drafts the user approves, a reconcile across PRD, design and code, and gates on publishing and pushing."
     }
   ]
 }

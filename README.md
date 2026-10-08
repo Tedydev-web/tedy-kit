@@ -1,86 +1,95 @@
-# tedy-kit
+# tedy-kit engine
 
-Personal Claude Code kit that carries one engineer's way of working (PR review, development, project management) into every session and project. It is a local directory marketplace (`tedy-kit`) that ships one plugin (`tedy`).
+A Claude Code plugin (`tedy`) for pull request review, development and project management that keeps every write behind a draft the user approves. It reconciles a scope across the PRD, the design, the backend, the contract and the frontend; drafts review comments, tracker items and Doc or Figma comments in the user's style and language; and adds hooks that stop the agent from publishing, pushing to an integration branch or crossing into another role's work without asking.
 
-Plan and evidence: `~/Documents/workspace/plans/261006-1429-personal-working-style-kit/`.
+The plugin holds no personal or project data. Everything that belongs to one user (rules, writing samples, project maps, gate switches) lives in their profile directory, which the plugin reads.
 
-## Layout
+## Requirements
 
-| Path | Role | Loaded |
-|---|---|---|
-| `rules/working-style.md` | Always-on personal rules, imported from `~/.claude/CLAUDE.md` | Every session, survives compaction |
-| `plugin/skills/` | Role skills (`/tedy:review-pr`, …) | On invocation |
-| `plugin/shared/` | Procedures and style samples the skills read | When a skill reads them |
-| `plugin/hooks/`, `plugin/scripts/` | Mechanical gates and helpers (Node, `node:test`) | On hook events |
-| `<profile>/projects/` | Project maps written by `/tedy:setup`, in the user's profile (`plugin/shared/profile-layout.md`); fields in `plugin/shared/project-map-schema.md` | When a skill resolves the current project |
-| `evals/` | Probes for platform assumptions, pressure tests, plugin evals | Manual |
-
-## Commands
-
-A one-page guide in Vietnamese for daily use: [`docs/user-guide.html`](docs/user-guide.html).
-
-| Command | Invocation | Does |
-|---|---|---|
-| `/tedy:review-pr <PR>` | User or model | Reviews a teammate's PR against PRD, Figma and backend code, drafts hints, posts after approval |
-| `/tedy:setup [update]` | User only | Builds or updates the project map through guided questions |
-| `/tedy:reconcile <scope>` | User only | Cross-checks PRD, Figma, backend, contract, frontend and demo for one scope; writes a mismatch table and raise list |
-| `/tedy:dev <task> \| rebut <review>` | User only | Builds one task (reconcile, branch, verify on the commit, two reviewer lenses, commit, report) or rebuts an external review claim by claim before any edit |
-| `/tedy:pm <scope> \| replies \| tasks <scope>` | User or model | Gaps ledger, Doc and Figma comment drafts and OpenProject task drafts in the user's style; posts after approval; checks replies |
-| `/tedy:learn [project path]` | User only | Promotes repeated corrections from a project's auto memory and the edit log into rules, role references, style samples or the project map, and deletes what they replace |
+- Claude Code with plugin support.
+- Node.js 20 or later, `git`, and the GitHub CLI `gh` logged in.
+- Optional, per channel: an OpenProject API token in `~/.config/op/config.json`, a Figma token in `~/.config/figma/token`, and an `rclone` remote named `gdrive` for Google Doc comments. Tokens are read at run time and never printed.
 
 ## Install
 
-```bash
-claude plugin marketplace add ~/Documents/workspace/tedy-kit
-claude plugin install tedy@tedy-kit
+```text
+/plugin marketplace add Tedydev-web/tedy-kit-engine#v0.1.0
+/plugin install tedy@tedy-kit
 ```
 
-The plugin runs from this source directory: edits apply in a new session or after `/reload-plugins`, with no reinstall. Script edits apply at once; a compaction does not reload `hooks.json`, so the role card after compaction asks for `/reload-plugins` when the session still runs older hooks.
+The `#v0.1.0` pins a release: the plugin changes only when you move the pin and run `claude plugin marketplace update tedy-kit`.
 
-`~/.claude/CLAUDE.md` must keep this line after the shared-core import:
+## Set up your profile
+
+```bash
+node "$(find ~/.claude/plugins/cache/tedy-kit -name profile.mjs -path "*/scripts/*" | sort | tail -1)" init
+```
+
+`init` creates `~/.config/tedy` with a default `config.json`, a starter `rules.md` and an empty `projects/` folder, and never overwrites a file. To keep the profile elsewhere, for example in a private git repository, set `TEDY_PROFILE_DIR` in the `env` block of `~/.claude/settings.json`, so hooks and commands both see it. Then import your rules into every session by adding this line to `~/.claude/CLAUDE.md`:
 
 ```text
-@~/Documents/workspace/tedy-kit/rules/working-style.md
+@~/.config/tedy/rules.md
 ```
 
-AgentKit does not manage `~/.claude/CLAUDE.md`; if the line ever disappears, add it back.
+`profile.mjs doctor` shows what the plugin will read. The layout and every config key are in [`plugin/shared/profile-layout.md`](plugin/shared/profile-layout.md).
 
-User settings this kit relies on (`~/.claude/settings.json`):
-- `outputStyle: "God Mode (Level 5)"`.
-- `skillOverrides` set to `"user-invocable-only"` for `ak-review-pr`, `ak-code-review`, `pg-review-pr`, `pg-project-management`, `code-review`.
-- `permissions.ask` covering PR merge, `github-write.mjs` and the OpenProject, Figma and Doc write commands, in plain form. Since 2026-10-08 a feature-branch push and `gh pr create --draft` need no prompt; the git gate asks before a push to an integration branch (repositories listed in the profile's `gates.pushExempt` excepted) or one that rewrites history, and refuses a non-draft PR (rtk was removed on 2026-10-07; while it was installed, its rewrite hook made permission rules miss commands). Verified 2026-10-07: a fresh session prompts for `node …/github-write.mjs` and runs other `node` commands freely.
+## Gates
 
-After every Claude Code update, run `bash evals/probes/run-probes.sh` and compare with `plans/reports/probe-261007-tedy-kit-open-questions-resolved.md`.
+| Gate | Default | What it does |
+|---|---|---|
+| Integration-branch push | always on | Asks before a push to `main`, `master`, `dev`, `develop`, `production` or `staging`, unless the repository is in `gates.pushExempt` |
+| History rewrite | always on | Asks before a force push, a deleting refspec or `--mirror` |
+| `gates.noComments` | off | Blocks edits that add code comments and reports comments a push carries |
+| `gates.draftPrOnly` | off | Refuses a pull request that is not a draft |
+| `gates.ghWrites` | off | Refuses direct `gh` writes so that everything posted to GitHub goes through `github-write.mjs` after an approved draft |
+| `gates.roleGate` | off | Asks before a session writes for another role listed in the project map's `sessions` |
 
-## Data in this repository
+A broken `config.json` turns every personal gate on and is reported at session start until `profile.mjs doctor` reports it ok.
 
-Project maps hold internal company data: PRD document ids, Figma file keys, OpenProject project ids, team member names. The repository is private. It holds no credentials: tokens stay in `~/.config` (mode 600) and are read at run time.
+## Commands
 
-## Authoring standard
-
-- Each SKILL.md opens with a senior persona, the iron laws, and a "not for this skill" section naming the sibling that owns that work.
-- Make a skill model-invocable only when the agent must reach it on its own; otherwise set `disable-model-invocation: true`. Always-on rules carry a routing line for each model-invocable skill, because the skill listing is over budget and new skills appear by name only.
-- Every step ends on a checkable, exhaustive completion criterion.
-- State rules positively with a one-clause reason. Use a prohibition only for a hard guardrail, paired with the target behavior.
-- Leading words, each defined once: _draft_ (unpublished text waiting for approval), _hint_ (one-sentence statement of the current state, no fix), _rebut_ (verify then accept or refute a claim), _raise_ (surface a conflict now, quoting both sides), _truth ladder_ (FE matches BE and contract; BE and contract match PRD and Figma), _write-guard_ (`WRITE → <target> : 1 review · K comments`, printed by `github-write.mjs` before any external write), _READY_ (doctor verdict), _docs-claim_ (a fact from docs not yet checked against code).
-- Anti-rationalization tables hold only excuses observed in real runs.
-- Limits: SKILL.md body at most about 9,000 English characters (5,000 tokens is the post-compaction re-injection cap); each reference under 300 lines; description up to 1,024 characters stating trigger conditions, not a workflow summary.
-- Skills that ask the user never use `context: fork`, and never list AskUserQuestion in `allowed-tools`.
-- Mark exact external-write command blocks with `<!-- fragile -->`.
-- Quote script-printed canonical blocks in full in the reply.
-- Gates before calling a change done: `claude plugin validate`, `python3 ~/.claude/skills/ak-skill-creator/scripts/quick_validate.py <skill>`, `python3 ~/.claude/skills/ak-skill-creator/scripts/lint_cruft.py <skill> --routing` (0 High), `node --test plugin/scripts/*.test.mjs`. The machine-global gitignore excludes `*.test.*`; `.gitignore` re-includes `*.test.mjs`, so check `git status` shows new test files.
-
-## Considered and rejected
-
-| Option | Reason |
+| Command | Does |
 |---|---|
-| Role persona through `claude --agent` | Replaces the default Claude Code system prompt (kill-test 2026-10-06) |
-| Agent `memory:` for accumulated experience | `code-reviewer` ran 97 times with an empty memory directory |
-| New MCP servers for GitHub, Figma, Google Docs, OpenProject | Existing CLIs and REST cover them; the Figma MCP cannot read or write comments |
-| Router skill | `/tedy:` autocomplete already lists every command |
-| Self-update gate, version parity, CHANGELOG | Plugin loads in place from source; git history is enough for a personal kit |
-| Blind LLM-judge acceptance | Circular (judge reads the same style docs), underpowered at 6 pairs, self-preference bias; the edit rate on real approvals replaces it |
-| Recall ≥ 90% routing target | Skill listing is over budget and is not re-injected after compaction; manual invocation plus routing lines is the path |
-| `CLAUDE_CODE_THRIFTY_SONIC=0` | Undocumented internal flag; the report after each push covers Bash-side writes |
-| `skillOverrides` for `mattpocock-skills:code-review` | Plugin skills ignore `skillOverrides`; the plugin stays enabled by the user's choice |
-| Footer disclosing AI-drafted review comments | User's decision on 2026-10-07: no disclosure |
+| `/tedy:setup [update]` | Builds or updates the project map in your profile through guided questions |
+| `/tedy:reconcile <scope>` | Cross-checks PRD, design, backend, contract, frontend and demo for one scope; writes a mismatch table and a raise list |
+| `/tedy:review-pr <PR>` | Reviews a teammate's PR against the PRD, the design and the backend, drafts one-sentence line comments, posts after approval |
+| `/tedy:dev <task>` or `rebut <review>` | Builds one task (reconcile, branch, verify on the commit, independent review, draft PR) or checks an external review claim by claim before any edit |
+| `/tedy:pm <scope>`, `replies` or `tasks <scope>` | Drafts tracker items and Doc or Figma comments from a gaps ledger, publishes after approval, checks replies |
+| `/tedy:learn [project path]` | Turns repeated corrections into rules, style samples or map facts in your profile |
+
+Menus and table words come in the profile's chat language (`language.chat`, English and Vietnamese today); comments follow the language each project map sets for PR reviews, the tracker, and Doc and Figma.
+
+## Trackers
+
+`openproject.mjs` is the only tracker adapter. The commands, files and guarantees an adapter must keep are in [`plugin/shared/tracker-contract.md`](plugin/shared/tracker-contract.md); `project-map.mjs doctor` reports a `tracker.type` with no adapter.
+
+## Where data lives
+
+| What | Where |
+|---|---|
+| Rules, style samples, project maps, gate switches | Your profile: `TEDY_PROFILE_DIR` or `~/.config/tedy` |
+| Gate log, edit log, draft snapshots, last reply check | `TEDY_STATE_DIR` or `~/.local/state/tedy` |
+| Tracker slug map | `~/.config/op/sync/` |
+
+Uninstalling the plugin removes none of these.
+
+## Development
+
+```bash
+claude --plugin-dir ./plugin
+node --test plugin/scripts/*.test.mjs
+node plugin/scripts/public-scan.mjs tree . --denylist <your-profile>/public-denylist.txt
+```
+
+`--plugin-dir` replaces the installed `tedy` for that session only. `public-scan.mjs history <repo>` checks every object a push would publish for home paths, email addresses, secrets and the terms in your denylist. After a Claude Code update, `bash evals/probes/run-probes.sh` re-checks the platform behaviour the hooks rely on, and `evals/pressure/run-pressure.sh` replays scenarios where the agent is pushed to skip an approval (`ARMS`, `PLUGIN_DIR` and `LABEL` select what runs).
+
+Authoring rules for skills:
+- Each SKILL.md opens with a persona, the iron laws and a "not for this skill" section naming the sibling that owns that work.
+- A skill is model-invocable only when the agent must reach it on its own; otherwise it sets `disable-model-invocation: true`.
+- Every step ends on a checkable completion criterion. Rules are stated positively with a one-clause reason.
+- Menu labels are keys of `plugin/scripts/labels.mjs`, never literal text.
+- A description stays under 1,024 characters and must parse as plain YAML: no ` #` and no `: ` inside it.
+
+## License
+
+No license has been chosen yet, so all rights are reserved.

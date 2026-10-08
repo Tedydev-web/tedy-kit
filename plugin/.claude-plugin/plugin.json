@@ -1,5 +1,8 @@
 {
   "name": "tedy",
-  "description": "Personal working style for PR review, development and project management: role skills, output style samples, reconciliation and mechanical gates.",
-  "author": { "name": "tedydev" }
+  "version": "0.1.0",
+  "description": "Pull request review, development and project management with drafts the user approves, a reconcile across PRD, design and code, and gates on publishing and pushing.",
+  "author": {
+    "name": "tedydev"
+  }
 }
