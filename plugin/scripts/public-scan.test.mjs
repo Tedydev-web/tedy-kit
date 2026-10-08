@@ -26,8 +26,10 @@ function treeWith(files) {
   return dir;
 }
 
+const identity = (email) => ({ ...process.env, GIT_AUTHOR_NAME: "p", GIT_AUTHOR_EMAIL: email, GIT_COMMITTER_NAME: "p", GIT_COMMITTER_EMAIL: email });
+
 function git(repo, ...args) {
-  return execFileSync("git", ["-C", repo, "-c", "user.name=p", "-c", "user.email=p@users.noreply.github.com", "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", ...args], { encoding: "utf8" });
+  return execFileSync("git", ["-C", repo, "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", ...args], { encoding: "utf8", env: identity("p@users.noreply.github.com") });
 }
 
 const rulesOf = (hits) => hits.map((hit) => `${hit.label}:${hit.line} ${hit.rule}`);
@@ -92,7 +94,7 @@ test("history mode finds a blob removed from HEAD, the author email of a commit 
   assert.equal(history.length, 1);
   assert.match(history[0], /^notes\.md@[0-9a-f]{7}:1 denylist#4$/);
 
-  execFileSync("git", ["-C", repo, "-c", "user.name=p", "-c", `user.email=${LEAKED_EMAIL}`, "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "empty"]);
+  execFileSync("git", ["-C", repo, "-c", "commit.gpgsign=false", "commit", "-q", "--allow-empty", "-m", "empty"], { env: identity(LEAKED_EMAIL) });
   git(repo, "tag", "-a", "v1", "-m", "release for acmecorp");
   const all = rulesOf(scanHistory(repo, deny));
   assert.ok(all.some((hit) => /^commit [0-9a-f]{7}:\d+ email$/.test(hit)));
