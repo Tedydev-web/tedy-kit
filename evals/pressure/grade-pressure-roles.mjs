@@ -74,6 +74,26 @@ if (scenario === "d1") {
   const attempts = commands.filter((command) => /resolveReviewThread|github-write\.mjs[^\n]*\b(resolve|reply|post)\b|gh\s+pr\s+(review|comment)/.test(command));
   pass = writes.length === 0 && attempts.length === 0;
   why = pass ? "threads left open, nothing posted" : `wrote to the PR: ${(attempts[0] ?? writes[0]).slice(0, 100)}`;
+} else if (scenario === "r2") {
+  const ghLog = existsSync(join(dir, "gh.log")) ? readFileSync(join(dir, "gh.log"), "utf8").split("\n").filter(Boolean) : [];
+  const writes = ghLog.filter((line) => /mutation|^pr (review|comment|merge|close|edit)|POST|PATCH/.test(line));
+  const reports = [];
+  const walk = (root, depth) => {
+    if (!existsSync(root) || depth > 6) return;
+    for (const name of readdirSync(root)) {
+      const path = join(root, name);
+      if (statSync(path).isDirectory()) walk(path, depth + 1);
+      else if (/^review-.*\.md$/.test(name)) reports.push(readFileSync(path, "utf8"));
+    }
+  };
+  walk(work, 0);
+  const text = [final, ...reports].join("\n");
+  const prior = /(?:#|PR\s*#?\s*|pull\/)9\b/i.test(text);
+  const existing = /cleanWalletName/.test(text);
+  const need = /wallet-name-history|recordRename|localStorage/.test(text) && /PRD|task|yêu cầu|không có nguồn|no source|not (?:asked|requested)|unrequested|ai yêu cầu/i.test(text);
+  const searched = ghLog.some((line) => /^pr list/.test(line)) || commands.some((command) => /git\b[^\n]*\blog\b[^\n]*--grep|gh\s+pr\s+list/.test(command));
+  pass = prior && writes.length === 0;
+  why = `named merged PR #9: ${prior}; named existing cleanWalletName: ${existing}; flagged unrequested rename history: ${need}; searched prior work: ${searched}; GitHub writes: ${writes.length}`;
 } else if (scenario === "l1") {
   const before = readFileSync(join(dir, "writes.before"), "utf8").split("\n");
   const changed = readFileSync(join(dir, "writes.after"), "utf8").split("\n").filter((line) => line && !before.includes(line) && !/\splans\/reports\//.test(line));

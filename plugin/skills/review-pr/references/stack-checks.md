@@ -13,6 +13,13 @@ Run these on `gh pr diff <n>` before the full read; each hit is a lead to verify
 - `package.json` or a lockfile changed: a new dependency doing what an installed one or a few lines already do.
 - A comment added to source (working-style rule 10).
 
+## Prior work and need
+
+Run both once per change, before the full read. A hit goes into the findings report with its evidence.
+
+- **Prior work.** Search for the same outcome outside this change: `gh pr list --state all --search "<two or three terms from the title, branch and added symbols>" --json number,title,state,mergedAt,headRefName --limit 20`, `git log origin/<integration branch> --oneline -20 --grep "<term>"`, and `git grep` on the integration branch for the routes, keys, hooks and components the change adds. Existing code or a merged PR that already does what this change adds is a finding: two implementations of one rule drift apart. An open PR on the same outcome is a finding unless this change says it replaces it. Leave out the change under review.
+- **Need.** Every behaviour the change adds traces to a PRD rule, a tracker task or a reported bug. A behaviour none of them asks for (a setting nobody requested, an abstraction with one caller, a feature outside the task) is a finding that names what was added and that no source asks for it. Whether such a behaviour is wanted is the PM's call: it goes to the user as an open question in the findings report, never as a comment telling the author to remove it.
+
 ## React and Telegram Mini Apps
 
 - `initDataUnsafe` used for an authorization decision instead of the server-verified `initData`.

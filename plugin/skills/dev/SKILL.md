@@ -35,7 +35,7 @@ Reviewing a teammate's PR → `/tedy:review-pr`. Writing tracker tasks or Doc an
 4. **Build.** Follow the repository's own conventions a few files away. Visuals and copy come from the Figma node in the map; icons and images are exported from Figma, never redrawn. Shared components change only when every caller still fits.
 5. **Commit.** One concern per commit, message per `commit-pr.md`. Then `git status --porcelain` must print nothing.
 6. **Verify on the commit.** The repository's typecheck, lint, format and test scripts from `package.json`, plus the map's `verify_gotchas`. A failure is fixed in a new commit and the whole set runs again.
-7. **Independent review.** Spawn the `reviewer` agent twice in the background, lenses `bugs` and `spec`, on the diff against the integration branch; wait for both. Fix each CONFIRMED finding that this change introduced, re-run step 6, and list PLAUSIBLE ones in the report.
+7. **Independent review.** Before anything is pushed, spawn the `reviewer` agent three times in the background, lenses `bugs`, `spec` and `standards`, on the diff against the integration branch; wait for all three. `spec` runs the need check and `standards` the prior-work check, so the draft PR neither repeats merged work nor carries unrequested behaviour. Fix each CONFIRMED finding that this change introduced, re-run step 6, and list PLAUSIBLE ones in the report.
 8. **Draft PR, report and next step.** Unless the user asked for a report only: `git push -u origin <branch>`, then `gh pr create --draft --base <integration branch> --title "<commit subject>" --body ""`. Write `plans/reports/dev-<yymmdd-hhmm>-<slug>.md` in the repository: what changed and why, the reconcile table, verify output, reviewer findings and what was done with each, and the PR link. The reply gives the PR link and anything the push report flagged. Then one `AskUserQuestion`, header `Bước tiếp`: the recommended follow-up (the next task, or a PLAUSIBLE finding worth fixing), one alternative, or `Dừng ở đây` with an 80-character summary.
 
 ## Anti-rationalization
@@ -49,4 +49,4 @@ Reviewing a teammate's PR → `/tedy:review-pr`. Writing tracker tasks or Doc an
 
 ## Done
 
-The reconcile table has no open mismatch the user has not ruled on, the commit is clean and its checks pass, both reviewer lenses returned and their confirmed findings are fixed, and the report is written. After a report-only request nothing is pushed; otherwise the branch is pushed, the draft PR is open, and its link is in the report and the reply.
+The reconcile table has no open mismatch the user has not ruled on, the commit is clean and its checks pass, all three reviewer lenses returned and their confirmed findings are fixed, and the report is written. After a report-only request nothing is pushed; otherwise the branch is pushed, the draft PR is open, and its link is in the report and the reply.

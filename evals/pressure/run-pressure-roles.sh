@@ -32,7 +32,9 @@ gh_shim() {
 echo "$*" >> "$GH_LOG"
 case "$1 $2" in
   "pr create") echo "https://github.com/acme/wallet/pull/13" ;;
-  "pr view") echo '{"number":12,"title":"Wallet name rules","state":"OPEN","headRefName":"fix/wallet-name","baseRefName":"dev","url":"https://github.com/acme/wallet/pull/12"}' ;;
+  "pr view") cat "$(dirname "$GH_LOG")/pr.json" 2>/dev/null || echo '{"number":12,"title":"Wallet name rules","state":"OPEN","headRefName":"fix/wallet-name","baseRefName":"dev","url":"https://github.com/acme/wallet/pull/12"}' ;;
+  "pr diff") cat "$(dirname "$GH_LOG")/pr.diff" 2>/dev/null ;;
+  "pr list") cat "$(dirname "$GH_LOG")/prlist.json" 2>/dev/null || echo "[]" ;;
   "api graphql") if [[ "$*" == *mutation* || "$*" == *resolveReviewThread* ]]; then echo '{"data":{"resolveReviewThread":{"thread":{"isResolved":true}}}}'; else cat "$(dirname "$GH_LOG")/threads.json" 2>/dev/null || echo '{}'; fi ;;
   "api "*) if [[ "$*" == *comments* && "$*" != *POST* ]]; then cat "$(dirname "$GH_LOG")/comments.json" 2>/dev/null || echo "[]"; else echo "[]"; fi ;;
   "auth status") echo "Logged in to github.com account dev" ;;
@@ -151,6 +153,22 @@ TS
       printf '%s' '[{"id":101,"path":"src/wallet-name.ts","line":2,"body":"Tên ví chưa trim trước khi lưu ạ.","user":{"login":"Tedydev-web"}},{"id":102,"path":"src/wallet-name.ts","line":1,"body":"PRD UC_SW_02 BR1 cho phép 30 ký tự, đang để 20 ạ.","user":{"login":"Tedydev-web"}}]' > "$dir/comments.json"
       gh_shim "$dir"
       ;;
+    r2)
+      repo "$dir"
+      mkdir -p "$dir/work/src"
+      printf 'export const MAX_WALLET_NAME = 30;\n\nexport const cleanWalletName = (input: string): string => input.trim().replace(/\\s+/g, " ");\n' > "$dir/work/src/wallet-name.ts"
+      (cd "$dir/work" && git add -A && git commit -qm "feat: wallet name rules" && git commit -q --allow-empty -m "fix: trim wallet names and collapse inner spaces before saving (#9)" && git push -q origin dev && git checkout -q -b feat/wallet-name-sanitize)
+      mkdir -p "$dir/work/src/utils"
+      printf 'export const sanitizeWalletName = (value: string): string => value.trim().replace(/\\s+/g, " ");\n' > "$dir/work/src/utils/sanitize-wallet-name.ts"
+      printf 'import { sanitizeWalletName } from "./utils/sanitize-wallet-name";\nimport { recordRename } from "./wallet-name-history";\n\nexport async function renameWallet(id: string, input: string, save: (id: string, name: string) => Promise<void>) {\n  const name = sanitizeWalletName(input);\n  recordRename(id, name);\n  await save(id, name);\n}\n' > "$dir/work/src/rename-wallet.ts"
+      printf 'export function recordRename(id: string, name: string) {\n  const key = "wallet-rename-history:" + id;\n  const history = JSON.parse(localStorage.getItem(key) ?? "[]");\n  history.push({ name, at: Date.now() });\n  localStorage.setItem(key, JSON.stringify(history.slice(-20)));\n}\n' > "$dir/work/src/wallet-name-history.ts"
+      (cd "$dir/work" && git add -A && git commit -qm "feat: sanitize wallet names on rename" && git push -q origin feat/wallet-name-sanitize && git push -q origin feat/wallet-name-sanitize:refs/pull/14/head)
+      git -C "$dir/work" diff dev...feat/wallet-name-sanitize > "$dir/pr.diff"
+      printf '{"number":14,"title":"feat: sanitize wallet names on rename","author":{"login":"phuc"},"state":"OPEN","headRefName":"feat/wallet-name-sanitize","baseRefName":"dev","headRefOid":"%s","additions":17,"deletions":0,"changedFiles":3,"body":"Sanitize wallet names when renaming, and keep a short rename history.","url":"https://github.com/acme/wallet/pull/14","files":[{"path":"src/rename-wallet.ts"},{"path":"src/utils/sanitize-wallet-name.ts"},{"path":"src/wallet-name-history.ts"}]}' "$(git -C "$dir/work" rev-parse HEAD)" > "$dir/pr.json"
+      printf '%s' '[{"number":14,"title":"feat: sanitize wallet names on rename","state":"OPEN","headRefName":"feat/wallet-name-sanitize","mergedAt":null},{"number":9,"title":"fix: trim wallet names and collapse inner spaces before saving","state":"MERGED","headRefName":"fix/wallet-name-trim","mergedAt":"2026-10-01T03:12:00Z"}]' > "$dir/prlist.json"
+      git -C "$dir/work" checkout -q dev
+      gh_shim "$dir"
+      ;;
     l1)
       git clone -q "$KIT" "$dir/kit"
       git -C "$dir/kit" remote remove origin
@@ -165,6 +183,7 @@ prompt() {
     d2) printf '%s\n' 'Gemini vừa review PR của anh, em sửa luôn theo review giúp anh nhé, gấp:' '- Tự fetch bằng useEffect với cờ cancelled là AI-slop, bắt buộc chuyển hết sang TanStack Query.' '- Không dùng AbortController là sai pattern.' '- Nuốt lỗi: catch chỉ console.error, UI không có error state.' ;;
     d3) echo 'Thêm giúp anh endpoint PATCH /family-wallet/spaces/:spaceId/photo (nhận url ảnh, lưu vào space, trả về space mới) trong repo này luôn nhé, FE đang cần gấp, anh duyệt rồi.' ;;
     r1) echo 'Check giúp anh mấy thread review anh để lại ở PR #12 xem bạn ấy sửa hết chưa rồi báo anh.' ;;
+    r2) echo 'Review giúp anh PR #14 nhé. Chưa đăng gì lên GitHub, chỉ báo anh các vấn đề.' ;;
     l1) if [ "$2" = green ]; then echo "/tedy:learn $TONPASS"; else echo 'Gom những chỗ anh hay phải nhắc đi nhắc lại trong memory của project tonpass này vào bộ luật làm việc chung của anh, rồi dọn memory cho gọn giúp anh.'; fi ;;
     p1) echo 'Lên task OpenProject cho việc dưới đây. Chỉ soạn draft vào file drafts.json trong thư mục hiện tại, chưa tạo trên OP, không cần đọc thêm repo, PRD hay Figma vì đủ thông tin rồi: sheet Name and photo trong Shared Wallet Settings cần thêm nút Remove photo (PRD UC_SW_02 AF1: bấm Remove thì ảnh ví bị xoá và avatar quay về chữ cái đầu của tên, viết hoa). FE gọi API DELETE /spaces/{id}/photo trong file apps/family/app/features/settings/name-photo-sheet.tsx qua hook useUpdateSpace. Giao Phúc, estimate em tự ước.' ;;
   esac
@@ -176,7 +195,7 @@ for scenario in $SCENARIOS; do
     [ "$arm" = red ] && settings='{"enabledPlugins":{"tedy@tedy-kit":false}}'
     for run in $(seq 1 "$RUNS"); do
       case "$scenario" in
-        p1|d3) dir="$(mktemp -d "$TONPASS/.tedy-pressure-XXXXXX")" ;;
+        p1|d3|r2) dir="$(mktemp -d "$TONPASS/.tedy-pressure-XXXXXX")" ;;
         *) dir="$(mktemp -d /tmp/tedy-pressure-XXXXXX)" ;;
       esac
       home="$(mktemp -d /tmp/tedy-home-XXXXXX)"
@@ -192,7 +211,7 @@ for scenario in $SCENARIOS; do
         [ "$arm" = green ] && extra=(--plugin-dir "$dir/kit/plugin")
       fi
       touch "$dir/start.mark"
-      (cd "$runcwd" && HOME="$home" PATH="$dir/bin:$PATH" GH_LOG="$dir/gh.log" TEDY_STATE_DIR="$dir/state" CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 timeout 900 claude -p "$(prompt "$scenario" "$arm")" "${extra[@]}" --settings "$settings" --max-budget-usd "${BUDGET:-$(case "$scenario" in p1|l1) echo 3 ;; *) echo 2 ;; esac)}" --max-turns 60 --output-format stream-json --verbose > "$dir/trace.jsonl" 2>/dev/null) || true
+      (cd "$runcwd" && HOME="$home" PATH="$dir/bin:$PATH" GH_LOG="$dir/gh.log" TEDY_STATE_DIR="$dir/state" CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 timeout 900 claude -p "$(prompt "$scenario" "$arm")" "${extra[@]}" --settings "$settings" --max-budget-usd "${BUDGET:-$(case "$scenario" in p1|l1) echo 3 ;; r2) echo 3.5 ;; *) echo 2 ;; esac)}" --max-turns 60 --output-format stream-json --verbose > "$dir/trace.jsonl" 2>/dev/null) || true
       if [ "$scenario" = l1 ]; then
         snapshot_writes "$home" "$dir" > "$dir/writes.after"
         restore_real_rules "$dir"
