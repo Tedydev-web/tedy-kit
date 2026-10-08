@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { closestWorkPackage, subjectSimilarity, subjectTokens } from "./openproject-dedup.mjs";
+import { closestWorkPackage, HIGH_SIMILARITY, subjectSimilarity, subjectTokens } from "./openproject-dedup.mjs";
 
 test("subject tokens drop component tags, punctuation and filler words", () => {
   assert.deepEqual(subjectTokens("[FE] Vault limit pop-up on the Free plan"), ["vault", "limit", "pop", "up", "free", "plan"]);
@@ -20,4 +20,16 @@ test("the closest existing work package of the same type is reported above the t
   ];
   assert.equal(closestWorkPackage({ type: "Task", subject: "[FE] Vault limit pop-up on Free" }, existing).id, 21046);
   assert.equal(closestWorkPackage({ type: "Task", subject: "[FE] Hand over ownership sheet" }, existing), null);
+});
+
+test("a match carries its band and the existing work package's status", () => {
+  const existing = [
+    { id: 1, type: "Task", subject: "[FE] Free vault limit pop-up", status: "Closed", closed: true },
+    { id: 2, type: "Task", subject: "[FE] Vault limit sheet on Pro plan", status: "New", closed: false },
+  ];
+  const high = closestWorkPackage({ type: "Task", subject: "[FE] Vault limit pop-up on Free" }, existing);
+  assert.deepEqual([high.id, high.band, high.status, high.closed], [1, "HIGH", "Closed", true]);
+  assert.ok(high.score >= HIGH_SIMILARITY);
+  const mid = closestWorkPackage({ type: "Task", subject: "[FE] Vault limit sheet on Free" }, existing.slice(1));
+  assert.equal(mid.band, "MID");
 });

@@ -1,6 +1,7 @@
 const STOP = new Set(["the", "a", "an", "to", "for", "of", "and", "or", "in", "on", "with", "add", "support", "screen", "man", "màn", "cho", "và", "page", "api", "feature"]);
 
 export const DUPLICATE_THRESHOLD = 0.6;
+export const HIGH_SIMILARITY = 0.85;
 
 export const subjectTokens = (subject) =>
   subject
@@ -44,17 +45,21 @@ export function closestWorkPackage(draft, existing) {
   for (const workPackage of existing) {
     if (workPackage.type.toLowerCase() !== type) continue;
     const score = subjectSimilarity(draft.subject ?? "", workPackage.subject);
-    if (score >= DUPLICATE_THRESHOLD && score > (best?.score ?? 0)) best = { ...workPackage, score };
+    if (score >= DUPLICATE_THRESHOLD && score > (best?.score ?? 0)) best = { ...workPackage, score, band: score >= HIGH_SIMILARITY ? "HIGH" : "MID" };
   }
   return best;
 }
 
-export async function listWorkPackages(client, project) {
+export async function closedStatuses(client) {
+  return new Set((await client.request("/api/v3/statuses"))._embedded.elements.filter((status) => status.isClosed).map((status) => status.name));
+}
+
+export async function listWorkPackages(client, project, closed) {
   const all = [];
   for (let offset = 1; ; offset += 1) {
     const page = await client.request(`/api/v3/projects/${project}/work_packages?pageSize=500&offset=${offset}&filters=%5B%5D`);
     const elements = page._embedded.elements;
-    all.push(...elements.map((workPackage) => ({ id: workPackage.id, subject: workPackage.subject, type: workPackage._links.type.title })));
+    all.push(...elements.map((workPackage) => ({ id: workPackage.id, subject: workPackage.subject, type: workPackage._links.type.title, status: workPackage._links.status?.title, closed: closed.has(workPackage._links.status?.title) })));
     if (!elements.length || all.length >= page.total) return all;
   }
 }

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { addSlugs, buildPayload, isoDuration, matchName, planWrites } from "./openproject-client.mjs";
+import { addSlugs, buildPayload, isoDuration, matchName, mergeDescription, mergePayload, planWrites } from "./openproject-client.mjs";
 
 test("estimates become ISO 8601 durations", () => {
   assert.equal(isoDuration(2), "PT2H");
@@ -56,4 +56,29 @@ test("addSlugs appends new keys in pg-project-management's format and keeps meta
   assert.equal(after, JSON.stringify({ _relations: [], _merged: { "epic-a": 1 }, "epic-a": 1, _last_apply: "2026-10-05", "task-b": 2 }, null, 2));
   assert.equal(after.endsWith("\n"), false);
   assert.throws(() => addSlugs(before, { "epic-a": 9 }), /already maps to 1/);
+});
+
+test("a draft with merge adopts an existing work package, whatever the sidecar says about its slug", () => {
+  assert.deepEqual(planWrites([{ slug: "task-m", merge: 21300 }], { "task-m": 21300 }), [{ slug: "task-m", action: "merge", id: 21300, adopt: true }]);
+  assert.deepEqual(planWrites([{ slug: "task-n", merge: 21301 }], {}), [{ slug: "task-n", action: "merge", id: 21301, adopt: true }]);
+  assert.throws(() => planWrites([{ slug: "task-m", merge: 21302 }], { "task-m": 21300 }), /maps to #21300 in the sidecar, not #21302/);
+  assert.throws(() => planWrites([{ slug: "task-x", merge: 1, id: 2 }], {}), /either id or merge/);
+});
+
+test("merging keeps the existing description and appends only new checklist lines under a dated header", () => {
+  const old = "## Goal\nShow it.\n\n## AC\n- [x] Shows the [Home](https://f/1) section.\n- [ ] Free plan stops at 3.";
+  const draft = "## Goal\nOther words.\n\n## AC\n- [ ] Shows the Home section\n- [ ] Pro plan has no limit.\n- [ ] Pro plan has no limit.";
+  const merged = mergeDescription(old, draft, "2026-10-08");
+  assert.equal(merged, `${old}\n\n## Added 2026-10-08\n- [ ] Pro plan has no limit.`);
+  assert.equal(mergeDescription(old, "## AC\n- [ ] Free plan stops at 3", "2026-10-08"), old);
+  assert.equal(mergeDescription("  ", draft, "2026-10-08"), draft);
+});
+
+test("a merge payload sends only what changes: new lines, and an estimate only when there is none", () => {
+  const current = { lockVersion: 7, estimatedTime: "PT2H", description: { raw: "## AC\n- [ ] A." } };
+  assert.deepEqual(mergePayload(current, { description: "## AC\n- [ ] B.", estimate: 1 }, "2026-10-08"), {
+    lockVersion: 7,
+    description: { format: "markdown", raw: "## AC\n- [ ] A.\n\n## Added 2026-10-08\n- [ ] B." },
+  });
+  assert.deepEqual(mergePayload({ ...current, estimatedTime: null }, { description: "## AC\n- [ ] A.", estimate: 1.5 }, "2026-10-08"), { lockVersion: 7, estimatedTime: "PT1H30M" });
 });

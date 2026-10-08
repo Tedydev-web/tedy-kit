@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { addSlugs, buildPayload, loadConfig, loadRefs, planWrites, readSidecar, sidecarPath, writeSidecar } from "./openproject-client.mjs";
-import { closestWorkPackage, listWorkPackages } from "./openproject-dedup.mjs";
+import { addSlugs, buildPayload, loadConfig, loadRefs, mergePayload, planWrites, readSidecar, sidecarPath, writeSidecar } from "./openproject-client.mjs";
+import { closedStatuses, closestWorkPackage, listWorkPackages } from "./openproject-dedup.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { snapshotOnce, snapshotPath } from "./draft-lint.mjs";
 import { appendEditLog, frozenOriginal, labelText } from "./edit-log.mjs";
@@ -13,13 +13,17 @@ function projectOf(flags) {
   return project;
 }
 
+const today = () => new Date().toLocaleDateString("en-CA");
+const similarNote = (similar) => ` | similar ${similar.band} #${similar.id} ${similar.score.toFixed(2)} [${similar.status}] "${similar.subject}"${similar.closed ? " closed: never merge, create new with relates" : ""}`;
+
 const resolveParent = (draft, mapping, created) => (typeof draft.parent === "string" ? mapping[draft.parent] ?? created[draft.parent] : draft.parent);
 
 async function check(client, project, drafts) {
   const mapping = JSON.parse(readSidecar(sidecarPath(client.host, project)));
   const plan = planWrites(drafts, mapping);
   const refs = await loadRefs(client, project);
-  const existing = plan.some((step) => step.action === "create") ? await listWorkPackages(client, project) : [];
+  const closed = plan.some((step) => step.action !== "update") ? await closedStatuses(client) : new Set();
+  const existing = plan.some((step) => step.action === "create") ? await listWorkPackages(client, project, closed) : [];
   let failed = false;
   const locks = {};
   for (const [index, draft] of drafts.entries()) {
@@ -29,8 +33,25 @@ async function check(client, project, drafts) {
     const warns = findings.filter((finding) => finding.severity === "WARN").map((finding) => finding.rule);
     const similar = step.action === "create" ? closestWorkPackage(draft, existing) : null;
     let form = "form skipped: parent not created yet";
+    let mergeNote = "";
     const parent = resolveParent(draft, mapping, {});
-    if (!(typeof draft.parent === "string" && !parent)) {
+    if (step.action === "merge") {
+      const current = await client.request(`/api/v3/work_packages/${step.id}`);
+      locks[draft.slug] = current.lockVersion;
+      const payload = mergePayload(current, draft, today());
+      const added = payload.description ? payload.description.raw.slice((current.description?.raw ?? "").trimEnd().length).split("\n").filter((line) => line.startsWith("- [ ]")).length : 0;
+      mergeNote = ` | +${added} checklist line(s), estimate ${payload.estimatedTime ? "set" : "kept"}`;
+      const refusal = closed.has(current._links.status.title) ? `refused: #${step.id} is ${current._links.status.title}; create a new work package with relates instead` : draft.status ? "refused: a merge keeps the work package's status; drop status from the draft" : null;
+      if (refusal) {
+        form = refusal;
+        failed = true;
+      } else {
+        const result = await client.request(`/api/v3/work_packages/${step.id}/form`, { method: "POST", body: payload });
+        const errors = Object.values(result?._embedded?.validationErrors ?? {}).map((error) => error.message);
+        form = errors.length ? `form errors: ${errors.join("; ")}` : "form ok";
+        failed ||= errors.length > 0;
+      }
+    } else if (!(typeof draft.parent === "string" && !parent)) {
       const target = step.action === "create" ? `/api/v3/projects/${project}/work_packages/form` : `/api/v3/work_packages/${step.id}/form`;
       const lockVersion = step.action === "update" ? (await client.request(`/api/v3/work_packages/${step.id}`)).lockVersion : undefined;
       if (lockVersion !== undefined) locks[draft.slug] = lockVersion;
@@ -41,13 +62,13 @@ async function check(client, project, drafts) {
     }
     failed ||= blocks.length > 0;
     const lint = blocks.length ? `lint ${blocks.map((finding) => finding.rule).join(", ")}` : `lint clean (${countWords(draft.description ?? "")} words)`;
-    const notes = `${warns.length ? ` | warn ${warns.join(", ")}` : ""}${similar ? ` | similar #${similar.id} ${similar.score.toFixed(2)} "${similar.subject}"` : ""}`;
+    const notes = `${mergeNote}${warns.length ? ` | warn ${warns.join(", ")}` : ""}${similar ? similarNote(similar) : ""}`;
     console.log(`${step.action}${step.id ? ` #${step.id}` : ""} ${draft.slug} | ${lint} | ${form}${notes}`);
   }
   for (const finding of lintDrafts(drafts, { glossary: resolveMap(process.cwd())?.map.glossary ?? {} })) console.log(`warn ${finding.slug}: ${finding.rule}: ${finding.message}`);
   console.log(readinessLine(readiness(drafts, { updating: new Set(drafts.filter((_, index) => plan[index].action === "update").map((draft) => draft.slug)) })));
-  const creates = plan.filter((step) => step.action === "create").length;
-  console.log(`WRITE → ${client.host} · project ${project} : ${creates} create · ${plan.length - creates} update`);
+  const count = (action) => plan.filter((step) => step.action === action).length;
+  console.log(`WRITE → ${client.host} · project ${project} : ${count("create")} create · ${count("update")} update · ${count("merge")} merge`);
   return { failed, plan, refs, mapping, locks };
 }
 
@@ -71,6 +92,7 @@ async function apply(client, project, drafts, file) {
   }
   const path = sidecarPath(client.host, project);
   const created = {};
+  const expected = {};
   const statuses = drafts.some((draft) => draft.status) ? (await client.request("/api/v3/statuses"))._embedded.elements : [];
   for (const [index, draft] of drafts.entries()) {
     const step = plan[index];
@@ -80,6 +102,12 @@ async function apply(client, project, drafts, file) {
       saved = await client.request(`/api/v3/projects/${project}/work_packages`, { method: "POST", body: buildPayload({ ...draft, parent }, refs) });
       created[draft.slug] = saved.id;
       writeSidecar(path, addSlugs(readSidecar(path), { [draft.slug]: saved.id }));
+    } else if (step.action === "merge") {
+      const current = await client.request(`/api/v3/work_packages/${step.id}`);
+      const payload = mergePayload(current, draft, today());
+      saved = Object.keys(payload).length > 1 ? await client.request(`/api/v3/work_packages/${step.id}`, { method: "PATCH", body: payload }) : current;
+      expected[draft.slug] = { subject: current.subject, description: payload.description?.raw ?? current.description?.raw ?? "" };
+      writeSidecar(path, addSlugs(readSidecar(path), { [draft.slug]: step.id }));
     } else {
       const current = await client.request(`/api/v3/work_packages/${step.id}`);
       saved = await client.request(`/api/v3/work_packages/${step.id}`, { method: "PATCH", body: buildPayload({ ...draft, parent }, refs, current.lockVersion) });
@@ -101,7 +129,8 @@ async function apply(client, project, drafts, file) {
   for (const [index, draft] of drafts.entries()) {
     const id = plan[index].id ?? created[draft.slug];
     const read = await client.request(`/api/v3/work_packages/${id}`);
-    const same = read.subject === draft.subject && read.description?.raw?.trim() === draft.description.trim();
+    const want = expected[draft.slug] ?? { subject: draft.subject, description: draft.description };
+    const same = read.subject === want.subject && (read.description?.raw ?? "").trim() === want.description.trim();
     verified += same ? 1 : 0;
     console.log(`#${id} ${same ? "matches" : "DIFFERS"} ${read.subject}`);
   }

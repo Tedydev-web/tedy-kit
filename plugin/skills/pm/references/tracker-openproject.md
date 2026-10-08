@@ -24,6 +24,7 @@ A JSON array, one object per work package:
 ```
 
 - `slug` is stable across runs: `<type>-<area>-<screen-or-behaviour>`. A slug already in the sidecar map updates that work package instead of creating a twin.
+- `merge` adopts an existing work package as the same work, the way `pg-project-management` merges: its subject, status, assignee, history and description stay; only checklist and AC lines it lacks are appended under `## Added <date>`, and the estimate is set only when it has none. A merge draft carries no `status`, and a closed work package is never a merge target. `apply` adds the slug to the sidecar.
 - `id` targets an existing work package the sidecar does not know yet, such as one the PM created by hand; `apply` adds its slug to the sidecar only after that update succeeds. Nothing else writes the sidecar, so it is never edited by hand or by a script outside `apply`.
 - `parent`, `relates` and `blocks` take ids, or slugs of drafts earlier in the same file.
 - `estimate` is in hours: the agent's own estimate halved. `startDate` and `dueDate` follow the assignee's queue at 8 hours a day; ask only for the start date of a new story.
@@ -34,8 +35,8 @@ A JSON array, one object per work package:
 | Command | Writes | What it does |
 |---|---|---|
 | `get <api path>` | no | Any GET, for example `/api/v3/work_packages/21298` |
-| `preview <drafts.json>` | no | `task-lint` on every draft, then the `/form` endpoint validates each payload; prints create or update per slug, lint warnings, story warnings (a new story with a UI task and no wire task, or the reverse), glossary drift against the map's `glossary`, the closest existing work package of the same type (`similar #id score`, from 0.60) for each create, then a `readiness đủ|mỏng|thiếu nặng` line (descriptions without a BLOCK, estimates on new leaf tasks, blocking open questions; the same thresholds as `pg-project-management`'s `readiness`) and the `WRITE →` line. A `similar` row is linked or updated instead, or the ledger says why it is new |
-| `apply <drafts.json>` | yes | Refuses unless preview is clean; creates or updates, adds relations and status, adds new slugs to the sidecar, reads every work package back and prints `verified N/N` |
+| `preview <drafts.json>` | no | `task-lint` on every draft, then the `/form` endpoint validates each payload; prints create or update per slug, lint warnings, story warnings (a new story with a UI task and no wire task, or the reverse), glossary drift against the map's `glossary`, the closest existing work package of the same type for each create (`similar HIGH|MID #id score [status]`; HIGH from 0.85, MID from 0.60), what each merge adds, then a `readiness đủ|mỏng|thiếu nặng` line (descriptions without a BLOCK, estimates on new leaf tasks, blocking open questions; the same thresholds as `pg-project-management`'s `readiness`) and the `WRITE →` line. A HIGH row becomes a `merge` unless the ledger says why it is new work; a MID row is listed in the `Duyệt` menu for the user to pick merge, new with `relates`, or drop; a closed match gets a new work package with `relates`, never a merge |
+| `apply <drafts.json>` | yes | Refuses unless preview is clean; creates, updates or merges, adds relations and status, adds new slugs to the sidecar, reads every work package back and prints `verified N/N` |
 
 `apply` triggers the permission prompt. The sidecar `~/.config/op/sync/<host>__<project>.map.json` is shared with `pg-project-management`: `apply` only appends new slug keys in the same format and never touches `_relations`, `_merged`, `_last_apply` or `_forced_pushes`.
 

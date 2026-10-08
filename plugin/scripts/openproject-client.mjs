@@ -4,6 +4,8 @@ import { dirname, join } from "node:path";
 import { requestJson } from "./api-request.mjs";
 
 const RESERVED = /^_/;
+const CHECK_LINE = /^\s*[-*]\s*\[[ xX]\]\s*(.+?)\s*$/;
+const lineKey = (text) => (text.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1").toLowerCase().match(/[\p{L}\p{M}\p{N}_]+/gu) ?? []).join(" ");
 const fold = (text) => text.normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/gi, "d").toLowerCase();
 
 export function isoDuration(hours) {
@@ -34,13 +36,38 @@ export function buildPayload(draft, refs, lockVersion) {
   return payload;
 }
 
+export function mergeDescription(old, incoming, date) {
+  if (!old?.trim()) return incoming;
+  const have = new Set(old.split("\n").flatMap((line) => line.match(CHECK_LINE)?.[1] ?? []).map(lineKey));
+  const added = [];
+  for (const line of (incoming ?? "").split("\n")) {
+    const item = line.match(CHECK_LINE)?.[1];
+    if (!item || have.has(lineKey(item))) continue;
+    have.add(lineKey(item));
+    added.push(`- [ ] ${item}`);
+  }
+  return added.length ? `${old.trimEnd()}\n\n## Added ${date}\n${added.join("\n")}` : old;
+}
+
+export function mergePayload(current, draft, date) {
+  const payload = { lockVersion: current.lockVersion };
+  const old = current.description?.raw ?? "";
+  const merged = mergeDescription(old, draft.description ?? "", date);
+  if (merged !== old) payload.description = { format: "markdown", raw: merged };
+  if (draft.estimate !== undefined && !current.estimatedTime) payload.estimatedTime = isoDuration(draft.estimate);
+  return payload;
+}
+
 export function planWrites(drafts, mapping) {
   const seen = new Set();
-  return drafts.map(({ slug, id }) => {
+  return drafts.map(({ slug, id, merge }) => {
     if (!slug || RESERVED.test(slug)) throw new Error(`slug "${slug}" is missing or reserved (keys starting with _ belong to the sidecar)`);
     if (seen.has(slug)) throw new Error(`duplicate slug "${slug}" in the drafts`);
     seen.add(slug);
-    if (id && mapping[slug] && mapping[slug] !== id) throw new Error(`slug "${slug}" maps to #${mapping[slug]} in the sidecar, not #${id}`);
+    if (id && merge) throw new Error(`draft "${slug}" takes either id or merge, not both`);
+    const target = id ?? merge;
+    if (target && mapping[slug] && mapping[slug] !== target) throw new Error(`slug "${slug}" maps to #${mapping[slug]} in the sidecar, not #${target}`);
+    if (merge) return { slug, action: "merge", id: merge, adopt: true };
     if (mapping[slug]) return { slug, action: "update", id: mapping[slug] };
     return id ? { slug, action: "update", id, adopt: true } : { slug, action: "create", id: null };
   });
