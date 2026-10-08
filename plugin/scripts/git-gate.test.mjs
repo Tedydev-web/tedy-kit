@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { evaluate, splitSegments, classify, hiddenPublish } from "./git-gate.mjs";
+import { tempDir } from "./temp-dir-for-tests.mjs";
 
 test("splitSegments handles chains, pipes, newlines and shell wrappers", () => {
   assert.deepEqual(splitSegments("cd x && git push; echo ok | cat\ngit status"), ["cd x", "git push", "echo ok", "cat", "git status"]);
@@ -74,7 +74,7 @@ test("pushes that rewrite history or land on an integration branch ask the user"
 });
 
 test("a bare git push asks only when the branch tracks an integration branch", () => {
-  const root = mkdtempSync(join(tmpdir(), "tedy-gate-"));
+  const root = tempDir("tedy-gate-");
   const git = (...args) => execFileSync("git", ["-C", join(root, "work"), ...args], { stdio: "ignore" });
   execFileSync("git", ["init", "-q", "--bare", "-b", "dev", join(root, "remote.git")]);
   execFileSync("git", ["clone", "-q", join(root, "remote.git"), join(root, "work")], { stdio: "ignore" });

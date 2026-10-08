@@ -1,16 +1,16 @@
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { checkRepos, missingFields, parseMap, resolveMap } from "./project-map.mjs";
+import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const mapFile = (data) => `# Project map\n\nNotes for people.\n\n\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\`\n`;
 
 let dir;
 before(() => {
-  dir = mkdtempSync(join(tmpdir(), "tedy-maps-"));
+  dir = tempDir("tedy-maps-");
   writeFileSync(join(dir, "alpha.md"), mapFile({ name: "alpha", paths: ["/w/tonpass"], repos: [{ path: "fe", role: "FE" }], language: { pr_review: "vi" } }));
   writeFileSync(join(dir, "alpha-fe.md"), mapFile({ name: "alpha-fe", paths: ["/w/tonpass/tonpass-wallet-fe"], repos: [{ path: ".", role: "FE" }], language: { pr_review: "vi" } }));
   writeFileSync(join(dir, "_schema.md"), "# schema, not a map\n");
@@ -39,7 +39,7 @@ test("missingFields separates required gaps from optional ones", () => {
 });
 
 test("checkRepos reports a missing directory and a missing integration branch", () => {
-  const root = mkdtempSync(join(tmpdir(), "tedy-ws-"));
+  const root = tempDir("tedy-ws-");
   const remote = join(root, "remote.git");
   execFileSync("git", ["init", "-q", "--bare", "-b", "main", remote]);
   execFileSync("git", ["clone", "-q", remote, join(root, "fe")], { stdio: "ignore" });

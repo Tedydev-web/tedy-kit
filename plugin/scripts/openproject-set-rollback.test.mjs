@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const run = promisify(execFile);
 const SCRIPT = new URL("./openproject.mjs", import.meta.url).pathname;
@@ -75,7 +75,7 @@ function fakeOpenProject() {
 }
 
 function workspace(url) {
-  const home = mkdtempSync(join(tmpdir(), "tedy-op-set-"));
+  const home = tempDir("tedy-op-set-");
   mkdirSync(join(home, ".config", "op", "sync"), { recursive: true });
   writeFileSync(join(home, ".config", "op", "config.json"), JSON.stringify({ url, token: "test-token-value" }));
   const env = { ...process.env, HOME: home, TEDY_STATE_DIR: join(home, "state"), OP_SYNC_DIR: join(home, ".config", "op", "sync") };

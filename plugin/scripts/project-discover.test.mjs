@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { detectStack, discover, extractLinks, guessIntegration, verifyScripts } from "./project-discover.mjs";
+import { tempDir } from "./temp-dir-for-tests.mjs";
 
 test("extractLinks finds Google Doc tabs and Figma nodes, deduplicated", () => {
   const text = [
@@ -39,7 +39,7 @@ test("guessIntegration prefers the base most merged PRs used, then dev, develop,
 });
 
 test("discover lists repositories, instruction files, PRD markdown and links without network", () => {
-  const root = mkdtempSync(join(tmpdir(), "tedy-discover-"));
+  const root = tempDir("tedy-discover-");
   const remote = join(root, "remote.git");
   execFileSync("git", ["init", "-q", "--bare", "-b", "main", remote]);
   const fe = join(root, "app-fe");

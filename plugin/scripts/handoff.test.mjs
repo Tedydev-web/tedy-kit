@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { listPending, parse, render, route, setStatus, slugOf, stamp } from "./handoff.mjs";
+import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const map = {
   paths: ["/w/tonpass"],
@@ -37,7 +37,7 @@ test("status moves from pending to accepted to done, keeping one updated line", 
 });
 
 test("listPending returns only pending hand-offs, optionally for one session", () => {
-  const dir = mkdtempSync(join(tmpdir(), "handoff-"));
+  const dir = tempDir("tedy-handoff-");
   writeFileSync(join(dir, "handoff-1.md"), render({ to: "Dev TMA - Family Wallet", from: "PM - Family Wallet", title: "one", body: "x", created: "c" }));
   writeFileSync(join(dir, "handoff-2.md"), setStatus(render({ to: "Dev TMA - Family Wallet", from: "PM", title: "two", body: "x", created: "c" }), "done", "t"));
   writeFileSync(join(dir, "handoff-3.md"), render({ to: "PM - Family Wallet", from: "Dev", title: "three", body: "x", created: "c" }));

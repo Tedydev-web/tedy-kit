@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { checkEdit } from "./no-comments-gate.mjs";
+import { tempDir } from "./temp-dir-for-tests.mjs";
 
 test("Edit adding a comment is denied", () => {
   const result = checkEdit("Edit", { file_path: "/w/a.ts", old_string: "const a = 1;", new_string: "const a = 1; // why" });
@@ -16,7 +16,7 @@ test("Edit near an existing comment without adding one is allowed", () => {
 });
 
 test("Write compares against the current file content", () => {
-  const dir = mkdtempSync(join(tmpdir(), "tedy-edit-"));
+  const dir = tempDir("tedy-edit-");
   const file = join(dir, "x.ts");
   writeFileSync(file, "// kept\nexport const x = 1;\n");
   assert.equal(checkEdit("Write", { file_path: file, content: "// kept\nexport const x = 2;\n" }).allow, true);

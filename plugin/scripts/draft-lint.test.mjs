@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { diffLines, lintComment, lintDraft, parseDraft } from "./draft-lint.mjs";
+import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const REAL = [
   { path: "store/members-store.ts", line: 220, body: "Toast đang là câu chung, chưa đúng copy PRD ạ.\n\nPRD EPIC 08 · UC_MB_09 BR7:\n> BR7 (Toast): \"{Name} spends from {vault list}\", or \"{Name} has no vault to spend from\"." },
@@ -88,11 +89,9 @@ test("lintDraft asks new drafts to use the colon header", () => {
 });
 
 test("the first clean lint freezes the original once, so later edits by the user stay measurable", async () => {
-  const { mkdtempSync, readFileSync } = await import("node:fs");
-  const { tmpdir } = await import("node:os");
-  const { join } = await import("node:path");
+  const { readFileSync } = await import("node:fs");
   const { snapshotOnce, snapshotPath } = await import("./draft-lint.mjs");
-  const dir = mkdtempSync(join(tmpdir(), "tedy-snap-"));
+  const dir = tempDir("tedy-snap-");
   const first = snapshotOnce("/w/plans/reports/review-x.md", "original", dir);
   assert.equal(first, snapshotPath("/w/plans/reports/review-x.md", dir));
   assert.equal(snapshotOnce("/w/plans/reports/review-x.md", "edited by the user", dir), null);

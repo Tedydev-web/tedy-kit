@@ -1,11 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const run = promisify(execFile);
 const SCRIPT = new URL("./openproject.mjs", import.meta.url).pathname;
@@ -41,7 +41,7 @@ function fakeOpenProject(workPackages) {
 }
 
 function workspace(url, drafts) {
-  const home = mkdtempSync(join(tmpdir(), "tedy-op-merge-"));
+  const home = tempDir("tedy-op-merge-");
   mkdirSync(join(home, ".config", "op", "sync"), { recursive: true });
   writeFileSync(join(home, ".config", "op", "config.json"), JSON.stringify({ url, token: "test-token-value" }));
   const file = join(home, "drafts.json");

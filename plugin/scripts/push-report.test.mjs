@@ -1,15 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pushFailed, pushFindings, pushTargets, reportText } from "./push-report.mjs";
+import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const git = (dir, ...args) => execFileSync("git", ["-C", dir, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 
 function makeRepo() {
-  const root = mkdtempSync(join(tmpdir(), "tedy-push-"));
+  const root = tempDir("tedy-push-");
   const remote = join(root, "remote.git");
   const work = join(root, "work");
   execFileSync("git", ["init", "-q", "--bare", "-b", "main", remote]);
