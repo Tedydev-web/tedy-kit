@@ -1,7 +1,8 @@
 ---
 to: the session that builds tedy-kit
 from: PM - Family Wallet
-status: pending
+status: done
+updated: 2026-10-08T06:45:00Z
 created: 2026-10-08T07:00:00Z
 title: openproject relations need a from link
 ---

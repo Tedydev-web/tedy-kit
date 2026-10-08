@@ -118,7 +118,7 @@ async function apply(client, project, drafts, file) {
     }
     for (const [type, targets] of [["relates", draft.relates ?? []], ["blocks", draft.blocks ?? []]]) {
       for (const target of targets) {
-        await client.request(`/api/v3/work_packages/${saved.id}/relations`, { method: "POST", body: { type, _links: { to: { href: `/api/v3/work_packages/${mapping[target] ?? created[target] ?? target}` } } } }).catch((error) => relationFailures.push(`${draft.slug} ${type} ${target}: ${error.message}`));
+        await client.request(`/api/v3/work_packages/${saved.id}/relations`, { method: "POST", body: { type, _links: { from: { href: `/api/v3/work_packages/${saved.id}` }, to: { href: `/api/v3/work_packages/${mapping[target] ?? created[target] ?? target}` } } } }).catch((error) => relationFailures.push(`${draft.slug} ${type} ${target}: ${error.message}`));
       }
     }
     if (draft.status) {

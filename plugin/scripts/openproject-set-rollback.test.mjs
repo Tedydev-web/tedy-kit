@@ -42,6 +42,14 @@ function fakeOpenProject() {
         workPackages[created.id] = created;
         return send(created);
       }
+      const relation = url.pathname.match(/^\/api\/v3\/work_packages\/(\d+)\/relations$/);
+      if (relation && request.method === "POST") {
+        const links = JSON.parse(body)._links ?? {};
+        const target = links.to?.href?.split("/").pop();
+        if (links.from?.href !== `/api/v3/work_packages/${relation[1]}`) return response.writeHead(500).end(JSON.stringify({ message: "undefined method `project' for nil:NilClass" }));
+        if (!workPackages[target]) return response.writeHead(422).end(JSON.stringify({ message: "Related work package does not exist" }));
+        return response.writeHead(201).end(JSON.stringify({ id: 903 }));
+      }
       const match = url.pathname.match(/^\/api\/v3\/work_packages\/(\d+)$/);
       const workPackage = match && workPackages[match[1]];
       if (!workPackage) return response.writeHead(404).end("{}");
@@ -141,10 +149,11 @@ test("a failed relation fails the apply, and work packages created before a mid-
   const { home, op, sidecar } = workspace(url);
   const file = join(home, "drafts.json");
   try {
-    writeFileSync(file, JSON.stringify([{ slug: "task-fe-r", type: "Task", subject: "[FE] Vault limit hint", description: DESCRIPTION, estimate: 1, relates: [21298] }]));
+    writeFileSync(file, JSON.stringify([{ slug: "task-fe-r", type: "Task", subject: "[FE] Vault limit hint", description: DESCRIPTION, estimate: 1, relates: [21298, 99999] }]));
     await op("preview", file, "--project", "183");
     const applied = await op("apply", file, "--project", "183");
-    assert.match(applied, /relation failed: task-fe-r relates 21298/);
+    assert.doesNotMatch(applied, /relation failed: task-fe-r relates 21298/);
+    assert.match(applied, /relation failed: task-fe-r relates 99999/);
     assert.match(applied, /verified 1\/1; 1 relation\(s\) failed/);
     assert.deepEqual(sidecar()._last_apply.created, [30000]);
 
