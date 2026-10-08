@@ -58,10 +58,10 @@
       </ul>
     </div>
     <div class="card">
-      <h3>Gate tự chặn</h3>
+      <h3>Gate và báo cáo tự động</h3>
       <ul>
-        <li>Sửa file mà thêm comment vào code: bị chặn.</li>
-        <li><code>git commit</code> hoặc <code>push</code> khi diff có comment mới, hoặc cây chưa sạch: bị chặn.</li>
+        <li>Sửa file mà thêm comment vào code: bị chặn, em tự viết lại.</li>
+        <li><code>git commit</code> và <code>push</code> không bị chặn. Sau mỗi lần push, nếu phần vừa đẩy có comment mới hoặc còn file chưa commit, em báo anh ngay trong câu trả lời đó.</li>
         <li>Ghi thẳng lên GitHub (<code>gh pr review</code>, <code>merge</code>, <code>close</code>…): bị chặn. Đăng chỉ đi qua script sau khi anh duyệt.</li>
         <li>Kết lượt bằng câu hỏi văn xuôi: em bị nhắc phải chuyển thành menu.</li>
       </ul>
@@ -143,8 +143,8 @@
   <table>
     <tr><th style="width:42%">Thông báo bắt đầu bằng</th><th>Nghĩa là gì, làm gì</th></tr>
     <tr><td><code>tedy gate: this edit adds comments to …</code></td><td>Em vừa định thêm comment vào code. Em sẽ tự viết lại không có comment; phần giải thích đưa vào commit message.</td></tr>
-    <tr><td><code>tedy gate: the code being committed/pushed adds comments</code></td><td>Diff có comment mới. Nếu đó là comment của đồng đội cần giữ, anh tự chạy lệnh bằng <code>! git …</code>.</td></tr>
-    <tr><td><code>tedy gate: tracked files have uncommitted changes</code></td><td>Cây chưa sạch. Commit hoặc khôi phục các file đó rồi push.</td></tr>
+    <tr><td>Em báo "phần vừa push có comment mới"</td><td>Push đã đi rồi. Em đề xuất chuyển phần giải thích vào commit message hoặc mô tả PR rồi push thêm một commit; anh muốn giữ comment (ví dụ của đồng đội) thì cứ nói giữ.</td></tr>
+    <tr><td>Em báo "còn file chưa commit lúc push"</td><td>Commit vừa push có thể khác bản đã build và test. Em commit hoặc khôi phục các file đó theo ý anh.</td></tr>
     <tr><td><code>tedy gate: publish to GitHub through github-write.mjs …</code></td><td>Đăng lên GitHub chỉ đi qua draft đã duyệt. Bảo em "đăng draft".</td></tr>
     <tr><td><code>tedy gate: merging, closing or editing a PR … belongs to the user</code></td><td>Merge và close là việc của anh. Resolve thread chỉ làm khi anh bảo ngay trong lượt đó, và chỉ với thread đã kiểm là đã sửa.</td></tr>
     <tr><td>Prompt cho phép khi push/đăng/apply</td><td>Đó là bước chốt cuối cùng. Bấm cho phép nếu đúng là anh muốn ghi ra ngoài.</td></tr>

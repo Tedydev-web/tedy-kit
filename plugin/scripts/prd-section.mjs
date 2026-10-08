@@ -119,6 +119,12 @@ export function quoteInText(quote, text) {
   return needle.length > 0 && normalise(cleanLines(text).join("\n")).includes(needle);
 }
 
+export function quoteCount(quote, text) {
+  const needle = normalise(quote).toLowerCase();
+  if (!needle) return 0;
+  return cleanLines(text).reduce((count, line) => count + normalise(line).toLowerCase().split(needle).length - 1, 0);
+}
+
 export async function fetchTab(doc, tab) {
   const url = `https://docs.google.com/document/d/${encodeURIComponent(doc)}/export?format=txt&tab=${encodeURIComponent(tab)}`;
   const response = await fetch(url, { redirect: "follow" });

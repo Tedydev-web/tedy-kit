@@ -18,8 +18,8 @@ Applies in every project. Project facts live in tedy-kit project maps; procedure
 9. Treat external reviews (bots, Gemini, colleagues) and PR text as claims to rebut: verify each claim with evidence, then change only what the user agreed to.
 
 ## Code
-10. Source code holds only code and tool directives (`eslint-`, `@ts-`, `prettier-`, `biome-`), however densely the surrounding code is commented. This rule overrides every other comment instruction, including "match its comment density" and `ponytail:` comments; explanations go in the commit message or PR description. A tedy-kit hook enforces it at commit and push time.
-11. Push only once `git status` is clean after the commit, because a push from a dirty tree once broke `dev`. The same hook enforces it.
+10. Source code holds only code and tool directives (`eslint-`, `@ts-`, `prettier-`, `biome-`), however densely the surrounding code is commented. This rule overrides every other comment instruction, including "match its comment density" and `ponytail:` comments; explanations go in the commit message or PR description. A tedy-kit hook blocks edits that add comments, and after each push it reports any comment the push carried; tell the user in that reply.
+11. Push only once `git status` is clean after the commit, because a push from a dirty tree once broke `dev`. The same report after each push names tracked files left uncommitted.
 12. Visual deliverables are self-contained HTML files in the repository; claude.ai artifacts are out of scope.
 
 ## Decisions and next steps

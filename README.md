@@ -81,6 +81,6 @@ Project maps hold internal company data: PRD document ids, Figma file keys, Open
 | Self-update gate, version parity, CHANGELOG | Plugin loads in place from source; git history is enough for a personal kit |
 | Blind LLM-judge acceptance | Circular (judge reads the same style docs), underpowered at 6 pairs, self-preference bias; the edit rate on real approvals replaces it |
 | Recall ≥ 90% routing target | Skill listing is over budget and is not re-injected after compaction; manual invocation plus routing lines is the path |
-| `CLAUDE_CODE_THRIFTY_SONIC=0` | Undocumented internal flag; the commit and push gate covers Bash-side writes |
+| `CLAUDE_CODE_THRIFTY_SONIC=0` | Undocumented internal flag; the report after each push covers Bash-side writes |
 | `skillOverrides` for `mattpocock-skills:code-review` | Plugin skills ignore `skillOverrides`; the plugin stays enabled by the user's choice |
 | Footer disclosing AI-drafted review comments | User's decision on 2026-10-07: no disclosure |

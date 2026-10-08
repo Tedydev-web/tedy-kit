@@ -21,9 +21,11 @@ Every write below prints a `WRITE →` line, triggers the permission prompt, lin
 - `reply <comment-id> --body-file <f>`: a reply in that thread, only when it is on the thread's topic. A reply placed under an unrelated thread hides the question from the PM; on 2026-10-07 nine such replies had to be re-anchored.
 - `anchor --tab <t.id> --quote "<exact text>" --body-file <f>`: a new question anchored on the passage it is about, through the Docs API. The quote must appear exactly once in the tab.
 
-A new question is always anchored. Without the user's own OAuth client, `anchor` refuses, and the question goes into an HTML hand-off file instead: `plans/reports/pm-comments-<yymmdd-hhmm>-<slug>.html`, one item per question with the exact text to highlight (checked with `prd-section.mjs find` to appear exactly once in the current tab) and the comment text, so the user highlights and posts it.
+A new PRD question is never posted by the agent, neither as an anchored comment nor as a reply under another thread. It goes into an HTML file the user posts by hand: highlight the passage, then comment.
 
-When the PM answers in a thread but the PRD text still says the old thing, add a question asking the PM to write the decision into the PRD.
+1. Write an items file: `{ "title": "<scope>", "items": [{ "group": "A|B", "epic": "<map prd.tabs key>", "where": "<UC and locator>", "quote": "<exact passage to highlight>", "comment": "<comment text>", "note": "<optional: status or affected task>" }] }`. Group A holds new questions. Group B holds a decision the PM gave in a comment that the PRD text does not yet say, or a passage where the PRD contradicts itself; its comment asks the PM to write the decision into the PRD.
+2. `node <plugin>/scripts/doc-comment-file.mjs <items.json>` from the project. It downloads the latest PRD tabs, and writes nothing unless every passage appears exactly once the way Ctrl+F finds it (case-insensitive, inside one paragraph) and every comment passes the Doc lint. On success it prints `plans/reports/pm-comments-<yymmdd-hhmm>-<slug>.html`.
+3. Run it again right before handing the file over whenever the PRD may have changed since, so the check matches the PRD the user will search.
 
 Enabling `anchor` (rclone's shared client cannot call the Docs API and is being retired during 2026):
 

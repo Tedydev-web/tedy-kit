@@ -13,7 +13,7 @@ export function checkEdit(toolName, toolInput) {
   const shown = added.slice(0, 5).map((comment) => `- ${comment.text.split("\n")[0].slice(0, 100)}`).join("\n");
   return {
     allow: false,
-    reason: `tedy gate: this edit adds comments to ${path}:\n${shown}\nWrite the change without them and put the explanation in the commit message or PR description (working-style rule 10). Writing the file through Bash does not help: the commit and push gate checks the same rule.`,
+    reason: `tedy gate: this edit adds comments to ${path}:\n${shown}\nWrite the change without them and put the explanation in the commit message or PR description (working-style rule 10). Writing the file through Bash does not help: the report after each push flags the same rule to the user.`,
   };
 }
 
