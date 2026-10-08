@@ -1,6 +1,7 @@
 import { appendFileSync, closeSync, fstatSync, mkdirSync, openSync, readFileSync, readSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { redact } from "./api-request.mjs";
 
 export const STATE_DIR = process.env.TEDY_STATE_DIR ?? join(homedir(), ".local", "state", "tedy");
 
@@ -15,7 +16,8 @@ export function readHookInput() {
 export function logGate(entry) {
   try {
     mkdirSync(STATE_DIR, { recursive: true });
-    appendFileSync(join(STATE_DIR, "gate-log.jsonl"), JSON.stringify({ at: new Date().toISOString(), ...entry }) + "\n");
+    const fields = Object.fromEntries(Object.entries(entry).map(([key, value]) => [key, typeof value === "string" ? redact(value) : value]));
+    appendFileSync(join(STATE_DIR, "gate-log.jsonl"), JSON.stringify({ at: new Date().toISOString(), ...fields }) + "\n");
   } catch (error) {
     process.stderr.write(`tedy gate log failed: ${error.message}\n`);
   }
