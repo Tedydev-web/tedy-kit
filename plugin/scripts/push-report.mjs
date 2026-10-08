@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { isScannedFile, newComments } from "./comment-scan.mjs";
 import { classify, splitSegments } from "./git-gate.mjs";
-import { logGate, readHookInput } from "./hook-io.mjs";
+import { gateSwitches, logGate, readHookInput } from "./hook-io.mjs";
 
 const BASE_CANDIDATES = ["origin/dev", "origin/develop", "origin/main", "origin/master"];
 const MAX_SHOWN = 5;
@@ -44,11 +44,11 @@ function rangeStart(dir) {
   return best && git(dir, ["merge-base", best.ref, "HEAD"]).trim();
 }
 
-export function pushFindings(dir) {
+export function pushFindings(dir, { comments: checkComments = true } = {}) {
   const dirty = lines(git(dir, ["status", "--porcelain", "--untracked-files=no"]));
   const start = rangeStart(dir);
   const comments = [];
-  if (start) {
+  if (start && checkComments) {
     for (const file of lines(git(dir, ["diff", "--name-only", "--diff-filter=ACMR", start, "HEAD"])).filter(isScannedFile)) {
       for (const comment of newComments(tryGit(dir, ["show", `${start}:${file}`]) ?? "", tryGit(dir, ["show", `HEAD:${file}`]) ?? "")) {
         comments.push(`${file}:${comment.line} ${comment.text.split("\n")[0].slice(0, 100)}`);
@@ -82,7 +82,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     }
     const reports = targets
       .filter((dir) => tryGit(dir, ["rev-parse", "--is-inside-work-tree"])?.trim() === "true")
-      .map((dir) => reportText(dir, pushFindings(dir)))
+      .map((dir) => reportText(dir, pushFindings(dir, { comments: gateSwitches().noComments })))
       .filter(Boolean);
     logGate({ hook: "push-report", decision: reports.length ? "reported" : "clean", command: command.slice(0, 200), cwd: input.cwd });
     if (reports.length) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: reports.join("\n\n") } }));

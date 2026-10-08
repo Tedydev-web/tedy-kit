@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -11,5 +11,11 @@ process.on("exit", () => {
 export function tempDir(prefix) {
   const dir = mkdtempSync(join(tmpdir(), prefix));
   made.push(dir);
+  return dir;
+}
+
+export function profileWith(config) {
+  const dir = tempDir("tedy-profile-");
+  writeFileSync(join(dir, "config.json"), typeof config === "string" ? config : JSON.stringify(config));
   return dir;
 }

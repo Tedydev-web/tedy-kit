@@ -80,3 +80,8 @@ test("the session name comes from the fleet list, and the role card names the se
   assert.match(card, /stop looking into it/);
   assert.equal(roleCard(map, "Agent Assistant"), "");
 });
+
+test("the role card promises a prompt only when the role gate is on", () => {
+  assert.match(roleCard(map, "PM - Family Wallet"), /asks the user first/);
+  assert.doesNotMatch(roleCard(map, "PM - Family Wallet", false), /asks the user first/);
+});

@@ -2,6 +2,7 @@ import { appendFileSync, closeSync, fstatSync, mkdirSync, openSync, readFileSync
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { redact } from "./api-request.mjs";
+import { loadConfig } from "./profile.mjs";
 
 export const STATE_DIR = process.env.TEDY_STATE_DIR ?? join(homedir(), ".local", "state", "tedy");
 
@@ -20,6 +21,17 @@ export function logGate(entry) {
     appendFileSync(join(STATE_DIR, "gate-log.jsonl"), JSON.stringify({ at: new Date().toISOString(), ...fields }) + "\n");
   } catch (error) {
     process.stderr.write(`tedy gate log failed: ${error.message}\n`);
+  }
+}
+
+export const ALL_GATES_ON = Object.freeze({ noComments: true, draftPrOnly: true, roleGate: true, pushExempt: Object.freeze([]) });
+
+export function gateSwitches() {
+  try {
+    return loadConfig().gates;
+  } catch (error) {
+    logGate({ hook: "profile-config", decision: "invalid-gates-on", error: error.message });
+    return ALL_GATES_ON;
   }
 }
 

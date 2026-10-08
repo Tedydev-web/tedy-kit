@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { activeRole, decideNudge, hooksLoadedSince, reloadHint } from "./session-hooks.mjs";
-import { tempDir } from "./temp-dir-for-tests.mjs";
+import { profileWith, tempDir } from "./temp-dir-for-tests.mjs";
 
 const prompt = (text) => ({ type: "user", entrypoint: "cli", message: { content: text } });
 const say = (text) => ({ type: "assistant", entrypoint: "cli", message: { content: [{ type: "text", text }] } });
@@ -105,4 +105,11 @@ test("no hint when the transcript is missing or the hooks did not change after t
   assert.equal(reloadHint(undefined, changedAt), "");
   assert.equal(reloadHint("/nonexistent/t.jsonl", changedAt), "");
   assert.equal(reloadHint(transcript([startup("2026-10-08T05:00:00Z"), compact("2026-10-08T07:31:00Z")]), changedAt), "");
+});
+
+test("a broken profile config is announced at session start, a valid or missing one is not", async () => {
+  const { configWarning } = await import("./session-hooks.mjs");
+  assert.equal(configWarning(profileWith({ gates: { noComments: true } })), "");
+  assert.equal(configWarning(tempDir("tedy-profile-none-")), "");
+  assert.match(configWarning(profileWith({ gates: { noComments: "on" } })), /config\.json.*gates\.noComments must be a boolean.*every personal gate stays on/s);
 });

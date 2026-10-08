@@ -1,8 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import { basename, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { ask, deny, logGate, readHookInput } from "./hook-io.mjs";
+import { pathToFileURL } from "node:url";
+import { ALL_GATES_ON, ask, deny, gateSwitches, logGate, readHookInput } from "./hook-io.mjs";
 
 const SHELL_WRAPPER = /^(?:bash|sh|zsh)\s+-c\s+(['"])([\s\S]*)\1$/;
 const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
@@ -11,7 +11,6 @@ const READ_ONLY_GH_ACTIONS = new Set(["view", "list", "diff", "checks", "status"
 const READ_ONLY_GH_AREAS = new Set(["search", "status", "browse", "help", "--version", "--help", undefined]);
 const LOCAL_GH = new Set(["pr checkout", "repo clone", "auth", "config", "alias", "extension", "completion"]);
 const PROTECTED_BRANCHES = new Set(["main", "master", "dev", "develop", "production", "staging"]);
-const KIT_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const PREFIX_WORDS = new Set(["command", "exec", "builtin", "nohup", "time"]);
 const HEREDOC = /<<(-?)\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/g;
 const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve)|openproject\.mjs["']?\s+(?:apply\b|set\b.*--apply|rollback\b.*--apply)|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor))\b/;
@@ -213,10 +212,11 @@ function tryGit(dir, args) {
   }
 }
 
-export function pushRisk(args, dir) {
+export function pushRisk(args, dir, exempt = []) {
   const rewriting = args.find((arg) => REWRITING_PUSH.test(arg));
   if (rewriting) return `\`${rewriting}\` can rewrite or delete remote branches`;
-  const guarded = (target) => PROTECTED_BRANCHES.has(target) && tryGit(dir, ["rev-parse", "--show-toplevel"]) !== KIT_ROOT;
+  const exemptRoots = new Set(exempt.map((path) => resolve(path)));
+  const guarded = (target) => PROTECTED_BRANCHES.has(target) && !exemptRoots.has(tryGit(dir, ["rev-parse", "--show-toplevel"]));
   const refspecs = args.filter((arg) => !arg.startsWith("-")).slice(1);
   if (!refspecs.length) {
     const upstream = tryGit(dir, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
@@ -233,7 +233,7 @@ export function pushRisk(args, dir) {
   return null;
 }
 
-export function evaluate(command, cwd) {
+export function evaluate(command, cwd, gates = ALL_GATES_ON) {
   const hidden = hiddenPublish(command);
   if (hidden) return { allow: false, ask: true, reason: `tedy gate: this publishes through a kit script in a form the permission rules do not match (\`${hidden.slice(0, 120)}\`). Allow it only if the user approved this exact publish; otherwise run it as a plain \`node <script> …\` command.` };
   let dir = cwd;
@@ -244,12 +244,12 @@ export function evaluate(command, cwd) {
       continue;
     }
     if (action.kind === "push") {
-      const risk = pushRisk(action.args, action.dir);
+      const risk = pushRisk(action.args, action.dir, gates.pushExempt);
       if (risk) return { allow: false, ask: true, reason: `tedy gate: ${risk}, which belongs to the user. Allow it only if the user asked for this push.` };
       continue;
     }
     if (action.kind === "pr-create") {
-      if (!action.args.some((arg) => arg === "--draft" || arg === "-d")) return { allow: false, reason: "tedy gate: open the PR as a draft with `--draft`; the user marks it ready." };
+      if (gates.draftPrOnly && !action.args.some((arg) => arg === "--draft" || arg === "-d")) return { allow: false, reason: "tedy gate: open the PR as a draft with `--draft`; the user marks it ready." };
       continue;
     }
     if (action.kind !== "github-write") continue;
@@ -265,7 +265,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const input = readHookInput();
   const command = input.tool_input?.command ?? "";
   try {
-    const result = evaluate(command, input.cwd ?? process.cwd());
+    const result = evaluate(command, input.cwd ?? process.cwd(), gateSwitches());
     if (!result.allow) logGate({ hook: "git-gate", decision: result.ask ? "ask" : "deny", command: command.slice(0, 200), cwd: input.cwd, reason: result.reason });
     if (result.ask) ask(result.reason);
     else if (!result.allow) deny(result.reason);

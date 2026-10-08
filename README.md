@@ -48,7 +48,7 @@ AgentKit does not manage `~/.claude/CLAUDE.md`; if the line ever disappears, add
 User settings this kit relies on (`~/.claude/settings.json`):
 - `outputStyle: "God Mode (Level 5)"`.
 - `skillOverrides` set to `"user-invocable-only"` for `ak-review-pr`, `ak-code-review`, `pg-review-pr`, `pg-project-management`, `code-review`.
-- `permissions.ask` covering PR merge, `github-write.mjs` and the OpenProject, Figma and Doc write commands, in plain form. Since 2026-10-08 a feature-branch push and `gh pr create --draft` need no prompt; the git gate asks before a push to an integration branch (the tedy-kit repository itself excepted) or one that rewrites history, and refuses a non-draft PR (rtk was removed on 2026-10-07; while it was installed, its rewrite hook made permission rules miss commands). Verified 2026-10-07: a fresh session prompts for `node …/github-write.mjs` and runs other `node` commands freely.
+- `permissions.ask` covering PR merge, `github-write.mjs` and the OpenProject, Figma and Doc write commands, in plain form. Since 2026-10-08 a feature-branch push and `gh pr create --draft` need no prompt; the git gate asks before a push to an integration branch (repositories listed in the profile's `gates.pushExempt` excepted) or one that rewrites history, and refuses a non-draft PR (rtk was removed on 2026-10-07; while it was installed, its rewrite hook made permission rules miss commands). Verified 2026-10-07: a fresh session prompts for `node …/github-write.mjs` and runs other `node` commands freely.
 
 After every Claude Code update, run `bash evals/probes/run-probes.sh` and compare with `plans/reports/probe-261007-tedy-kit-open-questions-resolved.md`.
 

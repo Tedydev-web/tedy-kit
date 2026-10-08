@@ -1,9 +1,10 @@
 import { test } from "node:test";
+import { spawnSync } from "node:child_process";
 import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { checkEdit } from "./no-comments-gate.mjs";
-import { tempDir } from "./temp-dir-for-tests.mjs";
+import { profileWith, tempDir } from "./temp-dir-for-tests.mjs";
 
 test("Edit adding a comment is denied", () => {
   const result = checkEdit("Edit", { file_path: "/w/a.ts", old_string: "const a = 1;", new_string: "const a = 1; // why" });
@@ -38,4 +39,13 @@ test("MultiEdit is checked edit by edit", () => {
   assert.equal(result.allow, false);
   assert.match(result.reason, /why/);
   assert.equal(checkEdit("MultiEdit", { file_path: "/w/a.ts", edits: edits.slice(0, 1) }).allow, true);
+});
+
+test("the hook blocks a commented edit only when the profile turns noComments on", () => {
+  const file = join(tempDir("tedy-edit-"), "a.ts");
+  const input = JSON.stringify({ tool_name: "Write", tool_input: { file_path: file, content: "// why\nexport const a = 1;\n" } });
+  const run = (profile) => spawnSync("node", [new URL("./no-comments-gate.mjs", import.meta.url).pathname], { input, encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: tempDir("tedy-edit-state-") } });
+  assert.equal(run(profileWith({ gates: { noComments: false } })).stdout, "");
+  assert.match(run(profileWith({ gates: { noComments: true } })).stdout, /"permissionDecision":"deny"/);
+  assert.match(run(profileWith("{ broken")).stdout, /"permissionDecision":"deny"/);
 });

@@ -1,7 +1,8 @@
 import { closeSync, existsSync, fstatSync, openSync, readSync, statSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { listPending, reportsDir } from "./handoff.mjs";
-import { currentTurn, logGate, readHookInput, readTranscriptTail, toolUses } from "./hook-io.mjs";
+import { currentTurn, gateSwitches, logGate, readHookInput, readTranscriptTail, toolUses } from "./hook-io.mjs";
+import { loadConfig, profileDir } from "./profile.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { listSessions, roleCard, sessionName } from "./role-gate.mjs";
 
@@ -59,7 +60,7 @@ function runDecisionNudge() {
 function sessionRoleCard(input) {
   try {
     const resolved = resolveMap(input.cwd ?? process.cwd());
-    return resolved ? roleCard(resolved.map, sessionName(input.session_id, listSessions())) : "";
+    return resolved ? roleCard(resolved.map, sessionName(input.session_id, listSessions()), gateSwitches().roleGate) : "";
   } catch (error) {
     logGate({ hook: "role-card", decision: "skip-on-error", error: error.message });
     return "";
@@ -130,6 +131,15 @@ function runRoleReminder() {
   }
 }
 
+export function configWarning(dir = profileDir()) {
+  try {
+    loadConfig(dir);
+    return "";
+  } catch (error) {
+    return `tedy: ${error.message}. Until node <plugin>/scripts/profile.mjs doctor reports the config ok, every personal gate stays on. Tell the user in this reply.`;
+  }
+}
+
 export function pendingNotice(pending, procedure) {
   if (!pending.length) return "";
   const lines = pending.map((item) => `- to ${item.to}: ${item.title} (from ${item.from}) ${item.path}`);
@@ -140,8 +150,7 @@ function runPendingHandoffs() {
   const input = readHookInput();
   try {
     const resolved = resolveMap(input.cwd ?? process.cwd());
-    if (!resolved) return;
-    const notice = [sessionRoleCard(input), pendingNotice(listPending(reportsDir(resolved.map)), fileURLToPath(new URL("../shared/handoff.md", import.meta.url)))].filter(Boolean).join("\n\n");
+    const notice = [configWarning(), resolved && sessionRoleCard(input), resolved && pendingNotice(listPending(reportsDir(resolved.map)), fileURLToPath(new URL("../shared/handoff.md", import.meta.url)))].filter(Boolean).join("\n\n");
     if (notice) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: notice } }));
   } catch (error) {
     logGate({ hook: "pending-handoffs", decision: "skip-on-error", error: error.message });

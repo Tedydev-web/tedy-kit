@@ -82,3 +82,14 @@ test("a command that pushes nothing is not logged, even when its output carries 
   assert.equal(stdout, "");
   assert.equal(existsSync(join(state, "gate-log.jsonl")), false);
 });
+
+test("with the comment gate off a push is checked for uncommitted files only", () => {
+  const repo = makeRepo();
+  git(repo, "checkout", "-qb", "feat");
+  writeFileSync(join(repo, "src", "d.ts"), "// explains d\nexport const d = 1;\n");
+  git(repo, "add", "-A");
+  git(repo, "commit", "-qm", "d");
+  git(repo, "push", "-q", "-u", "origin", "feat");
+  assert.equal(pushFindings(repo).comments.length, 1);
+  assert.deepEqual(pushFindings(repo, { comments: false }).comments, []);
+});

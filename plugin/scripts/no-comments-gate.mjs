@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { isScannedFile, newComments } from "./comment-scan.mjs";
-import { deny, logGate, readHookInput } from "./hook-io.mjs";
+import { deny, gateSwitches, logGate, readHookInput } from "./hook-io.mjs";
 
 export function checkEdit(toolName, toolInput) {
   const path = toolInput?.file_path ?? "";
@@ -24,7 +24,7 @@ export function checkEdit(toolName, toolInput) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const input = readHookInput();
   try {
-    const result = checkEdit(input.tool_name, input.tool_input);
+    const result = gateSwitches().noComments ? checkEdit(input.tool_name, input.tool_input) : { allow: true };
     if (!result.allow) {
       logGate({ hook: "no-comments-edit", decision: "deny", file: input.tool_input?.file_path });
       deny(result.reason);
