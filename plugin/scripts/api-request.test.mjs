@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { requestJson } from "./api-request.mjs";
+import { redact, requestJson } from "./api-request.mjs";
 
 function stubFetch(statuses) {
   const calls = [];
@@ -30,4 +30,16 @@ test("a rate-limited POST is retried, because the server refused it before savin
   const calls = stubFetch([429, 200]);
   assert.deepEqual(await requestJson("https://api.example.com/comments", { method: "POST", body: { message: "x" }, wait: noWait }), { id: "1" });
   assert.deepEqual(calls, ["POST", "POST"]);
+});
+
+test("redact masks key-value secrets and token-shaped values but keeps the rest of the message", () => {
+  const masked = redact('invalid apikey=abcd1234efgh, "token": "s3cr3tvalue", Authorization: Basic YXBpa2V5OmFiY2RlZmdoaWprbG1ub3A=, sha 0123456789abcdef0123456789abcdef, ghp_abcdefghijklmnopqrstuvwxyz01');
+  assert.doesNotMatch(masked, /abcd1234efgh|s3cr3tvalue|YXBpa2V5|0123456789abcdef0123|ghp_abcdef/);
+  assert.match(masked, /^invalid apikey=\*\*\*/);
+  assert.equal(redact("Subject can't be blank."), "Subject can't be blank.");
+});
+
+test("an error body that echoes a secret is redacted before it reaches the thrown message", async () => {
+  globalThis.fetch = async () => new Response("bad request for apikey=topsecretvalue123", { status: 400 });
+  await assert.rejects(requestJson("https://op.example/api/v3/x"), (error) => !error.message.includes("topsecretvalue123") && /apikey=\*\*\*/.test(error.message));
 });

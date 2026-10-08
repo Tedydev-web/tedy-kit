@@ -8,6 +8,13 @@ function parse(text) {
   }
 }
 
+const SECRET_ASSIGNMENT = /((?:api[_-]?key|apikey|access[_-]?token|refresh[_-]?token|token|secret|password|authorization)["']?\s*[:=]\s*["']?)((?:(?:Basic|Bearer)\s+)?[^\s"'&,;{}]{4,})/gi;
+const SECRET_SHAPE = /\b(?:eyJ[\w-]{10,}\.[\w.-]*|[A-Fa-f0-9]{32,}|(?:Basic|Bearer) [\w.~+/=-]{16,}|gh[pousr]_\w{20,}|figd_[\w-]{20,}|ya29\.[\w.-]{20,})/g;
+
+export function redact(text) {
+  return String(text ?? "").replace(SECRET_ASSIGNMENT, "$1***").replace(SECRET_SHAPE, "***");
+}
+
 function apiMessage(data, text) {
   return data?.message ?? data?.error?.message ?? data?.err ?? data?._embedded?.errors?.map((error) => error.message).join("; ") ?? text.slice(0, 200);
 }
@@ -27,7 +34,7 @@ export async function requestJson(url, { method = "GET", headers = {}, body, ret
     const data = text ? parse(text) : null;
     if (!response.ok) {
       const limit = response.headers.get("x-figma-rate-limit-type");
-      throw new Error(`${method} ${new URL(url).pathname} returned HTTP ${response.status}: ${apiMessage(data, text)}${limit ? ` (rate limit type ${limit})` : ""}`);
+      throw new Error(`${method} ${new URL(url).pathname} returned HTTP ${response.status}: ${redact(apiMessage(data, text))}${limit ? ` (rate limit type ${limit})` : ""}`);
     }
     return data;
   }
