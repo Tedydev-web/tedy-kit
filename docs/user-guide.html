@@ -155,7 +155,7 @@
 
   <h2 id="bao-tri">6. Bảo trì</h2>
   <ul>
-    <li>Kit chạy thẳng từ <code>~/Documents/workspace/tedy-kit</code>. Sửa kit thì mở phiên mới hoặc gõ <code>/reload-plugins</code>.</li>
+    <li>Kit chạy thẳng từ <code>~/Documents/workspace/tedy-kit</code>. Sửa kit thì mở phiên mới hoặc gõ <code>/reload-plugins</code>. Compact không nạp lại hook: script chạy bản mới nhưng gate mới trong <code>hooks.json</code> thì chưa, nên role card sau compact nhắc <code>/reload-plugins</code> khi phiên còn chạy hook cũ.</li>
     <li>Dòng <code>@~/Documents/workspace/tedy-kit/rules/working-style.md</code> phải luôn có trong <code>~/.claude/CLAUDE.md</code>.</li>
     <li>Sau mỗi lần Claude Code tự cập nhật: <code>bash evals/probes/run-probes.sh</code>.</li>
     <li>Test của kit: <code>node --test plugin/scripts/*.test.mjs</code>.</li>

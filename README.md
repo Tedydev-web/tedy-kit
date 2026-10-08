@@ -35,7 +35,7 @@ claude plugin marketplace add ~/Documents/workspace/tedy-kit
 claude plugin install tedy@tedy-kit
 ```
 
-The plugin runs from this source directory: edits apply in a new session or after `/reload-plugins`, with no reinstall.
+The plugin runs from this source directory: edits apply in a new session or after `/reload-plugins`, with no reinstall. Script edits apply at once; a compaction does not reload `hooks.json`, so the role card after compaction asks for `/reload-plugins` when the session still runs older hooks.
 
 `~/.claude/CLAUDE.md` must keep this line after the shared-core import:
 

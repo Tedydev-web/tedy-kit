@@ -1,6 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { activeRole, decideNudge } from "./session-hooks.mjs";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { activeRole, decideNudge, hooksLoadedSince, reloadHint } from "./session-hooks.mjs";
+import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const prompt = (text) => ({ type: "user", entrypoint: "cli", message: { content: text } });
 const say = (text) => ({ type: "assistant", entrypoint: "cli", message: { content: [{ type: "text", text }] } });
@@ -64,4 +67,42 @@ test("the session-start notice lists pending hand-offs with their target, and st
   const notice = pendingNotice([{ to: "Dev TMA - Family Wallet", from: "PM - Family Wallet", title: "Fix the fake save toast", path: "/w/plans/reports/handoff-1.md" }], "/p/handoff.md");
   assert.match(notice, /- to Dev TMA - Family Wallet: Fix the fake save toast \(from PM - Family Wallet\) \/w\/plans\/reports\/handoff-1\.md/);
   assert.match(notice, /ListAgents prints this session's name/);
+});
+
+const line = (timestamp, extra) => JSON.stringify({ timestamp, ...extra });
+const startup = (timestamp, kind = "startup") => line(timestamp, { type: "attachment", attachment: { type: "hook_success", hookName: `SessionStart:${kind}` } });
+const reload = (timestamp) => line(timestamp, { type: "user", message: { content: "<command-name>/reload-plugins</command-name>\n<command-message>reload-plugins</command-message>" } });
+const work = (timestamp) => line(timestamp, { type: "assistant", message: { content: [{ type: "text", text: "x".repeat(40) }] } });
+const compact = (timestamp) => startup(timestamp, "compact");
+const changedAt = Date.parse("2026-10-08T04:38:00Z");
+
+function transcript(lines) {
+  const path = join(tempDir("tedy-reload-"), "t.jsonl");
+  writeFileSync(path, lines.join("\n") + "\n");
+  return path;
+}
+
+test("a session started, resumed or reloaded after hooks.json changed has the current hooks", () => {
+  assert.equal(hooksLoadedSince(transcript([startup("2026-10-08T01:00:00Z"), work("2026-10-08T04:40:00Z"), startup("2026-10-08T06:56:00Z", "resume"), work("2026-10-08T07:00:00Z")]), changedAt), true);
+  assert.equal(hooksLoadedSince(transcript([startup("2026-10-08T01:00:00Z"), reload("2026-10-08T05:00:00Z"), compact("2026-10-08T07:31:00Z")]), changedAt), true);
+  assert.equal(hooksLoadedSince(transcript([startup("2026-10-08T05:00:00Z", "fork"), work("2026-10-08T05:01:00Z")]), changedAt), true);
+});
+
+test("a compaction is not a reload, so a session last loaded before the change still runs the old hooks", () => {
+  const path = transcript([startup("2026-10-08T01:00:00Z"), reload("2026-10-08T03:04:00Z"), work("2026-10-08T05:00:00Z"), compact("2026-10-08T07:31:00Z"), work("2026-10-08T07:33:00Z")]);
+  assert.equal(hooksLoadedSince(path, changedAt), false);
+  assert.match(reloadHint(path, changedAt), /\/reload-plugins/);
+  assert.match(reloadHint(path, changedAt), /2026-10-08T04:38:00\.000Z/);
+});
+
+test("the scan reads the transcript backwards in chunks and finds a marker that straddles a chunk boundary", () => {
+  const lines = [startup("2026-10-08T01:00:00Z"), startup("2026-10-08T05:00:00Z", "resume"), ...Array.from({ length: 50 }, (_, index) => work(`2026-10-08T06:${String(index).padStart(2, "0")}:00Z`))];
+  for (const chunk of [7, 64, 333]) assert.equal(hooksLoadedSince(transcript(lines), changedAt, chunk), true);
+  assert.equal(hooksLoadedSince(transcript(lines.slice(2)), changedAt, 64), false);
+});
+
+test("no hint when the transcript is missing or the hooks did not change after the last load", () => {
+  assert.equal(reloadHint(undefined, changedAt), "");
+  assert.equal(reloadHint("/nonexistent/t.jsonl", changedAt), "");
+  assert.equal(reloadHint(transcript([startup("2026-10-08T05:00:00Z"), compact("2026-10-08T07:31:00Z")]), changedAt), "");
 });
