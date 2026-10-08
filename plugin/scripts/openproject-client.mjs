@@ -97,6 +97,40 @@ export function sidecarPath(host, project) {
   return join(process.env.OP_SYNC_DIR ?? join(homedir(), ".config", "op", "sync"), `${host}__${project}.map.json`);
 }
 
+export function recordLastApply(text, at, created) {
+  const mapping = JSON.parse(text);
+  delete mapping._last_apply;
+  mapping._last_apply = { at, created };
+  return JSON.stringify(mapping, null, 2);
+}
+
+export function forgetSlugs(text, deleted, failed) {
+  const mapping = JSON.parse(text);
+  const gone = new Set(deleted);
+  for (const [key, value] of Object.entries(mapping)) if (!key.startsWith("_") && gone.has(value)) delete mapping[key];
+  if (failed.length) mapping._last_apply = { ...mapping._last_apply, created: failed };
+  else delete mapping._last_apply;
+  return JSON.stringify(mapping, null, 2);
+}
+
+const byName = (items, wanted, kind) => {
+  const hit = items.find((item) => item.name.toLowerCase() === String(wanted).toLowerCase());
+  if (!hit) throw new Error(`${kind} "${wanted}" does not exist; choose one of: ${items.map((item) => item.name).join(", ")}`);
+  return hit._links.self.href;
+};
+
+export function setPayload(lockVersion, { status, assignee, priority, estimate }, refs) {
+  const links = {};
+  if (status) links.status = { href: byName(refs.statuses, status, "status") };
+  if (assignee) links.assignee = { href: matchName(refs.assignees, assignee).href };
+  if (priority) links.priority = { href: byName(refs.priorities, priority, "priority") };
+  if (!Object.keys(links).length && estimate === undefined) throw new Error("nothing to set; pass --status, --assignee, --priority or --estimate");
+  const payload = { lockVersion };
+  if (estimate !== undefined) payload.estimatedTime = isoDuration(estimate);
+  if (Object.keys(links).length) payload._links = links;
+  return payload;
+}
+
 export function readSidecar(path) {
   return existsSync(path) ? readFileSync(path, "utf8") : JSON.stringify({ _relations: [], _merged: {} }, null, 2);
 }

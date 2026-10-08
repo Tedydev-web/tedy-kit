@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { addSlugs, buildPayload, isoDuration, matchName, mergeDescription, mergePayload, planWrites } from "./openproject-client.mjs";
+import { addSlugs, buildPayload, forgetSlugs, isoDuration, matchName, mergeDescription, mergePayload, planWrites, recordLastApply, setPayload } from "./openproject-client.mjs";
 
 test("estimates become ISO 8601 durations", () => {
   assert.equal(isoDuration(2), "PT2H");
@@ -81,4 +81,30 @@ test("a merge payload sends only what changes: new lines, and an estimate only w
     description: { format: "markdown", raw: "## AC\n- [ ] A.\n\n## Added 2026-10-08\n- [ ] B." },
   });
   assert.deepEqual(mergePayload({ ...current, estimatedTime: null }, { description: "## AC\n- [ ] A.", estimate: 1.5 }, "2026-10-08"), { lockVersion: 7, estimatedTime: "PT1H30M" });
+});
+
+test("the last apply is recorded in pg-project-management's format, and rolled-back slugs can be forgotten", () => {
+  const before = JSON.stringify({ _relations: [], _merged: {}, "task-a": 1, "task-b": 2 }, null, 2);
+  const recorded = recordLastApply(before, "2026-10-08T11:00:00", [2]);
+  assert.deepEqual(JSON.parse(recorded)._last_apply, { at: "2026-10-08T11:00:00", created: [2] });
+  assert.ok(recorded.indexOf('"task-b"') < recorded.indexOf('"_last_apply"'));
+  const forgotten = forgetSlugs(recorded, [2], []);
+  assert.deepEqual(Object.keys(JSON.parse(forgotten)), ["_relations", "_merged", "task-a"]);
+  assert.deepEqual(JSON.parse(forgetSlugs(recorded, [], [2]))._last_apply.created, [2]);
+});
+
+test("a quick set builds a PATCH with only the named fields and the lock it was previewed at", () => {
+  const refs = {
+    statuses: [{ name: "In progress", _links: { self: { href: "/api/v3/statuses/7" } } }],
+    priorities: [{ name: "High", _links: { self: { href: "/api/v3/priorities/9" } } }],
+    assignees: [{ name: "Hoàng Phúc", href: "/api/v3/users/7" }],
+  };
+  assert.deepEqual(setPayload(5, { status: "in progress", assignee: "Phuc", priority: "High", estimate: 2.5 }, refs), {
+    lockVersion: 5,
+    estimatedTime: "PT2H30M",
+    _links: { status: { href: "/api/v3/statuses/7" }, assignee: { href: "/api/v3/users/7" }, priority: { href: "/api/v3/priorities/9" } },
+  });
+  assert.deepEqual(setPayload(5, { estimate: 1 }, refs), { lockVersion: 5, estimatedTime: "PT1H" });
+  assert.throws(() => setPayload(5, { status: "Done" }, refs), /status "Done" does not exist/);
+  assert.throws(() => setPayload(5, {}, refs), /nothing to set/);
 });

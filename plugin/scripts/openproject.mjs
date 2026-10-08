@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { addSlugs, buildPayload, loadConfig, loadRefs, mergePayload, planWrites, readSidecar, sidecarPath, writeSidecar } from "./openproject-client.mjs";
+import { addSlugs, buildPayload, forgetSlugs, loadConfig, loadRefs, mergePayload, planWrites, readSidecar, recordLastApply, setPayload, sidecarPath, writeSidecar } from "./openproject-client.mjs";
 import { closedStatuses, closestWorkPackage, listWorkPackages } from "./openproject-dedup.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { snapshotOnce, snapshotPath } from "./draft-lint.mjs";
@@ -125,6 +125,7 @@ async function apply(client, project, drafts, file) {
       await client.request(`/api/v3/work_packages/${saved.id}`, { method: "PATCH", body: { lockVersion: current.lockVersion, _links: { status: { href: status._links.self.href } } } });
     }
   }
+  writeSidecar(path, recordLastApply(readSidecar(path), new Date().toLocaleString("sv-SE").replace(" ", "T"), Object.values(created)));
   let verified = 0;
   for (const [index, draft] of drafts.entries()) {
     const id = plan[index].id ?? created[draft.slug];
@@ -138,13 +139,88 @@ async function apply(client, project, drafts, file) {
   return verified === drafts.length ? 0 : 1;
 }
 
+const describe = (workPackage) => `#${workPackage.id} "${workPackage.subject}" [${workPackage._links.status.title}]`;
+
+async function quickSet(client, id, flags) {
+  const current = await client.request(`/api/v3/work_packages/${id}`);
+  const project = current._links.project.href.split("/").pop();
+  const refs = {
+    statuses: flags.status ? (await client.request("/api/v3/statuses"))._embedded.elements : [],
+    priorities: flags.priority ? (await client.request("/api/v3/priorities"))._embedded.elements : [],
+    assignees: flags.assignee ? (await loadRefs(client, project)).assignees : [],
+  };
+  const payload = setPayload(current.lockVersion, { status: flags.status, assignee: flags.assignee, priority: flags.priority, estimate: flags.estimate === undefined ? undefined : Number(flags.estimate) }, refs);
+  const before = { status: current._links.status?.title, assignee: current._links.assignee?.title ?? "none", priority: current._links.priority?.title, estimate: current.estimatedTime ?? "none" };
+  const changes = ["status", "assignee", "priority", "estimate"].filter((field) => flags[field] !== undefined).map((field) => `${field} ${before[field]} → ${flags[field]}`);
+  const form = await client.request(`/api/v3/work_packages/${id}/form`, { method: "POST", body: payload });
+  const errors = Object.values(form?._embedded?.validationErrors ?? {}).map((error) => error.message);
+  console.log(`${describe(current)} | ${changes.join(", ")} | ${errors.length ? `form errors: ${errors.join("; ")}` : "form ok"} | lock ${current.lockVersion}`);
+  if (errors.length) return 1;
+  if (flags.apply === undefined) {
+    console.log(`WRITE → ${client.host} · #${id} : 1 update; run again with --apply --lock ${current.lockVersion}`);
+    return 0;
+  }
+  if (Number(flags.lock) !== current.lockVersion) {
+    console.log(`refused: #${id} is at lock ${current.lockVersion}, not the previewed ${flags.lock}; read its activity, then preview again`);
+    return 1;
+  }
+  await client.request(`/api/v3/work_packages/${id}`, { method: "PATCH", body: payload });
+  const read = await client.request(`/api/v3/work_packages/${id}`);
+  console.log(`set ${describe(read)} assignee ${read._links.assignee?.title ?? "none"} priority ${read._links.priority?.title} estimate ${read.estimatedTime ?? "none"}`);
+  return 0;
+}
+
+async function rollback(client, project, flags) {
+  const path = sidecarPath(client.host, project);
+  const last = JSON.parse(readSidecar(path))._last_apply;
+  if (!last?.created?.length) {
+    console.log("nothing to roll back: the last apply created no work package");
+    return 0;
+  }
+  const action = flags.delete === undefined ? "close" : "delete";
+  const items = [];
+  for (const id of last.created) items.push(await client.request(`/api/v3/work_packages/${id}`));
+  const touched = items.filter((item) => new Date(item.updatedAt).getTime() > new Date(last.at).getTime() + 60_000);
+  console.log(`rollback of the apply at ${last.at}: ${action} ${items.length} work package(s) it created; nothing else is touched`);
+  for (const item of items) console.log(`  ${describe(item)} updated ${item.updatedAt}${touched.includes(item) ? " changed after the apply" : ""}`);
+  if (action === "delete" && touched.length) {
+    console.log(`refused: ${touched.map((item) => `#${item.id}`).join(", ")} changed after the apply; close instead, or delete by hand after reading its activity`);
+    return 1;
+  }
+  if (flags.apply === undefined) {
+    console.log(`WRITE → ${client.host} · project ${project} : ${items.length} ${action}; run again with --apply${action === "delete" ? " --delete" : ""}`);
+    return 0;
+  }
+  const statuses = (await client.request("/api/v3/statuses"))._embedded.elements.filter((status) => status.isClosed);
+  const closedStatus = statuses.find((status) => status.name.toLowerCase() === "closed") ?? statuses[0];
+  if (action === "close" && !closedStatus) throw new Error("this instance has no closed status");
+  const done = [];
+  const failed = [];
+  for (const item of items.toReversed()) {
+    try {
+      if (action === "delete") await client.request(`/api/v3/work_packages/${item.id}`, { method: "DELETE" });
+      else await client.request(`/api/v3/work_packages/${item.id}`, { method: "PATCH", body: { lockVersion: item.lockVersion, _links: { status: { href: closedStatus._links.self.href } } } });
+      done.push(item.id);
+    } catch (error) {
+      console.log(`  ! #${item.id} ${action} failed: ${error.message}`);
+      failed.push(item.id);
+    }
+  }
+  writeSidecar(path, forgetSlugs(readSidecar(path), action === "delete" ? done : [], failed));
+  console.log(`${action} ${done.length}/${items.length}${failed.length ? "; the failed ones stay recorded, run rollback again to retry them" : ""}`);
+  return failed.length ? 1 : 0;
+}
+
 async function main([command, target, ...rest]) {
-  const flags = Object.fromEntries(rest.flatMap((arg, index) => (arg.startsWith("--") ? [[arg.slice(2), rest[index + 1]]] : [])));
+  const args = command === "rollback" ? [target, ...rest].filter((arg) => arg !== undefined) : rest;
+  const flags = Object.fromEntries(args.flatMap((arg, index) => (arg.startsWith("--") ? [[arg.slice(2), args[index + 1] === undefined || args[index + 1].startsWith("--") ? true : args[index + 1]]] : [])));
   const client = loadConfig();
   if (command === "get" && target) {
     console.log(JSON.stringify(await client.request(target), null, 1));
     return 0;
   }
+  if (command === "set" && /^\d+$/.test(target ?? "")) return quickSet(client, Number(target), flags);
+  if (command === "rollback") return rollback(client, projectOf(flags), flags);
   if ((command === "preview" || command === "apply") && target) {
     const drafts = JSON.parse(readFileSync(target, "utf8"));
     const project = projectOf(flags);
@@ -169,7 +245,7 @@ async function main([command, target, ...rest]) {
     ]);
     return code;
   }
-  console.error("usage: openproject.mjs get <api path> | preview <drafts.json> [--project <id>] | apply <drafts.json> [--project <id>]");
+  console.error("usage: openproject.mjs get <api path> | preview <drafts.json> [--project <id>] | apply <drafts.json> [--project <id>] | set <id> [--status <name>] [--assignee <name>] [--priority <name>] [--estimate <hours>] [--apply --lock <n>] | rollback [--project <id>] [--delete] [--apply]");
   return 2;
 }
 
