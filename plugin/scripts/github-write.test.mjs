@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildReviewPayload, labelEdits, verifyComment } from "./github-write.mjs";
+import { alreadyOnPr, buildReviewPayload, labelEdits, replyExists, verifyComment } from "./github-write.mjs";
 
 const c = (path, line, body) => ({ path, line, body });
 
@@ -47,4 +47,15 @@ test("quoted copy must come from the diff, the repository or the PRD unless the 
   assert.match(verifyComment(c("a.ts", 1, 'Nút đang là "Ask the crew" ạ.'), sources).refusals[0], /Ask the crew/);
   assert.deepEqual(verifyComment(c("a.ts", 1, `Ô tên chưa có counter, [Figma](${frame}) có "10/30" ạ.`), sources), { refusals: [], unverified: ['"10/30" (Figma 3846:8503)'] });
   assert.match(verifyComment(c("a.ts", 1, 'Ô tên chưa có counter, Figma 3846:8503 có "10/30" ạ.'), sources).refusals[0], /10\/30/);
+});
+
+test("draft comments already on the PR are found by path and text, wherever the line moved", () => {
+  const existing = [
+    { id: 901, path: "a.ts", line: 14, body: "Nút đang sai ạ.\n\nPRD EPIC 09 · UC_SW_08 step 3:\n> button Ask the group." },
+    { id: 902, path: "b.ts", line: 5, body: "Sheet đóng sớm ạ.", in_reply_to_id: 800 },
+  ];
+  const draft = [c("a.ts", 12, "Nút đang sai ạ.\n\nPRD EPIC 09 · UC_SW_08 step 3:\n>  button Ask the group."), c("b.ts", 5, "Sheet đóng sớm ạ."), c("a.ts", 20, "Toast dư dấu chấm ạ.")];
+  assert.deepEqual(alreadyOnPr(existing, draft).map((twin) => [twin.comment.line, twin.id]), [[12, 901]]);
+  assert.equal(replyExists(existing, 800, "Sheet  đóng sớm ạ."), 902);
+  assert.equal(replyExists(existing, 801, "Sheet đóng sớm ạ."), null);
 });

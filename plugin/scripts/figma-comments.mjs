@@ -23,6 +23,8 @@ const squash = (text) => text.replace(/\s+/g, " ").trim();
 export const duplicateOnNode = (comments, node, body) =>
   comments.find((comment) => !comment.parent_id && !comment.resolved_at && comment.client_meta?.node_id === node && squash(comment.message) === squash(body));
 
+export const duplicateReply = (comments, rootId, body) => comments.find((comment) => comment.parent_id === rootId && squash(comment.message) === squash(body));
+
 export function threadsSince(comments, since) {
   const roots = comments.filter((comment) => !comment.parent_id);
   return roots
@@ -82,6 +84,8 @@ async function main([command, target, ...rest]) {
     const body = readBody(flags);
     const { comments } = await figma.request(`/files/${figma.file}/comments`);
     const root = rootOf(comments, target);
+    const twin = duplicateReply(comments, root.id, body);
+    if (twin) throw new Error(`reply ${twin.id} in thread ${root.id} already says this; nothing posted`);
     console.log(`WRITE → Figma ${figma.file} thread ${root.id} : 1 reply`);
     const created = await figma.request(`/files/${figma.file}/comments`, { method: "POST", body: { message: body, comment_id: root.id } });
     await verify(figma, created.id, body);

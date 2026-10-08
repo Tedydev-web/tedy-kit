@@ -70,6 +70,13 @@ const readBody = (flags) => {
   return body;
 };
 
+const squash = (text) => text.replace(/\s+/g, " ").trim();
+
+export const alreadyPosted = (comments, command, target, body) =>
+  command === "reply"
+    ? comments.some((comment) => comment.id === target && comment.replies.some((reply) => squash(reply.content) === squash(body)))
+    : comments.some((comment) => !comment.resolved && squash(comment.content) === squash(body));
+
 async function listComments(google) {
   const comments = [];
   let page = "";
@@ -97,6 +104,7 @@ async function main([command, target, ...rest]) {
   if ((command === "reply" && target) || command === "anchor") {
     const body = readBody(flags);
     const google = await session(flags, command === "anchor");
+    if (alreadyPosted(await listComments(google), command, target, body)) throw new Error(`the Doc already has this ${command === "reply" ? `reply in thread ${target}` : "comment"}; nothing posted`);
     let id;
     if (command === "reply") {
       console.log(`WRITE → Google Doc ${google.doc} thread ${target} : 1 reply`);

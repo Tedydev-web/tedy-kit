@@ -35,6 +35,16 @@ export function labelEdits(draft, final) {
   return entries;
 }
 
+export const alreadyOnPr = (existing, comments) =>
+  comments.flatMap((comment) => {
+    const twin = existing.find((candidate) => !candidate.in_reply_to_id && candidate.path === comment.path && normalise(candidate.body) === normalise(comment.body));
+    return twin ? [{ comment, id: twin.id }] : [];
+  });
+
+export const replyExists = (existing, id, body) => existing.find((candidate) => String(candidate.in_reply_to_id) === String(id) && normalise(candidate.body) === normalise(body))?.id ?? null;
+
+const prComments = (repo, pr) => JSON.parse(gh(["api", "--paginate", "--slurp", `repos/${repo}/pulls/${pr}/comments`])).flat();
+
 export function buildReviewPayload(comments, commitId) {
   return { commit_id: commitId, event: "COMMENT", comments: comments.map(({ path, line, body }) => ({ path, line, side: "RIGHT", body })) };
 }
@@ -136,6 +146,9 @@ async function post(file, flags) {
     refused ||= refusals.length > 0;
   }
   if (refused) return 1;
+  const twins = alreadyOnPr(prComments(repo, final.pr), final.comments);
+  for (const twin of twins) console.log(`refused ${twin.comment.index}. ${twin.comment.path}:${twin.comment.line}: already on the PR as comment ${twin.id}; drop it from the draft`);
+  if (twins.length) return 1;
   const payload = buildReviewPayload(final.comments, head);
   console.log(`WRITE → ${repo}#${final.pr} : 1 review · ${final.comments.length} comments`);
   if (flags["dry-run"]) {
@@ -195,6 +208,11 @@ function resolveThreads(threadIds) {
 function reply(pr, id, flags) {
   const repo = currentRepo(flags);
   const body = readBody(flags);
+  const twin = replyExists(prComments(repo, pr), id, body);
+  if (twin) {
+    console.log(`refused: reply ${twin} under ${id} already says this; nothing posted`);
+    return 1;
+  }
   console.log(`WRITE → ${repo}#${pr} : reply to ${id}`);
   const created = JSON.parse(gh(["api", "-X", "POST", `repos/${repo}/pulls/${pr}/comments/${id}/replies`, "--input", "-"], JSON.stringify({ body })));
   logEdits([{ repo, pr: Number(pr), key: String(id), label: "reply", draft: null, posted: body }]);

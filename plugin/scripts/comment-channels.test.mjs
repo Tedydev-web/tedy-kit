@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { duplicateOnNode, pinOffset, rootOf, threadsSince } from "./figma-comments.mjs";
-import { findQuoteRange, tokenFromDump } from "./gdoc-comments.mjs";
+import { duplicateOnNode, duplicateReply, pinOffset, rootOf, threadsSince } from "./figma-comments.mjs";
+import { alreadyPosted, findQuoteRange, tokenFromDump } from "./gdoc-comments.mjs";
 
 test("a Figma pin sits at half the width and three quarters of the height of the node", () => {
   assert.deepEqual(pinOffset({ x: 100, y: 200, width: 375, height: 812 }), { x: 188, y: 609 });
@@ -69,4 +69,25 @@ test("figma-read lists frames with ids and the exact copy of every text layer, i
   const { textLines } = await import("./figma-read.mjs");
   const tree = { type: "FRAME", name: "Name and photo", id: "3846:8420", children: [{ type: "TEXT", characters: "Change  photo\n" }, { type: "GROUP", name: "Actions", id: "3846:9", children: [{ type: "TEXT", characters: "Save" }] }] };
   assert.deepEqual(textLines(tree), ['frame Name and photo (3846:8420)', '  "Change photo"', "  group Actions (3846:9)", '    "Save"']);
+});
+
+test("a Figma reply already in the thread is found, whitespace aside", () => {
+  const comments = [
+    { id: "1", message: "@an frame thiếu state lỗi a", parent_id: "" },
+    { id: "2", message: "@an  xong rồi\nnha", parent_id: "1" },
+    { id: "3", message: "@an xong rồi nha", parent_id: "9" },
+  ];
+  assert.equal(duplicateReply(comments, "1", "@an xong rồi nha").id, "2");
+  assert.equal(duplicateReply(comments, "1", "@an chưa xong"), undefined);
+});
+
+test("a Doc reply or anchored comment already posted is found before posting again", () => {
+  const comments = [
+    { id: "AAA", content: "Câu hỏi cũ a?", resolved: false, replies: [{ content: "E hỏi thêm:  ví nào trả a?" }] },
+    { id: "BBB", content: "Mục này PRD ghi 30 ký tự a?", resolved: false, replies: [] },
+  ];
+  assert.ok(alreadyPosted(comments, "reply", "AAA", "E hỏi thêm: ví nào trả a?"));
+  assert.ok(!alreadyPosted(comments, "reply", "BBB", "E hỏi thêm: ví nào trả a?"));
+  assert.ok(alreadyPosted(comments, "anchor", undefined, "Mục này PRD ghi 30 ký tự a?"));
+  assert.ok(!alreadyPosted(comments, "anchor", undefined, "Câu hỏi mới a?"));
 });
