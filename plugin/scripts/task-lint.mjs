@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { resolveMap } from "./project-map.mjs";
 
 const REQUIRED = {
   epic: [["outcome"], ["context"], ["acceptance criteria"], ["definition of done"]],
@@ -25,6 +26,12 @@ const WORD = /[\p{L}\p{M}\p{N}_]+/gu;
 const PARAM_SEGMENT_WORDS = 6;
 const LINE_WORD_CEILING = 30;
 const OVERSIZE_HOURS = 16;
+const LEAF_TYPES = new Set(["task", "bug", "user story"]);
+const FRONTEND_TAG = /^\[(?:FE|Admin-FE)\]/i;
+const WIRE_SUBJECT = /^\[[^\]]+\]\s+Wire\b/i;
+const BLOCKING_LINE = /^\s*[-*]\s*Blocking:/i;
+const TRIED = /\bTried:/i;
+const QUOTED = /"[^"]*"|“[^”]*”|\{[^}]*\}/g;
 
 const readable = (text) => text.replace(LINK_TARGET, "]").replace(BARE_URL, " ");
 const prose = (text) => readable(text.replace(CODE_SPAN, " "));
@@ -61,6 +68,9 @@ function findSection(found, alternatives) {
 }
 
 const checkboxes = (body) => (body.match(CHECKBOX) ?? []).length;
+const kindOf = (draft) => String(draft.type ?? "").trim().toLowerCase();
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const blockingQuestions = (description) => (findSection(sections(description), ["open questions"]) ?? "").split("\n").filter((line) => BLOCKING_LINE.test(line));
 
 export function lintWorkPackage({ type, subject = "", description = "", estimate }) {
   const kind = String(type ?? "").trim().toLowerCase();
@@ -90,6 +100,9 @@ export function lintWorkPackage({ type, subject = "", description = "", estimate
       const ac = findSection(found, ["ac", "acceptance criteria"]);
       if (ac && checkboxes(ac) > 6) block("ac-over", `${checkboxes(ac)} acceptance criteria > 6`);
     }
+    for (const line of blockingQuestions(description).filter((line) => !TRIED.test(line))) {
+      block("oq-untried", `blocking open question has no "Tried:" trail; record where you looked before it reaches the team: ${line.trim().slice(0, 80)}`);
+    }
   }
   if (AUTHORED_TYPES.has(kind) && VN_CHAR.test(subject)) block("subject-language", "the subject carries Vietnamese; tracker content is English");
   if ((kind === "task" || kind === "bug") && !COMPONENT_TAG.test(subject)) warn("subject-tag", "the subject has no leading [component] tag");
@@ -101,20 +114,60 @@ export function lintWorkPackage({ type, subject = "", description = "", estimate
   return findings;
 }
 
+export function readiness(drafts, { updating = new Set() } = {}) {
+  const parents = new Set(drafts.map((draft) => draft.parent).filter((parent) => typeof parent === "string"));
+  const lintable = drafts.filter((draft) => REQUIRED[kindOf(draft)]);
+  const descOk = lintable.filter((draft) => !lintWorkPackage(draft).some((finding) => finding.severity === "BLOCK")).length;
+  const leaves = drafts.filter((draft) => LEAF_TYPES.has(kindOf(draft)) && !parents.has(draft.slug) && draft.id === undefined && !updating.has(draft.slug));
+  const estimated = leaves.filter((draft) => typeof draft.estimate === "number").length;
+  const percent = (part, whole) => (whole ? Math.round((100 * part) / whole) : 0);
+  const pctDesc = percent(descOk, lintable.length);
+  const pctEst = leaves.length ? percent(estimated, leaves.length) : 100;
+  const verdict = !lintable.length || pctDesc < 50 || pctEst < 40 ? "thiếu nặng" : pctDesc >= 90 && pctEst >= 80 ? "đủ" : "mỏng";
+  const questions = drafts.reduce((sum, draft) => sum + blockingQuestions(draft.description ?? "").length, 0);
+  return { total: drafts.length, lintable: lintable.length, descOk, leaves: leaves.length, estimated, blockingQuestions: questions, pctDesc, pctEst, verdict };
+}
+
+export const readinessLine = (stats) => `readiness ${stats.verdict}: description ${stats.descOk}/${stats.lintable}, estimate ${stats.estimated}/${stats.leaves}, blocking open questions ${stats.blockingQuestions}`;
+
+export function lintDrafts(drafts, { glossary = {} } = {}) {
+  const findings = [];
+  const warn = (slug, rule, message) => findings.push({ slug, severity: "WARN", rule, message });
+  for (const story of drafts.filter((draft) => kindOf(draft) === "user story" && draft.slug)) {
+    const screens = drafts.filter((draft) => draft.parent === story.slug && FRONTEND_TAG.test(draft.subject ?? ""));
+    const wires = screens.filter((draft) => WIRE_SUBJECT.test(draft.subject));
+    if (screens.length && !wires.length) warn(story.slug, "story-layers-unjoined", "the story has a UI task but no wire task; every screen gets both");
+    else if (wires.length && wires.length === screens.length) warn(story.slug, "story-layers-unjoined", "the story has a wire task but no UI task; every screen gets both");
+  }
+  for (const [preferred, banned] of Object.entries(glossary)) {
+    if (!banned?.length) continue;
+    const pattern = new RegExp(`\\b(?:${banned.map(escapeRegExp).join("|")})\\b`, "i");
+    for (const draft of drafts) {
+      const hit = prose(`${draft.subject ?? ""}\n${draft.description ?? ""}`).replace(QUOTED, " ").match(pattern);
+      if (hit) warn(draft.slug ?? draft.subject, "glossary-drift", `says "${hit[0]}" where the map's glossary fixes "${preferred}"`);
+    }
+  }
+  return findings;
+}
+
 function main(files) {
   if (!files.length) {
     console.error("usage: task-lint.mjs <drafts.json>...   (each file: an array of { slug, type, subject, description, ... })");
     return 2;
   }
   let blocked = 0;
+  const glossary = resolveMap(process.cwd())?.map.glossary ?? {};
   for (const file of files) {
-    for (const draft of JSON.parse(readFileSync(file, "utf8"))) {
+    const drafts = JSON.parse(readFileSync(file, "utf8"));
+    for (const draft of drafts) {
       const findings = lintWorkPackage(draft);
       blocked += findings.filter((finding) => finding.severity === "BLOCK").length;
       const label = draft.slug ?? draft.subject;
       if (!findings.length) console.log(`clean ${label} (${countWords(draft.description ?? "")} words)`);
       for (const finding of findings) console.log(`${finding.severity} ${label}: ${finding.rule}: ${finding.message}`);
     }
+    for (const finding of lintDrafts(drafts, { glossary })) console.log(`WARN ${finding.slug}: ${finding.rule}: ${finding.message}`);
+    console.log(readinessLine(readiness(drafts)));
   }
   return blocked ? 1 : 0;
 }

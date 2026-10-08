@@ -5,7 +5,7 @@ import { closestWorkPackage, listWorkPackages } from "./openproject-dedup.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { snapshotOnce, snapshotPath } from "./draft-lint.mjs";
 import { appendEditLog, frozenOriginal, labelText } from "./edit-log.mjs";
-import { countWords, lintWorkPackage } from "./task-lint.mjs";
+import { countWords, lintDrafts, lintWorkPackage, readiness, readinessLine } from "./task-lint.mjs";
 
 function projectOf(flags) {
   const project = flags.project ?? resolveMap(process.cwd())?.map.tracker?.project;
@@ -44,6 +44,8 @@ async function check(client, project, drafts) {
     const notes = `${warns.length ? ` | warn ${warns.join(", ")}` : ""}${similar ? ` | similar #${similar.id} ${similar.score.toFixed(2)} "${similar.subject}"` : ""}`;
     console.log(`${step.action}${step.id ? ` #${step.id}` : ""} ${draft.slug} | ${lint} | ${form}${notes}`);
   }
+  for (const finding of lintDrafts(drafts, { glossary: resolveMap(process.cwd())?.map.glossary ?? {} })) console.log(`warn ${finding.slug}: ${finding.rule}: ${finding.message}`);
+  console.log(readinessLine(readiness(drafts, { updating: new Set(drafts.filter((_, index) => plan[index].action === "update").map((draft) => draft.slug)) })));
   const creates = plan.filter((step) => step.action === "create").length;
   console.log(`WRITE → ${client.host} · project ${project} : ${creates} create · ${plan.length - creates} update`);
   return { failed, plan, refs, mapping, locks };

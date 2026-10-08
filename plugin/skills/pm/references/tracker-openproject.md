@@ -34,7 +34,7 @@ A JSON array, one object per work package:
 | Command | Writes | What it does |
 |---|---|---|
 | `get <api path>` | no | Any GET, for example `/api/v3/work_packages/21298` |
-| `preview <drafts.json>` | no | `task-lint` on every draft, then the `/form` endpoint validates each payload; prints create or update per slug, lint warnings, the closest existing work package of the same type (`similar #id score`, from 0.60) for each create, and the `WRITE →` line. A `similar` row is linked or updated instead, or the ledger says why it is new |
+| `preview <drafts.json>` | no | `task-lint` on every draft, then the `/form` endpoint validates each payload; prints create or update per slug, lint warnings, story warnings (a new story with a UI task and no wire task, or the reverse), glossary drift against the map's `glossary`, the closest existing work package of the same type (`similar #id score`, from 0.60) for each create, then a `readiness đủ|mỏng|thiếu nặng` line (descriptions without a BLOCK, estimates on new leaf tasks, blocking open questions; the same thresholds as `pg-project-management`'s `readiness`) and the `WRITE →` line. A `similar` row is linked or updated instead, or the ledger says why it is new |
 | `apply <drafts.json>` | yes | Refuses unless preview is clean; creates or updates, adds relations and status, adds new slugs to the sidecar, reads every work package back and prints `verified N/N` |
 
 `apply` triggers the permission prompt. The sidecar `~/.config/op/sync/<host>__<project>.map.json` is shared with `pg-project-management`: `apply` only appends new slug keys in the same format and never touches `_relations`, `_merged`, `_last_apply` or `_forced_pushes`.

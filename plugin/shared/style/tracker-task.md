@@ -26,7 +26,7 @@ Words are counted the way `task-lint.mjs` counts them: word characters only, wit
 
 - A task speaks at the PM's altitude: behaviour, copy, states and PRD codes. Function names, files, endpoints and libraries stay out; scouting results go into a task comment that opens "Reference for whoever implements, not part of the checklist".
 - Every screen gets two tasks, UI on sample data and its wire task, even when one person does both; the UI task ends its Goal with "Wiring is the next task" and the wire task names the UI task and the backend task.
-- `## Open questions` lists each gap as a fact: what is missing and who was asked ("asked the PM"). The closing Checklist line "Report the gaps below to the backend team." appears in 7 of 23 such tasks, all by 2026-10-05, and later tasks drop it.
+- `## Open questions` lists each gap as a fact: what is missing and who was asked ("asked the PM"). A gap that stops the build opens with `Blocking:` and carries `Tried:` with where it was looked up before anyone was asked (PRD locator, Figma frame, backend branch, OpenProject); `task-lint` blocks a `Blocking:` line without it. The closing Checklist line "Report the gaps below to the backend team." appears in 7 of 23 such tasks, all by 2026-10-05, and later tasks drop it.
 - Estimate: the agent's own estimate halved, as `PT<h>H<m>M`. Start and due dates are scheduled at 8 hours a day per assignee; only the start date of a new story is asked.
 - `[BE]` and `[Admin-BE]` tasks are written only when the user asks for them, checked against the PRD and design with extra care (2026-10-05: "với task của BE bạn cần lên thật chính xác"). Never for the backend team's own queue: "lên luôn task BE cho Tân thì đừng làm gì cả vì ngoài quyền hạn của chúng ta rồi".
 
