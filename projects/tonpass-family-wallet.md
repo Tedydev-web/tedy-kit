@@ -10,8 +10,8 @@ Family Wallet only; Gift-Card work in this workspace is out of scope. Written by
     { "path": "tonpass-wallet-fe", "role": "FE", "branch": "dev" },
     { "path": "tonpass-wallet-be", "role": "BE", "branch": "dev", "readonly": true },
     { "path": "family-wallet-smartcontract", "role": "contract", "branch": "dev", "readonly": true },
-    { "path": "onedollar-wallet-admin-fe", "role": "admin-FE", "branch": "dev", "readonly": true },
-    { "path": "tonpass-wallet-admin-be", "role": "admin-BE", "branch": "dev", "readonly": true }
+    { "path": "onedollar-wallet-admin-fe", "role": "admin-FE", "branch": "dev" },
+    { "path": "tonpass-wallet-admin-be", "role": "admin-BE", "branch": "dev" }
   ],
   "language": { "pr_review": "vi", "pr_body": "en", "tracker": "en", "doc_figma": "vi" },
   "prd": {

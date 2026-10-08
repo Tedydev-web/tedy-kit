@@ -70,7 +70,8 @@
       <h3>Luôn hỏi trước khi ghi ra ngoài</h3>
       <p>Các lệnh sau luôn hiện prompt để anh bấm cho phép, kể cả ở chế độ bypass:</p>
       <ul>
-        <li>push, tạo PR, merge</li>
+        <li>push lên dev/main/master/production/staging, force-push, xoá branch trên remote</li>
+        <li>merge PR</li>
         <li>đăng hoặc trả lời comment GitHub, Figma, Google Doc</li>
         <li>apply task lên OpenProject</li>
       </ul>
@@ -86,7 +87,7 @@
     <tr><th style="width:26%">Lệnh</th><th>Dùng khi</th><th style="width:30%">Anh nhận được</th></tr>
     <tr><td><code>/tedy:review-pr 703</code><br><span class="tag">hoặc nói "review PR 703"</span></td><td>Review PR của đồng đội. Em đối chiếu PRD, Figma, BE, chạy typecheck/lint/test trên worktree riêng, PR lớn hoặc đụng tiền/auth thì chạy thêm 3 reviewer độc lập.</td><td>Draft comment tiếng Việt, mỗi comment một câu gợi ý kết bằng "ạ." kèm trích PRD. Menu <b>Đăng review</b>.</td></tr>
     <tr><td><code>/tedy:pm UC_SW_02</code><br><code>/tedy:pm replies</code><br><code>/tedy:pm tasks &lt;scope&gt;</code></td><td>Việc PM: rà PRD với Figma và code, hỏi designer/PM, lên task OpenProject, check reply.</td><td>Ledger các chỗ lệch, draft comment Figma/Doc kiểu chat, draft task tiếng Anh tách UI và wire. Menu <b>Duyệt</b>.</td></tr>
-    <tr><td><code>/tedy:dev &lt;task #id hoặc mô tả&gt;</code></td><td>Làm một task từ đầu đến cuối.</td><td>Đối soát, branch, code, verify trên commit, 2 reviewer, commit, report. Không push nếu anh không bảo. Menu <b>Bước tiếp</b>.</td></tr>
+    <tr><td><code>/tedy:dev &lt;task #id hoặc mô tả&gt;</code></td><td>Làm một task từ đầu đến cuối.</td><td>Đối soát, branch, code, verify trên commit, 2 reviewer, commit, push branch và mở <b>PR nháp</b>, report kèm link PR. Anh nói "noted lại cho tôi biết" hay "báo cáo" thì chỉ báo, không push. Mark ready và merge là việc của anh. Menu <b>Bước tiếp</b>.</td></tr>
     <tr><td><code>/tedy:dev rebut</code> + dán review</td><td>Có review từ Gemini, bot hoặc đồng nghiệp trên PR của anh.</td><td>Bảng <i>Đúng / Sai / Đúng một phần</i> kèm bằng chứng. Menu <b>Sửa gì</b>; chưa sửa gì trước khi anh chọn.</td></tr>
     <tr><td><code>/tedy:reconcile &lt;epic hoặc UC&gt;</code></td><td>Chỉ muốn đối chiếu, chưa làm gì.</td><td>Bảng lệch PRD/Figma/BE/FE, độ phủ và danh sách cần raise kèm người chịu trách nhiệm.</td></tr>
     <tr><td><code>/tedy:setup</code><br><code>/tedy:setup update</code></td><td>Dự án mới, hoặc cần thêm Figma node, PRD tab, tracker.</td><td>Vài câu hỏi dạng menu, rồi map được ghi và commit vào kit.</td></tr>
@@ -145,6 +146,8 @@
     <tr><td><code>tedy gate: this edit adds comments to …</code></td><td>Em vừa định thêm comment vào code. Em sẽ tự viết lại không có comment; phần giải thích đưa vào commit message.</td></tr>
     <tr><td>Em báo "phần vừa push có comment mới"</td><td>Push đã đi rồi. Em đề xuất chuyển phần giải thích vào commit message hoặc mô tả PR rồi push thêm một commit; anh muốn giữ comment (ví dụ của đồng đội) thì cứ nói giữ.</td></tr>
     <tr><td>Em báo "còn file chưa commit lúc push"</td><td>Commit vừa push có thể khác bản đã build và test. Em commit hoặc khôi phục các file đó theo ý anh.</td></tr>
+    <tr><td><code>tedy gate: open the PR as a draft with --draft</code></td><td>Em mở PR thường. Em tự mở lại dạng nháp; anh mark ready khi muốn.</td></tr>
+    <tr><td>Prompt có <code>tedy gate: it pushes to `dev`</code> hoặc <code>`--force` …</code></td><td>Lệnh push này đi thẳng vào branch tích hợp, hoặc ghi đè/xoá lịch sử trên remote. Chỉ bấm cho phép nếu anh bảo em làm vậy.</td></tr>
     <tr><td><code>tedy gate: publish to GitHub through github-write.mjs …</code></td><td>Đăng lên GitHub chỉ đi qua draft đã duyệt. Bảo em "đăng draft".</td></tr>
     <tr><td><code>tedy gate: merging, closing or editing a PR … belongs to the user</code></td><td>Merge và close là việc của anh. Resolve thread chỉ làm khi anh bảo ngay trong lượt đó, và chỉ với thread đã kiểm là đã sửa.</td></tr>
     <tr><td>Prompt cho phép khi push/đăng/apply</td><td>Đó là bước chốt cuối cùng. Bấm cho phép nếu đúng là anh muốn ghi ra ngoài.</td></tr>

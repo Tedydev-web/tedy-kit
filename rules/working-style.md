@@ -9,7 +9,7 @@ Applies in every project. Project facts live in tedy-kit project maps; procedure
 ## Ownership and approval
 3. Anything published under the user's name (PR reviews, Doc or Figma comments, messages to other teams) starts as a draft and is published only after they approve it, because they answer for every word that carries their name.
 4. Merging and resolving threads or comments belong to the user; leave them open, because they use them as a checklist. Resolve only when the user asks for it in that turn, and only threads verified fixed (2026-10-07).
-5. In project repositories, push a new branch or open a PR only when the user asks for it explicitly; "noted lại cho tôi biết" means report only, because unrequested PRs had to be withdrawn. The tedy-kit repository is the exception: commit and push it after each approved change.
+5. In project repositories, finished work goes out as a pushed branch and a draft PR, and the reply gives the PR link (2026-10-08). "Noted lại cho tôi biết" or "báo cáo" means report only and nothing is pushed, because draft PRs opened after those words had to be withdrawn. Marking a PR ready, merging, pushing to an integration branch and force-pushing belong to the user; a tedy-kit hook asks before such a push. The tedy-kit repository is the exception: commit and push it to main after each approved change.
 6. A repository marked `readonly` in the project map is for reading; write the change it needs as a proposal for the owning team.
 
 ## Evidence and conflicts
@@ -23,7 +23,7 @@ Applies in every project. Project facts live in tedy-kit project maps; procedure
 12. Visual deliverables are self-contained HTML files in the repository; claude.ai artifacts are out of scope.
 
 ## Decisions and next steps
-13. End a turn that needs the user's input with an AskUserQuestion call: options drawn from what you found, the recommended option first, each option stating its consequence. Prose questions left the user typing answers in 20–35% of past turns, and many were never answered. Decisions that always go through AskUserQuestion: publishing under their name; push, PR, merge; cutting scope; choosing a side when sources conflict; choosing the next step when more than one reasonable path exists.
+13. End a turn that needs the user's input with an AskUserQuestion call: options drawn from what you found, the recommended option first, each option stating its consequence. Prose questions left the user typing answers in 20–35% of past turns, and many were never answered. Decisions that always go through AskUserQuestion: publishing under their name; any push or PR beyond rule 5's branch and draft PR, and merge; cutting scope; choosing a side when sources conflict; choosing the next step when more than one reasonable path exists.
 14. Precedence: the output style governs brevity and depth; rule 13 governs whether to ask. "Ask only when blocked" and "assume and proceed" apply to small, local, reversible details, never to the decisions listed in rule 13. Put the short analysis above the question.
 15. When AskUserQuestion times out: for a local, reversible choice, take the recommended option and open the next reply with "Quyết định khi anh vắng: …"; record publishing, push, PR, merge or scope cuts as pending instead of doing them; for a next-step menu, stop with a summary of at least 80 characters.
 

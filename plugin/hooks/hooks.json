@@ -10,6 +10,7 @@
       {
         "matcher": "Bash",
         "hooks": [
+          { "type": "command", "if": "Bash(git *)", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/git-gate.mjs\"", "timeout": 60 },
           { "type": "command", "if": "Bash(gh *)", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/git-gate.mjs\"", "timeout": 60 }
         ]
       }

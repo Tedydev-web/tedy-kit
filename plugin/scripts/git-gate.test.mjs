@@ -1,5 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { evaluate, splitSegments, classify } from "./git-gate.mjs";
 
 test("splitSegments handles chains, pipes, newlines and shell wrappers", () => {
@@ -9,9 +13,9 @@ test("splitSegments handles chains, pipes, newlines and shell wrappers", () => {
 });
 
 test("classify recognises git and gh actions through env vars and -C", () => {
-  assert.deepEqual(classify("git push origin x", "/w"), { kind: "push", dir: "/w" });
+  assert.deepEqual(classify("git push origin x", "/w"), { kind: "push", dir: "/w", args: ["origin", "x"] });
   assert.deepEqual(classify("FOO=1 git -C sub commit -am msg", "/w"), { kind: "commit", dir: "/w/sub", all: true });
-  assert.deepEqual(classify("git -c core.x=y push", "/w"), { kind: "push", dir: "/w" });
+  assert.deepEqual(classify("git -c core.x=y push", "/w"), { kind: "push", dir: "/w", args: [] });
   assert.equal(classify("gh pr create --fill", "/w").kind, "pr-create");
   assert.equal(classify("gh pr review 12 --comment -b hi", "/w").kind, "github-write");
   assert.equal(classify("gh api -X POST repos/o/r/pulls/1/reviews", "/w").kind, "github-write");
@@ -50,4 +54,34 @@ test("merging or closing a PR is denied as the user's call, not routed to github
   const result = evaluate("cd x && gh pr merge 12 --squash", "/w");
   assert.equal(result.allow, false);
   assert.match(result.reason, /belongs to the user/);
+});
+
+test("gh pr create must open a draft", () => {
+  const result = evaluate("git push -u origin feat && gh pr create --fill", "/w");
+  assert.equal(result.allow, false);
+  assert.match(result.reason, /--draft/);
+  assert.equal(evaluate("gh pr create -d --fill", "/w").allow, true);
+});
+
+test("pushes that rewrite history or land on an integration branch ask the user", () => {
+  for (const command of ["git push origin dev", "git push -f", "git push --force-with-lease=feat origin feat", "git push origin +feat", "git push origin :feat", "git push origin HEAD:main", "git push -d origin feat", "cd x && git push origin refs/heads/production"]) {
+    const result = evaluate(command, "/w");
+    assert.equal(result.ask, true, command);
+    assert.match(result.reason, /belongs to the user/, command);
+  }
+  assert.equal(evaluate("git push -u origin feat", "/w").allow, true);
+});
+
+test("a bare git push asks only when the branch tracks an integration branch", () => {
+  const root = mkdtempSync(join(tmpdir(), "tedy-gate-"));
+  const git = (...args) => execFileSync("git", ["-C", join(root, "work"), ...args], { stdio: "ignore" });
+  execFileSync("git", ["init", "-q", "--bare", "-b", "dev", join(root, "remote.git")]);
+  execFileSync("git", ["clone", "-q", join(root, "remote.git"), join(root, "work")], { stdio: "ignore" });
+  writeFileSync(join(root, "work", "a.txt"), "a\n");
+  git("add", "-A");
+  git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init");
+  git("push", "-q", "origin", "dev");
+  assert.equal(evaluate("git push", join(root, "work")).ask, true);
+  git("checkout", "-qb", "feat");
+  assert.equal(evaluate("git push", join(root, "work")).allow, true);
 });

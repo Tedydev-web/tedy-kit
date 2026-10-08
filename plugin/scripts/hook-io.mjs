@@ -25,6 +25,10 @@ export function deny(reason) {
   process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: reason } }));
 }
 
+export function ask(reason) {
+  process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "ask", permissionDecisionReason: reason } }));
+}
+
 export function readTranscriptTail(path, bytes = 1_500_000) {
   if (!path) return [];
   let descriptor;

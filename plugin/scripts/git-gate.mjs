@@ -1,7 +1,8 @@
+import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { deny, logGate, readHookInput } from "./hook-io.mjs";
+import { ask, deny, logGate, readHookInput } from "./hook-io.mjs";
 
 const SHELL_WRAPPER = /^(?:bash|sh|zsh)\s+-c\s+(['"])([\s\S]*)\1$/;
 const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
@@ -9,6 +10,8 @@ const READ_ONLY_GIT = new Set(["status", "diff", "log", "show", "fetch", "rev-pa
 const READ_ONLY_GH_ACTIONS = new Set(["view", "list", "diff", "checks", "status", "watch", "download"]);
 const READ_ONLY_GH_AREAS = new Set(["search", "status", "browse", "help", "--version", "--help", undefined]);
 const LOCAL_GH = new Set(["pr checkout", "repo clone", "auth", "config", "alias", "extension", "completion"]);
+const PROTECTED_BRANCHES = new Set(["main", "master", "dev", "develop", "production", "staging"]);
+const REWRITING_PUSH = /^(-f|--force|--force-with-lease(=.*)?|--force-if-includes|--mirror|--all|--prune|-d|--delete)$/;
 
 export function splitSegments(command) {
   const segments = [];
@@ -128,7 +131,7 @@ export function classify(segment, cwd) {
       }
     }
     const subcommand = args[index];
-    if (subcommand === "push") return { kind: "push", dir };
+    if (subcommand === "push") return { kind: "push", dir, args: args.slice(index + 1) };
     if (subcommand === "add") return { kind: "add", dir, args: args.slice(index + 1) };
     if (subcommand === "commit") {
       const all = args.slice(index + 1).some((token) => token === "--all" || /^-[^-]*a/.test(token));
@@ -138,7 +141,7 @@ export function classify(segment, cwd) {
   }
   if (program === "gh") {
     const [area, action] = args;
-    if (area === "pr" && action === "create") return { kind: "pr-create", dir: cwd };
+    if (area === "pr" && action === "create") return { kind: "pr-create", dir: cwd, args: args.slice(2) };
     if (area === "api") return { kind: classifyGitHubApi(args.slice(1)) ?? "read", dir: cwd };
     if (READ_ONLY_GH_AREAS.has(area) || READ_ONLY_GH_ACTIONS.has(action)) return { kind: "read", dir: cwd };
     if (LOCAL_GH.has(area) || LOCAL_GH.has(`${area} ${action}`)) return { kind: "other", dir: cwd };
@@ -147,9 +150,51 @@ export function classify(segment, cwd) {
   return { kind: "other", dir: cwd };
 }
 
+function tryGit(dir, args) {
+  try {
+    return execFileSync("git", ["-C", dir, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  } catch {
+    return null;
+  }
+}
+
+export function pushRisk(args, dir) {
+  const rewriting = args.find((arg) => REWRITING_PUSH.test(arg));
+  if (rewriting) return `\`${rewriting}\` can rewrite or delete remote branches`;
+  const refspecs = args.filter((arg) => !arg.startsWith("-")).slice(1);
+  if (!refspecs.length) {
+    const upstream = tryGit(dir, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
+    const target = upstream ? upstream.replace(/^[^/]+\//, "") : tryGit(dir, ["rev-parse", "--abbrev-ref", "HEAD"]);
+    return PROTECTED_BRANCHES.has(target) ? `it pushes to \`${target}\`` : null;
+  }
+  for (const refspec of refspecs) {
+    if (refspec.startsWith("+")) return `\`${refspec}\` forces the update`;
+    const [source, destination = source] = refspec.split(":");
+    if (!source) return `\`${refspec}\` deletes a remote branch`;
+    const target = destination === "HEAD" ? tryGit(dir, ["rev-parse", "--abbrev-ref", "HEAD"]) : destination.replace(/^refs\/heads\//, "");
+    if (PROTECTED_BRANCHES.has(target)) return `it pushes to \`${target}\``;
+  }
+  return null;
+}
+
 export function evaluate(command, cwd) {
+  let dir = cwd;
   for (const segment of splitSegments(command)) {
-    if (classify(segment, cwd).kind !== "github-write") continue;
+    const action = classify(segment, dir);
+    if (action.kind === "cd") {
+      dir = action.dir;
+      continue;
+    }
+    if (action.kind === "push") {
+      const risk = pushRisk(action.args, action.dir);
+      if (risk) return { allow: false, ask: true, reason: `tedy gate: ${risk}, which belongs to the user (working-style rule 5). Allow it only if the user asked for this push.` };
+      continue;
+    }
+    if (action.kind === "pr-create") {
+      if (!action.args.some((arg) => arg === "--draft" || arg === "-d")) return { allow: false, reason: "tedy gate: open the PR as a draft with `--draft`; the user marks it ready (working-style rule 5)." };
+      continue;
+    }
+    if (action.kind !== "github-write") continue;
     if (/\bgh\s+(pr|issue)\s+(merge|close|reopen|ready|edit|lock|unlock)\b/.test(segment)) {
       return { allow: false, reason: "tedy gate: merging, closing or editing a PR or issue belongs to the user (working-style rule 4). Tell the user what is ready and let them do it." };
     }
@@ -163,8 +208,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const command = input.tool_input?.command ?? "";
   try {
     const result = evaluate(command, input.cwd ?? process.cwd());
-    logGate({ hook: "git-gate", decision: result.allow ? "allow" : "deny", command: command.slice(0, 200), cwd: input.cwd, reason: result.allow ? undefined : result.reason });
-    if (!result.allow) deny(result.reason);
+    logGate({ hook: "git-gate", decision: result.allow ? "allow" : result.ask ? "ask" : "deny", command: command.slice(0, 200), cwd: input.cwd, reason: result.reason });
+    if (result.ask) ask(result.reason);
+    else if (!result.allow) deny(result.reason);
   } catch (error) {
     logGate({ hook: "git-gate", decision: "allow-on-error", command: command.slice(0, 200), error: error.message });
     process.stderr.write(`tedy gate could not classify this command: ${error.message}\n`);
