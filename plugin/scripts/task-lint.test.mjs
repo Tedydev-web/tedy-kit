@@ -10,7 +10,7 @@ const SAMPLES = [...STYLE.matchAll(/### \d+\. ([^:\n]+): #\d+ ([^\n]+)\n\n```mar
   description: match[3],
 }));
 const blocks = (draft) => lintWorkPackage(draft).filter((finding) => finding.severity === "BLOCK").map((finding) => finding.rule);
-const task = SAMPLES.find((sample) => sample.subject.startsWith("[FE] Vault limit"));
+const task = SAMPLES.find((sample) => sample.subject.startsWith("[FE] Cart limit"));
 
 test("every published sample in the style file passes", () => {
   assert.equal(SAMPLES.length, 6);

@@ -118,3 +118,11 @@ test("English comments follow the English rules: a plain sentence first, no gree
   assert.ok(lintChatComment("@a thanks for the frame", "figma", "en").some((problem) => /openers/.test(problem)));
   assert.throws(() => lintComment("x", "fr"), /no comment rules for language "fr"; supported: vi, en/);
 });
+
+test("the default PR comment samples pass the English rules", async () => {
+  const { readFileSync } = await import("node:fs");
+  const style = readFileSync(new URL("../shared/style/pr-comment.md", import.meta.url), "utf8");
+  const bodies = [...style.matchAll(/```markdown\n## \d+\. `[^`]+`\n\n([\s\S]*?)\n```/g)].map((match) => match[1]);
+  assert.equal(bodies.length, 4);
+  for (const body of bodies) assert.deepEqual(lintComment(body, "en"), [], body);
+});
