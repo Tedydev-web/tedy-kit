@@ -9,3 +9,5 @@ plugin/evals/results/
 !reports/
 !docs/
 !docs/**
+!test_*.py
+*.pyc

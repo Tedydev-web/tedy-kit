@@ -1,6 +1,6 @@
+import argparse
 import json
 import re
-import sys
 
 QUESTION = re.compile(
     r"(\?\s*$)|(anh (muốn|chọn|có muốn|thấy sao|quyết)"
@@ -11,7 +11,7 @@ SKIP = ("<local-command", "<system-reminder", "<task-notification")
 
 
 def turns(path):
-    current = {"texts": [], "ask": 0}
+    current = {"texts": [], "ask": 0, "at": "", "cli": False}
     for line in open(path, errors="ignore"):
         try:
             event = json.loads(line)
@@ -22,8 +22,8 @@ def turns(path):
             if message["content"].startswith(SKIP):
                 continue
             yield current
-            current = {"texts": [], "ask": 0}
-        elif event.get("type") == "assistant":
+            current = {"texts": [], "ask": 0, "at": event.get("timestamp", ""), "cli": event.get("entrypoint") == "cli"}
+        elif event.get("type") == "assistant" and not event.get("isSidechain"):
             for block in message.get("content") or []:
                 if block.get("type") == "text":
                     current["texts"].append(block["text"])
@@ -32,10 +32,10 @@ def turns(path):
     yield current
 
 
-def rate(path):
+def rate(path, since=""):
     total = asked = prose = 0
     for turn in turns(path):
-        if not turn["texts"]:
+        if not turn["texts"] or not turn["cli"] or turn["at"] < since:
             continue
         total += 1
         if turn["ask"]:
@@ -48,7 +48,16 @@ def rate(path):
 
 
 if __name__ == "__main__":
-    for transcript in sys.argv[1:]:
-        total, asked, prose = rate(transcript)
-        share = round(100 * prose / total) if total else 0
-        print(f"{transcript}: turns={total} ask_user_question={asked} prose_question_endings={prose} ({share}%)")
+    parser = argparse.ArgumentParser(description="Share of interactive turns that end with a prose question instead of AskUserQuestion.")
+    parser.add_argument("--since", default="", help="ISO UTC timestamp; count only turns the user started at or after it")
+    parser.add_argument("transcripts", nargs="+")
+    args = parser.parse_args()
+    sums = [0, 0, 0]
+    for transcript in args.transcripts:
+        counts = rate(transcript, args.since)
+        sums = [a + b for a, b in zip(sums, counts)]
+        total, asked, prose = counts
+        if total:
+            print(f"{transcript}: turns={total} ask_user_question={asked} prose_question_endings={prose} ({round(100 * prose / total)}%)")
+    total, asked, prose = sums
+    print(f"all: turns={total} ask_user_question={asked} prose_question_endings={prose} ({round(100 * prose / total, 1) if total else 0}%)")
