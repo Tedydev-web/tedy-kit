@@ -2,6 +2,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { listPending, reportsDir } from "./handoff.mjs";
 import { currentTurn, logGate, readHookInput, readTranscriptTail, toolUses } from "./hook-io.mjs";
 import { resolveMap } from "./project-map.mjs";
+import { listSessions, roleCard, sessionName } from "./role-gate.mjs";
 
 export const PROSE_QUESTION = /(\?\s*$)|(anh (muốn|chọn|có muốn|thấy sao|quyết)|em (làm|tiếp tục|tiến hành)[^.]{0,40}(không|ko)\b|được không|nhé\?)/i;
 
@@ -52,11 +53,22 @@ function runDecisionNudge() {
   }
 }
 
+function sessionRoleCard(input) {
+  try {
+    const resolved = resolveMap(input.cwd ?? process.cwd());
+    return resolved ? roleCard(resolved.map, sessionName(input.session_id, listSessions())) : "";
+  } catch (error) {
+    logGate({ hook: "role-card", decision: "skip-on-error", error: error.message });
+    return "";
+  }
+}
+
 function runRoleReminder() {
   const input = readHookInput();
   try {
     const role = activeRole(readTranscriptTail(input.transcript_path, 4_000_000));
-    if (role) process.stdout.write(`Active role before compaction: /${role}. Its iron laws sit at the top of that skill; invoke /${role} again before the next request of the same kind.`);
+    const lines = [sessionRoleCard(input), role ? `Active role before compaction: /${role}. Its iron laws sit at the top of that skill; invoke /${role} again before the next request of the same kind.` : ""].filter(Boolean);
+    if (lines.length) process.stdout.write(lines.join("\n"));
   } catch (error) {
     logGate({ hook: "role-reminder", decision: "skip-on-error", error: error.message });
   }
@@ -73,7 +85,7 @@ function runPendingHandoffs() {
   try {
     const resolved = resolveMap(input.cwd ?? process.cwd());
     if (!resolved) return;
-    const notice = pendingNotice(listPending(reportsDir(resolved.map)), fileURLToPath(new URL("../shared/handoff.md", import.meta.url)));
+    const notice = [sessionRoleCard(input), pendingNotice(listPending(reportsDir(resolved.map)), fileURLToPath(new URL("../shared/handoff.md", import.meta.url)))].filter(Boolean).join("\n\n");
     if (notice) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: notice } }));
   } catch (error) {
     logGate({ hook: "pending-handoffs", decision: "skip-on-error", error: error.message });

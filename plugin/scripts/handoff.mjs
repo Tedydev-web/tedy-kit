@@ -92,7 +92,7 @@ function main([command, target, ...rest]) {
     console.log(`${status}: ${target}`);
     return 0;
   }
-  console.error('usage: handoff.mjs route <pm|dev|review> [--repo <path>] | write --to "<session>" --from "<session>" --title "<title>" --body-file <f> | pending [--to "<session>"] | accept <file> | done <file>');
+  console.error('usage: handoff.mjs route <pm|dev|review|devops> [--repo <path>] | write --to "<session>" --from "<session>" --title "<title>" --body-file <f> | pending [--to "<session>"] | accept <file> | done <file>');
   return 2;
 }
 
