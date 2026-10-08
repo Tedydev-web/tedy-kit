@@ -31,3 +31,11 @@ test("non-source files and tests are allowed", () => {
   assert.equal(checkEdit("Write", { file_path: "/w/README.md", content: "// not code" }).allow, true);
   assert.equal(checkEdit("Edit", { file_path: "/w/a.spec.ts", old_string: "", new_string: "// fine" }).allow, true);
 });
+
+test("MultiEdit is checked edit by edit", () => {
+  const edits = [{ old_string: "const a = 1;", new_string: "const a = 2;" }, { old_string: "const b = 1;", new_string: "const b = 1; /* why */" }];
+  const result = checkEdit("MultiEdit", { file_path: "/w/a.ts", edits });
+  assert.equal(result.allow, false);
+  assert.match(result.reason, /why/);
+  assert.equal(checkEdit("MultiEdit", { file_path: "/w/a.ts", edits: edits.slice(0, 1) }).allow, true);
+});

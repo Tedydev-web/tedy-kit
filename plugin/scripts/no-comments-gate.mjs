@@ -6,9 +6,13 @@ import { deny, logGate, readHookInput } from "./hook-io.mjs";
 export function checkEdit(toolName, toolInput) {
   const path = toolInput?.file_path ?? "";
   if (!isScannedFile(path)) return { allow: true };
-  const before = toolName === "Write" ? (existsSync(path) ? readFileSync(path, "utf8") : "") : toolInput.old_string ?? "";
-  const after = toolName === "Write" ? toolInput.content ?? "" : toolInput.new_string ?? "";
-  const added = newComments(before, after);
+  const pairs =
+    toolName === "Write"
+      ? [[existsSync(path) ? readFileSync(path, "utf8") : "", toolInput.content ?? ""]]
+      : toolName === "MultiEdit"
+        ? (toolInput.edits ?? []).map((item) => [item.old_string ?? "", item.new_string ?? ""])
+        : [[toolInput.old_string ?? "", toolInput.new_string ?? ""]];
+  const added = pairs.flatMap(([before, after]) => newComments(before, after));
   if (!added.length) return { allow: true };
   const shown = added.slice(0, 5).map((comment) => `- ${comment.text.split("\n")[0].slice(0, 100)}`).join("\n");
   return {
