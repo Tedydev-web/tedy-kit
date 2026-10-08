@@ -126,3 +126,17 @@ test("the default PR comment samples pass the English rules", async () => {
   assert.equal(bodies.length, 4);
   for (const body of bodies) assert.deepEqual(lintComment(body, "en"), [], body);
 });
+
+test("with no project map the comment rules follow the profile's chat language", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const { writeFileSync } = await import("node:fs");
+  const { join } = await import("node:path");
+  const { profileWith, tempDir } = await import("./temp-dir-for-tests.mjs");
+  const work = tempDir("tedy-lint-nomap-");
+  writeFileSync(join(work, "c.txt"), "@a Anh ơi xem giúp e frame này nha\n");
+  const run = (chat) => spawnSync("node", [new URL("./draft-lint.mjs", import.meta.url).pathname, "figma-comment", "c.txt"], { encoding: "utf8", cwd: work, env: { ...process.env, TEDY_PROFILE_DIR: profileWith({ language: { chat } }), TEDY_STATE_DIR: tempDir("tedy-lint-state-") } });
+  const vi = run("vi");
+  assert.equal(vi.status, 1);
+  assert.match(vi.stdout, /openers/);
+  assert.equal(run("en").status, 0);
+});

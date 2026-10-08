@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { STATE_DIR } from "./hook-io.mjs";
 import { UC_ID } from "./prd-section.mjs";
+import { chatLanguage } from "./labels.mjs";
 import { resolveMap } from "./project-map.mjs";
 
 export const MAX_BODY = 360;
@@ -145,7 +146,7 @@ export function readDiff(pr, repo) {
   return execFileSync("gh", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
 }
 
-export const mapLanguage = (field) => resolveMap(process.cwd())?.map.language?.[field] ?? "en";
+export const mapLanguage = (field) => resolveMap(process.cwd())?.map.language?.[field] ?? chatLanguage();
 
 function main([kind, file, ...flags]) {
   if ((kind === "doc-comment" || kind === "figma-comment") && file) {
