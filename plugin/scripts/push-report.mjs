@@ -74,11 +74,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const input = readHookInput();
   const command = input.tool_input?.command ?? "";
   try {
+    const targets = pushTargets(command, input.cwd ?? process.cwd());
+    if (!targets.length) process.exit(0);
     if (pushFailed(`${input.tool_response?.stdout ?? ""}\n${input.tool_response?.stderr ?? ""}`)) {
       logGate({ hook: "push-report", decision: "skipped-failed-push", command: command.slice(0, 200), cwd: input.cwd });
       process.exit(0);
     }
-    const reports = pushTargets(command, input.cwd ?? process.cwd())
+    const reports = targets
       .filter((dir) => tryGit(dir, ["rev-parse", "--is-inside-work-tree"])?.trim() === "true")
       .map((dir) => reportText(dir, pushFindings(dir)))
       .filter(Boolean);

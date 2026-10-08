@@ -5,7 +5,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { evaluate, splitSegments, classify } from "./git-gate.mjs";
+import { evaluate, splitSegments, classify, hiddenPublish } from "./git-gate.mjs";
 
 test("splitSegments handles chains, pipes, newlines and shell wrappers", () => {
   assert.deepEqual(splitSegments("cd x && git push; echo ok | cat\ngit status"), ["cd x", "git push", "echo ok", "cat", "git status"]);
@@ -92,4 +92,31 @@ test("the tedy-kit repository pushes to main without asking, but still asks befo
   assert.equal(evaluate("git push origin main", kit).allow, true);
   assert.equal(evaluate(`git -C ${kit} push -q origin main`, "/w").allow, true);
   assert.equal(evaluate("git push -f origin main", kit).ask, true);
+});
+
+test("git and gh are recognised behind command, exec, env and absolute paths", () => {
+  for (const command of ["command git push --force origin main", "/usr/bin/git push --force origin main", "env FOO=1 git push --force origin main", "exec git push --force origin main", "env -i HOME=/h /usr/bin/git push -f"]) {
+    assert.equal(evaluate(command, "/w").ask, true, command);
+  }
+  assert.equal(evaluate("command gh pr merge 12", "/w").allow, false);
+  assert.equal(classify("/opt/homebrew/bin/git -C sub commit -m x", "/w").kind, "commit");
+});
+
+test("heredoc bodies are data, not commands", () => {
+  assert.deepEqual(splitSegments("cat <<'EOF' > notes.md\ngit push --force origin main\nEOF\ngit status"), ["cat <<'EOF' > notes.md", "git status"]);
+  assert.deepEqual(splitSegments("git commit -F - <<EOF\nmention github-write.mjs post here\nEOF"), ["git commit -F - <<EOF"]);
+  assert.equal(evaluate("cat <<-'END'\n\tgit push -f origin main\n\tEND", "/w").allow, true);
+});
+
+test("a publishing script hidden from the permission rules asks; a plain node call is left to them", () => {
+  assert.match(hiddenPublish("bash -c 'node /k/scripts/github-write.mjs post d.md'"), /github-write\.mjs post/);
+  assert.ok(hiddenPublish("env X=1 node /k/scripts/gdoc-comments.mjs reply AAA --body-file b.txt"));
+  assert.ok(hiddenPublish("/usr/bin/node /k/scripts/figma-comments.mjs delete 12"));
+  assert.ok(hiddenPublish("command node /k/scripts/openproject.mjs apply d.json"));
+  assert.ok(hiddenPublish("eval 'node /k/scripts/openproject.mjs set 1 --status x --apply --lock 2'"));
+  assert.equal(hiddenPublish("cd repo && node /k/scripts/github-write.mjs post d.md"), null);
+  assert.equal(hiddenPublish("FOO=1 node /k/scripts/openproject.mjs apply d.json"), null);
+  assert.equal(hiddenPublish("bash -c 'node /k/scripts/openproject.mjs preview d.json'"), null);
+  assert.equal(hiddenPublish("git commit -F - <<'EOF'\nrun github-write.mjs post later\nEOF"), null);
+  assert.equal(evaluate("sh -c 'node /k/scripts/github-write.mjs reply 1 2 --body-file r.txt'", "/w").ask, true);
 });

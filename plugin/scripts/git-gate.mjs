@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { ask, deny, logGate, readHookInput } from "./hook-io.mjs";
 
@@ -12,11 +12,28 @@ const READ_ONLY_GH_AREAS = new Set(["search", "status", "browse", "help", "--ver
 const LOCAL_GH = new Set(["pr checkout", "repo clone", "auth", "config", "alias", "extension", "completion"]);
 const PROTECTED_BRANCHES = new Set(["main", "master", "dev", "develop", "production", "staging"]);
 const KIT_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
+const PREFIX_WORDS = new Set(["command", "exec", "builtin", "nohup", "time"]);
+const HEREDOC = /<<(-?)\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/g;
+const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve)|openproject\.mjs["']?\s+(?:apply\b|set\b.*--apply|rollback\b.*--apply)|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor))\b/;
 const REWRITING_PUSH = /^(-f|--force|--force-with-lease(=.*)?|--force-if-includes|--mirror|--all|--prune|-d|--delete)$/;
 
-export function splitSegments(command) {
+function skipHeredocs(command, index, line) {
+  let at = index;
+  for (const [, dash, , tag] of line.matchAll(HEREDOC)) {
+    while (at < command.length) {
+      const end = command.indexOf("\n", at + 1);
+      const body = command.slice(at + 1, end === -1 ? command.length : end);
+      at = end === -1 ? command.length : end;
+      if ((dash ? body.replace(/^\t+/, "") : body) === tag) break;
+    }
+  }
+  return at;
+}
+
+export function splitSegments(command, unwrap = true) {
   const segments = [];
   let current = "";
+  let line = "";
   let quote = null;
   for (let index = 0; index < command.length; index += 1) {
     const char = command[index];
@@ -29,24 +46,36 @@ export function splitSegments(command) {
       }
       if (char === quote) quote = null;
       current += char;
+      line += char;
       continue;
     }
     if (char === "'" || char === '"') {
       quote = char;
       current += char;
+      line += char;
       continue;
     }
     if (pair === "&&" || pair === "||") {
+      line += pair;
       segments.push(current);
       current = "";
       index += 1;
       continue;
     }
-    if (char === ";" || char === "|" || char === "\n") {
+    if (char === "\n") {
+      index = skipHeredocs(command, index, line);
+      line = "";
       segments.push(current);
       current = "";
       continue;
     }
+    if (char === ";" || char === "|") {
+      line += char;
+      segments.push(current);
+      current = "";
+      continue;
+    }
+    line += char;
     current += char;
   }
   segments.push(current);
@@ -54,7 +83,7 @@ export function splitSegments(command) {
     .map((segment) => segment.trim())
     .filter(Boolean)
     .flatMap((segment) => {
-      const wrapped = segment.match(SHELL_WRAPPER);
+      const wrapped = unwrap && segment.match(SHELL_WRAPPER);
       return wrapped ? splitSegments(wrapped[2]) : [segment];
     });
 }
@@ -113,10 +142,35 @@ function classifyGitHubApi(args) {
   return hasFields ? "github-write" : null;
 }
 
-export function classify(segment, cwd) {
+function commandTokens(segment) {
   let tokens = tokenize(segment);
-  while (tokens.length && ENV_ASSIGNMENT.test(tokens[0])) tokens = tokens.slice(1);
-  const [program, ...args] = tokens;
+  for (;;) {
+    while (tokens.length && ENV_ASSIGNMENT.test(tokens[0])) tokens = tokens.slice(1);
+    if (tokens[0] === "env") {
+      tokens = tokens.slice(1);
+      while (tokens.length && (tokens[0].startsWith("-") || ENV_ASSIGNMENT.test(tokens[0]))) tokens = tokens.slice(tokens[0] === "-u" ? 2 : 1);
+      continue;
+    }
+    if (PREFIX_WORDS.has(tokens[0])) {
+      tokens = tokens.slice(1);
+      continue;
+    }
+    return tokens.length && tokens[0].includes("/") ? [basename(tokens[0]), ...tokens.slice(1)] : tokens;
+  }
+}
+
+export function hiddenPublish(command) {
+  for (const segment of splitSegments(command, false)) {
+    if (!PUBLISH.test(segment)) continue;
+    const tokens = tokenize(segment);
+    const first = tokens.find((token) => !ENV_ASSIGNMENT.test(token));
+    if (first !== "node") return segment;
+  }
+  return null;
+}
+
+export function classify(segment, cwd) {
+  const [program, ...args] = commandTokens(segment);
   if (program === "cd") return { kind: "cd", dir: resolve(cwd, args[0] ?? homedir()) };
   if (program === "git") {
     let dir = cwd;
@@ -180,6 +234,8 @@ export function pushRisk(args, dir) {
 }
 
 export function evaluate(command, cwd) {
+  const hidden = hiddenPublish(command);
+  if (hidden) return { allow: false, ask: true, reason: `tedy gate: this publishes through a kit script in a form the permission rules do not match (\`${hidden.slice(0, 120)}\`). Allow it only if the user approved this exact publish; otherwise run it as a plain \`node <script> …\` command.` };
   let dir = cwd;
   for (const segment of splitSegments(command)) {
     const action = classify(segment, dir);
@@ -210,7 +266,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const command = input.tool_input?.command ?? "";
   try {
     const result = evaluate(command, input.cwd ?? process.cwd());
-    logGate({ hook: "git-gate", decision: result.allow ? "allow" : result.ask ? "ask" : "deny", command: command.slice(0, 200), cwd: input.cwd, reason: result.reason });
+    if (!result.allow) logGate({ hook: "git-gate", decision: result.ask ? "ask" : "deny", command: command.slice(0, 200), cwd: input.cwd, reason: result.reason });
     if (result.ask) ask(result.reason);
     else if (!result.allow) deny(result.reason);
   } catch (error) {
