@@ -93,6 +93,9 @@ async function apply(client, project, drafts, file) {
   const path = sidecarPath(client.host, project);
   const created = {};
   const expected = {};
+  const relationFailures = [];
+  const appliedAt = new Date().toLocaleString("sv-SE").replace(" ", "T");
+  writeSidecar(path, recordLastApply(readSidecar(path), appliedAt, []));
   const statuses = drafts.some((draft) => draft.status) ? (await client.request("/api/v3/statuses"))._embedded.elements : [];
   for (const [index, draft] of drafts.entries()) {
     const step = plan[index];
@@ -101,7 +104,7 @@ async function apply(client, project, drafts, file) {
     if (step.action === "create") {
       saved = await client.request(`/api/v3/projects/${project}/work_packages`, { method: "POST", body: buildPayload({ ...draft, parent }, refs) });
       created[draft.slug] = saved.id;
-      writeSidecar(path, addSlugs(readSidecar(path), { [draft.slug]: saved.id }));
+      writeSidecar(path, recordLastApply(addSlugs(readSidecar(path), { [draft.slug]: saved.id }), appliedAt, Object.values(created)));
     } else if (step.action === "merge") {
       const current = await client.request(`/api/v3/work_packages/${step.id}`);
       const payload = mergePayload(current, draft, today());
@@ -115,7 +118,7 @@ async function apply(client, project, drafts, file) {
     }
     for (const [type, targets] of [["relates", draft.relates ?? []], ["blocks", draft.blocks ?? []]]) {
       for (const target of targets) {
-        await client.request(`/api/v3/work_packages/${saved.id}/relations`, { method: "POST", body: { type, _links: { to: { href: `/api/v3/work_packages/${mapping[target] ?? created[target] ?? target}` } } } }).catch((error) => console.log(`relation ${type} ${target}: ${error.message}`));
+        await client.request(`/api/v3/work_packages/${saved.id}/relations`, { method: "POST", body: { type, _links: { to: { href: `/api/v3/work_packages/${mapping[target] ?? created[target] ?? target}` } } } }).catch((error) => relationFailures.push(`${draft.slug} ${type} ${target}: ${error.message}`));
       }
     }
     if (draft.status) {
@@ -125,7 +128,6 @@ async function apply(client, project, drafts, file) {
       await client.request(`/api/v3/work_packages/${saved.id}`, { method: "PATCH", body: { lockVersion: current.lockVersion, _links: { status: { href: status._links.self.href } } } });
     }
   }
-  writeSidecar(path, recordLastApply(readSidecar(path), new Date().toLocaleString("sv-SE").replace(" ", "T"), Object.values(created)));
   let verified = 0;
   for (const [index, draft] of drafts.entries()) {
     const id = plan[index].id ?? created[draft.slug];
@@ -135,8 +137,9 @@ async function apply(client, project, drafts, file) {
     verified += same ? 1 : 0;
     console.log(`#${id} ${same ? "matches" : "DIFFERS"} ${read.subject}`);
   }
-  console.log(`verified ${verified}/${drafts.length}`);
-  return verified === drafts.length ? 0 : 1;
+  for (const failure of relationFailures) console.log(`relation failed: ${failure}`);
+  console.log(`verified ${verified}/${drafts.length}${relationFailures.length ? `; ${relationFailures.length} relation(s) failed` : ""}`);
+  return verified === drafts.length && !relationFailures.length ? 0 : 1;
 }
 
 const describe = (workPackage) => `#${workPackage.id} "${workPackage.subject}" [${workPackage._links.status.title}]`;

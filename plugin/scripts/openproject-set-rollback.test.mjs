@@ -135,3 +135,28 @@ test("rollback lists what the last apply created, closes by default, and deletes
     server.close();
   }
 });
+
+test("a failed relation fails the apply, and work packages created before a mid-batch error stay in the rollback record", async () => {
+  const { server, url } = await fakeOpenProject();
+  const { home, op, sidecar } = workspace(url);
+  const file = join(home, "drafts.json");
+  try {
+    writeFileSync(file, JSON.stringify([{ slug: "task-fe-r", type: "Task", subject: "[FE] Vault limit hint", description: DESCRIPTION, estimate: 1, relates: [21298] }]));
+    await op("preview", file, "--project", "183");
+    const applied = await op("apply", file, "--project", "183");
+    assert.match(applied, /relation failed: task-fe-r relates 21298/);
+    assert.match(applied, /verified 1\/1; 1 relation\(s\) failed/);
+    assert.deepEqual(sidecar()._last_apply.created, [30000]);
+
+    writeFileSync(file, JSON.stringify([
+      { slug: "task-fe-s", type: "Task", subject: "[FE] Vault limit sheet", description: DESCRIPTION, estimate: 1 },
+      { slug: "task-fe-t", type: "Task", subject: "[FE] Vault limit toast", description: DESCRIPTION, estimate: 1, status: "Nope" },
+    ]));
+    await op("preview", file, "--project", "183");
+    await op("apply", file, "--project", "183");
+    assert.deepEqual(sidecar()._last_apply.created, [30001, 30002]);
+    assert.match(await op("rollback", "--project", "183"), /close 2 work package\(s\)/);
+  } finally {
+    server.close();
+  }
+});
