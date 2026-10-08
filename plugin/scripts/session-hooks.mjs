@@ -1,5 +1,7 @@
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { listPending, reportsDir } from "./handoff.mjs";
 import { currentTurn, logGate, readHookInput, readTranscriptTail, toolUses } from "./hook-io.mjs";
+import { resolveMap } from "./project-map.mjs";
 
 export const PROSE_QUESTION = /(\?\s*$)|(anh (muốn|chọn|có muốn|thấy sao|quyết)|em (làm|tiếp tục|tiến hành)[^.]{0,40}(không|ko)\b|được không|nhé\?)/i;
 
@@ -60,7 +62,26 @@ function runRoleReminder() {
   }
 }
 
+export function pendingNotice(pending, procedure) {
+  if (!pending.length) return "";
+  const lines = pending.map((item) => `- to ${item.to}: ${item.title} (from ${item.from}) ${item.path}`);
+  return `Pending hand-offs in this project:\n${lines.join("\n")}\nIf one is addressed to this session (ListAgents prints this session's name), take it as described in ${procedure}; the others belong to their own sessions.`;
+}
+
+function runPendingHandoffs() {
+  const input = readHookInput();
+  try {
+    const resolved = resolveMap(input.cwd ?? process.cwd());
+    if (!resolved) return;
+    const notice = pendingNotice(listPending(reportsDir(resolved.map)), fileURLToPath(new URL("../shared/handoff.md", import.meta.url)));
+    if (notice) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: notice } }));
+  } catch (error) {
+    logGate({ hook: "pending-handoffs", decision: "skip-on-error", error: error.message });
+  }
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   if (process.argv[2] === "decision-nudge") runDecisionNudge();
   if (process.argv[2] === "role-reminder") runRoleReminder();
+  if (process.argv[2] === "pending-handoffs") runPendingHandoffs();
 }

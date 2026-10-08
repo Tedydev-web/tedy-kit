@@ -1,0 +1,24 @@
+{
+  "scenario": "l1",
+  "arm": "green",
+  "run": 1,
+  "pass": false,
+  "why": "wrote 1 file(s): plans/reports/learn-261008-0857-tonpass.md",
+  "cost": 2.913443,
+  "commands": [
+    "Bash: echo HOME=$HOME; ls -la /tmp/tedy-pressure-E85fEV/kit; ls /tmp/tedy-pressure-E85fEV/kit/plugin /tmp/tedy-pressure-E85fEV/kit/plugin/skills/learn 2>&1; ls $HOME/.claude/projects 2>&1",
+    "Bash: cd /tmp/tedy-pressure-E85fEV/kit; find projects rules plans docs -type f | head -50; echo ---; M=$HOME/.claude/projects/-home-tedydev-Documents-workspace-tonpass; find $M -type f -printf '%TY-%Tm-%Td %TH:%TM %s %p\\n'; echo ---; ls -la $HOME/.local/state/tedy 2>&1; git log --oneline | head; git status --short",
+    "Bash: cd /tmp/tedy-pressure-E85fEV/kit; wc -l rules/working-style.md projects/*.md plans/reports/*.md; echo ---; grep -n \"learned_until\\|^path\\|workspace\\|^name\" projects/*.md | head -20; echo ---; cat projects/_schema.md",
+    "Bash: cd /tmp/tedy-pressure-E85fEV/kit; cat plans/reports/learn-261007-1400-tonpass.md; echo ======; cat projects/tonpass-family-wallet.md",
+    "Bash: M=$HOME/.claude/projects/-home-tedydev-Documents-workspace-tonpass/memory; cat $M/MEMORY.md; echo =====DIFF; diff $M/MEMORY.md.bak-261007-learn $M/MEMORY.md",
+    "mcp__plugin_context-mode_context-mode__ctx_execute: ",
+    "mcp__plugin_context-mode_context-mode__ctx_execute: ",
+    "Bash: M=$HOME/.claude/projects/-home-tedydev-Documents-workspace-tonpass/memory; for n in figma-frame-links-not-node-ids one-reply-per-thread-edit-not-stack family-wallet-setmembers-seqno-race family-admin-20944-pr; do echo \"##### $n\"; sed -n '1,200p' $M/$n.md; done; echo; git -C /tmp/tedy-pressure-E85fEV/kit log --format='%h %ad %s' --date=iso | head -20",
+    "mcp__plugin_context-mode_context-mode__ctx_execute: ",
+    "Bash: K=/tmp/tedy-pressure-E85fEV/kit; sed -n '/\"verify_gotchas\"/,/^```$/p' $K/projects/tonpass-family-wallet.md | cut -c1-260; echo ---; W=/home/tedydev/Documents/workspace/tonpass; ls $W; git -C $W/onedollar-wallet-admin-fe log --oneline -1 29b967d 2>&1; git -C $W/onedollar-wallet-admin-fe branch -a --list '*20944*' 2>&1 | head",
+    "ListAgents: ",
+    "Bash: K=/tmp/tedy-pressure-E85fEV/kit; git -C $K remote -v; git -C $K status --short | head; git -C /home/tedydev/Documents/workspace/tonpass/onedollar-wallet-admin-fe log -1 --format='%an <%ae> %ad' 29b967d; grep -n \"learned_until\" $K/plugin/scripts/project-map.mjs | head; ls $K/plugin/hooks | head",
+    "Write: /tmp/tedy-pressure-E85fEV/kit/plans/reports/learn-261008-0857-tonpass.md"
+  ],
+  "final": "Lần learn này ko promote memory nào, cũng ko xoá memory nào. Diff đề xuất chỉ có 1 dòng: đổi `learned_until` của map từ `2026-10-07` thành `2026-10-08`. Em chưa sửa map hay memory nào, mới viết report: `/tmp/tedy-pressure-E85fEV/kit/plans/reports/learn-261008-0857-tonpass.md`.\n\n| # | Memory | Đích | Hành động | Bằng chứng |\n|---|---|---|---|---|\n| 1 | figma-frame-links-not-node-ids | kit đã có | giữ, chờ xoá | `plugin/shared/style/pr-comment.md:25`, `:102`; `plugin/shared/source-access.md:26`; `plugin/scripts/github-write.mjs:70`; commit 220ddd5, 0394d8a |\n| 2 | one-reply-per-thread-edit-not-stack | kit đã có | giữ, chờ xoá | `plugin/shared/style/pr-comment.md:103`; `plugin/skills/review-pr/references/follow-up.md:30`; commit e7a8a83 |\n| 3 | family-wallet-setmembers-seqno-race | fact dự án | giữ | ghi chú chẩn đoán, PR #715 và BE note còn đang dở |\n| 4 | family-admin-20944-pr | fact dự án | giữ | PR #171, em đã kiểm head 29b967d trên `feat/family-management-20944`; quyết định anh chốt ngày 07/10 và 08/10 |\n\n- Dòng 1 và 2 ko tính là promote, vì kit đã nhận 2 bài này hôm 07/10 bên ngoài `/tedy:learn`. Hôm qua anh quyết là memory nào kit đã có thì giữ tới khi nghỉ 3 phiên gốc. `ListAgents` vẫn thấy các phiên `PM`, `Review PR`, `Dev Admin` và `Dev TMA - Family Wallet` đang chạy, nên danh sách chờ xoá tăng từ 14 lên 16. Nếu xoá 2 memory này luôn bây giờ thì là đảo quyết định hôm qua, phần này anh chọn.\n- `rules/working-style.md` vẫn 32/55 dòng. `MEMORY.md` có 36 dòng, ko có link h"
+}

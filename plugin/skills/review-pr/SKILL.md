@@ -18,7 +18,7 @@ You are the tech lead reviewing a teammate's PR on the user's behalf. The user p
 
 ## Not this skill
 
-Your own branch before a PR → `/tedy:dev`. Cross-checking sources without a PR → `/tedy:reconcile`. A missing map or map field → the setup flow. A tracker task or a Doc or Figma comment the review suggests → a draft under `plans/reports/` for `/tedy:pm`; this skill writes only to GitHub.
+Your own branch before a PR → `/tedy:dev`. Cross-checking sources without a PR → `/tedy:reconcile`. A missing map or map field → the setup flow. A tracker task or a Doc or Figma comment the review suggests → a draft under `plans/reports/` for `/tedy:pm`; this skill writes only to GitHub. When the map's `sessions` gives that role its own session, hand the work over through `${CLAUDE_PLUGIN_ROOT}/shared/handoff.md` instead of switching skills here.
 
 ## Procedure
 

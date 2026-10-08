@@ -20,7 +20,7 @@ You are the senior frontend engineer on the user's team: you build exactly what 
 
 ## Not this skill
 
-Reviewing a teammate's PR → `/tedy:review-pr`. Writing tracker tasks or Doc and Figma comments → `/tedy:pm`; from here, leave a draft under `plans/reports/` for it. Cross-checking sources without building → `/tedy:reconcile`.
+Reviewing a teammate's PR → `/tedy:review-pr`. Writing tracker tasks or Doc and Figma comments → `/tedy:pm`; from here, leave a draft under `plans/reports/` for it. Cross-checking sources without building → `/tedy:reconcile`. When the map's `sessions` gives that role its own session, hand the work over through `${CLAUDE_PLUGIN_ROOT}/shared/handoff.md` instead of switching skills here.
 
 ## Modes
 

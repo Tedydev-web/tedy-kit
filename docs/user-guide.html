@@ -46,7 +46,7 @@
   <h2 id="tu-dong">1. Phần tự chạy: anh không cần gõ gì</h2>
   <div class="grid">
     <div class="card">
-      <h3>17 luật làm việc</h3>
+      <h3>18 luật làm việc</h3>
       <p>File <code>rules/working-style.md</code> nạp vào mọi phiên qua <code>~/.claude/CLAUDE.md</code>.</p>
       <ul>
         <li>Xưng "em", gọi "anh".</li>
@@ -118,7 +118,15 @@
     <span class="step you">Menu Sửa gì</span><span class="arrow">→</span>
     <span class="step">Chỉ sửa phần anh chọn</span>
   </div>
-  <div class="note"><b>Một phiên, một vai.</b> Phiên PM là phiên duy nhất ghi lên OpenProject, Doc và Figma. Phiên Dev hay Review gặp việc PM thì để lại draft trong <code>plans/reports/</code> và chuyển sang phiên PM.</div>
+  <h3>Chuyển việc giữa các phiên</h3>
+  <div class="flow">
+    <span class="step you">Anh bảo phiên PM làm việc của Dev</span><span class="arrow">→</span>
+    <span class="step">Phiên PM không làm, tìm phiên Dev trong map</span><span class="arrow">→</span>
+    <span class="step you">Menu Chuyển việc: chuyển / vẫn làm ở đây / bỏ</span><span class="arrow">→</span>
+    <span class="step">Ghi file hand-off, nhắn phiên Dev</span><span class="arrow">→</span>
+    <span class="step">Phiên Dev tự nhận, làm local, báo lại</span>
+  </div>
+  <div class="note"><b>Một phiên, một vai.</b> Vai của từng phiên nằm ở mục <code>sessions</code> trong map dự án, khớp theo tên phiên. Phiên PM là phiên duy nhất ghi lên OpenProject, Doc và Figma. Phiên nhận việc được đọc, sửa và commit local ngay, nhưng push, đăng hay ghi tracker vẫn hiện menu để anh duyệt trong chính phiên đó. Phiên đích đang tắt thì file hand-off nằm chờ trong <code>plans/reports/handoff-….md</code> và hiện ra khi phiên đó mở lại. Xem hàng chờ: <code>node ~/Documents/workspace/tedy-kit/plugin/scripts/handoff.mjs pending</code>.</div>
 
   <h2 id="ket-qua">4. Xem kết quả ở đâu</h2>
   <table>
@@ -126,6 +134,7 @@
     <tr><td>Draft review, findings</td><td><code>&lt;repo&gt;/plans/reports/review-&lt;yymmdd-hhmm&gt;-pr&lt;n&gt;-line-comments.md</code>, <code>…-findings.md</code></td></tr>
     <tr><td>Ledger PM, câu hỏi PRD chờ anh tự đăng</td><td><code>&lt;workspace&gt;/plans/reports/pm-….md</code>, <code>pm-comments-….html</code></td></tr>
     <tr><td>Report task Dev, bảng đối chiếu</td><td><code>plans/reports/dev-….md</code>, <code>reconcile-….md</code></td></tr>
+    <tr><td>Việc chuyển giữa các phiên (pending / accepted / done)</td><td><code>&lt;workspace&gt;/plans/reports/handoff-….md</code></td></tr>
     <tr><td>Anh phải sửa nháp bao nhiêu (theo kênh, theo tuần)</td><td><pre>node ~/Documents/workspace/tedy-kit/plugin/scripts/edit-rate.mjs</pre></td></tr>
     <tr><td>Nhật ký gate (chặn hay cho qua, vì sao)</td><td><code>~/.local/state/tedy/gate-log.jsonl</code></td></tr>
   </table>

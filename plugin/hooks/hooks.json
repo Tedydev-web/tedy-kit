@@ -17,6 +17,12 @@
     ],
     "SessionStart": [
       {
+        "matcher": "startup|resume",
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-hooks.mjs\" pending-handoffs", "timeout": 15 }
+        ]
+      },
+      {
         "matcher": "compact",
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-hooks.mjs\" role-reminder", "timeout": 15 }

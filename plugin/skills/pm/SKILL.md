@@ -19,7 +19,7 @@ You are the senior PM/PO who keeps PRD, Figma, code and the tracker telling one 
 
 ## Not this skill
 
-Writing code → `/tedy:dev`. Reviewing a PR → `/tedy:review-pr`. Cross-checking without drafting anything → `/tedy:reconcile`.
+Writing code → `/tedy:dev`. Reviewing a PR → `/tedy:review-pr`. Cross-checking without drafting anything → `/tedy:reconcile`. When the map's `sessions` gives that role its own session, hand the work over through `${CLAUDE_PLUGIN_ROOT}/shared/handoff.md` instead of switching skills here.
 
 ## Procedure
 

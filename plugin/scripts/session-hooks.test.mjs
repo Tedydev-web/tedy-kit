@@ -57,3 +57,11 @@ test("activeRole returns the last tedy skill invoked", () => {
   assert.equal(activeRole(entries), "tedy:review-pr");
   assert.equal(activeRole([use("Skill", { skill: "ak:plan" })]), null);
 });
+
+test("the session-start notice lists pending hand-offs with their target, and stays silent when none wait", async () => {
+  const { pendingNotice } = await import("./session-hooks.mjs");
+  assert.equal(pendingNotice([], "/p/handoff.md"), "");
+  const notice = pendingNotice([{ to: "Dev TMA - Family Wallet", from: "PM - Family Wallet", title: "Fix the fake save toast", path: "/w/plans/reports/handoff-1.md" }], "/p/handoff.md");
+  assert.match(notice, /- to Dev TMA - Family Wallet: Fix the fake save toast \(from PM - Family Wallet\) \/w\/plans\/reports\/handoff-1\.md/);
+  assert.match(notice, /ListAgents prints this session's name/);
+});

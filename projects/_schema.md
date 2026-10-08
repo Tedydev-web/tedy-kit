@@ -22,3 +22,4 @@ A map keeps only what cannot be looked up. Repository remotes, default branches,
 | `learned_until` | no | Date up to which `/tedy:learn` has folded corrections in |
 | `last_reply_check` | no | ISO timestamp of the last reply sweep |
 | `open_questions[]` | no | `{ q, tried }`: what is unknown and what was already searched |
+| `sessions[]` | no | `{ name, role, repos? }`: the user's session per role, `name` exactly as `ListAgents` prints it, `role` one of `pm`, `dev`, `review`, `repos` the repositories it owns when one role has several sessions. Hand-offs route through it (`plugin/shared/handoff.md`) |

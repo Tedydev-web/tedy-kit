@@ -78,6 +78,12 @@ Family Wallet only; Gift-Card work in this workspace is out of scope. Written by
     "Figma change to a built screen, UI only": "Tedy",
     "Figma change to a built screen, touching its logic": "the original builder"
   },
+  "sessions": [
+    { "name": "PM - Family Wallet", "role": "pm" },
+    { "name": "Review PR - Family Wallet", "role": "review" },
+    { "name": "Dev TMA - Family Wallet", "role": "dev", "repos": ["tonpass-wallet-fe"] },
+    { "name": "Dev Admin - Family Wallet", "role": "dev", "repos": ["onedollar-wallet-admin-fe", "tonpass-wallet-admin-be"] }
+  ],
   "learned_until": "2026-10-07",
   "last_reply_check": null,
   "open_questions": [
