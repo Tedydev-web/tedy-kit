@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { evaluate, splitSegments, classify } from "./git-gate.mjs";
 
 test("splitSegments handles chains, pipes, newlines and shell wrappers", () => {
@@ -84,4 +85,11 @@ test("a bare git push asks only when the branch tracks an integration branch", (
   assert.equal(evaluate("git push", join(root, "work")).ask, true);
   git("checkout", "-qb", "feat");
   assert.equal(evaluate("git push", join(root, "work")).allow, true);
+});
+
+test("the tedy-kit repository pushes to main without asking, but still asks before rewriting history", () => {
+  const kit = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+  assert.equal(evaluate("git push origin main", kit).allow, true);
+  assert.equal(evaluate(`git -C ${kit} push -q origin main`, "/w").allow, true);
+  assert.equal(evaluate("git push -f origin main", kit).ask, true);
 });

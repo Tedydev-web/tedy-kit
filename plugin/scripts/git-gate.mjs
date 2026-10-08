@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { homedir } from "node:os";
 import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { ask, deny, logGate, readHookInput } from "./hook-io.mjs";
 
 const SHELL_WRAPPER = /^(?:bash|sh|zsh)\s+-c\s+(['"])([\s\S]*)\1$/;
@@ -11,6 +11,7 @@ const READ_ONLY_GH_ACTIONS = new Set(["view", "list", "diff", "checks", "status"
 const READ_ONLY_GH_AREAS = new Set(["search", "status", "browse", "help", "--version", "--help", undefined]);
 const LOCAL_GH = new Set(["pr checkout", "repo clone", "auth", "config", "alias", "extension", "completion"]);
 const PROTECTED_BRANCHES = new Set(["main", "master", "dev", "develop", "production", "staging"]);
+const KIT_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const REWRITING_PUSH = /^(-f|--force|--force-with-lease(=.*)?|--force-if-includes|--mirror|--all|--prune|-d|--delete)$/;
 
 export function splitSegments(command) {
@@ -161,18 +162,19 @@ function tryGit(dir, args) {
 export function pushRisk(args, dir) {
   const rewriting = args.find((arg) => REWRITING_PUSH.test(arg));
   if (rewriting) return `\`${rewriting}\` can rewrite or delete remote branches`;
+  const guarded = (target) => PROTECTED_BRANCHES.has(target) && tryGit(dir, ["rev-parse", "--show-toplevel"]) !== KIT_ROOT;
   const refspecs = args.filter((arg) => !arg.startsWith("-")).slice(1);
   if (!refspecs.length) {
     const upstream = tryGit(dir, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
     const target = upstream ? upstream.replace(/^[^/]+\//, "") : tryGit(dir, ["rev-parse", "--abbrev-ref", "HEAD"]);
-    return PROTECTED_BRANCHES.has(target) ? `it pushes to \`${target}\`` : null;
+    return guarded(target) ? `it pushes to \`${target}\`` : null;
   }
   for (const refspec of refspecs) {
     if (refspec.startsWith("+")) return `\`${refspec}\` forces the update`;
     const [source, destination = source] = refspec.split(":");
     if (!source) return `\`${refspec}\` deletes a remote branch`;
     const target = destination === "HEAD" ? tryGit(dir, ["rev-parse", "--abbrev-ref", "HEAD"]) : destination.replace(/^refs\/heads\//, "");
-    if (PROTECTED_BRANCHES.has(target)) return `it pushes to \`${target}\``;
+    if (guarded(target)) return `it pushes to \`${target}\``;
   }
   return null;
 }
