@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pushFailed, pushFindings, pushTargets, reportText } from "./push-report.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
@@ -73,4 +73,12 @@ test("a rejected or fatal push is recognised so the previous push is not reporte
   assert.equal(pushFailed(" ! [rejected]        feat -> feat (non-fast-forward)\nerror: failed to push some refs"), true);
   assert.equal(pushFailed("fatal: The current branch feat has no upstream branch."), true);
   assert.equal(pushFailed("To github.com:o/r.git\n   1a2b3c4..5d6e7f8  feat -> feat"), false);
+});
+
+test("a command that pushes nothing is not logged, even when its output carries a fatal line", () => {
+  const state = tempDir("tedy-push-");
+  const input = { tool_name: "Bash", cwd: state, tool_input: { command: "git show origin/dev:src/a.ts && git grep -n x" }, tool_response: { stdout: "", stderr: "fatal: invalid object name 'origin/dev'." } };
+  const stdout = execFileSync("node", [new URL("./push-report.mjs", import.meta.url).pathname], { input: JSON.stringify(input), encoding: "utf8", env: { ...process.env, TEDY_STATE_DIR: state } });
+  assert.equal(stdout, "");
+  assert.equal(existsSync(join(state, "gate-log.jsonl")), false);
 });
