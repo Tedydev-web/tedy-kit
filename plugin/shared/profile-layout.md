@@ -24,6 +24,7 @@ Runtime state (gate log, edit log, draft snapshots, last check times) lives in `
 | `gates.noComments` | boolean | `false` | Block edits that add code comments; report comments a push carries |
 | `gates.draftPrOnly` | boolean | `false` | Refuse a pull request that is not a draft |
 | `gates.roleGate` | boolean | `false` | Ask before a session writes for another role in the project map's `sessions` |
+| `gates.ghWrites` | boolean | `false` | Block direct `gh` writes (merge, close, edit, comment, API POST) so everything published to GitHub goes through `github-write.mjs` after the user approves the draft |
 | `gates.pushExempt` | string[] | `[]` | Repositories whose pushes to an integration branch need no prompt; `~/` expands to the home directory |
 | `language.chat` | string | `"en"` | Language of replies and question labels |
 

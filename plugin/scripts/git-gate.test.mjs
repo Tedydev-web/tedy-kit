@@ -129,3 +129,12 @@ test("a publishing script hidden from the permission rules asks; a plain node ca
   assert.equal(hiddenPublish("git commit -F - <<'EOF'\nrun github-write.mjs post later\nEOF"), null);
   assert.equal(evaluate("sh -c 'node /k/scripts/github-write.mjs reply 1 2 --body-file r.txt'", "/w").ask, true);
 });
+
+test("with ghWrites off gh may write directly; with it on every gh write goes through github-write.mjs", () => {
+  const off = { ...ALL_GATES_ON, ghWrites: false };
+  for (const command of ["gh pr merge 12", "gh pr comment 12 --body x", "gh api -X POST repos/o/r/issues/1/comments -f body=x"]) {
+    assert.equal(evaluate(command, "/w", off).allow, true, command);
+    assert.equal(evaluate(command, "/w").allow, false, command);
+  }
+  assert.equal(evaluate("git push origin main", "/w", off).ask, true);
+});

@@ -21,7 +21,7 @@ test("the gate log masks secret values in every string field and keeps the rest"
 test("gate switches come from the profile config, and a broken config turns every personal gate on", async () => {
   const { ALL_GATES_ON, STATE_DIR, gateSwitches } = await import("./hook-io.mjs");
   process.env.TEDY_PROFILE_DIR = profileWith({ gates: { roleGate: true } });
-  assert.deepEqual(gateSwitches(), { noComments: false, draftPrOnly: false, roleGate: true, pushExempt: [] });
+  assert.deepEqual(gateSwitches(), { noComments: false, draftPrOnly: false, roleGate: true, ghWrites: false, pushExempt: [] });
   process.env.TEDY_PROFILE_DIR = profileWith({ gates: { roleGate: "yes" } });
   assert.deepEqual(gateSwitches(), ALL_GATES_ON);
   assert.match(readFileSync(join(STATE_DIR, "gate-log.jsonl"), "utf8"), /"hook":"profile-config","decision":"invalid-gates-on"/);

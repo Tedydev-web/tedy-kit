@@ -27,18 +27,19 @@ test("the profile directory comes from TEDY_PROFILE_DIR, else ~/.config/tedy", (
 test("a missing config gives the defaults, with every personal gate off", () => {
   const config = loadConfig(profileWith({}));
   assert.deepEqual(config, DEFAULT_CONFIG);
-  assert.deepEqual(config.gates, { noComments: false, draftPrOnly: false, roleGate: false, pushExempt: [] });
+  assert.deepEqual(config.gates, { noComments: false, draftPrOnly: false, roleGate: false, ghWrites: false, pushExempt: [] });
   assert.equal(config.language.chat, "en");
 });
 
 test("a partial config keeps the defaults it does not set and expands ~ in pushExempt", () => {
   const dir = profileWith({ "config.json": JSON.stringify({ gates: { noComments: true, pushExempt: ["~/work/kit", "/abs/profile"] }, language: { chat: "vi" } }) });
-  assert.deepEqual(loadConfig(dir), { gates: { noComments: true, draftPrOnly: false, roleGate: false, pushExempt: [join(homedir(), "work/kit"), "/abs/profile"] }, language: { chat: "vi" } });
+  assert.deepEqual(loadConfig(dir), { gates: { noComments: true, draftPrOnly: false, roleGate: false, ghWrites: false, pushExempt: [join(homedir(), "work/kit"), "/abs/profile"] }, language: { chat: "vi" } });
 });
 
 test("an invalid config fails loudly, naming the file and the field", () => {
   const cases = [
     [{ gates: { noComments: "yes" } }, /gates\.noComments must be a boolean/],
+    [{ gates: { ghWrites: 1 } }, /gates\.ghWrites must be a boolean/],
     [{ gates: { pushExempt: "/one" } }, /gates\.pushExempt must be an array of strings/],
     [{ gate: {} }, /unknown key "gate"/],
     [{ gates: { noComment: true } }, /unknown key "gates\.noComment"/],
@@ -74,11 +75,11 @@ test("init creates the config and rules from the template, and never overwrites 
 });
 
 test("doctor reports the profile, config, rules, overrides and maps, and exits 1 on an invalid config", () => {
-  const dir = profileWith({ "config.json": JSON.stringify({ gates: { roleGate: true } }), "rules.md": "r\n", "style/pr-comment.md": "mine\n", "projects/a.md": "x\n" });
+  const dir = profileWith({ "config.json": JSON.stringify({ gates: { roleGate: true, ghWrites: true } }), "rules.md": "r\n", "style/pr-comment.md": "mine\n", "projects/a.md": "x\n" });
   const ok = spawnSync("node", [SCRIPT, "doctor"], { encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: dir } });
   assert.equal(ok.status, 0);
   assert.match(ok.stdout, new RegExp(`^profile: ${dir}$`, "m"));
-  assert.match(ok.stdout, /^config: ok \(personal gates on: roleGate\)$/m);
+  assert.match(ok.stdout, /^config: ok \(personal gates on: roleGate, ghWrites\)$/m);
   assert.match(ok.stdout, /^rules: present$/m);
   assert.match(ok.stdout, /^overrides: style\/pr-comment\.md$/m);
   assert.match(ok.stdout, /^projects: 1 map$/m);

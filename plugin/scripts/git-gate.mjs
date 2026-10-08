@@ -252,7 +252,7 @@ export function evaluate(command, cwd, gates = ALL_GATES_ON) {
       if (gates.draftPrOnly && !action.args.some((arg) => arg === "--draft" || arg === "-d")) return { allow: false, reason: "tedy gate: open the PR as a draft with `--draft`; the user marks it ready." };
       continue;
     }
-    if (action.kind !== "github-write") continue;
+    if (action.kind !== "github-write" || !gates.ghWrites) continue;
     if (/\bgh\s+(pr|issue)\s+(merge|close|reopen|ready|edit|lock|unlock)\b/.test(segment)) {
       return { allow: false, reason: "tedy gate: merging, closing or editing a PR or issue belongs to the user. Tell the user what is ready and let them do it." };
     }
