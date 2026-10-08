@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { listPending, parse, render, route, setStatus, slugOf, stamp } from "./handoff.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
@@ -50,4 +50,20 @@ test("listPending returns only pending hand-offs, optionally for one session", (
 test("slugs fold Vietnamese and stamps follow yymmdd-hhmm", () => {
   assert.equal(slugOf("Sửa toast giả ở Đổi tên"), "sua-toast-gia-o-doi-ten");
   assert.equal(stamp(new Date(2026, 9, 8, 9, 5)), "261008-0905");
+});
+
+test("the message for the receiving session starts with Hand-off in every language", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const { profileWith } = await import("./temp-dir-for-tests.mjs");
+  const work = tempDir("tedy-handoff-work-");
+  const body = join(work, "body.md");
+  writeFileSync(body, "x\n");
+  const run = (chat) => {
+    const profile = profileWith({ language: { chat } });
+    mkdirSync(join(profile, "projects"));
+    writeFileSync(join(profile, "projects", "shop.md"), `# Shop\n\n\`\`\`json\n${JSON.stringify({ name: "shop", paths: [work], sessions: [{ name: "Dev Web - Shop", role: "dev" }] })}\n\`\`\`\n`);
+    return spawnSync("node", [new URL("./handoff.mjs", import.meta.url).pathname, "write", "--to", "Dev Web - Shop", "--from", "PM - Shop", "--title", "Fix toast", "--body-file", body], { encoding: "utf8", cwd: work, env: { ...process.env, TEDY_PROFILE_DIR: profile } }).stdout;
+  };
+  assert.match(run("vi"), /^message: Hand-off từ PM - Shop: Fix toast\. File: .*\. Việc chuyển này đã được duyệt\.$/m);
+  assert.match(run("en"), /^message: Hand-off from PM - Shop: Fix toast\. File: .*\. The user approved this hand-off\.$/m);
 });

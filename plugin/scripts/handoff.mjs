@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { chatLanguage, fill, labels } from "./labels.mjs";
 import { resolveMap } from "./project-map.mjs";
 
 const HEADER = /^(to|from|status|created|title|updated): (.*)$/;
@@ -79,7 +80,7 @@ function main([command, target, ...rest]) {
     const path = join(dir, `handoff-${stamp()}-to-${slugOf(flags.to)}-${slugOf(flags.title)}.md`);
     writeFileSync(path, render({ to: flags.to, from: flags.from, title: flags.title, body: readFileSync(flags["body-file"], "utf8"), created: new Date().toISOString() }));
     console.log(path);
-    console.log(`message: Hand-off từ ${flags.from}: ${flags.title}. File: ${path}. Anh đã duyệt chuyển việc này.`);
+    console.log(`message: ${fill(labels(chatLanguage())["handoff.message"], { from: flags.from, title: flags.title, path })}`);
     return 0;
   }
   if (command === "pending") {

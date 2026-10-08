@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
+import { chatLanguage, labels } from "./labels.mjs";
 import { resolveMap } from "./project-map.mjs";
 
 const REQUIRED = {
@@ -123,12 +124,12 @@ export function readiness(drafts, { updating = new Set() } = {}) {
   const percent = (part, whole) => (whole ? Math.round((100 * part) / whole) : 0);
   const pctDesc = percent(descOk, lintable.length);
   const pctEst = leaves.length ? percent(estimated, leaves.length) : 100;
-  const verdict = !lintable.length || pctDesc < 50 || pctEst < 40 ? "thiếu nặng" : pctDesc >= 90 && pctEst >= 80 ? "đủ" : "mỏng";
+  const verdict = !lintable.length || pctDesc < 50 || pctEst < 40 ? "missing" : pctDesc >= 90 && pctEst >= 80 ? "ready" : "thin";
   const questions = drafts.reduce((sum, draft) => sum + blockingQuestions(draft.description ?? "").length, 0);
   return { total: drafts.length, lintable: lintable.length, descOk, leaves: leaves.length, estimated, blockingQuestions: questions, pctDesc, pctEst, verdict };
 }
 
-export const readinessLine = (stats) => `readiness ${stats.verdict}: description ${stats.descOk}/${stats.lintable}, estimate ${stats.estimated}/${stats.leaves}, blocking open questions ${stats.blockingQuestions}`;
+export const readinessLine = (stats, lang) => `readiness ${labels(lang)[`readiness.${stats.verdict}`]}: description ${stats.descOk}/${stats.lintable}, estimate ${stats.estimated}/${stats.leaves}, blocking open questions ${stats.blockingQuestions}`;
 
 export function lintDrafts(drafts, { glossary = {} } = {}) {
   const findings = [];
@@ -167,7 +168,7 @@ function main(files) {
       for (const finding of findings) console.log(`${finding.severity} ${label}: ${finding.rule}: ${finding.message}`);
     }
     for (const finding of lintDrafts(drafts, { glossary })) console.log(`WARN ${finding.slug}: ${finding.rule}: ${finding.message}`);
-    console.log(readinessLine(readiness(drafts)));
+    console.log(readinessLine(readiness(drafts), chatLanguage()));
   }
   return blocked ? 1 : 0;
 }

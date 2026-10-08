@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { requestJson } from "./api-request.mjs";
-import { lintChatComment } from "./draft-lint.mjs";
+import { lintChatComment, mapLanguage } from "./draft-lint.mjs";
 import { logPostedText } from "./edit-log.mjs";
 import { resolveMap } from "./project-map.mjs";
 
@@ -41,7 +41,7 @@ export function client(flags) {
 
 const readBody = (flags) => {
   const body = readFileSync(flags["body-file"], "utf8").trim();
-  const problems = lintChatComment(body, "figma");
+  const problems = lintChatComment(body, "figma", mapLanguage("doc_figma"));
   if (problems.length) throw new Error(`comment not posted: ${problems.join("; ")}`);
   return body;
 };

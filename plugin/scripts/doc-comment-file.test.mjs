@@ -15,7 +15,7 @@ test("quoteCount matches like Ctrl+F: case-insensitive, within one paragraph, ig
 });
 
 test("checkItems passes a passage found exactly once and a clean comment", () => {
-  assert.deepEqual(checkItems([item({})], { "t.9": TAB }, tabOf), []);
+  assert.deepEqual(checkItems([item({})], { "t.9": TAB }, tabOf, "vi"), []);
 });
 
 test("checkItems refuses passages found zero or several times, tagged comments, unknown epics and groups", () => {
@@ -23,6 +23,7 @@ test("checkItems refuses passages found zero or several times, tagged comments, 
     [item({ quote: "The fee is shown once." }), item({ quote: "not in the PRD" }), item({ comment: "@Hùng xem giúp e" }), item({ epic: "99" }), item({ group: "C" })],
     { "t.9": TAB },
     tabOf,
+    "vi",
   );
   assert.match(problems[0], /#1 .*appears 2 times/);
   assert.match(problems[1], /#2 .*appears 0 times/);
@@ -37,10 +38,20 @@ test("renderFile numbers group A before group B and escapes text in attributes",
     doc: "DOC",
     checkedAt: "08/10 09:30",
     items: [item({ group: "B", where: "B1", comment: 'PM chốt "giữ" rồi, a ghi vào PRD giúp e nha' }), item({ where: "A1" })],
+    lang: "vi",
   });
   assert.ok(html.indexOf("A1") < html.indexOf("B1"));
   assert.match(html, /Nhóm A \(1–1\)/);
   assert.match(html, /Nhóm B \(2–2\)/);
   assert.match(html, /data-t="PM chốt &quot;giữ&quot; rồi/);
   assert.match(html, /\(2 cái\)/);
+});
+
+
+test("renderFile writes the page in the chat language it is given", () => {
+  const html = renderFile({ title: "UC_CT_04", doc: "DOC", checkedAt: "08/10 09:30", items: [item({ where: "A1" })], lang: "en" });
+  assert.match(html, /<html lang=en>/);
+  assert.match(html, /Group A \(1–1\)/);
+  assert.match(html, /comments to highlight yourself \(1\)/);
+  assert.doesNotMatch(html, /Nhóm|bôi đen/);
 });

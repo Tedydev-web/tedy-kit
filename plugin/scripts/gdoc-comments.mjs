@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { requestJson } from "./api-request.mjs";
-import { lintChatComment } from "./draft-lint.mjs";
+import { lintChatComment, mapLanguage } from "./draft-lint.mjs";
 import { logPostedText } from "./edit-log.mjs";
 import { resolveMap } from "./project-map.mjs";
 
@@ -65,7 +65,7 @@ async function session(flags, needOwnClient = false) {
 
 const readBody = (flags) => {
   const body = readFileSync(flags["body-file"], "utf8").trim();
-  const problems = lintChatComment(body, "doc");
+  const problems = lintChatComment(body, "doc", mapLanguage("doc_figma"));
   if (problems.length) throw new Error(`comment not posted: ${problems.join("; ")}`);
   return body;
 };

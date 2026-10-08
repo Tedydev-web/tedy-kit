@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { STATE_DIR } from "./hook-io.mjs";
 import { UC_ID } from "./prd-section.mjs";
+import { resolveMap } from "./project-map.mjs";
 
 export const MAX_BODY = 360;
 export const MAX_CHAT = 600;
@@ -11,6 +12,16 @@ const HEADER = /^# PR #(\d+)(:| —) comment line by line \(head ([0-9a-f]{7,40}
 const SECTION = /^## (\d+)\. `([^`]+):(\d+)`\s*$/gm;
 const PRD_HEADER = new RegExp(`^PRD EPIC \\d{2} · ${UC_ID.source} .+:$`);
 const FOREIGN_SCRIPT = /[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}]/u;
+const COMMENT_RULES = {
+  vi: { ending: "ạ.", fillers: /anh ơi|cảm ơn|thank/i, fillerHint: 'drop openers and fillers such as "Anh ơi" or "cảm ơn"' },
+  en: { ending: ".", fillers: /^\W*(hi|hey|hello)\b|\bthanks?\b|thank you/i, fillerHint: 'drop openers and fillers such as "Hi" or "thanks"' },
+};
+
+export function commentRules(lang) {
+  const rules = COMMENT_RULES[lang];
+  if (!rules) throw new Error(`no comment rules for language "${lang}"; supported: ${Object.keys(COMMENT_RULES).join(", ")}`);
+  return rules;
+}
 
 export function parseDraft(text) {
   const header = text.match(HEADER);
@@ -54,15 +65,16 @@ function withoutSpans(text) {
   return text.replace(/`[^`]*`/g, "``").replace(/"[^"]*"/g, '""').replace(/“[^”]*”/g, '""');
 }
 
-export function lintComment(body) {
+export function lintComment(body, lang) {
+  const rules = commentRules(lang);
   const problems = [];
   const text = body.normalize("NFC");
   const [first, ...rest] = text.split("\n");
   if (text.includes("```")) problems.push("no code block in a comment");
   if (text.length > MAX_BODY) problems.push(`body is ${text.length} characters; keep it at or under ${MAX_BODY}`);
-  if (!first.trimEnd().endsWith("ạ.")) problems.push('the first line must end with "ạ."');
-  if (/[.!?]\s+\S/.test(withoutSpans(first.trim()).replace(/ạ\.$/, ""))) problems.push("the first line must be one sentence");
-  if (/anh ơi|cảm ơn|thank/i.test(text)) problems.push('drop openers and fillers such as "Anh ơi" or "cảm ơn"');
+  if (!first.trimEnd().endsWith(rules.ending)) problems.push(`the first line must end with "${rules.ending}"`);
+  if (/[.!?]\s+\S/.test(withoutSpans(first.trim()).slice(0, -rules.ending.length))) problems.push("the first line must be one sentence");
+  if (rules.fillers.test(text)) problems.push(rules.fillerHint);
   if (FOREIGN_SCRIPT.test(text.replace(/`[^`]*`/g, ""))) problems.push("non-Latin characters outside backticks");
   rest.forEach((line, offset) => {
     const previous = offset === 0 ? first : rest[offset - 1];
@@ -81,20 +93,21 @@ export function lintComment(body) {
   return problems;
 }
 
-export function lintChatComment(text, channel) {
+export function lintChatComment(text, channel, lang) {
+  const rules = commentRules(lang);
   const problems = [];
   const body = text.normalize("NFC").trim();
   if (!body) return ["the comment is empty"];
   if (body.includes("```")) problems.push("no code block in a comment");
   if (body.length > MAX_CHAT) problems.push(`comment is ${body.length} characters; keep it at or under ${MAX_CHAT}`);
-  if (/anh ơi|cảm ơn|thank/i.test(body)) problems.push('drop openers and fillers such as "Anh ơi" or "cảm ơn"');
+  if (rules.fillers.test(body)) problems.push(rules.fillerHint);
   if (FOREIGN_SCRIPT.test(body.replace(/`[^`]*`/g, ""))) problems.push("non-Latin characters outside backticks");
   if (channel === "figma" && !/^@\S/.test(body)) problems.push("a Figma comment opens with the @handle of whoever owns the fix");
   if (channel === "doc" && /(^|\s)@\S/.test(body)) problems.push("a Doc comment tags nobody");
   return problems;
 }
 
-export function lintDraft(text, diffText) {
+export function lintDraft(text, diffText, lang) {
   const parsed = parseDraft(text);
   const problems = [];
   if (parsed.separator !== ":") problems.push({ index: 0, location: "header", problem: 'use the header "# PR #<n>: comment line by line (head <sha8>)"' });
@@ -102,7 +115,7 @@ export function lintDraft(text, diffText) {
   const lines = diffText === undefined ? null : diffLines(diffText);
   for (const comment of parsed.comments) {
     const location = `${comment.path}:${comment.line}`;
-    for (const problem of lintComment(comment.body)) problems.push({ index: comment.index, location, problem });
+    for (const problem of lintComment(comment.body, lang)) problems.push({ index: comment.index, location, problem });
     if (!lines) continue;
     if (!lines.has(comment.path)) {
       const candidates = [...lines.keys()].filter((path) => path.endsWith(`/${comment.path}`));
@@ -132,9 +145,11 @@ export function readDiff(pr, repo) {
   return execFileSync("gh", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
 }
 
+export const mapLanguage = (field) => resolveMap(process.cwd())?.map.language?.[field] ?? "en";
+
 function main([kind, file, ...flags]) {
   if ((kind === "doc-comment" || kind === "figma-comment") && file) {
-    const problems = lintChatComment(readFileSync(file, "utf8"), kind.replace("-comment", ""));
+    const problems = lintChatComment(readFileSync(file, "utf8"), kind.replace("-comment", ""), mapLanguage("doc_figma"));
     for (const problem of problems) console.log(problem);
     if (!problems.length) {
       console.log(`clean: ${kind}`);
@@ -151,7 +166,7 @@ function main([kind, file, ...flags]) {
   const text = readFileSync(file, "utf8");
   const { pr } = parseDraft(text);
   const diffText = flag("--diff") ? readFileSync(flag("--diff"), "utf8") : readDiff(pr, flag("--repo"));
-  const result = lintDraft(text, diffText);
+  const result = lintDraft(text, diffText, mapLanguage("pr_review"));
   if (!result.problems.length) {
     console.log(`clean: ${result.comments.length} comments, PR #${result.pr}, head ${result.sha}`);
     const frozen = snapshotOnce(file, text);

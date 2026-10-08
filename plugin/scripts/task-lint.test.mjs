@@ -70,14 +70,14 @@ const good = (slug, extra = {}) => ({ ...task, slug, estimate: 2, parent: "story
 const bare = { slug: "t-bare", type: "Task", subject: "[BE] Validate mining", description: "", parent: "story-a" };
 const storyDraft = { ...story, slug: "story-a" };
 
-test("readiness follows pg thresholds: mixed is mỏng, clean is đủ, bare or unproven is thiếu nặng", () => {
+test("readiness follows pg thresholds: mixed is thin, clean is ready, bare or unproven is missing", () => {
   const mixed = readiness([storyDraft, good("t-good"), bare]);
   assert.deepEqual([mixed.lintable, mixed.descOk, mixed.leaves, mixed.estimated], [3, 2, 2, 1]);
-  assert.equal(mixed.verdict, "mỏng");
-  assert.equal(readiness([storyDraft, good("t-1"), good("t-2")]).verdict, "đủ");
-  assert.equal(readiness([{ ...bare, parent: undefined }]).verdict, "thiếu nặng");
-  assert.equal(readiness([{ slug: "m", type: "Milestone", subject: "M" }]).verdict, "thiếu nặng");
-  assert.equal(readiness([storyDraft, good("t-1", { estimate: undefined }), good("t-2", { estimate: undefined })]).verdict, "thiếu nặng");
+  assert.equal(mixed.verdict, "thin");
+  assert.equal(readiness([storyDraft, good("t-1"), good("t-2")]).verdict, "ready");
+  assert.equal(readiness([{ ...bare, parent: undefined }]).verdict, "missing");
+  assert.equal(readiness([{ slug: "m", type: "Milestone", subject: "M" }]).verdict, "missing");
+  assert.equal(readiness([storyDraft, good("t-1", { estimate: undefined }), good("t-2", { estimate: undefined })]).verdict, "missing");
   const blocking = good("t-q", { description: withQuestion("Blocking: which wallet pays? Tried: PRD UC_SW_13.").description });
   assert.equal(readiness([storyDraft, blocking]).blockingQuestions, 1);
 });
@@ -103,7 +103,14 @@ test("glossary drift is flagged in prose but not in code spans, quoted copy or p
 
 test("updates of existing work packages are not asked for an estimate", () => {
   const update = good("t-u", { id: 21298, estimate: undefined, parent: 21270 });
-  assert.equal(readiness([update]).verdict, "đủ");
-  assert.equal(readiness([good("t-s", { estimate: undefined, parent: 21270 })], { updating: new Set(["t-s"]) }).verdict, "đủ");
-  assert.equal(readiness([good("t-n", { estimate: undefined, parent: 21270 })]).verdict, "thiếu nặng");
+  assert.equal(readiness([update]).verdict, "ready");
+  assert.equal(readiness([good("t-s", { estimate: undefined, parent: 21270 })], { updating: new Set(["t-s"]) }).verdict, "ready");
+  assert.equal(readiness([good("t-n", { estimate: undefined, parent: 21270 })]).verdict, "missing");
+});
+
+test("the readiness line names the verdict in the chat language", async () => {
+  const { readinessLine } = await import("./task-lint.mjs");
+  const stats = { verdict: "missing", descOk: 0, lintable: 1, estimated: 0, leaves: 1, blockingQuestions: 0 };
+  assert.match(readinessLine(stats, "vi"), /^readiness thiếu nặng:/);
+  assert.match(readinessLine(stats, "en"), /^readiness not ready:/);
 });

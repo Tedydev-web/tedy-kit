@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { diffLines, lintComment, lintDraft, parseDraft } from "./draft-lint.mjs";
+import { diffLines, lintChatComment, lintComment, lintDraft, parseDraft } from "./draft-lint.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const REAL = [
@@ -33,7 +33,7 @@ const DIFF = [
 ].join("\n");
 
 test("real comments written after the last style correction lint clean", () => {
-  for (const comment of REAL) assert.deepEqual(lintComment(comment.body), [], comment.body);
+  for (const comment of REAL) assert.deepEqual(lintComment(comment.body, "vi"), [], comment.body);
 });
 
 test("parseDraft reads the header, sections and bodies, and accepts the older em dash header", () => {
@@ -63,12 +63,12 @@ test("each broken shape is reported", () => {
     ["Nút đang hiện 家族 ạ.", /non-Latin/],
     [`${"Nút đang sai ".repeat(40)}ạ.`, /360/],
   ];
-  for (const [body, pattern] of cases) assert.ok(lintComment(body).some((problem) => pattern.test(problem)), body);
+  for (const [body, pattern] of cases) assert.ok(lintComment(body, "vi").some((problem) => pattern.test(problem)), body);
 });
 
 test("non-Latin text inside backticks and PRD symbols are allowed", () => {
-  assert.deepEqual(lintComment("Key `家族.title` chưa có trong locale vi ạ."), []);
-  assert.deepEqual(lintComment("PRD ghi khác ạ.\n\nPRD EPIC 08 · UC_MB_S01 BR5:\n> One Owner — always → never two · ok."), []);
+  assert.deepEqual(lintComment("Key `家族.title` chưa có trong locale vi ạ.", "vi"), []);
+  assert.deepEqual(lintComment("PRD ghi khác ạ.\n\nPRD EPIC 08 · UC_MB_S01 BR5:\n> One Owner — always → never two · ok.", "vi"), []);
 });
 
 test("lintDraft checks every location against the diff and points to the full path", () => {
@@ -77,14 +77,14 @@ test("lintDraft checks every location against the diff and points to the full pa
     { path: "src/a.ts", line: 30, body: "Dòng này ngoài diff ạ." },
     { path: "a.ts", line: 11, body: "Đường dẫn rút gọn ạ." },
   ]);
-  const { problems } = lintDraft(text, DIFF);
+  const { problems } = lintDraft(text, DIFF, "vi");
   assert.deepEqual(problems.map((problem) => problem.index), [2, 3]);
   assert.match(problems[0].problem, /not in the PR diff/);
   assert.match(problems[1].problem, /src\/a\.ts/);
 });
 
 test("lintDraft asks new drafts to use the colon header", () => {
-  const { problems } = lintDraft(draft([{ path: "src/a.ts", line: 12, body: "Giá trị đang là 3 ạ." }], "# PR #1 — comment line by line (head abcdef12)"), DIFF);
+  const { problems } = lintDraft(draft([{ path: "src/a.ts", line: 12, body: "Giá trị đang là 3 ạ." }], "# PR #1 — comment line by line (head abcdef12)"), DIFF, "vi");
   assert.ok(problems.some((problem) => /header/.test(problem.problem)));
 });
 
@@ -100,10 +100,21 @@ test("the first clean lint freezes the original once, so later edits by the user
 
 test("chat comments: Figma opens with a handle, Doc tags nobody, both stay short and plain", async () => {
   const { lintChatComment } = await import("./draft-lint.mjs");
-  assert.deepEqual(lintChatComment('@designer.lan Hint đổi "The family votes on it." thành "The group votes on it." nha', "figma"), []);
-  assert.deepEqual(lintChatComment("Thêm 1 ý ở UC_LG_01 BR8: e đang hiểu là gồm cả 2, a xác nhận giúp e nha", "doc"), []);
-  assert.ok(lintChatComment("Hint đổi thành group nha", "figma").some((problem) => /@handle/.test(problem)));
-  assert.ok(lintChatComment("@pm_minh chốt giúp e nha", "doc").some((problem) => /tags nobody/.test(problem)));
-  assert.ok(lintChatComment(`@a ${"x ".repeat(400)}`, "figma").some((problem) => /600/.test(problem)));
-  assert.ok(lintChatComment("@a Anh ơi xem giúp e", "figma").some((problem) => /openers/.test(problem)));
+  assert.deepEqual(lintChatComment('@designer.lan Hint đổi "The family votes on it." thành "The group votes on it." nha', "figma", "vi"), []);
+  assert.deepEqual(lintChatComment("Thêm 1 ý ở UC_LG_01 BR8: e đang hiểu là gồm cả 2, a xác nhận giúp e nha", "doc", "vi"), []);
+  assert.ok(lintChatComment("Hint đổi thành group nha", "figma", "vi").some((problem) => /@handle/.test(problem)));
+  assert.ok(lintChatComment("@pm_minh chốt giúp e nha", "doc", "vi").some((problem) => /tags nobody/.test(problem)));
+  assert.ok(lintChatComment(`@a ${"x ".repeat(400)}`, "figma", "vi").some((problem) => /600/.test(problem)));
+  assert.ok(lintChatComment("@a Anh ơi xem giúp e", "figma", "vi").some((problem) => /openers/.test(problem)));
+});
+
+test("English comments follow the English rules: a plain sentence first, no greeting or thanks", () => {
+  assert.deepEqual(lintComment("The toast still uses the generic copy, not the PRD wording.", "en"), []);
+  assert.deepEqual(lintComment("The total ignores refunds.\n\nPRD EPIC 03 · UC_CT_04 BR2:\n> Refunds lower the total.", "en"), []);
+  assert.ok(lintComment("Hi, the total ignores refunds.", "en").some((problem) => /openers/.test(problem)));
+  assert.ok(lintComment("The total ignores refunds. Please fix it.", "en").some((problem) => /one sentence/.test(problem)));
+  assert.ok(lintComment("The total ignores refunds", "en").some((problem) => /must end with "\."/.test(problem)));
+  assert.deepEqual(lintChatComment("@designer.lan Should the hint say shop instead of store?", "figma", "en"), []);
+  assert.ok(lintChatComment("@a thanks for the frame", "figma", "en").some((problem) => /openers/.test(problem)));
+  assert.throws(() => lintComment("x", "fr"), /no comment rules for language "fr"; supported: vi, en/);
 });

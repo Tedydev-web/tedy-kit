@@ -5,6 +5,7 @@ import { closedStatuses, closestWorkPackage, listWorkPackages } from "./openproj
 import { resolveMap } from "./project-map.mjs";
 import { snapshotOnce, snapshotPath } from "./draft-lint.mjs";
 import { appendEditLog, frozenOriginal, labelText } from "./edit-log.mjs";
+import { chatLanguage } from "./labels.mjs";
 import { countWords, lintDrafts, lintWorkPackage, readiness, readinessLine } from "./task-lint.mjs";
 
 function projectOf(flags) {
@@ -66,7 +67,7 @@ async function check(client, project, drafts) {
     console.log(`${step.action}${step.id ? ` #${step.id}` : ""} ${draft.slug} | ${lint} | ${form}${notes}`);
   }
   for (const finding of lintDrafts(drafts, { glossary: resolveMap(process.cwd())?.map.glossary ?? {} })) console.log(`warn ${finding.slug}: ${finding.rule}: ${finding.message}`);
-  console.log(readinessLine(readiness(drafts, { updating: new Set(drafts.filter((_, index) => plan[index].action === "update").map((draft) => draft.slug)) })));
+  console.log(readinessLine(readiness(drafts, { updating: new Set(drafts.filter((_, index) => plan[index].action === "update").map((draft) => draft.slug)) }), chatLanguage()));
   const count = (action) => plan.filter((step) => step.action === action).length;
   console.log(`WRITE → ${client.host} · project ${project} : ${count("create")} create · ${count("update")} update · ${count("merge")} merge`);
   return { failed, plan, refs, mapping, locks };

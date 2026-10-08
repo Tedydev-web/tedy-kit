@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { lintComment, lintDraft, parseDraft, readDiff, snapshotPath } from "./draft-lint.mjs";
+import { lintComment, lintDraft, mapLanguage, parseDraft, readDiff, snapshotPath } from "./draft-lint.mjs";
 import { appendEditLog, labelText } from "./edit-log.mjs";
 import { fetchTab, indexTab, quoteInText, UC_ID } from "./prd-section.mjs";
 import { resolveMap } from "./project-map.mjs";
@@ -126,7 +126,7 @@ async function post(file, flags) {
   const original = existsSync(snapshotPath(file)) ? readFileSync(snapshotPath(file), "utf8") : finalText;
   const repo = currentRepo(flags);
   const draft = parseDraft(original);
-  const final = lintDraft(finalText, readDiff(parseDraft(finalText).pr, repo));
+  const final = lintDraft(finalText, readDiff(parseDraft(finalText).pr, repo), mapLanguage("pr_review"));
   if (final.pr !== draft.pr || final.sha !== draft.sha) throw new Error(`the draft now names a different PR or head than the frozen original at ${snapshotPath(file)}`);
   if (final.problems.length) {
     for (const item of final.problems) console.log(`${item.index}. ${item.location}: ${item.problem}`);
@@ -169,7 +169,7 @@ async function post(file, flags) {
 
 function readBody(flags) {
   const body = (flags["body-file"] ? readFileSync(flags["body-file"], "utf8") : flags.body ?? "").trim();
-  const problems = lintComment(body);
+  const problems = lintComment(body, mapLanguage("pr_review"));
   if (!body || problems.length) throw new Error(`body not posted: ${problems.join("; ") || "empty"}`);
   return body;
 }
