@@ -35,9 +35,9 @@ Building or editing the map's sources → `/tedy:setup`. Changing a role's proce
    Check each claim against its source before promoting it; a memory can be stale.
 3. **Subtract.** Delete promoted memories and their `MEMORY.md` lines. Merge rules to stay under the cap. Replace a style sample the edit log shows the user keeps rewriting.
 4. **Report.** Write `<profile>/reports/learn-<yymmdd-hhmm>-<project>.md`: the table, the full proposed diff, line counts before and after, and broken links in `MEMORY.md` (reported only; the user decides). Quote the table in the reply.
-5. **Approve.** One `AskUserQuestion`, header `Học`: `Áp dụng tất cả (Recommended)`, `Chọn từng mục` (a multiSelect follow-up by row number), `Chưa áp dụng`.
+5. **Approve.** One `AskUserQuestion`, header `learn.header`: `learn.all`, `learn.pick` (a multiSelect follow-up by row number), `learn.hold`.
 6. **Apply** the approved rows, record today with `project-state.mjs set learned_until <YYYY-MM-DD>`, run `claude -p "/doctor prompt-audit"` and fix any new conflict it names, then, when the profile is a git repository, commit there (`feat: fold <project> lessons into the profile`).
-7. **Next step.** `Bước tiếp`: run the role whose material changed on real work, or `Dừng ở đây` with an 80-character summary.
+7. **Next step.** `next.header`: run the role whose material changed on real work, or `next.stop` with an 80-character summary.
 
 ## Done
 

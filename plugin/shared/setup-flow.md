@@ -6,7 +6,7 @@ How `/tedy:setup` builds and updates a project map. This file is the single sour
 
 1. **Mechanical**: a missing remote ref, an unfetched sibling repo. Fix it read-only (`git -C <repo> fetch -q origin`) or print the exact command, then continue.
 2. **Verified single answer**: a fact a command proves and only one answer fits, such as the base branch of every recent merged PR or the only repository with `nest-cli.json`. Apply it with one evidence line (`base of 28/30 merged PRs: dev`).
-3. **Preference, ambiguity, or anything that writes**: ask. A guess is never the user's answer, however likely it looks. Every question carries `đã tự tìm: …` with what was checked.
+3. **Preference, ambiguity, or anything that writes**: ask. A guess is never the user's answer, however likely it looks. Every question carries `setup.found` with what was checked.
 
 ## Bare run: `/tedy:setup`
 
@@ -18,7 +18,7 @@ How `/tedy:setup` builds and updates a project map. This file is the single sour
    - `prdFiles[]`: PRD markdown under `docs/`.
    - `links`: Google Doc ids with tabs and Figma files with nodes, each with the files it came from (instruction files, READMEs, `docs/`, the project's auto memory).
    Then, for each Doc tab found, `prd-section.mjs index <doc> <tab>` to learn its epic and use case prefix. Old session transcripts are read for links only after the user says yes in this flow.
-4. Ask the tier-3 gaps, one topic per call, grouped: repositories (role, readonly), languages, PRD and Figma per epic, tracker, then optional team, gotchas and truth overrides. Offer "bỏ qua" for optional groups.
+4. Ask the tier-3 gaps, one topic per call, grouped: repositories (role, readonly), languages, PRD and Figma per epic, tracker, then optional team, gotchas and truth overrides. Offer `setup.skip` for optional groups.
 5. Write `<profile>/projects/<name>.md` with Write (`node <plugin>/scripts/profile.mjs doctor` prints the profile directory): a two-line note for people, then the ```json block. Run `doctor` again until `READY`.
 6. When the profile is a git repository, commit the map there (`git -C <profile> add projects/<name>.md`, then commit with `feat: add <name> project map` or `feat: update <name> project map`); otherwise the written file is enough. Push only after the user approves it through the push prompt.
 

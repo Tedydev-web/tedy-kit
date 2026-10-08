@@ -1,6 +1,6 @@
 ---
 name: pm
-description: Work as the project's PM in the user's style - turn a reconcile into a gaps ledger, draft Google Doc and Figma comments and OpenProject tasks, post them after approval, and check replies. Use for "lên task", "tạo task OP", "comment lên Doc/Figma", "check reply", "rà PRD với Figma để báo PM". Not for writing code.
+description: Work as the project's PM in the user's style - turn a reconcile into a gaps ledger, draft Google Doc and Figma comments and OpenProject tasks, post them after approval, and check replies. Use, in any language, to create tracker tasks, comment on the PRD Doc or Figma, check replies, or cross-check the PRD against Figma for the PM. Not for writing code.
 argument-hint: "<scope: epic | UC | Figma node | rule> | replies | tasks <scope>"
 ---
 
@@ -34,22 +34,22 @@ Writing code → `/tedy:dev`. Reviewing a PR → `/tedy:review-pr`. Cross-checki
 5. **Draft.**
    - Figma comments and Doc replies: one file each, voice from `doc-figma-comment.md`, checked with `node ${CLAUDE_PLUGIN_ROOT}/scripts/draft-lint.mjs doc-comment|figma-comment <file>` until clean.
    - New PRD questions: one items file for `node ${CLAUDE_PLUGIN_ROOT}/scripts/doc-comment-file.mjs` as `comment-channels.md` describes, run until it writes the HTML file.
-   - Tasks: one `drafts.json` array per the shape in `tracker-openproject.md`, with estimate, dates, assignee from the map's team split, parent story and sibling links; `node ${CLAUDE_PLUGIN_ROOT}/scripts/openproject.mjs preview <drafts.json>` until every row reads `lint clean` and `form ok`; a readiness other than `đủ` is said in the ledger with the reason.
-6. **Approve and publish.** Quote every comment and every task in the reply, then one `AskUserQuestion`, header `Duyệt`: `Đăng và tạo tất cả (Recommended)` when lint and form are clean, `Bỏ bớt` (numbers in a follow-up multiSelect, or typed in "Other"), `Sửa câu chữ`, `Chưa đăng`. On approval run the write commands in `comment-channels.md` and `tracker-openproject.md`; each reads its result back. Report ids.
+   - Tasks: one `drafts.json` array per the shape in `tracker-openproject.md`, with estimate, dates, assignee from the map's team split, parent story and sibling links; `node ${CLAUDE_PLUGIN_ROOT}/scripts/openproject.mjs preview <drafts.json>` until every row reads `lint clean` and `form ok`; a readiness other than `readiness.ready` is said in the ledger with the reason.
+6. **Approve and publish.** Quote every comment and every task in the reply, then one `AskUserQuestion`, header `approve.header`: `approve.all` when lint and form are clean, `approve.trim` (numbers in a follow-up multiSelect, or typed in "Other"), `approve.reword`, `approve.hold`. On approval run the write commands in `comment-channels.md` and `tracker-openproject.md`; each reads its result back. Report ids.
 7. **Replies.** `figma-comments.mjs list --since <last>` and `gdoc-comments.mjs list --since <last>`, where `<last>` is what `project-state.mjs get last_reply_check` prints (empty means no earlier sweep: list everything). For each thread with a new reply: settled, still open, or new question; quote the reply. A settled answer the PRD text does not yet reflect gets a group B card asking the PM to write it into the PRD. Draft only the task updates and follow-up replies the replies justify, then step 6. Record the time of this check with `project-state.mjs set last_reply_check <ISO time>`.
-8. **Next step.** One `AskUserQuestion`, header `Bước tiếp`: the recommended follow-up from the ledger (the next scope, a reply check later today, or `/tedy:dev` on a task just created), one alternative, `Dừng ở đây` with an 80-character summary.
+8. **Next step.** One `AskUserQuestion`, header `next.header`: the recommended follow-up from the ledger (the next scope, a reply check later today, or `/tedy:dev` on a task just created), one alternative, `next.stop` with an 80-character summary.
 
 ## Anti-rationalization
 
 | Thought | What happened |
 |---|---|
-| Naming the hook and endpoint helps the developer | #21046, 2026-09-22: "không technical quá ở trong task của dev mà chỉ mang tính chất cung cấp thông tin thôi" |
-| One task is simpler, one person does both | 2026-09-29: UI and wire are always two tasks |
-| The backend needs it, so ticket it | 2026-10-05: "lên luôn task BE cho Hùng thì đừng làm gì cả vì ngoài quyền hạn của chúng ta rồi" |
-| The scope difference is small; build to the API | Stamps per user against per family was used silently instead of raised; the user asked for such mismatches in the same turn |
+| Naming the hook and endpoint helps the developer | The user asked that developer tasks inform rather than prescribe: no hook, function or endpoint names |
+| One task is simpler, one person does both | UI and wiring are always two tasks |
+| The backend needs it, so ticket it | Backend tasks are outside this role's authority; draft them only when the user asks |
+| The scope difference is small; build to the API | A per-user against per-group difference was built silently instead of raised; the user wants such mismatches raised in the same turn |
 | The reply sits nearby; answer there | A new PRD question once went under an unrelated thread; new questions go to a file the user posts |
-| The preview looked fine; create them now | 2026-10-07: "soạn bản xem trước … để tôi duyệt", then "ok duyệt …, tạo luôn" |
-| The sidecar lacks this task's slug; add it so the preview says update | 2026-10-07 acceptance run: the shared sidecar was edited before approval and lost its format; the draft takes the work package `id` instead |
+| The preview looked fine; create them now | The user reads a preview first and only then says to create |
+| The sidecar lacks this task's slug; add it so the preview says update | In an acceptance run the shared sidecar was edited before approval and lost its format; the draft takes the work package `id` instead |
 
 ## Done
 

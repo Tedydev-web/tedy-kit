@@ -11,11 +11,13 @@ How to cross-check one scope across the PRD, Figma, the backend and contract, th
 
 ## Evidence labels
 
+Evidence and conclusion words are label keys; write them in the chat language as `node <plugin>/scripts/labels.mjs` prints them.
+
 | Label | Meaning | Reviewer agent label |
 |---|---|---|
-| `đọc thấy` | Read this run; the cell cites a re-checkable `path:line@branch`, a PRD locator from `prd-section.mjs find`, or a Figma node and label | CONFIRMED |
-| `suy ra` | Follows from lines read this run through a chain the cell states | PLAUSIBLE |
-| `đoán` | Not checked | none; goes only to the raise list, never into a conclusion |
+| `evidence.seen` | Read this run; the cell cites a re-checkable `path:line@branch`, a PRD locator from `prd-section.mjs find`, or a Figma node and label | CONFIRMED |
+| `evidence.derived` | Follows from lines read this run through a chain the cell states | PLAUSIBLE |
+| `evidence.guess` | Not checked | none; goes only to the raise list, never into a conclusion |
 
 A statement taken from prose (README, AGENTS.md, a PR description, a memory note) is a `[docs-claim]` until code confirms it. When code contradicts it, code wins on behaviour and the contradiction is a row of its own.
 
@@ -36,13 +38,13 @@ A statement taken from prose (README, AGENTS.md, a PR description, a memory note
    | Item | PRD (locator: quote) | Figma (frame link: label or copy) | Backend / contract (`path:line@branch`) | Frontend (`path:line`) | Conclusion | Label | Owner of the fix |
    |---|---|---|---|---|---|---|---|
 
-   Conclusion is `khớp`, `lệch`, or `thiếu nguồn`. Owner is the PM, the designer, the backend team, the blockchain team or the frontend.
-6. **Raise list.** Every `lệch` without a documented reason and every `đoán` row, each with both sides quoted and the owner named. Name the side the truth ladder favours when it does; when it does not (PRD against Figma), say so.
+   Conclusion is `match.ok`, `match.diff`, or `match.nosource`. Owner is the PM, the designer, the backend team, the blockchain team or the frontend.
+6. **Raise list.** Every `match.diff` without a documented reason and every `evidence.guess` row, each with both sides quoted and the owner named. Name the side the truth ladder favours when it does; when it does not (PRD against Figma), say so.
 7. **Independent lens.** When the scope has more than 8 items, spawn the `reviewer` agent with lens `spec` on the frontend repository and wait for its completion notice before writing the table. One rule or one use case needs no lens.
 8. **Report.** `<paths[0]>/plans/reports/reconcile-<yymmdd-hhmm>-<slug>.md`: scope, item list, coverage (how many of the requirements in the scoped PRD sections, counting steps, BRs, AFs, EFs and UI rules, have a row or a stated reason to skip), sources read and skipped, the table, the raise list. Quote the coverage, the table and the raise list in the reply.
 
 ## Done
 
-Every item has a conclusion from every source that exists, every `đọc thấy` cell can be re-checked from its citation, and every unexplained `lệch` is in the raise list with an owner.
+Every item has a conclusion from every source that exists, every `evidence.seen` cell can be re-checked from its citation, and every unexplained `match.diff` is in the raise list with an owner.
 
 Drafting Doc or Figma comments and tracker tasks from the raise list belongs to `/tedy:pm`; building the frontend side of a fix belongs to `/tedy:dev`.

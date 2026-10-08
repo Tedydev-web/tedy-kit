@@ -1,6 +1,6 @@
 ---
 name: reconcile
-description: Cross-check one scope (an epic, a use case, a rule in words, or a PR) across the PRD, Figma, backend, contract, frontend and PM demo, and produce a mismatch table with a raise list. Use when the user asks to đối soát, rà PRD với code, or check that FE, BE, contract, PRD and Figma agree.
+description: Cross-check one scope (an epic, a use case, a rule in words, or a PR) across the PRD, Figma, backend, contract, frontend and PM demo, and produce a mismatch table with a raise list. Use when the user asks, in any language, to reconcile or cross-check the PRD against code, or to check that FE, BE, contract, PRD and Figma agree.
 argument-hint: "<epic | UC_XX_nn | rule in words | PR number>"
 disable-model-invocation: true
 ---
@@ -22,4 +22,4 @@ Reviewing a PR line by line → `/tedy:review-pr`. Building or changing the map 
 
 ## Procedure
 
-Follow `${CLAUDE_PLUGIN_ROOT}/shared/reconcile-flow.md` step by step, with `${CLAUDE_PLUGIN_ROOT}/shared/source-access.md` for each source and `${CLAUDE_PLUGIN_ROOT}/shared/decision-points.md` for any question. Done when the flow's completion criterion holds and the report is written. Finish with one `AskUserQuestion`, header `Bước tiếp`: draft comments and tasks from the raise list (`/tedy:pm`) as recommended when it is not empty, review a PR touching the same scope when one is open (`/tedy:review-pr`), update the map when the run found a gap (`/tedy:setup update`), or `Dừng ở đây` with an 80-character summary.
+Follow `${CLAUDE_PLUGIN_ROOT}/shared/reconcile-flow.md` step by step, with `${CLAUDE_PLUGIN_ROOT}/shared/source-access.md` for each source and `${CLAUDE_PLUGIN_ROOT}/shared/decision-points.md` for any question. Done when the flow's completion criterion holds and the report is written. Finish with one `AskUserQuestion`, header `next.header`: draft comments and tasks from the raise list (`/tedy:pm`) as recommended when it is not empty, review a PR touching the same scope when one is open (`/tedy:review-pr`), update the map when the run found a gap (`/tedy:setup update`), or `next.stop` with an 80-character summary.

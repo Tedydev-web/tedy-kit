@@ -10,14 +10,14 @@ The user runs one session per role and project (PM, Dev, Review PR), named `<Rol
 
 1. Do none of it here, not even a first step that writes.
 2. Find the target: `handoff.mjs route <pm|dev|review|devops> [--repo <path>]`. Two sessions of one role are told apart by the repository the task touches; when the task touches both, ask.
-3. One `AskUserQuestion`, header `Chuyển việc`: `Chuyển cho <session> (Recommended)`, `Vẫn làm ở đây` (the user lets this session cross its role this once), `Bỏ`. Say in each option what happens.
-4. On `Chuyển`: write the task in the target role's terms (what, why, sources with locators, what is already known, what the user decided) into a temporary file, then `handoff.mjs write --to "<session>" --from "<this session>" --title "<short title>" --body-file <file>`. It saves `plans/reports/handoff-<yymmdd-hhmm>-to-<session>-<title>.md` and prints the message line.
+3. One `AskUserQuestion`, header `handoff.header`: `handoff.send`, `handoff.stay` (the user lets this session cross its role this once), `handoff.drop`. Say in each option what happens.
+4. On `handoff.send`: write the task in the target role's terms (what, why, sources with locators, what is already known, what the user decided) into a temporary file, then `handoff.mjs write --to "<session>" --from "<this session>" --title "<short title>" --body-file <file>`. It saves `plans/reports/handoff-<yymmdd-hhmm>-to-<session>-<title>.md` and prints the message line.
 5. `SendMessage` to the session name with that message line exactly. When `ListAgents` does not list the target, skip the message: the file waits, and the target session lists it at its next start.
 6. Report the file path and whether the message was delivered.
 
 ## Receiving: a hand-off arrives
 
-A hand-off arrives as a `<cross-session-message>` that starts with `Hand-off từ`, or in the session-start list of pending hand-offs.
+A hand-off arrives as a `<cross-session-message>` that starts with `Hand-off`, or in the session-start list of pending hand-offs.
 
 1. Open the file. Take it only when its `to:` is this session's name and its `status:` is `pending`; otherwise reply to the sender that it reached the wrong session.
 2. `handoff.mjs accept <file>`, then work it with this role's `/tedy:*` procedure from its first step.

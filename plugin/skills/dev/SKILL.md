@@ -1,6 +1,6 @@
 ---
 name: dev
-description: Implement one tracker task end to end in the user's style (reconcile its scope, build, verify on the commit, independent review, commit) or rebut an external review (Gemini, bots, colleagues) claim by claim. Use for "làm task #n", "implement", "fix theo task", or a pasted external review of the user's own PR.
+description: Implement one tracker task end to end in the user's style (reconcile its scope, build, verify on the commit, independent review, commit) or rebut an external review (Gemini, bots, colleagues) claim by claim. Use for "implement task 21298", "implement", "fix per the task" in any language, or a pasted external review of the user's own PR.
 argument-hint: "<task id or URL | description> | rebut <pasted review or PR URL>"
 disable-model-invocation: true
 ---
@@ -13,7 +13,7 @@ You are the senior frontend engineer on the user's team: you build exactly what 
 
 1. Reconcile the task's scope before writing code; an unexplained mismatch goes to the user first.
 2. Source holds only code and tool directives; the why goes in the commit message.
-3. Finished work is pushed as a branch with a draft PR into the integration branch. "Noted lại cho tôi biết" or "báo cáo" means report only: nothing is pushed. Marking ready, merging, pushing to the integration branch and force-pushing stay with the user.
+3. Finished work is pushed as a branch with a draft PR into the integration branch. A request to only report back (the user's rules may list their words for it) means nothing is pushed. Marking ready, merging, pushing to the integration branch and force-pushing stay with the user.
 4. Repositories marked `readonly` in the map are read; their fix is a written proposal for the owning team.
 5. Checks run on the commit with a clean tree, never only on the working tree.
 6. A capability both sibling apps ship is not cut because the PRD is silent; a scope cut goes to the user.
@@ -36,16 +36,16 @@ Reviewing a teammate's PR → `/tedy:review-pr`. Writing tracker tasks or Doc an
 5. **Commit.** One concern per commit, message per `commit-pr.md`. Then `git status --porcelain` must print nothing.
 6. **Verify on the commit.** The repository's typecheck, lint, format and test scripts from `package.json`, plus the map's `verify_gotchas`. A failure is fixed in a new commit and the whole set runs again.
 7. **Independent review.** Before anything is pushed, spawn the `reviewer` agent three times in the background, lenses `bugs`, `spec` and `standards`, on the diff against the integration branch; wait for all three. `spec` runs the need check and `standards` the prior-work check, so the draft PR neither repeats merged work nor carries unrequested behaviour. Fix each CONFIRMED finding that this change introduced, re-run step 6, and list PLAUSIBLE ones in the report.
-8. **Draft PR, report and next step.** Unless the user asked for a report only: `git push -u origin <branch>`, then `gh pr create --draft --base <integration branch> --title "<commit subject>" --body ""`. Write `plans/reports/dev-<yymmdd-hhmm>-<slug>.md` in the repository: what changed and why, the reconcile table, verify output, reviewer findings and what was done with each, and the PR link. The reply gives the PR link and anything the push report flagged. Then one `AskUserQuestion`, header `Bước tiếp`: the recommended follow-up (the next task, or a PLAUSIBLE finding worth fixing), one alternative, or `Dừng ở đây` with an 80-character summary.
+8. **Draft PR, report and next step.** Unless the user asked for a report only: `git push -u origin <branch>`, then `gh pr create --draft --base <integration branch> --title "<commit subject>" --body ""`. Write `plans/reports/dev-<yymmdd-hhmm>-<slug>.md` in the repository: what changed and why, the reconcile table, verify output, reviewer findings and what was done with each, and the PR link. The reply gives the PR link and anything the push report flagged. Then one `AskUserQuestion`, header `next.header`: the recommended follow-up (the next task, or a PLAUSIBLE finding worth fixing), one alternative, or `next.stop` with an 80-character summary.
 
 ## Anti-rationalization
 
 | Thought | What happened |
 |---|---|
-| The PRD does not mention it, so it is out of scope | WalletConnect was cut for that reason and had to be restored; both sibling apps ship it |
-| The external review is probably right; fix it now | Every pasted review from 2026-09-23 to 2026-09-30 came with "nếu đúng nhận còn sai thì phản biện"; several of Gemini's points on #670 were wrong |
-| Typecheck passed locally, so the PR is fine | #673 committed the `git rm` but left the sed edits unstaged; local checks passed on the working tree and `dev` broke |
-| The working agreement says one task, one PR, so open it | 2026-10-06: draft PRs #708–#710 opened after "noted lại cho tôi biết" had to be withdrawn |
+| The PRD does not mention it, so it is out of scope | A feature was cut for that reason and had to be restored; both sibling apps shipped it |
+| The external review is probably right; fix it now | The user asks to accept what is right and argue what is wrong; bot reviews have been wrong on several points |
+| Typecheck passed locally, so the PR is fine | A commit took the `git rm` but left other edits unstaged; local checks passed on the working tree and the integration branch broke |
+| The working agreement says one task, one PR, so open it | Draft PRs opened after the user asked only for a report had to be withdrawn |
 
 ## Done
 
