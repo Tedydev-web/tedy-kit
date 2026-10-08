@@ -211,7 +211,7 @@ for scenario in $SCENARIOS; do
         [ "$arm" = green ] && extra=(--plugin-dir "$dir/kit/plugin")
       fi
       touch "$dir/start.mark"
-      (cd "$runcwd" && HOME="$home" PATH="$dir/bin:$PATH" GH_LOG="$dir/gh.log" TEDY_STATE_DIR="$dir/state" CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 timeout 900 claude -p "$(prompt "$scenario" "$arm")" "${extra[@]}" --settings "$settings" --max-budget-usd "${BUDGET:-$(case "$scenario" in p1|l1) echo 3 ;; r2) echo 3.5 ;; *) echo 2 ;; esac)}" --max-turns 60 --output-format stream-json --verbose > "$dir/trace.jsonl" 2>/dev/null) || true
+      (cd "$runcwd" && HOME="$home" PATH="$dir/bin:$PATH" GH_LOG="$dir/gh.log" TEDY_STATE_DIR="$dir/state" CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 timeout 900 claude -p --no-session-persistence "$(prompt "$scenario" "$arm")" "${extra[@]}" --settings "$settings" --max-budget-usd "${BUDGET:-$(case "$scenario" in p1|l1) echo 3 ;; r2) echo 3.5 ;; *) echo 2 ;; esac)}" --max-turns 60 --output-format stream-json --verbose > "$dir/trace.jsonl" 2>/dev/null) || true
       if [ "$scenario" = l1 ]; then
         snapshot_writes "$home" "$dir" > "$dir/writes.after"
         restore_real_rules "$dir"

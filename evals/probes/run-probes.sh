@@ -2,6 +2,8 @@
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 W="$(mktemp -d /tmp/tedy-probes-XXXX)"
+D="$HOME/.claude/projects/$(echo "$W" | sed 's#[/.]#-#g')"
+trap 'rm -rf "$D" "$W"' EXIT
 mkdir -p /tmp/tedy-probes/logs && rm -f /tmp/tedy-probes/logs/*.jsonl
 cd "$W" && git init -q && echo a > a.txt && git add a.txt && git -c user.email=p@p -c user.name=p commit -qm init && echo m >> a.txt
 run() { timeout 300 claude -p --plugin-dir "$HERE/probe" --permission-mode bypassPermissions --max-budget-usd 1 "$@" < /dev/null 2>/dev/null; }
@@ -19,6 +21,3 @@ run --resume "$SID" "/compact" >/dev/null
 run --resume "$SID" "Answer from your context, quoting exactly, or NONE: (1) the check value from the zz-body-probe skill; (2) any line containing ROLE-REMINDER; (3) the first heading line of the Shared Agent Core instructions."
 echo "[8] ask rule inside bypassPermissions"
 timeout 300 claude -p --permission-mode bypassPermissions --max-budget-usd 1 --output-format stream-json --verbose --settings '{"permissions":{"ask":["Bash(echo tedy-ask-probe*)"]}}' "Run exactly: echo tedy-ask-probe-1" < /dev/null 2>/dev/null | jq -r 'select(.type=="result") | "permission_denials=\(.permission_denials // [] | length)"'
-D="$HOME/.claude/projects/$(echo "$W" | sed 's#[/.]#-#g')"
-[ -d "$D" ] && rm -rf "$D"
-rm -rf "$W"
