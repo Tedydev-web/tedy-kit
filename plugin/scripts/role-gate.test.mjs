@@ -49,6 +49,12 @@ test("commits and pushes count as code only inside a mapped repository", () => {
   assert.equal(bash("cd tonpass-wallet-fe && git log --oneline -3"), null);
 });
 
+test("a map without sessions has nothing for the role gate to judge, so the fleet list is never read", () => {
+  const noSessions = { ...map, sessions: undefined };
+  assert.equal(classifyAction({ tool_name: "Bash", cwd: "/w/tonpass", tool_input: { command: "cd tonpass-wallet-fe && git commit -m x" } }, noSessions), null);
+  assert.equal(classifyAction({ tool_name: "Edit", cwd: "/w/tonpass", tool_input: { file_path: "/w/tonpass/tonpass-wallet-fe/src/a.ts" } }, { ...map, sessions: [] }), null);
+});
+
 test("each role is asked only about the other roles' writes, and the owner session is named", () => {
   const prd = { kind: "doc-figma", repo: null };
   const code = { kind: "code", repo: "tonpass-wallet-admin-be" };

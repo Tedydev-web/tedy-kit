@@ -40,6 +40,7 @@ function repoOf(map, path) {
 const isCode = (hit) => hit && !hit.inside.split("/").includes("plans") && !hit.inside.endsWith(".md");
 
 export function classifyAction(input, map) {
+  if (!map.sessions?.length) return null;
   const cwd = input.cwd ?? process.cwd();
   if (EDIT_TOOLS.has(input.tool_name)) {
     const path = resolve(cwd, input.tool_input?.file_path ?? input.tool_input?.notebook_path ?? "");
