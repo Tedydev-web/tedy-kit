@@ -9,8 +9,8 @@ test("estimates become ISO 8601 durations", () => {
 });
 
 test("a draft becomes an OpenProject payload with markdown, type, assignee, parent and manual dates", () => {
-  const refs = { types: { task: "/api/v3/types/1" }, assignees: [{ name: "Hoàng Phúc", href: "/api/v3/users/7" }] };
-  const draft = { slug: "task-fe-x", type: "Task", subject: "[FE] X", description: "## Goal\nX.", estimate: 1.5, assignee: "Phúc", startDate: "2026-10-08", dueDate: "2026-10-08", parent: 21270 };
+  const refs = { types: { task: "/api/v3/types/1" }, assignees: [{ name: "Hoàng Lâm", href: "/api/v3/users/7" }] };
+  const draft = { slug: "task-fe-x", type: "Task", subject: "[FE] X", description: "## Goal\nX.", estimate: 1.5, assignee: "Lâm", startDate: "2026-10-08", dueDate: "2026-10-08", parent: 21270 };
   assert.deepEqual(buildPayload(draft, refs), {
     subject: "[FE] X",
     description: { format: "markdown", raw: "## Goal\nX." },
@@ -25,10 +25,10 @@ test("a draft becomes an OpenProject payload with markdown, type, assignee, pare
 });
 
 test("names match without diacritics and must be unique", () => {
-  const people = [{ name: "Hoàng Phúc" }, { name: "Phan Tín" }, { name: "Phan Hiếu" }];
-  assert.equal(matchName(people, "phuc").name, "Hoàng Phúc");
+  const people = [{ name: "Hoàng Lâm" }, { name: "Phan Bình" }, { name: "Phan Hiếu" }];
+  assert.equal(matchName(people, "lam").name, "Hoàng Lâm");
   assert.throws(() => matchName(people, "Phan"), /2 people/);
-  assert.throws(() => matchName(people, "Tân"), /no assignee/);
+  assert.throws(() => matchName(people, "Kim"), /no assignee/);
 });
 
 test("planWrites updates mapped slugs, creates the rest and refuses meta keys", () => {
@@ -97,9 +97,9 @@ test("a quick set builds a PATCH with only the named fields and the lock it was 
   const refs = {
     statuses: [{ name: "In progress", _links: { self: { href: "/api/v3/statuses/7" } } }],
     priorities: [{ name: "High", _links: { self: { href: "/api/v3/priorities/9" } } }],
-    assignees: [{ name: "Hoàng Phúc", href: "/api/v3/users/7" }],
+    assignees: [{ name: "Hoàng Lâm", href: "/api/v3/users/7" }],
   };
-  assert.deepEqual(setPayload(5, { status: "in progress", assignee: "Phuc", priority: "High", estimate: 2.5 }, refs), {
+  assert.deepEqual(setPayload(5, { status: "in progress", assignee: "Lam", priority: "High", estimate: 2.5 }, refs), {
     lockVersion: 5,
     estimatedTime: "PT2H30M",
     _links: { status: { href: "/api/v3/statuses/7" }, assignee: { href: "/api/v3/users/7" }, priority: { href: "/api/v3/priorities/9" } },

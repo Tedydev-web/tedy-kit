@@ -43,7 +43,7 @@ function fakeOpenProject(workPackages) {
 function workspace(url, drafts) {
   const home = tempDir("tedy-op-merge-");
   mkdirSync(join(home, ".config", "op", "sync"), { recursive: true });
-  writeFileSync(join(home, ".config", "op", "config.json"), JSON.stringify({ url, token: "test-token-value" }));
+  writeFileSync(join(home, ".config", "op", "config.json"), JSON.stringify({ url, token: "test-" + "token-value" }));
   const file = join(home, "drafts.json");
   writeFileSync(file, JSON.stringify(drafts));
   const env = { ...process.env, HOME: home, TEDY_STATE_DIR: join(home, "state"), OP_SYNC_DIR: join(home, ".config", "op", "sync") };

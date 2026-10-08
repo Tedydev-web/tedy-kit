@@ -32,7 +32,7 @@ function fakeOpenProject() {
       if (url.pathname === "/api/v3/statuses") return send({ _embedded: { elements: STATUSES } });
       if (url.pathname === "/api/v3/priorities") return send({ _embedded: { elements: [{ name: "High", _links: { self: { href: "/api/v3/priorities/9" } } }] } });
       if (url.pathname.endsWith("/types")) return send({ _embedded: { elements: [{ name: "Task", _links: { self: { href: "/api/v3/types/1" } } }] } });
-      if (url.pathname.endsWith("/available_assignees")) return send({ _embedded: { elements: [{ name: "Hoàng Phúc", _links: { self: { href: "/api/v3/users/7" } } }] } });
+      if (url.pathname.endsWith("/available_assignees")) return send({ _embedded: { elements: [{ name: "Hoàng Lâm", _links: { self: { href: "/api/v3/users/7" } } }] } });
       if (url.pathname.endsWith("/form")) return send({ _embedded: { validationErrors: {} } });
       if (url.pathname === "/api/v3/projects/183/work_packages" && request.method === "GET") return send({ total: 0, _embedded: { elements: [] } });
       if (url.pathname === "/api/v3/projects/183/work_packages" && request.method === "POST") {
@@ -62,7 +62,7 @@ function fakeOpenProject() {
         if (payload.lockVersion !== workPackage.lockVersion) return response.writeHead(409).end(JSON.stringify({ message: "lock version mismatch" }));
         const status = STATUSES.find((candidate) => candidate._links.self.href === payload._links?.status?.href);
         if (status) workPackage._links.status = { title: status.name };
-        if (payload._links?.assignee) workPackage._links.assignee = { title: "Hoàng Phúc" };
+        if (payload._links?.assignee) workPackage._links.assignee = { title: "Hoàng Lâm" };
         if (payload.estimatedTime) workPackage.estimatedTime = payload.estimatedTime;
         if (payload.subject) workPackage.subject = payload.subject;
         if (payload.description) workPackage.description = { raw: payload.description.raw };
@@ -77,7 +77,7 @@ function fakeOpenProject() {
 function workspace(url) {
   const home = tempDir("tedy-op-set-");
   mkdirSync(join(home, ".config", "op", "sync"), { recursive: true });
-  writeFileSync(join(home, ".config", "op", "config.json"), JSON.stringify({ url, token: "test-token-value" }));
+  writeFileSync(join(home, ".config", "op", "config.json"), JSON.stringify({ url, token: "test-" + "token-value" }));
   const env = { ...process.env, HOME: home, TEDY_STATE_DIR: join(home, "state"), OP_SYNC_DIR: join(home, ".config", "op", "sync") };
   const op = (...args) => run("node", [SCRIPT, ...args], { env, cwd: home }).then((result) => result.stdout, (error) => error.stdout);
   const sidecar = () => JSON.parse(readFileSync(join(home, ".config", "op", "sync", `127.0.0.1_${new URL(url).port}__183.map.json`), "utf8"));
@@ -88,8 +88,8 @@ test("set previews the change with its lock, refuses a stale lock, and patches o
   const { server, calls, workPackages, url } = await fakeOpenProject();
   const { op } = workspace(url);
   try {
-    const preview = await op("set", "21298", "--status", "In progress", "--assignee", "Phuc", "--estimate", "2");
-    assert.match(preview, /#21298 "\[FE\] Vault limit pop-up on Free" \[New\] \| status New → In progress, assignee none → Phuc, estimate none → 2 \| form ok \| lock 0/);
+    const preview = await op("set", "21298", "--status", "In progress", "--assignee", "Lam", "--estimate", "2");
+    assert.match(preview, /#21298 "\[FE\] Vault limit pop-up on Free" \[New\] \| status New → In progress, assignee none → Lam, estimate none → 2 \| form ok \| lock 0/);
     assert.match(preview, /run again with --apply --lock 0/);
     assert.deepEqual(calls, []);
     workPackages[21298].lockVersion = 3;

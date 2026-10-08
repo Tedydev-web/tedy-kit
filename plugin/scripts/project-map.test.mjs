@@ -11,8 +11,8 @@ const mapFile = (data) => `# Project map\n\nNotes for people.\n\n\`\`\`json\n${J
 let dir;
 before(() => {
   dir = tempDir("tedy-maps-");
-  writeFileSync(join(dir, "alpha.md"), mapFile({ name: "alpha", paths: ["/w/tonpass"], repos: [{ path: "fe", role: "FE" }], language: { pr_review: "vi" } }));
-  writeFileSync(join(dir, "alpha-fe.md"), mapFile({ name: "alpha-fe", paths: ["/w/tonpass/tonpass-wallet-fe"], repos: [{ path: ".", role: "FE" }], language: { pr_review: "vi" } }));
+  writeFileSync(join(dir, "alpha.md"), mapFile({ name: "alpha", paths: ["/w/acme"], repos: [{ path: "fe", role: "FE" }], language: { pr_review: "vi" } }));
+  writeFileSync(join(dir, "alpha-fe.md"), mapFile({ name: "alpha-fe", paths: ["/w/acme/acme-shop-fe"], repos: [{ path: ".", role: "FE" }], language: { pr_review: "vi" } }));
   writeFileSync(join(dir, "_schema.md"), "# schema, not a map\n");
 });
 
@@ -23,10 +23,10 @@ test("parseMap reads the single json block and reports a broken one loudly", () 
 });
 
 test("resolveMap picks the longest path prefix and respects directory boundaries", () => {
-  assert.equal(resolveMap("/w/tonpass/tonpass-wallet-be/src", dir).map.name, "alpha");
-  assert.equal(resolveMap("/w/tonpass/tonpass-wallet-fe/apps", dir).map.name, "alpha-fe");
-  assert.equal(resolveMap("/w/tonpass", dir).map.name, "alpha");
-  assert.equal(resolveMap("/w/tonpass-other", dir), null);
+  assert.equal(resolveMap("/w/acme/acme-shop-be/src", dir).map.name, "alpha");
+  assert.equal(resolveMap("/w/acme/acme-shop-fe/apps", dir).map.name, "alpha-fe");
+  assert.equal(resolveMap("/w/acme", dir).map.name, "alpha");
+  assert.equal(resolveMap("/w/acme-other", dir), null);
   assert.equal(resolveMap("/elsewhere", dir), null);
 });
 

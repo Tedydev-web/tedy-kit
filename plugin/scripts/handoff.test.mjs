@@ -6,24 +6,24 @@ import { listPending, parse, render, route, setStatus, slugOf, stamp } from "./h
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const map = {
-  paths: ["/w/tonpass"],
+  paths: ["/w/acme"],
   sessions: [
-    { name: "PM - Family Wallet", role: "pm" },
-    { name: "Dev TMA - Family Wallet", role: "dev", repos: ["tonpass-wallet-fe"] },
-    { name: "Dev Admin - Family Wallet", role: "dev", repos: ["onedollar-wallet-admin-fe", "tonpass-wallet-admin-be"] },
+    { name: "PM - Shop", role: "pm" },
+    { name: "Dev TMA - Shop", role: "dev", repos: ["acme-shop-fe"] },
+    { name: "Dev Admin - Shop", role: "dev", repos: ["onedollar-wallet-admin-fe", "acme-shop-admin-be"] },
   ],
 };
 
 test("route picks the only session of a role, or the one owning the repository", () => {
-  assert.equal(route(map, "pm").name, "PM - Family Wallet");
-  assert.equal(route(map, "dev", "tonpass-wallet-admin-be").name, "Dev Admin - Family Wallet");
+  assert.equal(route(map, "pm").name, "PM - Shop");
+  assert.equal(route(map, "dev", "acme-shop-admin-be").name, "Dev Admin - Shop");
   assert.throws(() => route(map, "dev"), /2 dev sessions .*--repo/);
   assert.throws(() => route(map, "review"), /no review session/);
 });
 
 test("a hand-off renders as a pending header plus body, and parses back", () => {
-  const text = render({ to: "Dev TMA - Family Wallet", from: "PM - Family Wallet", title: "Fix the fake save toast", body: "Save shows a toast without calling the API.\n", created: "2026-10-08T01:00:00Z" });
-  assert.deepEqual(parse(text), { to: "Dev TMA - Family Wallet", from: "PM - Family Wallet", status: "pending", created: "2026-10-08T01:00:00Z", title: "Fix the fake save toast" });
+  const text = render({ to: "Dev TMA - Shop", from: "PM - Shop", title: "Fix the fake save toast", body: "Save shows a toast without calling the API.\n", created: "2026-10-08T01:00:00Z" });
+  assert.deepEqual(parse(text), { to: "Dev TMA - Shop", from: "PM - Shop", status: "pending", created: "2026-10-08T01:00:00Z", title: "Fix the fake save toast" });
   assert.match(text, /\n\nSave shows a toast without calling the API\.\n$/);
 });
 
@@ -38,12 +38,12 @@ test("status moves from pending to accepted to done, keeping one updated line", 
 
 test("listPending returns only pending hand-offs, optionally for one session", () => {
   const dir = tempDir("tedy-handoff-");
-  writeFileSync(join(dir, "handoff-1.md"), render({ to: "Dev TMA - Family Wallet", from: "PM - Family Wallet", title: "one", body: "x", created: "c" }));
-  writeFileSync(join(dir, "handoff-2.md"), setStatus(render({ to: "Dev TMA - Family Wallet", from: "PM", title: "two", body: "x", created: "c" }), "done", "t"));
-  writeFileSync(join(dir, "handoff-3.md"), render({ to: "PM - Family Wallet", from: "Dev", title: "three", body: "x", created: "c" }));
+  writeFileSync(join(dir, "handoff-1.md"), render({ to: "Dev TMA - Shop", from: "PM - Shop", title: "one", body: "x", created: "c" }));
+  writeFileSync(join(dir, "handoff-2.md"), setStatus(render({ to: "Dev TMA - Shop", from: "PM", title: "two", body: "x", created: "c" }), "done", "t"));
+  writeFileSync(join(dir, "handoff-3.md"), render({ to: "PM - Shop", from: "Dev", title: "three", body: "x", created: "c" }));
   writeFileSync(join(dir, "review-x.md"), "not a hand-off");
   assert.deepEqual(listPending(dir).map((item) => item.title).sort(), ["one", "three"]);
-  assert.deepEqual(listPending(dir, "PM - Family Wallet").map((item) => item.title), ["three"]);
+  assert.deepEqual(listPending(dir, "PM - Shop").map((item) => item.title), ["three"]);
   assert.deepEqual(listPending(join(dir, "missing")), []);
 });
 

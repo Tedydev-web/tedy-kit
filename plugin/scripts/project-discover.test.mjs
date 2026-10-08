@@ -8,16 +8,16 @@ import { tempDir } from "./temp-dir-for-tests.mjs";
 
 test("extractLinks finds Google Doc tabs and Figma nodes, deduplicated", () => {
   const text = [
-    "PRD https://docs.google.com/document/d/1skwBNY3Zh7HO47PAVQHVGP69iEEjHI6TaBdA44tGsns/edit?pli=1&tab=t.p59op2unmr",
-    "same doc https://docs.google.com/document/d/1skwBNY3Zh7HO47PAVQHVGP69iEEjHI6TaBdA44tGsns/edit?usp=sharing",
-    "design https://www.figma.com/design/LcVgoxchcAU5J4TYLa3AQ8/Family-Wallet-UI?node-id=3445-6702&m=dev",
-    "again https://www.figma.com/design/LcVgoxchcAU5J4TYLa3AQ8/Family-Wallet-UI?node-id=3445-6702",
+    "PRD https://docs.google.com/document/d/1FakeDocIdForTestsxxxxxxxxxxxxxxxxxxxxxxxxxx/edit?pli=1&tab=t.p59op2unmr",
+    "same doc https://docs.google.com/document/d/1FakeDocIdForTestsxxxxxxxxxxxxxxxxxxxxxxxxxx/edit?usp=sharing",
+    "design https://www.figma.com/design/FakeFigmaKeyyyyyyyyyyy/Family-Wallet-UI?node-id=3445-6702&m=dev",
+    "again https://www.figma.com/design/FakeFigmaKeyyyyyyyyyyy/Family-Wallet-UI?node-id=3445-6702",
   ].join("\n");
   assert.deepEqual(extractLinks(text), {
-    docs: [{ doc: "1skwBNY3Zh7HO47PAVQHVGP69iEEjHI6TaBdA44tGsns", tab: "t.p59op2unmr" }, { doc: "1skwBNY3Zh7HO47PAVQHVGP69iEEjHI6TaBdA44tGsns", tab: null }],
-    figma: [{ file: "LcVgoxchcAU5J4TYLa3AQ8", node: "3445:6702" }],
+    docs: [{ doc: "1FakeDocIdForTestsxxxxxxxxxxxxxxxxxxxxxxxxxx", tab: "t.p59op2unmr" }, { doc: "1FakeDocIdForTestsxxxxxxxxxxxxxxxxxxxxxxxxxx", tab: null }],
+    figma: [{ file: "FakeFigmaKeyyyyyyyyyyy", node: "3445:6702" }],
   });
-  assert.deepEqual(extractLinks("PRD for Family Wallet: Google Doc `1skwBNY3Zh7HO47PAVQHVGP69iEEjHI6TaBdA44tGsns` (export works)").docs, [{ doc: "1skwBNY3Zh7HO47PAVQHVGP69iEEjHI6TaBdA44tGsns", tab: null }]);
+  assert.deepEqual(extractLinks("PRD for Shop: Google Doc `1FakeDocIdForTestsxxxxxxxxxxxxxxxxxxxxxxxxxx` (export works)").docs, [{ doc: "1FakeDocIdForTestsxxxxxxxxxxxxxxxxxxxxxxxxxx", tab: null }]);
 });
 
 test("detectStack names the markers it sees", () => {

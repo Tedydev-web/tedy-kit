@@ -45,7 +45,7 @@ Writing code → `/tedy:dev`. Reviewing a PR → `/tedy:review-pr`. Cross-checki
 |---|---|
 | Naming the hook and endpoint helps the developer | #21046, 2026-09-22: "không technical quá ở trong task của dev mà chỉ mang tính chất cung cấp thông tin thôi" |
 | One task is simpler, one person does both | 2026-09-29: UI and wire are always two tasks |
-| The backend needs it, so ticket it | 2026-10-05: "lên luôn task BE cho Tân thì đừng làm gì cả vì ngoài quyền hạn của chúng ta rồi" |
+| The backend needs it, so ticket it | 2026-10-05: "lên luôn task BE cho Hùng thì đừng làm gì cả vì ngoài quyền hạn của chúng ta rồi" |
 | The scope difference is small; build to the API | Stamps per user against per family was used silently instead of raised; the user asked for such mismatches in the same turn |
 | The reply sits nearby; answer there | A new PRD question once went under an unrelated thread; new questions go to a file the user posts |
 | The preview looked fine; create them now | 2026-10-07: "soạn bản xem trước … để tôi duyệt", then "ok duyệt …, tạo luôn" |

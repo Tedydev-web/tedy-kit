@@ -41,7 +41,7 @@ test("length, checklist and AC ceilings are enforced", () => {
 
 test("Vietnamese prose and placeholders are blocked, while names and quoted frame titles pass", () => {
   assert.ok(blocks({ ...task, description: `${task.description}\nCần làm thêm phần này nha.` }).includes("desc-language"));
-  assert.deepEqual(blocks({ ...task, description: `${task.description}\nWiring is Tín's task; frame "Trang chọn ví".` }), []);
+  assert.deepEqual(blocks({ ...task, description: `${task.description}\nWiring is Sam's task; frame "Trang chọn ví".` }), []);
   assert.ok(blocks({ ...task, description: `${task.description}\nTBD after the PM answers.` }).includes("desc-placeholder"));
   assert.ok(blocks({ ...task, subject: "[FE] Màn chọn ví" }).includes("subject-language"));
 });

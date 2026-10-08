@@ -7,7 +7,7 @@ test("subject tokens drop component tags, punctuation and filler words", () => {
 });
 
 test("reordered and reworded subjects score high, unrelated ones low", () => {
-  assert.ok(subjectSimilarity("Tonpass integration", "Integrate Tonpass connector") >= 0.6);
+  assert.ok(subjectSimilarity("Acme integration", "Integrate Acme connector") >= 0.6);
   assert.equal(subjectSimilarity("[FE] Vault limit pop-up on Free", "[FE] Free vault limit pop-up"), 1);
   assert.ok(subjectSimilarity("[FE] Vault limit pop-up on Free", "[FE] Leave this wallet sheet") < 0.6);
 });

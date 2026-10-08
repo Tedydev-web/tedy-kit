@@ -11,3 +11,4 @@ plugin/evals/results/
 !docs/**
 !test_*.py
 *.pyc
+evals/pressure/results/

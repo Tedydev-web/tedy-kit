@@ -70,7 +70,7 @@ Several PRs in one request: steps 1–9 for each, one approval menu per PR.
 | More detail makes the comment clearer | 2026-10-01: "cho tôi ngắn gọn hơn nữa đi đừng dài dòng và quá chi tiết như vậy" |
 | It matches the PRD; saying so is enough | 2026-10-01: "mấy cái mà có liên quan đến PRD thì trích dẫn ra luôn nhé" |
 | The draft I wrote is the draft to post | 2026-10-02: "check lại file đi tôi xoá bớt đi rồi đó" |
-| The author says it is resolved | 2026-10-02: "Phúc nói đã resolved rồi nhưng tôi tháy cái comment … hình như chưa nhỉ" |
+| The author says it is resolved | 2026-10-02: "Lâm nói đã resolved rồi nhưng tôi tháy cái comment … hình như chưa nhỉ" |
 | Every finding deserves a comment | 2026-10-05: "cái số 5 tôi nghĩ cũng không cần thiết nữa nhé" |
 | The backend does X, so the frontend must do X | 2026-10-06: FE follows BE + contract in form, and BE + contract must match PRD + Figma; raise the mismatch instead of picking a side |
 
