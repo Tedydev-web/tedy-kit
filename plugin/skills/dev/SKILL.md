@@ -1,6 +1,6 @@
 ---
 name: dev
-description: Implement one tracker task end to end in the user's style (reconcile its scope, build, verify on the commit, independent review, commit) or rebut an external review (Gemini, bots, colleagues) claim by claim. Use for "làm task #n", "implement", "fix theo task", or a pasted external review of the user's own PR.
+description: Implement one tracker task end to end in the user's style (reconcile its scope, build, verify on the commit, independent review, commit) or rebut an external review (Gemini, bots, colleagues) claim by claim. Use for "làm task 21298", "implement", "fix theo task", or a pasted external review of the user's own PR.
 argument-hint: "<task id or URL | description> | rebut <pasted review or PR URL>"
 disable-model-invocation: true
 ---
