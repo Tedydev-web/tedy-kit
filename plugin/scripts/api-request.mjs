@@ -9,7 +9,7 @@ function parse(text) {
 }
 
 const SECRET_ASSIGNMENT = /((?:api[_-]?key|apikey|access[_-]?token|refresh[_-]?token|token|secret|password|authorization)["']?\s*[:=]\s*["']?)((?:(?:Basic|Bearer)\s+)?[^\s"'&,;{}]{4,})/gi;
-const SECRET_SHAPE = /\b(?:eyJ[\w-]{10,}\.[\w.-]*|[A-Fa-f0-9]{32,}|(?:Basic|Bearer) [\w.~+/=-]{16,}|gh[pousr]_\w{20,}|figd_[\w-]{20,}|ya29\.[\w.-]{20,})/g;
+export const SECRET_SHAPE = /\b(?:eyJ[\w-]{10,}\.[\w.-]*|[A-Fa-f0-9]{32,}|(?:Basic|Bearer) [\w.~+/=-]{16,}|gh[pousr]_\w{20,}|figd_[\w-]{20,}|ya29\.[\w.-]{20,})/g;
 
 export function redact(text) {
   return String(text ?? "").replace(SECRET_ASSIGNMENT, "$1***").replace(SECRET_SHAPE, "***");
