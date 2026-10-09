@@ -12,7 +12,7 @@ How the user's commits and PRs read. Measured on their 39 non-merge commits in `
 
 ## Pull request
 
-- PR into the integration branch (`dev`), opened as a draft (the 6 still-open PRs are drafts; merged ones were marked ready before merge), title equal to the commit subject, empty body (11 of the 12 latest PRs).
+- PR into the integration branch (`dev`), opened as a draft (the 6 still-open PRs are drafts; merged ones were marked ready before merge), title equal to the commit subject. The body is the single line `OP#<id>` when the PR does a tracker item, so OpenProject shows it on the work package and `merged-sweep.mjs` can move the item after merge (user decision 2026-10-09); otherwise empty.
 - One tracker task, one branch, one PR; the reviewer merges.
 - Open a PR or push a new branch only when the user says so in that request. "Noted lại cho tôi biết" means report only: on 2026-10-06 PRs #708–#710 were opened without that and had to be withdrawn.
 

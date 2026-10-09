@@ -2,6 +2,8 @@
 
 Use when the user asks to check replies, when a teammate says a thread is fixed, or when the next-step menu picks "Kiểm reply". Writes still go through `github-write.mjs` after the user approves, one `AskUserQuestion` per batch.
 
+Start with the status-after-merge sweep of step 1a in the skill; a merged PR of the user's own work package is handed to the PM session there.
+
 ## Check threads at the new head
 
 <!-- fragile: GraphQL field names; re-check against the GitHub schema if the query errors -->
