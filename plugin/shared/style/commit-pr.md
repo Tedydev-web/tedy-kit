@@ -11,7 +11,7 @@ Default samples. A profile copy at `<profile>/style/commit-pr.md` replaces this 
 ## Pull request
 
 - Title is the commit subject of the main change. Opened as a draft; the user marks it ready.
-- The body states the problem, the cause and what changed, with PRD codes and links to the tasks it closes.
+- The body states the problem, the cause and what changed, with PRD codes, and carries `OP#<id>` for the tracker item it does, so the tracker shows the PR and `merged-sweep.mjs` can move the item after merge.
 
 ## Samples
 

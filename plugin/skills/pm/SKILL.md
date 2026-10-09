@@ -24,7 +24,7 @@ Writing code → `/tedy:dev`. Reviewing a PR → `/tedy:review-pr`. Cross-checki
 ## Procedure
 
 1. **Context.** `node ${CLAUDE_PLUGIN_ROOT}/scripts/project-map.mjs resolve` and read the map. Read the style samples `node ${CLAUDE_PLUGIN_ROOT}/scripts/profile.mjs path style/tracker-task.md` and `… path style/doc-figma-comment.md` print, `${CLAUDE_PLUGIN_ROOT}/shared/decision-points.md`, and the two references in `${CLAUDE_PLUGIN_ROOT}/skills/pm/references/`.
-2. **Mode.** `replies` → step 7. A quick change to one work package, or undoing the last batch → `set` or `rollback` in `tracker-openproject.md`, then stop. Otherwise a scope; `tasks <scope>` skips comments.
+2. **Mode.** A status-after-merge hand-off (title `Status after merge: …`) → run each `openproject.mjs set <id> --status <status>` it lists without `--apply`, quote every preview line, one `AskUserQuestion` header `approve.header` for the whole batch, then `--apply --lock <n>` for the approved ones, report what each read back, and close the hand-off as `handoff.md` says. `replies` → step 7. A quick change to one work package, or undoing the last batch → `set` or `rollback` in `tracker-openproject.md`, then stop. Otherwise a scope; `tasks <scope>` skips comments.
 3. **Gaps ledger.** Run `${CLAUDE_PLUGIN_ROOT}/shared/reconcile-flow.md` for the scope. Its raise list, with the coverage count, opens `<paths[0]>/plans/reports/pm-<yymmdd-hhmm>-<slug>.md`.
 4. **Pick a channel per gap**, and say why in the ledger:
    - PRD unclear, silent or contradicting itself → a card in the Doc comment file (`comment-channels.md`).

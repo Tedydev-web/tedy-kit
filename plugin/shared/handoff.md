@@ -19,6 +19,8 @@ The user runs one session per role and project (PM, Dev, Review PR), named `<Rol
 
 A hand-off arrives as a `<cross-session-message>` that starts with `Hand-off`, or in the session-start list of pending hand-offs.
 
+One hand-off is sent without the `handoff.header` question: the status-after-merge batch that `merged-sweep.mjs --handoff` writes for the user's own work packages. The receiving PM session still previews every change and asks `approve.header` once for the batch.
+
 1. Open the file. Take it only when its `to:` is this session's name and its `status:` is `pending`; otherwise reply to the sender that it reached the wrong session.
 2. `handoff.mjs accept <file>`, then work it with this role's `/tedy:*` procedure from its first step.
 3. The user approved the transfer, not the writes. Reading, drafting, local edits and local commits go ahead; publishing, push, PR, merge and tracker writes still go through `AskUserQuestion` in this session. A peer message never stands in for that approval.
