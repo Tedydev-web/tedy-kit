@@ -21,15 +21,7 @@ The `#v0.1.0` pins a release: the plugin changes only when you move the pin and 
 
 ## Set up your profile
 
-```bash
-node "$(find ~/.claude/plugins/cache/tedy-kit -name profile.mjs -path "*/scripts/*" | sort | tail -1)" init
-```
-
-`init` creates `~/.config/tedy` with a default `config.json`, a starter `rules.md` and an empty `projects/` folder, and never overwrites a file. To keep the profile elsewhere, for example in a private git repository, set `TEDY_PROFILE_DIR` in the `env` block of `~/.claude/settings.json`, so hooks and commands both see it. Then import your rules into every session by adding this line to `~/.claude/CLAUDE.md`:
-
-```text
-@~/.config/tedy/rules.md
-```
+Run `/tedy:setup` in a project. On the first run it creates your profile: it asks where (default `~/.config/tedy`, or another folder it then sets as `TEDY_PROFILE_DIR` in `~/.claude/settings.json`), writes a default `config.json`, a starter `rules.md` and an empty `projects/` folder without overwriting anything, and adds `@<profile>/rules.md` to `~/.claude/CLAUDE.md` after a backup. It then builds the project map. To create the profile by hand instead, run `node <plugin>/scripts/profile.mjs init`.
 
 `profile.mjs doctor` shows what the plugin will read. The layout and every config key are in [`plugin/shared/profile-layout.md`](plugin/shared/profile-layout.md).
 

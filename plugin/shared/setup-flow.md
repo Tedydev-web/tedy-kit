@@ -8,6 +8,18 @@ How `/tedy:setup` builds and updates a project map. This file is the single sour
 2. **Verified single answer**: a fact a command proves and only one answer fits, such as the base branch of every recent merged PR or the only repository with `nest-cli.json`. Apply it with one evidence line (`base of 28/30 merged PRs: dev`).
 3. **Preference, ambiguity, or anything that writes**: ask. A guess is never the user's answer, however likely it looks. Every question carries `setup.found` with what was checked.
 
+## Profile first
+
+Every run starts with `node <plugin>/scripts/profile.mjs doctor`. When its first line ends with `(missing)` or it prints `rules: missing`, the user has no profile yet:
+
+1. One `AskUserQuestion`, header `profile.header`, with `setup.found` naming the directory doctor printed:
+   - `profile.create`: create the profile in that directory.
+   - `profile.elsewhere`: the user types a folder in "Other"; back up `~/.claude/settings.json`, then set `TEDY_PROFILE_DIR` to that folder in its `env` block so hooks and commands find it.
+   - `profile.stop`: stop setup; nothing is written.
+2. `node <plugin>/scripts/profile.mjs init`, with `TEDY_PROFILE_DIR=<folder>` in front for another folder. It creates `config.json` (every personal gate off), `rules.md` from the template and `projects/`, and never overwrites a file.
+3. When `~/.claude/CLAUDE.md` has no `@<profile>/rules.md` line, back it up and append that line, so the rules load in every new session.
+4. Quote the `profile.mjs doctor` output and say which gates the user can turn on in `config.json` (`<plugin>/shared/profile-layout.md`). Then continue with the bare run or the update.
+
 ## Bare run: `/tedy:setup`
 
 1. `node <plugin>/scripts/project-map.mjs doctor` in the current directory.
