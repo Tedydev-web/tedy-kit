@@ -75,7 +75,8 @@ Family Wallet only; Gift-Card work in this workspace is out of scope. Written by
     "Shared wallet Settings (Plans, Display currency, handover)": "Phúc",
     "Ledger History tab": "Tedy",
     "Ledger, everything else": "Tín",
-    "Admin console epic #20938": "Tedy",
+    "Personal wallet and onboarding (EPIC 01, 02)": "Tedy",
+    "Admin console epic #20938": "Tín (from 2026-10-13; was Tedy)",
     "Figma change to a built screen, UI only": "Tedy",
     "Figma change to a built screen, touching its logic": "the original builder"
   },
