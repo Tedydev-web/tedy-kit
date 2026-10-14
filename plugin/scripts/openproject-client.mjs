@@ -32,8 +32,31 @@ export function buildPayload(draft, refs, lockVersion) {
   if (draft.dueDate) payload.dueDate = draft.dueDate;
   if (draft.startDate || draft.dueDate) payload.scheduleManually = true;
   if (lockVersion !== undefined) payload.lockVersion = lockVersion;
-  payload._links = links;
+  const fields = fieldValues(draft.fields, refs.fields?.[type] ?? {});
+  Object.assign(payload, fields.payload);
+  payload._links = { ...links, ...fields.links };
   return payload;
+}
+
+export function fieldValues(fields, schema) {
+  const payload = {};
+  const links = {};
+  for (const [name, value] of Object.entries(fields ?? {})) {
+    const entry = Object.entries(schema).find(([, field]) => fold(field.name) === fold(name));
+    if (!entry) throw new Error(`no custom field named "${name}" on this type`);
+    const [key, field] = entry;
+    if (!field.type.endsWith("CustomOption")) {
+      payload[key] = field.type === "Formattable" ? { format: "markdown", raw: value } : value;
+      continue;
+    }
+    const hrefs = [value].flat().map((wanted) => {
+      const option = field.options.find((candidate) => fold(candidate.name) === fold(wanted));
+      if (!option) throw new Error(`"${wanted}" is not an option of ${field.name}: ${field.options.map((candidate) => candidate.name).join(", ")}`);
+      return { href: option.href };
+    });
+    links[key] = field.type.startsWith("[]") ? hrefs : hrefs[0];
+  }
+  return { payload, links };
 }
 
 export function mergeDescription(old, incoming, date) {
@@ -140,11 +163,22 @@ export function writeSidecar(path, text) {
   writeFileSync(path, text);
 }
 
-export async function loadRefs(client, project) {
+export async function loadRefs(client, project, drafts = []) {
   const types = await client.request(`/api/v3/projects/${project}/types`);
   const assignees = await client.request(`/api/v3/projects/${project}/available_assignees?pageSize=200`);
-  return {
+  const refs = {
     types: Object.fromEntries(types._embedded.elements.map((type) => [type.name.toLowerCase(), type._links.self.href])),
     assignees: assignees._embedded.elements.map((user) => ({ name: user.name, href: user._links.self.href })),
+    fields: {},
   };
+  const typed = new Set(drafts.filter((draft) => draft.fields).map((draft) => refs.types[String(draft.type).toLowerCase()]).filter(Boolean));
+  for (const href of typed) {
+    const form = await client.request(`/api/v3/projects/${project}/work_packages/form`, { method: "POST", body: { _links: { type: { href } } } });
+    refs.fields[href] = Object.fromEntries(
+      Object.entries(form._embedded.schema)
+        .filter(([key]) => key.startsWith("customField"))
+        .map(([key, field]) => [key, { name: field.name, type: field.type, options: (field._embedded?.allowedValues ?? []).map((option) => ({ name: option.value ?? option.name, href: option._links.self.href })) }]),
+    );
+  }
+  return refs;
 }

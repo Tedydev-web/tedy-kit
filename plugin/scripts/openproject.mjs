@@ -21,7 +21,7 @@ const resolveParent = (draft, mapping, created) => (typeof draft.parent === "str
 async function check(client, project, drafts) {
   const mapping = JSON.parse(readSidecar(sidecarPath(client.host, project)));
   const plan = planWrites(drafts, mapping);
-  const refs = await loadRefs(client, project);
+  const refs = await loadRefs(client, project, drafts);
   const closed = plan.some((step) => step.action !== "update") ? await closedStatuses(client) : new Set();
   const existing = plan.some((step) => step.action === "create") ? await listWorkPackages(client, project, closed) : [];
   let failed = false;

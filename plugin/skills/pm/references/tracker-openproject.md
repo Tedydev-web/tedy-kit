@@ -27,6 +27,7 @@ A JSON array, one object per work package:
 - `merge` adopts an existing work package as the same work, the way `pg-project-management` merges: its subject, status, assignee, history and description stay; only checklist and AC lines it lacks are appended under `## Added <date>`, and the estimate is set only when it has none. A merge draft carries no `status`, and a closed work package is never a merge target. `apply` adds the slug to the sidecar.
 - `id` targets an existing work package the sidecar does not know yet, such as one the PM created by hand; `apply` adds its slug to the sidecar only after that update succeeds. Nothing else writes the sidecar, so it is never edited by hand or by a script outside `apply`.
 - `parent`, `relates` and `blocks` take ids, or slugs of drafts earlier in the same file.
+- `fields` sets custom fields by their OpenProject name; option fields take the option name, or a list for a multi-select. A Bug in project 183 requires `"fields": {"Environment": "Dev", "Module": "Shared wallet", "Screen / Flow": "…", "Expected Result": "…"}`, and `preview` reports `Environment can't be blank` without them (2026-10-14: four bugs had to be created by a direct API call).
 - `estimate` is in hours: the agent's own estimate halved. `startDate` and `dueDate` follow the assignee's queue at 8 hours a day; ask only for the start date of a new story.
 - `status` is applied in its own PATCH after the main write. The API token moves a story only up to Ready for QA and a task to Merged, Code Review or Closed.
 
