@@ -88,7 +88,7 @@ Family Wallet only; Gift-Card work in this workspace is out of scope. Written by
     { "name": "DevOps - Family Wallet", "role": "devops" }
   ],
   "learned_until": "2026-10-07",
-  "last_reply_check": "2026-10-13T09:30:00Z",
+  "last_reply_check": "2026-10-14T03:42:00Z",
   "open_questions": [
     { "q": "Which PRD tab holds EPIC 06?", "tried": "resolved 2026-10-07: tab ids read from the Doc page; t.h6w8ajg2mxhw is EPIC 06 Recovery (draft, UC_RC); t.432ud3jdzos6 and t.dplz1vp0m5kx are the epic table" },
     { "q": "The 2026-10-06 brief's \"Epic Ledger\" PRD link points at Figma 2802:5083, not the Doc.", "tried": "resolved: tab t.mgu51yavprk8 is EPIC 07 Ledger (UC_LG), confirmed by prd-section index" }
