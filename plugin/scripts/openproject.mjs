@@ -173,6 +173,8 @@ async function quickSet(client, id, flags) {
   return 0;
 }
 
+export const prBodyFrom = (wp) => [`OP#${wp.id}`, "", `Task read at ${wp.updatedAt}`, "", `## ${wp.subject}`, "", (wp.description?.raw ?? "").trim()].join("\n").trim() + "\n";
+
 export const sameComment = (activities, body) => activities.find((activity) => (activity.comment?.raw ?? "").trim() === body.trim()) ?? null;
 
 async function comment(client, id, flags) {
@@ -248,6 +250,10 @@ async function main([command, target, ...rest]) {
   }
   if (command === "set" && /^\d+$/.test(target ?? "")) return quickSet(client, Number(target), flags);
   if (command === "comment" && /^\d+$/.test(target ?? "")) return comment(client, Number(target), flags);
+  if (command === "pr-body" && /^\d+$/.test(target ?? "")) {
+    process.stdout.write(prBodyFrom(await client.request(`/api/v3/work_packages/${target}`)));
+    return 0;
+  }
   if (command === "rollback") return rollback(client, projectOf(flags), flags);
   if ((command === "preview" || command === "apply") && target) {
     const drafts = JSON.parse(readFileSync(target, "utf8"));
@@ -273,7 +279,7 @@ async function main([command, target, ...rest]) {
     ]);
     return code;
   }
-  console.error("usage: openproject.mjs get <api path> | preview <drafts.json> [--project <id>] | apply <drafts.json> [--project <id>] | set <id> [--status <name>] [--assignee <name>] [--priority <name>] [--estimate <hours>] [--apply --lock <n>] | comment <id> --body-file <file> [--apply] | rollback [--project <id>] [--delete] [--apply]");
+  console.error("usage: openproject.mjs get <api path> | preview <drafts.json> [--project <id>] | apply <drafts.json> [--project <id>] | set <id> [--status <name>] [--assignee <name>] [--priority <name>] [--estimate <hours>] [--apply --lock <n>] | comment <id> --body-file <file> [--apply] | pr-body <id> | rollback [--project <id>] [--delete] [--apply]");
   return 2;
 }
 

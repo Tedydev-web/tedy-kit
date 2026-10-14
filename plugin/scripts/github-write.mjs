@@ -220,6 +220,36 @@ function reply(pr, id, flags) {
   return 0;
 }
 
+export function prBodyRefusal(pr, me, body) {
+  if (!/\bOP#\d+\b/.test(body)) return "the body has no OP#<id>";
+  if (!pr.isDraft) return `#${pr.number} is not a draft; a ready PR belongs to the user`;
+  if (pr.author?.login !== me) return `#${pr.number} belongs to ${pr.author?.login}, not ${me}`;
+  return null;
+}
+
+function prBody(number, flags) {
+  if (typeof flags["body-file"] !== "string") throw new Error("pr-body needs --body-file <file>");
+  const repo = currentRepo(flags);
+  const body = readFileSync(flags["body-file"], "utf8").trim();
+  const view = () => JSON.parse(gh(["pr", "view", String(number), "--repo", repo, "--json", "number,isDraft,author,body"]));
+  const pr = view();
+  const refusal = prBodyRefusal(pr, gh(["api", "user", "-q", ".login"]).trim(), body);
+  if (refusal) {
+    console.log(`refused: ${refusal}`);
+    return 1;
+  }
+  if (pr.body.trim() === body) {
+    console.log(`#${number} already has this body; nothing written`);
+    return 0;
+  }
+  console.log(`WRITE → ${repo}#${number} : PR body`);
+  if (flags["dry-run"]) return 0;
+  gh(["api", "-X", "PATCH", `repos/${repo}/pulls/${number}`, "--input", "-"], JSON.stringify({ body }));
+  const same = view().body.trim() === body;
+  console.log(same ? `updated #${number} body` : `written, but the read-back differs; open #${number} and check`);
+  return same ? 0 : 1;
+}
+
 function parseFlags(args) {
   const positional = [];
   const flags = {};
@@ -236,7 +266,8 @@ const USAGE = `usage:
   github-write.mjs edit <comment-id> --body-file <file> [--repo <owner/repo>]
   github-write.mjs minimize <node-id>
   github-write.mjs resolve <thread-node-id>...
-  github-write.mjs reply <pr> <comment-id> --body-file <file> [--repo <owner/repo>]`;
+  github-write.mjs reply <pr> <comment-id> --body-file <file> [--repo <owner/repo>]
+  github-write.mjs pr-body <pr> --body-file <file> [--repo <owner/repo>] [--dry-run]`;
 
 async function main([command, ...args]) {
   const { positional, flags } = parseFlags(args);
@@ -245,6 +276,7 @@ async function main([command, ...args]) {
   if (command === "minimize" && positional[0]) return minimize(positional[0]);
   if (command === "resolve" && positional.length) return resolveThreads(positional);
   if (command === "reply" && positional[1]) return reply(positional[0], positional[1], flags);
+  if (command === "pr-body" && positional[0]) return prBody(positional[0], flags);
   console.error(USAGE);
   return 2;
 }

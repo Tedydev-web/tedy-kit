@@ -55,6 +55,9 @@ Family Wallet only; Gift-Card work in this workspace is out of scope. Written by
     "instance": "https://task.toncorp.io",
     "project": 183,
     "merge_status": { "Task": "Merged/Code Review", "Bug": "Fixed (Dev Done)" },
+    "open_status": { "Task": "In progress", "Bug": "In progress" },
+    "revert_status": { "Task": "In progress", "Bug": "Re-Work" },
+    "not_started": ["New", "In specification", "Specified", "Confirmed", "To be scheduled", "Scheduled"],
     "rules": [
       "One task is one branch and one PR into dev; never merge.",
       "Write [FE] tasks by default; write [BE] or [Admin-BE] tasks only when the user asks (2026-10-05, 2026-10-06), checked against PRD and design with extra care, and never for the backend team's own queue (Tân, 2026-10-05). A missing API otherwise goes into the FE wire task's open questions.",

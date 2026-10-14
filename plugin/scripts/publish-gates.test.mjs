@@ -3,7 +3,9 @@ import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { evaluate } from "./git-gate.mjs";
-import { sameComment } from "./openproject.mjs";
+import { prBodyRefusal } from "./github-write.mjs";
+import { prBodyFrom, sameComment } from "./openproject.mjs";
+import { classifyAction, decide } from "./role-gate.mjs";
 import { publishes, unshown } from "./publish-quote-gate.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 import { evaluate as trackerToken, trackerHost } from "./tracker-token-gate.mjs";
@@ -76,4 +78,27 @@ test("an OpenProject comment already on the work package is refused as a duplica
   const activities = [{ id: 1, comment: { raw: "" } }, { id: 7, comment: { raw: "Đã fix ở PR #744\n" } }];
   assert.equal(sameComment(activities, "Đã fix ở PR #744")?.id, 7);
   assert.equal(sameComment(activities, "khác"), null);
+});
+
+test("a PR body built from a work package starts with OP#<id> and records when the package was read", () => {
+  const body = prBodyFrom({ id: 21453, updatedAt: "2026-10-14T07:00:00Z", subject: "[FE] Gửi USDT không hỏi duyệt", description: { raw: "## Goal\nX.\n\n## Checklist\n- [ ] Y\n" } });
+  assert.match(body, /^OP#21453\n\nTask read at 2026-10-14T07:00:00Z\n\n## \[FE\] Gửi USDT không hỏi duyệt\n\n## Goal\nX\./);
+  assert.ok(body.endsWith("- [ ] Y\n"));
+});
+
+test("pr-body writes only to the user's own draft PR and keeps the OP link", () => {
+  const draft = { number: 744, isDraft: true, author: { login: "tedy" } };
+  assert.equal(prBodyRefusal(draft, "tedy", "OP#21453\n\nbody"), null);
+  assert.match(prBodyRefusal(draft, "tedy", "no link"), /OP#<id>/);
+  assert.match(prBodyRefusal({ ...draft, isDraft: false }, "tedy", "OP#1"), /not a draft/);
+  assert.match(prBodyRefusal({ ...draft, author: { login: "tin" } }, "tedy", "OP#1"), /belongs to tin/);
+});
+
+test("pr-body is the dev session's write; the review and PM sessions are asked first", () => {
+  const map = { paths: ["/w"], repos: [], sessions: [{ name: "Dev", role: "dev" }, { name: "Review", role: "review" }, { name: "PM", role: "pm" }] };
+  const action = classifyAction({ tool_name: "Bash", cwd: "/w", tool_input: { command: "node /k/github-write.mjs pr-body 744 --body-file b.md" } }, map);
+  assert.equal(action.kind, "code");
+  assert.equal(decide(map, "Dev", action), null);
+  assert.match(decide(map, "Review", action), /dev session/);
+  assert.match(decide(map, "PM", action), /dev session/);
 });

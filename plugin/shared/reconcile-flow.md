@@ -33,11 +33,11 @@ A statement taken from prose (README, AGENTS.md, a PR description, a memory note
 4. **Compare** along the truth ladder, item by item.
 5. **Table.** One row per item and side that disagrees, in this shape:
 
-   | Item | PRD (locator: quote) | Figma (frame link: label or copy) | Backend / contract (`path:line@branch`) | Frontend (`path:line`) | Conclusion | Label | Owner of the fix |
-   |---|---|---|---|---|---|---|---|
+   | Item | PRD (locator: quote) | Figma (frame link: label or copy) | Backend / contract (`path:line@branch`) | Frontend (`path:line`) | Work package (`#id status`, or `thiếu task`) | Conclusion | Label | Owner of the fix |
+   |---|---|---|---|---|---|---|---|---|
 
-   Conclusion is `khớp`, `lệch`, or `thiếu nguồn`. Owner is the PM, the designer, the backend team, the blockchain team or the frontend.
-6. **Raise list.** Every `lệch` without a documented reason and every `đoán` row, each with both sides quoted and the owner named. Name the side the truth ladder favours when it does; when it does not (PRD against Figma), say so.
+   Conclusion is `khớp`, `lệch`, or `thiếu nguồn`. Owner is the PM, the designer, the backend team, the blockchain team or the frontend. When the map has a tracker, the work package column names the package that carries the item, found with `node <plugin>/scripts/openproject.mjs get /api/v3/work_packages/<id>` for the ids the task or PR names, otherwise by subject or use-case id among the project's packages; a package whose text disagrees with the PRD or Figma is itself a `lệch` row with the PM as owner.
+6. **Raise list.** Every `lệch` without a documented reason and every `đoán` row, each with both sides quoted and the owner named; a row owned by the PM names the work package to fix or says a new one is needed. Name the side the truth ladder favours when it does; when it does not (PRD against Figma), say so.
 7. **Independent lens.** When the scope has more than 8 items, spawn the `reviewer` agent with lens `spec` on the frontend repository and wait for its completion notice before writing the table. One rule or one use case needs no lens.
 8. **Report.** `<paths[0]>/plans/reports/reconcile-<yymmdd-hhmm>-<slug>.md`: scope, item list, coverage (how many of the requirements in the scoped PRD sections, counting steps, BRs, AFs, EFs and UI rules, have a row or a stated reason to skip), sources read and skipped, the table, the raise list. Quote the coverage, the table and the raise list in the reply.
 
