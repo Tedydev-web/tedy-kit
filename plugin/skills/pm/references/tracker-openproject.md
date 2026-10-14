@@ -1,6 +1,6 @@
 # OpenProject
 
-`node <plugin>/scripts/openproject.mjs` reads `~/.config/op/config.json` and the map's `tracker.project`; the token never leaves the process.
+`node <plugin>/scripts/openproject.mjs` reads `~/.config/op/config.json` and the map's `tracker.project`; the token never leaves the process. Only the kit's scripts read that file, and every tracker write goes through `openproject.mjs`; when it lacks what the work needs, stop and tell the user instead of calling the API another way. A hook denies any tool call that names the token file or sends a write to the tracker host directly.
 
 ## Drafts file
 
@@ -42,6 +42,8 @@ A JSON array, one object per work package:
 | `rollback` | no | Lists the work packages the last `apply` created, with status and last update |
 | `rollback --apply [--delete]` | yes | Closes them, or deletes them with `--delete`, children first; never touches anything that apply updated or merged; a deleted slug leaves the sidecar |
 | `apply <drafts.json>` | yes | Refuses unless preview is clean; creates, updates or merges, adds relations and status, adds new slugs to the sidecar, reads every work package back and prints `verified N/N` |
+| `comment <id> --body-file <file>` | no | Preview of one comment on a work package; refuses a comment that is already there |
+| `comment <id> --body-file <file> --apply` | yes | Posts the comment and reads it back |
 
 Every command that writes triggers the permission prompt. The sidecar `~/.config/op/sync/<host>__<project>.map.json` is shared with `pg-project-management`: `apply` appends new slug keys and records `_last_apply` (`{ at, created }`) in the same format, so either tool's rollback undoes the latest batch; `_relations`, `_merged` and `_forced_pushes` are never touched.
 

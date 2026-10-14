@@ -173,6 +173,30 @@ async function quickSet(client, id, flags) {
   return 0;
 }
 
+export const sameComment = (activities, body) => activities.find((activity) => (activity.comment?.raw ?? "").trim() === body.trim()) ?? null;
+
+async function comment(client, id, flags) {
+  if (typeof flags["body-file"] !== "string") throw new Error("comment needs --body-file <file>");
+  const body = readFileSync(flags["body-file"], "utf8").trim();
+  if (!body) throw new Error("comment body is empty");
+  const current = await client.request(`/api/v3/work_packages/${id}`);
+  const activities = (await client.request(`/api/v3/work_packages/${id}/activities`))._embedded.elements;
+  const twin = sameComment(activities, body);
+  if (twin) {
+    console.log(`refused: #${id} already has this comment as activity ${twin.id}`);
+    return 1;
+  }
+  console.log(`${describe(current)} | comment of ${body.length} characters`);
+  if (flags.apply === undefined) {
+    console.log(`WRITE → ${client.host} · #${id} : 1 comment; run again with --apply`);
+    return 0;
+  }
+  await client.request(`/api/v3/work_packages/${id}/activities`, { method: "POST", body: { comment: { raw: body } } });
+  const read = sameComment((await client.request(`/api/v3/work_packages/${id}/activities`))._embedded.elements, body);
+  console.log(read ? `commented #${id} activity ${read.id}` : `posted but not found on read-back; open #${id} and check`);
+  return read ? 0 : 1;
+}
+
 async function rollback(client, project, flags) {
   const path = sidecarPath(client.host, project);
   const last = JSON.parse(readSidecar(path))._last_apply;
@@ -223,6 +247,7 @@ async function main([command, target, ...rest]) {
     return 0;
   }
   if (command === "set" && /^\d+$/.test(target ?? "")) return quickSet(client, Number(target), flags);
+  if (command === "comment" && /^\d+$/.test(target ?? "")) return comment(client, Number(target), flags);
   if (command === "rollback") return rollback(client, projectOf(flags), flags);
   if ((command === "preview" || command === "apply") && target) {
     const drafts = JSON.parse(readFileSync(target, "utf8"));
@@ -248,7 +273,7 @@ async function main([command, target, ...rest]) {
     ]);
     return code;
   }
-  console.error("usage: openproject.mjs get <api path> | preview <drafts.json> [--project <id>] | apply <drafts.json> [--project <id>] | set <id> [--status <name>] [--assignee <name>] [--priority <name>] [--estimate <hours>] [--apply --lock <n>] | rollback [--project <id>] [--delete] [--apply]");
+  console.error("usage: openproject.mjs get <api path> | preview <drafts.json> [--project <id>] | apply <drafts.json> [--project <id>] | set <id> [--status <name>] [--assignee <name>] [--priority <name>] [--estimate <hours>] [--apply --lock <n>] | comment <id> --body-file <file> [--apply] | rollback [--project <id>] [--delete] [--apply]");
   return 2;
 }
 

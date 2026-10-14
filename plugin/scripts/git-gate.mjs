@@ -1,8 +1,12 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { ask, deny, logGate, readHookInput } from "./hook-io.mjs";
+import { resolveMap } from "./project-map.mjs";
+import { check as checkQuoted } from "./publish-quote-gate.mjs";
+import { evaluate as trackerToken, trackerHost } from "./tracker-token-gate.mjs";
 
 const SHELL_WRAPPER = /^(?:bash|sh|zsh)\s+-c\s+(['"])([\s\S]*)\1$/;
 const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
@@ -14,7 +18,7 @@ const PROTECTED_BRANCHES = new Set(["main", "master", "dev", "develop", "product
 const KIT_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const PREFIX_WORDS = new Set(["command", "exec", "builtin", "nohup", "time"]);
 const HEREDOC = /<<(-?)\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/g;
-const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve)|openproject\.mjs["']?\s+(?:apply\b|set\b.*--apply|rollback\b.*--apply)|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor))\b/;
+const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve)|openproject\.mjs["']?\s+(?:apply\b|set\b.*--apply|comment\b.*--apply|rollback\b.*--apply)|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor))\b/;
 const REWRITING_PUSH = /^(-f|--force|--force-with-lease(=.*)?|--force-if-includes|--mirror|--all|--prune|-d|--delete)$/;
 
 function skipHeredocs(command, index, line) {
@@ -88,7 +92,7 @@ export function splitSegments(command, unwrap = true) {
     });
 }
 
-function tokenize(segment) {
+export function tokenize(segment) {
   const tokens = [];
   let current = "";
   let quote = null;
@@ -233,7 +237,24 @@ export function pushRisk(args, dir) {
   return null;
 }
 
-export function evaluate(command, cwd) {
+export function prBody(args, dir) {
+  for (let index = 0; index < args.length; index += 1) {
+    const match = args[index].match(/^(--body|-b|--body-file|-F)(?:=([\s\S]*))?$/);
+    if (!match) continue;
+    const value = match[2] ?? args[index + 1];
+    if (value === undefined) return null;
+    if (match[1] === "--body" || match[1] === "-b") return value;
+    if (value === "-") return null;
+    try {
+      return readFileSync(resolve(dir, value), "utf8");
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+export function evaluate(command, cwd, projectsDir) {
   const hidden = hiddenPublish(command);
   if (hidden) return { allow: false, ask: true, reason: `tedy gate: this publishes through a kit script in a form the permission rules do not match (\`${hidden.slice(0, 120)}\`). Allow it only if the user approved this exact publish; otherwise run it as a plain \`node <script> …\` command.` };
   let dir = cwd;
@@ -250,6 +271,10 @@ export function evaluate(command, cwd) {
     }
     if (action.kind === "pr-create") {
       if (!action.args.some((arg) => arg === "--draft" || arg === "-d")) return { allow: false, reason: "tedy gate: open the PR as a draft with `--draft`; the user marks it ready (working-style rule 5)." };
+      const tracked = (projectsDir ? resolveMap(action.dir, projectsDir) : resolveMap(action.dir))?.map?.tracker;
+      if (tracked && !/\bOP#\d+\b/.test(prBody(action.args, action.dir) ?? "")) {
+        return { allow: false, reason: "tedy gate: this project tracks work in OpenProject, so every PR carries its work package as `--body \"OP#<id>\"`. No work package yet: stop, hand the task to the PM session (shared/handoff.md), and open the PR once it exists. A body file must already exist when the command runs." };
+      }
       continue;
     }
     if (action.kind !== "github-write") continue;
@@ -265,7 +290,15 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const input = readHookInput();
   const command = input.tool_input?.command ?? "";
   try {
-    const result = evaluate(command, input.cwd ?? process.cwd());
+    let result = evaluate(command, input.cwd ?? process.cwd());
+    if (result.allow) {
+      const token = trackerToken(input.tool_input, trackerHost());
+      if (token) result = { allow: false, reason: token };
+    }
+    if (result.allow) {
+      const quoted = checkQuoted(input);
+      if (quoted) result = { allow: false, ...quoted };
+    }
     if (!result.allow) logGate({ hook: "git-gate", decision: result.ask ? "ask" : "deny", command: command.slice(0, 200), cwd: input.cwd, reason: result.reason });
     if (result.ask) ask(result.reason);
     else if (!result.allow) deny(result.reason);
