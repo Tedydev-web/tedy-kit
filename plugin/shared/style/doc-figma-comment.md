@@ -2,6 +2,19 @@
 
 How a comment on the PRD Doc or on a Figma frame reads: a quick chat between teammates, in Vietnamese. Measured on 14 Figma comments posted by the user's account and 8 Doc comments, all after the tone correction of 2026-10-02 06:25.
 
+## Who reads it
+
+The PM and the designer are not developers. PRD, Figma and the PM's answers are the source of truth the team starts from, so a comment talks about that truth only: a business rule that changes, or a place in the Doc or the frame that is missing, wrong, redundant, contradictory, infeasible or illogical. How the app is built (backend, contract, network internals, versions, API) never appears as a cause. Translate it into what the person using the app sees or cannot do; if it changes nothing they see, it is not a comment for the PM. The technical reason goes in the item's `note`, which shows on the HTML card for the user and is never posted (user decision 2026-10-15).
+
+Shape of one comment, one change per comment:
+
+1. Where: the UC and one or two places (`BR6`, `step 5`), or the frame.
+2. What is off, in product words: thiếu, sai, thừa, lệch nhau, ko làm được.
+3. One concrete case the app user would meet, with real names or numbers.
+4. One ask: a decision with numbered options, a confirmation, or "a ghi giúp e vào …".
+
+Before showing the cards, read each one as the PM: can they act on it without asking a dev what a word means? Several places that need the same change are one comment per place, or one comment that names the rule once and lists at most three places; seven places in one thread cannot be ticked off one by one.
+
 ## Doc (PRD threads)
 
 - Opens by placing the point: "Thêm 1 ý ở UC_LG_01 BR8 (Who moved money):", "Thêm 1 chỗ về chip category:", "Cho e hỏi lại xíu:", "Chỗ Must include e thấy reply với docs đang lệch nè a:".
@@ -21,12 +34,6 @@ How a comment on the PRD Doc or on a Figma frame reads: a quick chat between tea
 
 Figma samples are the posted text re-read from the Figma API. Doc samples are the text as sent, taken from the request payloads in the PM session; sample 2 is the final text after its PATCH.
 
-### 1. Doc, two options and a decision asked, 2026-10-05
-
-```text
-Thêm 1 ý về mấy dòng USD-normalized này luôn: BE hiện chưa lưu USD lúc settle trên dòng activity, đang bổ sung. Mấy dòng đã settle trước đó thì BE ko giữ lịch sử giá, nên lúc backfill có 2 cách: (1) lấy lại giá tại thời điểm settle của từng dòng, (2) để trống, dòng cũ ko tính vào Ledger nên tổng các kỳ cũ sẽ thiếu. Lấy giá hôm nay thì ko được vì BR2 cấm. A chốt giúp e cách nào nha
-```
-
 ### 2. Doc, how em reads it, asking to confirm, 2026-10-05
 
 ```text
@@ -39,10 +46,10 @@ Thêm 1 ý ở UC_LG_01 BR8 (Who moved money): số của mỗi người có g�
 Chỗ Must include e thấy reply với docs đang lệch nè a: reply ghi tạm chuyển quyền duyệt về Owner/Admin như case bị remove (UC_FW_04 BR6a), còn BR6a mới trong docs ghi coi như ko có tên đó, các approver khác với tỷ lệ tự quyết. Vd rule 50% + Must include Minho, Minho bị view-only: theo reply thì đủ 50% vẫn phải chờ 1 Owner/Admin duyệt, theo docs thì đủ 50% là xong. Mình chốt cách nào a?
 ```
 
-### 4. Doc, follow-up question, 2026-10-02
+### 4. Doc, follow-up question, 2026-10-02, with its build detail taken out
 
 ```text
-Cho e hỏi lại xíu: khi xem Ledger bằng KRW/VND thì mình lấy số USD đã lưu đổi theo tỷ giá hôm nay, hay theo tỷ giá lúc giao dịch a? Nếu theo tỷ giá hôm nay thì kỳ đã đóng xem bằng KRW sẽ đổi số mỗi ngày (USD thì giữ nguyên). Nếu theo tỷ giá lúc giao dịch thì BE phải lưu thêm tỷ giá từng currency cho mỗi giao dịch.
+Cho e hỏi lại xíu: khi xem Ledger bằng KRW/VND thì mình lấy số USD đã lưu đổi theo tỷ giá hôm nay, hay theo tỷ giá lúc giao dịch a? Nếu theo tỷ giá hôm nay thì kỳ đã đóng xem bằng KRW sẽ đổi số mỗi ngày (USD thì giữ nguyên). Nếu theo tỷ giá lúc giao dịch thì số đã xem hôm qua ko đổi nữa.
 ```
 
 ### 5. Figma, change request ending nha (node 3846:9117), 2026-10-06
@@ -54,7 +61,7 @@ Cho e hỏi lại xíu: khi xem Ledger bằng KRW/VND thì mình lấy số USD 
 ### 6. Figma, product question to the PM (node 4195:7230), 2026-10-04
 
 ```text
-@PM_leon Toast kiểu glass + icon này khác PRD UC_FW_16 (pill tối 1 dòng ko icon) mà FE đang làm cho cả app, mình đổi cho toàn app luôn hay chỉ chỗ này a?
+@PM_leon Toast kiểu glass + icon này khác PRD UC_FW_16 (pill tối 1 dòng ko icon) mà app đang dùng cho mọi màn, mình đổi cho toàn app luôn hay chỉ chỗ này a?
 ```
 
 ### 7. Figma, two handles, each with its own ask (node 4195:6898), 2026-10-02
@@ -74,7 +81,10 @@ Cho e hỏi lại xíu: khi xem Ledger bằng KRW/VND thì mình lấy số USD 
 | Pattern | Why (evidence) |
 |---|---|
 | "Anh ơi", thank-you lines, formal phrasing | Tone rule 2026-10-02: casual texting, a/e/ko/đc |
+| Build words as the cause: BE, FE, API, contract, on-chain, v7, "BE hiện chưa lưu…" | User decision 2026-10-15: the PM is not technical and acts on business rules only. The 9 PRD v7 comments of 15/10 opened with "BE v7 đổi rồi a" and "contract mới chưa có bản Tron"; the Doc lint now refuses these words outside quoted copy |
+| One thread listing seven places to fix | UC_SW_08 comment of 15/10; the user ticks threads off one by one, so one comment carries one change |
+| Arrows `→` `↔` and code-like shorthand | Read as code by a non-developer; write "đổi từ A sang B" |
 | Resolving a thread, including one the agent opened | The user reads open threads to check answers; resolving is theirs (working-style rule 4) |
-| Replying under a thread on a different topic | Memory "PRD comment: ra file, không reply sai thread": a new question goes to an HTML file with the verified highlighted passage, and the user posts it |
+| Replying under a thread on a different topic | Memory "PRD comment: ra file, không reply sai thread": a new question goes to an HTML file with the verified highlighted passage, then is posted anchored on it after the user's Duyệt |
 | Reposting answered threads after a Figma restyle | Only unanswered threads are reposted |
 | Paraphrased UI copy | Copy is quoted exactly so the designer can search the frame for it |

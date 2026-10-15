@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { diffLines, lintComment, lintDraft, parseDraft } from "./draft-lint.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
@@ -106,4 +107,25 @@ test("chat comments: Figma opens with a handle, Doc tags nobody, both stay short
   assert.ok(lintChatComment("@PM_leon chốt giúp e nha", "doc").some((problem) => /tags nobody/.test(problem)));
   assert.ok(lintChatComment(`@a ${"x ".repeat(400)}`, "figma").some((problem) => /600/.test(problem)));
   assert.ok(lintChatComment("@a Anh ơi xem giúp e", "figma").some((problem) => /openers/.test(problem)));
+});
+
+test("Doc and Figma comments speak business: build words, crowded threads and arrows are refused, product words and quoted copy pass", async () => {
+  const { lintChatComment } = await import("./draft-lint.mjs");
+  const builds = (text) => lintChatComment(text, "doc").filter((problem) => /business rules/.test(problem));
+  assert.match(builds("BE v7 đổi rồi a: đủ phiếu xong mới thêm member")[0], /"BE", "v7"/);
+  assert.match(builds("contract mới chưa có bản Tron a")[0], /"contract"/);
+  assert.equal(builds("FE đang theo Figma, a chốt nha").length, 1);
+  assert.deepEqual(builds("Token Info hiện contract address, network nào thiếu a?"), []);
+  assert.deepEqual(builds('Toast ghi "API error" a, mình đổi câu khác nha'), []);
+  assert.deepEqual(builds("ví mở thêm chain Tron thì picker hiện gì a?"), []);
+  assert.ok(lintChatComment("Description, step 3, step 7, BR1, BR12, Postcondition cần sửa a", "doc").some((problem) => /6 PRD places/.test(problem)));
+  assert.ok(lintChatComment("Admin↔Member vẫn áp ngay a", "doc").some((problem) => /arrows/.test(problem)));
+});
+
+test("every sample in the Doc and Figma style guide passes the lint it teaches", async () => {
+  const { lintChatComment } = await import("./draft-lint.mjs");
+  const guide = readFileSync(new URL("../shared/style/doc-figma-comment.md", import.meta.url), "utf8");
+  const samples = [...guide.matchAll(/### \d+\. (Doc|Figma)[^\n]*\n\n```text\n([\s\S]*?)\n```/g)];
+  assert.ok(samples.length >= 7);
+  for (const [, channel, text] of samples) assert.deepEqual(lintChatComment(text, channel.toLowerCase()), [], text);
 });

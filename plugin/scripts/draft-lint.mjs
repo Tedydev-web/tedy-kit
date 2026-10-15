@@ -11,6 +11,9 @@ const HEADER = /^# PR #(\d+)(:| —) comment line by line \(head ([0-9a-f]{7,40}
 const SECTION = /^## (\d+)\. `([^`]+):(\d+)`\s*$/gm;
 const PRD_HEADER = new RegExp(`^PRD EPIC \\d{2} · ${UC_ID.source} .+:$`);
 const FOREIGN_SCRIPT = /[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}]/u;
+const DEV_WORDS = /(?<![\p{L}\d_])(BE|FE|backend|frontend|API|endpoint|schema|DB|database|Mongo|payload|seqno|relay|worker|cron|webhook|commit|merge|deploy|PR|SetMembers|on-chain|smart contract|contract(?! address)|v\d+)(?![\p{L}\d_])/giu;
+const LOCATOR = /\b(?:step \d+|BR\d+[a-z]?|AF\d+|EF\d+|Description|Precondition|Postcondition)\b/g;
+const MAX_LOCATORS = 3;
 
 export function parseDraft(text) {
   const header = text.match(HEADER);
@@ -91,6 +94,12 @@ export function lintChatComment(text, channel) {
   if (FOREIGN_SCRIPT.test(body.replace(/`[^`]*`/g, ""))) problems.push("non-Latin characters outside backticks");
   if (channel === "figma" && !/^@\S/.test(body)) problems.push("a Figma comment opens with the @handle of whoever owns the fix");
   if (channel === "doc" && /(^|\s)@\S/.test(body)) problems.push("a Doc comment tags nobody");
+  const prose = body.replace(/"[^"]*"|“[^”]*”/g, "");
+  const devWords = [...new Set([...prose.matchAll(DEV_WORDS)].map((match) => match[0]))];
+  if (devWords.length) problems.push(`the PM and designer read business rules, not how it is built: say what the app user sees instead of ${devWords.map((word) => `"${word}"`).join(", ")} (vd "app hiện đang theo Figma", "ví tạo trước ngày X chỉ nhận được tiền"), and keep the technical reason in the item's note`);
+  const locators = prose.match(LOCATOR) ?? [];
+  if (locators.length > MAX_LOCATORS) problems.push(`${locators.length} PRD places in one comment; one comment asks for one change, so split it (at most ${MAX_LOCATORS} places)`);
+  if (/[→↔⇒]/.test(prose)) problems.push("write arrows out in words; a PM reads → and ↔ as code");
   return problems;
 }
 
