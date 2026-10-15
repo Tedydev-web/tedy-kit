@@ -120,6 +120,7 @@ test("Doc and Figma comments speak business: build words, crowded threads and ar
   assert.deepEqual(builds("ví mở thêm chain Tron thì picker hiện gì a?"), []);
   assert.ok(lintChatComment("Description, step 3, step 7, BR1, BR12, Postcondition cần sửa a", "doc").some((problem) => /6 PRD places/.test(problem)));
   assert.ok(lintChatComment("Admin↔Member vẫn áp ngay a", "doc").some((problem) => /arrows/.test(problem)));
+  assert.ok(lintChatComment("@TON CORP Contract mới: duyệt xong Owner còn ký, FE làm theo PRD nha", "figma").some((problem) => /business rules/.test(problem)));
 });
 
 test("every sample in the Doc and Figma style guide passes the lint it teaches", async () => {
