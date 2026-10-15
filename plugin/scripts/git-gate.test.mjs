@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { evaluate, splitSegments, classify, hiddenPublish } from "./git-gate.mjs";
@@ -17,6 +18,8 @@ test("classify recognises git and gh actions through env vars and -C", () => {
   assert.deepEqual(classify("git push origin x", "/w"), { kind: "push", dir: "/w", args: ["origin", "x"] });
   assert.deepEqual(classify("FOO=1 git -C sub commit -am msg", "/w"), { kind: "commit", dir: "/w/sub", all: true });
   assert.deepEqual(classify("git -c core.x=y push", "/w"), { kind: "push", dir: "/w", args: [] });
+  assert.deepEqual(classify("cd ~/kit", "/w"), { kind: "cd", dir: join(homedir(), "kit") });
+  assert.deepEqual(classify("cd", "/w"), { kind: "cd", dir: homedir() });
   assert.equal(classify("gh pr create --fill", "/w").kind, "pr-create");
   assert.equal(classify("gh pr review 12 --comment -b hi", "/w").kind, "github-write");
   assert.equal(classify("gh api -X POST repos/o/r/pulls/1/reviews", "/w").kind, "github-write");

@@ -175,7 +175,7 @@ export function hiddenPublish(command) {
 
 export function classify(segment, cwd) {
   const [program, ...args] = commandTokens(segment);
-  if (program === "cd") return { kind: "cd", dir: resolve(cwd, args[0] ?? homedir()) };
+  if (program === "cd") return { kind: "cd", dir: resolve(cwd, (args[0] ?? "~").replace(/^~(?=\/|$)/, homedir())) };
   if (program === "git") {
     let dir = cwd;
     let index = 0;
