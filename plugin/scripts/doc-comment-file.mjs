@@ -2,6 +2,8 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { lintChatComment } from "./draft-lint.mjs";
+import { logPostedText } from "./edit-log.mjs";
+import { anchorComment, session } from "./gdoc-comments.mjs";
 import { slugOf, stamp } from "./handoff.mjs";
 import { fetchTab, quoteCount } from "./prd-section.mjs";
 import { resolveMap } from "./project-map.mjs";
@@ -30,11 +32,18 @@ export function checkItems(items, tabsText, tabOf) {
   return problems;
 }
 
-function card(item, number) {
+export const commentLink = (doc, id) => `https://docs.google.com/document/d/${doc}/edit?disco=${id}`;
+
+const done = (item, doc) =>
+  item.posted
+    ? `<label class=d><input type=checkbox checked disabled> Đã comment lúc ${escape(item.posted.at)} · <a href="${escape(commentLink(doc, item.posted.id))}">mở comment ${escape(item.posted.id)}</a></label>`
+    : `<label class=d><input type=checkbox> Đã comment</label>`;
+
+function card(item, number, doc) {
   return `<article><div class=h><span class=k>${number}</span><b>EPIC ${escape(item.epic)} · ${escape(item.where)}</b><span class=s>${escape(item.note ?? "")}</span></div>
 <label>1. Ctrl+F dán đoạn này, bôi đen đúng đoạn tìm thấy <button onclick="cp(this)" data-t="${escape(item.quote)}">Copy</button></label><pre class=a>${escape(item.quote)}</pre>
 <label>2. Comment ▸ dán nội dung <button onclick="cp(this)" data-t="${escape(item.comment.trim())}">Copy</button></label><pre class=c>${escape(item.comment.trim())}</pre>
-<label class=d><input type=checkbox> Đã comment</label></article>`;
+${done(item, doc)}</article>`;
 }
 
 export function renderFile({ title, doc, items, checkedAt }) {
@@ -45,7 +54,7 @@ export function renderFile({ title, doc, items, checkedAt }) {
   };
   const sections = ["A", "B"]
     .filter((group) => ordered.some((item) => item.group === group))
-    .map((group) => `<h2>${GROUPS[group]}</h2>${ordered.map((item, index) => (item.group === group ? card(item, index + 1) : "")).join("")}`)
+    .map((group) => `<h2>${GROUPS[group]}</h2>${ordered.map((item, index) => (item.group === group ? card(item, index + 1, doc) : "")).join("")}`)
     .join("\n");
   return `<!doctype html><html lang=vi><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>${escape(title)} — comment PRD chờ anh bôi đen</title><style>
 body{margin:0;background:#f6f5f2;color:#17211b;font:14px/1.55 system-ui,sans-serif}main{max-width:1000px;margin:auto;padding:24px 28px 60px}h1{font-size:21px;margin:0 0 6px}h2{font-size:16px;margin:26px 0 6px}
@@ -68,7 +77,52 @@ ${sections}
 `;
 }
 
-async function main([itemsFile]) {
+export const pendingItems = (items) => items.filter((item) => !item.posted);
+
+async function post(itemsFile, flags) {
+  if (!itemsFile || !flags.html) {
+    console.error("usage: doc-comment-file.mjs post <items.json> --html <pm-comments-….html> [--apply]");
+    return 2;
+  }
+  const resolved = resolveMap(process.cwd());
+  if (!resolved) throw new Error(`no project map covers ${process.cwd()}; run /tedy:setup`);
+  const { map } = resolved;
+  const data = JSON.parse(readFileSync(itemsFile, "utf8"));
+  const tabOf = (epic) => map.prd?.tabs?.[epic]?.tab;
+  const todo = pendingItems(data.items);
+  const tabsText = {};
+  for (const tab of new Set(todo.map((item) => tabOf(item.epic)).filter(Boolean))) tabsText[tab] = await fetchTab(map.prd.doc, tab);
+  const problems = checkItems(todo, tabsText, tabOf);
+  if (problems.length) {
+    console.error(`doc-comment-file: nothing posted; fix these first:\n${problems.map((problem) => `- ${problem}`).join("\n")}`);
+    return 1;
+  }
+  for (const item of todo) console.log(`- EPIC ${item.epic} · ${item.where} · tab ${tabOf(item.epic)}\n  [${item.quote.slice(0, 80)}]\n  ${item.comment.trim().replace(/\s+/g, " ")}`);
+  console.log(`WRITE → Google Doc ${map.prd.doc} : ${todo.length} anchored comments (${data.items.length - todo.length} already posted)`);
+  if (!flags.apply) return 0;
+  const google = await session({ doc: map.prd.doc }, true);
+  const save = () => {
+    writeFileSync(itemsFile, `${JSON.stringify(data, null, 2)}\n`);
+    const checkedAt = new Date().toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    writeFileSync(flags.html, renderFile({ title: data.title, doc: map.prd.doc, items: data.items, checkedAt }));
+  };
+  for (const item of todo) {
+    const body = item.comment.trim();
+    const id = await anchorComment(google, tabOf(item.epic), item.quote, body);
+    item.posted = { id, at: new Date().toISOString() };
+    logPostedText("doc-comment", itemsFile, id, body);
+    save();
+    console.log(`posted ${id} · EPIC ${item.epic} · ${item.where}`);
+  }
+  console.log(`posted and read back ${todo.length}/${todo.length}; ${flags.html} updated`);
+  return 0;
+}
+
+async function main([itemsFile, ...rest]) {
+  if (itemsFile === "post") {
+    const html = rest.includes("--html") ? rest[rest.indexOf("--html") + 1] : undefined;
+    return post(rest[0]?.startsWith("--") ? undefined : rest[0], { html, apply: rest.includes("--apply") });
+  }
   if (!itemsFile) {
     console.error('usage: doc-comment-file.mjs <items.json>   items.json = { "title": "...", "items": [{ "group": "A|B", "epic": "09", "where": "UC_SW_13 BR1", "quote": "...", "comment": "...", "note": "..." }] }');
     return 2;

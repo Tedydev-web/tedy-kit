@@ -56,7 +56,7 @@ async function accessToken(remote, needOwnClient) {
   return token.access;
 }
 
-async function session(flags, needOwnClient = false) {
+export async function session(flags, needOwnClient = false) {
   const doc = flags.doc ?? resolveMap(process.cwd())?.map.prd?.doc;
   if (!doc) throw new Error("no --doc and no prd.doc in the project map");
   const bearer = await accessToken(flags.remote ?? "gdrive", needOwnClient);
@@ -100,7 +100,17 @@ export const stillThere = (comments, commentId, replyId) => {
   return Boolean(comment && (!replyId || comment.replies.some((reply) => reply.id === replyId && !reply.deleted)));
 };
 
-async function listComments(google) {
+export async function anchorComment(google, tab, quote, body) {
+  const document = await google.request(`${DOCS}/documents/${google.doc}?includeTabsContent=true&suggestionsViewMode=SUGGESTIONS_INLINE`);
+  const range = findQuoteRange(document, tab, quote);
+  console.log(`WRITE → Google Doc ${google.doc} tab ${tab} : 1 comment anchored at ${range.startIndex}–${range.endIndex}`);
+  await google.request(`${DOCS}/documents/${google.doc}:batchUpdate`, { method: "POST", body: { requests: [{ insertComment: { content: body, range } }] } });
+  const posted = (await listComments(google)).filter((comment) => comment.author.me && !comment.resolved && comment.content.trim() === body).at(-1);
+  if (!posted) throw new Error("the anchored comment could not be read back with the same text");
+  return posted.id;
+}
+
+export async function listComments(google) {
   const comments = [];
   let page = "";
   do {
@@ -134,10 +144,7 @@ async function main([command, target, ...rest]) {
       await google.request(`${DRIVE}/files/${google.doc}/comments/${target}/replies?fields=id`, { method: "POST", body: { content: body } });
       id = target;
     } else {
-      const document = await google.request(`${DOCS}/documents/${google.doc}?includeTabsContent=true&suggestionsViewMode=SUGGESTIONS_INLINE`);
-      const range = findQuoteRange(document, flags.tab, flags.quote);
-      console.log(`WRITE → Google Doc ${google.doc} tab ${flags.tab} : 1 comment anchored at ${range.startIndex}–${range.endIndex}`);
-      await google.request(`${DOCS}/documents/${google.doc}:batchUpdate`, { method: "POST", body: { requests: [{ insertComment: { content: body, range } }] } });
+      id = await anchorComment(google, flags.tab, flags.quote, body);
     }
     const comments = await listComments(google);
     const found = comments.some((comment) => (command === "reply" ? comment.id === id && comment.replies.some((reply) => reply.content.trim() === body) : comment.content.trim() === body));

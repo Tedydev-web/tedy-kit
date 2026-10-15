@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { checkItems, renderFile } from "./doc-comment-file.mjs";
+import { checkItems, commentLink, pendingItems, renderFile } from "./doc-comment-file.mjs";
 import { quoteCount } from "./prd-section.mjs";
 
 const TAB = "UC_SW_13 Pay\nCrypto takes the price in USDT and the fee in GRAM from the payer[a]\nThe fee is shown once.\nthe FEE is shown once.\nSplit across\nlines here.\n[a]A reviewer comment mentioning Crypto takes the price in USDT\n";
@@ -43,4 +43,14 @@ test("renderFile numbers group A before group B and escapes text in attributes",
   assert.match(html, /Nhóm B \(2–2\)/);
   assert.match(html, /data-t="PM chốt &quot;giữ&quot; rồi/);
   assert.match(html, /\(2 cái\)/);
+});
+
+test("a posted item is skipped on the next post and its card shows a ticked box with the comment link", () => {
+  const posted = item({ where: "A1", posted: { id: "AAAB1", at: "2026-10-15T05:30:00.000Z" } });
+  const open = item({ where: "A2" });
+  assert.deepEqual(pendingItems([posted, open]), [open]);
+  assert.equal(commentLink("DOC", "AAAB1"), "https://docs.google.com/document/d/DOC/edit?disco=AAAB1");
+  const html = renderFile({ title: "t", doc: "DOC", checkedAt: "15/10 12:30", items: [posted, open] });
+  assert.match(html, /<input type=checkbox checked disabled> Đã comment lúc 2026-10-15T05:30:00\.000Z · <a href="https:\/\/docs\.google\.com\/document\/d\/DOC\/edit\?disco=AAAB1">mở comment AAAB1<\/a>/);
+  assert.equal((html.match(/<input type=checkbox>/g) ?? []).length, 1);
 });
