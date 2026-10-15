@@ -19,24 +19,34 @@ export function tokenFromDump(dumpText, remote) {
 }
 
 export function findQuoteRange(document, tabId, quote) {
-  const tab = (document.tabs ?? []).find((candidate) => candidate.tabProperties?.tabId === tabId);
+  const allTabs = (tabs) => tabs.flatMap((candidate) => [candidate, ...allTabs(candidate.childTabs ?? [])]);
+  const tab = allTabs(document.tabs ?? []).find((candidate) => candidate.tabProperties?.tabId === tabId);
   if (!tab) throw new Error(`tab ${tabId} not found in the document`);
-  const runs = (tab.documentTab.body.content ?? []).flatMap((block) => (block.paragraph?.elements ?? []).filter((element) => element.textRun));
+  const paragraphs = (content) =>
+    content.flatMap((block) =>
+      block.paragraph
+        ? [block.paragraph]
+        : block.table
+          ? block.table.tableRows.flatMap((row) => row.tableCells.flatMap((cell) => paragraphs(cell.content ?? [])))
+          : paragraphs(block.tableOfContents?.content ?? []),
+    );
+  const runs = paragraphs(tab.documentTab.body.content ?? []).flatMap((paragraph) => (paragraph.elements ?? []).filter((element) => element.textRun));
   let text = "";
   const starts = [];
   for (const run of runs) {
     starts.push({ offset: text.length, index: run.startIndex });
     text += run.textRun.content;
   }
-  const hits = [];
-  for (let at = text.indexOf(quote); at !== -1; at = text.indexOf(quote, at + 1)) hits.push(at);
+  const words = quote.trim().split(/\s+/).filter(Boolean).map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const hits = words.length ? [...text.matchAll(new RegExp(words.join("[^\\S\\n]+"), "gi"))] : [];
   if (!hits.length) throw new Error(`quote not found in tab ${tabId}: "${quote.slice(0, 60)}"`);
   if (hits.length > 1) throw new Error(`quote appears ${hits.length} times in tab ${tabId}; quote a longer passage`);
   const indexAt = (offset) => {
     const run = starts.filter((start) => start.offset <= offset).at(-1);
     return run.index + (offset - run.offset);
   };
-  return { startIndex: indexAt(hits[0]), endIndex: indexAt(hits[0] + quote.length - 1) + 1, tabId };
+  const [hit] = hits;
+  return { startIndex: indexAt(hit.index), endIndex: indexAt(hit.index + hit[0].length - 1) + 1, tabId };
 }
 
 async function accessToken(remote, needOwnClient) {

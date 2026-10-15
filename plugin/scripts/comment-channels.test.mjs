@@ -55,6 +55,26 @@ test("findQuoteRange maps a quote across text runs to UTF-16 document indexes in
   assert.throws(() => findQuoteRange(document, "t.p59op2unmr", "t"), /appears \d+ times/);
 });
 
+test("findQuoteRange finds a quote inside a table cell of a child tab the way Ctrl+F does", () => {
+  const cell = (startIndex, content) => ({ content: [{ startIndex, paragraph: { elements: [{ startIndex, textRun: { content } }] } }] });
+  const document = {
+    tabs: [
+      {
+        tabProperties: { tabId: "t.parent" },
+        documentTab: { body: { content: [] } },
+        childTabs: [
+          {
+            tabProperties: { tabId: "t.qfq5co4ax5ij" },
+            documentTab: { body: { content: [{ startIndex: 1, table: { tableRows: [{ tableCells: [cell(4, "BR6\n"), cell(10, "The vote is the only act —  on quorum\n")] }] } }] } },
+          },
+        ],
+      },
+    ],
+  };
+  assert.deepEqual(findQuoteRange(document, "t.qfq5co4ax5ij", "the vote is the only act — on quorum"), { startIndex: 10, endIndex: 47, tabId: "t.qfq5co4ax5ij" });
+  assert.throws(() => findQuoteRange(document, "t.qfq5co4ax5ij", "BR6 The vote"), /not found/);
+});
+
 test("a Figma post that repeats an open comment on the same node is caught; another node or a resolved thread is not", () => {
   const comments = [
     { id: "1", parent_id: "", resolved_at: null, client_meta: { node_id: "3445:6702" }, message: "@PM_leon  nút này\nđổi tên chưa a?" },
