@@ -48,6 +48,9 @@ A JSON array, one object per work package:
 | `comment <id> --body-file <file> --apply` | yes | Posts the comment and reads it back |
 | `comment-edit <activity-id> --body-file <file>` | no | Preview of rewriting a comment the token's user posted (activity id from `get <id> --activities`); refuses anyone else's |
 | `comment-edit <activity-id> --body-file <file> --apply` | yes | Rewrites it and reads it back |
+| `relation <from-id> <to-id> --type <type>` | no | Preview of setting the one relation between two work packages (`relates`, `blocks`, `precedes`, `follows`, `duplicates`, `includes`, `requires`); OpenProject allows only one relation per pair, so an existing one is shown as replaced |
+| `relation <from-id> <to-id> --type <type> --apply` | yes | Deletes the pair's old relation, creates the new one and reads it back; if the create is refused (HTTP 422 circular dependency) it recreates the old relation and prints both work packages' relations so the loop can be found |
+| `relation-delete <relation-id> [--apply]` | with `--apply` | Removes one relation (id from `get <id> --relations`) and checks it is gone |
 
 Every command that writes triggers the permission prompt. The sidecar `~/.config/op/sync/<host>__<project>.map.json` is shared with `pg-project-management`: `apply` appends new slug keys and records `_last_apply` (`{ at, created }`) in the same format, so either tool's rollback undoes the latest batch; `_relations`, `_merged` and `_forced_pushes` are never touched.
 

@@ -8,7 +8,7 @@ import { resolveMap } from "./project-map.mjs";
 
 const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 const SCRIPT_WRITES = [
-  { kind: "tracker", pattern: /openproject\.mjs["']?\s+(apply\b|set\b.*--apply|comment\b.*--apply|comment-edit\b.*--apply|rollback\b.*--apply)|op_apply\.py\b.*--apply|pg\.py["']?\s+(set\b|(sync|rollback)\b.*--apply)/ },
+  { kind: "tracker", pattern: /openproject\.mjs["']?\s+(apply\b|set\b.*--apply|comment\b.*--apply|comment-edit\b.*--apply|relation(-delete)?\b.*--apply|rollback\b.*--apply)|op_apply\.py\b.*--apply|pg\.py["']?\s+(set\b|(sync|rollback)\b.*--apply)/ },
   { kind: "doc-figma", pattern: /gdoc-comments\.mjs["']?\s+(reply|anchor|post|edit|delete)\b|figma-comments\.mjs["']?\s+(post|reply|delete)\b|doc-comment-file\.mjs/ },
   { kind: "code", pattern: /github-write\.mjs["']?\s+pr-body\b/ },
   { kind: "pr-review", pattern: /github-write\.mjs["']?\s+(post|resolve|unresolve|edit|minimize)\b/ },

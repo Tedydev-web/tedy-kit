@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { addSlugs, buildPayload, foreignActivity, forgetSlugs, loadConfig, loadRefs, mergePayload, planWrites, readSidecar, recordLastApply, setPayload, sidecarPath, workPackageFilters, workPackageLine, writeSidecar } from "./openproject-client.mjs";
 import { closedStatuses, closestWorkPackage, listWorkPackages } from "./openproject-dedup.mjs";
+import { deleteRelation, setRelation } from "./openproject-relation.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { snapshotOnce, snapshotPath } from "./draft-lint.mjs";
 import { appendEditLog, frozenOriginal, labelText } from "./edit-log.mjs";
@@ -320,6 +321,8 @@ async function main([command, target, ...rest]) {
   if (command === "set" && /^\d+$/.test(target ?? "")) return quickSet(client, Number(target), flags);
   if (command === "comment" && /^\d+$/.test(target ?? "")) return comment(client, Number(target), flags);
   if (command === "comment-edit" && /^\d+$/.test(target ?? "")) return commentEdit(client, Number(target), flags);
+  if (command === "relation" && /^\d+$/.test(target ?? "") && /^\d+$/.test(rest[0] ?? "")) return setRelation(client, Number(target), Number(rest[0]), flags);
+  if (command === "relation-delete" && /^\d+$/.test(target ?? "")) return deleteRelation(client, Number(target), flags);
   if (command === "pr-body" && /^\d+$/.test(target ?? "")) {
     process.stdout.write(prBodyFrom(await client.request(`/api/v3/work_packages/${target}`)));
     return 0;
@@ -349,7 +352,7 @@ async function main([command, target, ...rest]) {
     ]);
     return code;
   }
-  console.error("usage: openproject.mjs get <id> [--relations] [--activities] | get <api path> | list [--parent <id>] [--assignee <name>] [--status open|<name>] [--type <name>] [--project <id>] | preview <drafts.json> [--project <id>] | apply <drafts.json> [--project <id>] | set <id> [--status <name>] [--assignee <name>] [--priority <name>] [--estimate <hours>] [--start <YYYY-MM-DD>] [--due <YYYY-MM-DD>] [--apply --lock <n>] | comment <id> --body-file <file> [--apply] | comment-edit <activity-id> --body-file <file> [--apply] | pr-body <id> | rollback [--project <id>] [--delete] [--apply]");
+  console.error("usage: openproject.mjs get <id> [--relations] [--activities] | get <api path> | list [--parent <id>] [--assignee <name>] [--status open|<name>] [--type <name>] [--project <id>] | preview <drafts.json> [--project <id>] | apply <drafts.json> [--project <id>] | set <id> [--status <name>] [--assignee <name>] [--priority <name>] [--estimate <hours>] [--start <YYYY-MM-DD>] [--due <YYYY-MM-DD>] [--apply --lock <n>] | comment <id> --body-file <file> [--apply] | comment-edit <activity-id> --body-file <file> [--apply] | relation <from-id> <to-id> --type <relates|blocks|precedes|follows|…> [--apply] | relation-delete <relation-id> [--apply] | pr-body <id> | rollback [--project <id>] [--delete] [--apply]");
   return 2;
 }
 

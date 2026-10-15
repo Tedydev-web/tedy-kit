@@ -117,6 +117,9 @@ test("a publishing script hidden from the permission rules asks; a plain node ca
   assert.equal(hiddenPublish("env X=1 node /k/scripts/doc-comment-file.mjs post items.json --html f.html"), null);
   assert.ok(hiddenPublish("bash -c 'node /k/scripts/github-write.mjs unresolve PRRT_1'"));
   assert.ok(hiddenPublish("env X=1 node /k/scripts/openproject.mjs comment-edit 991 --body-file b.txt --apply"));
+  assert.ok(hiddenPublish("env X=1 node /k/scripts/openproject.mjs relation 21448 21450 --type blocks --apply"));
+  assert.ok(hiddenPublish("env X=1 node /k/scripts/openproject.mjs relation-delete 1000 --apply"));
+  assert.equal(hiddenPublish("env X=1 node /k/scripts/openproject.mjs relation 21448 21450 --type blocks"), null);
   assert.ok(hiddenPublish("/usr/bin/node /k/scripts/figma-comments.mjs delete 12"));
   assert.ok(hiddenPublish("command node /k/scripts/openproject.mjs apply d.json"));
   assert.ok(hiddenPublish("eval 'node /k/scripts/openproject.mjs set 1 --status x --apply --lock 2'"));
