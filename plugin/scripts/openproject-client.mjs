@@ -112,7 +112,7 @@ export function loadConfig() {
   return {
     url: config.url.replace(/\/$/, ""),
     host,
-    request: (path, options = {}) => requestJson(`${config.url.replace(/\/$/, "")}${path}`, { ...options, headers: { Authorization: auth, ...options.headers } }),
+    request: (path, options = {}) => requestJson(`${config.url.replace(/\/$/, "")}${path}`, { ...options, headers: { Authorization: auth, "Content-Type": "application/json", ...options.headers } }),
   };
 }
 

@@ -35,6 +35,7 @@ function fakeOpenProject({ refuse } = {}) {
       const path = new URL(request.url, "http://x").pathname;
       const send = (data, status = 200) => response.writeHead(status).end(JSON.stringify(data));
       if (request.method !== "GET") calls.push(`${request.method} ${path}`);
+      if (request.headers["content-type"] !== "application/json") return send({ message: "Missing content-type header" }, 406);
       const one = path.match(/^\/api\/v3\/relations\/(\d+)$/);
       if (one) {
         const index = relations.findIndex((relation) => relation.id === Number(one[1]));
