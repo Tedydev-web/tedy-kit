@@ -77,6 +77,15 @@ export const alreadyPosted = (comments, command, target, body) =>
     ? comments.some((comment) => comment.id === target && comment.replies.some((reply) => squash(reply.content) === squash(body)))
     : comments.some((comment) => !comment.resolved && squash(comment.content) === squash(body));
 
+export function editTarget(comments, commentId, replyId) {
+  const comment = comments.find((candidate) => candidate.id === commentId);
+  if (!comment) throw new Error(`no comment ${commentId} in the Doc`);
+  const item = replyId ? comment.replies.find((reply) => reply.id === replyId) : comment;
+  if (!item) throw new Error(`no reply ${replyId} in thread ${commentId}`);
+  if (!item.author.me) throw new Error(`${replyId ? "reply" : "comment"} by ${item.author.displayName}, not by this account; only your own text can be edited`);
+  return item;
+}
+
 async function listComments(google) {
   const comments = [];
   let page = "";
@@ -123,7 +132,21 @@ async function main([command, target, ...rest]) {
     logPostedText(command === "reply" ? "doc-reply" : "doc-comment", flags["body-file"], id ?? "anchored", body);
     return 0;
   }
-  console.error("usage: gdoc-comments.mjs list [--since <ISO>] [--doc <id>] | reply <comment-id> --body-file <f> | anchor --tab <t.id> --quote <exact text> --body-file <f>");
+  if (command === "edit" && target) {
+    const body = readBody(flags);
+    const google = await session(flags);
+    const item = editTarget(await listComments(google), target, flags.reply);
+    if (squash(item.content) === squash(body)) throw new Error("the posted text already matches the body file; nothing edited");
+    const path = `${DRIVE}/files/${google.doc}/comments/${target}${flags.reply ? `/replies/${flags.reply}` : ""}?fields=id,content`;
+    console.log(`WRITE → Google Doc ${google.doc} thread ${target}${flags.reply ? ` reply ${flags.reply}` : ""} : edit 1 ${flags.reply ? "reply" : "comment"}`);
+    await google.request(path, { method: "PATCH", body: { content: body } });
+    const after = editTarget(await listComments(google), target, flags.reply);
+    if (after.content.trim() !== body) throw new Error("the edited text could not be read back unchanged");
+    console.log("edited and read back unchanged");
+    logPostedText(flags.reply ? "doc-reply" : "doc-comment", flags["body-file"], flags.reply ?? target, body);
+    return 0;
+  }
+  console.error("usage: gdoc-comments.mjs list [--since <ISO>] [--doc <id>] | reply <comment-id> --body-file <f> | anchor --tab <t.id> --quote <exact text> --body-file <f> | edit <comment-id> [--reply <reply-id>] --body-file <f>");
   return 2;
 }
 

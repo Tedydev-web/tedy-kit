@@ -111,6 +111,7 @@ test("heredoc bodies are data, not commands", () => {
 test("a publishing script hidden from the permission rules asks; a plain node call is left to them", () => {
   assert.match(hiddenPublish("bash -c 'node /k/scripts/github-write.mjs post d.md'"), /github-write\.mjs post/);
   assert.ok(hiddenPublish("env X=1 node /k/scripts/gdoc-comments.mjs reply AAA --body-file b.txt"));
+  assert.ok(hiddenPublish("env X=1 node /k/scripts/gdoc-comments.mjs edit AAA --body-file b.txt"));
   assert.ok(hiddenPublish("/usr/bin/node /k/scripts/figma-comments.mjs delete 12"));
   assert.ok(hiddenPublish("command node /k/scripts/openproject.mjs apply d.json"));
   assert.ok(hiddenPublish("eval 'node /k/scripts/openproject.mjs set 1 --status x --apply --lock 2'"));

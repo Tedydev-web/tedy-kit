@@ -20,6 +20,7 @@ Every write below prints a `WRITE →` line, triggers the permission prompt, lin
 - `list [--since <ISO>]`: comments with their replies and quoted text.
 - `reply <comment-id> --body-file <f>`: a reply in that thread, only when it is on the thread's topic. A reply placed under an unrelated thread hides the question from the PM; on 2026-10-07 nine such replies had to be re-anchored.
 - `anchor --tab <t.id> --quote "<exact text>" --body-file <f>`: a new question anchored on the passage it is about, through the Docs API. The quote must appear exactly once in the tab.
+- `edit <comment-id> [--reply <reply-id>] --body-file <f>`: rewrites a comment or reply this account posted, then reads it back. Use it instead of stacking a second reply when the user's own reply needs a change; text by anyone else is refused.
 
 A new PRD question is never posted by the agent, neither as an anchored comment nor as a reply under another thread. It goes into an HTML file the user posts by hand: highlight the passage, then comment.
 

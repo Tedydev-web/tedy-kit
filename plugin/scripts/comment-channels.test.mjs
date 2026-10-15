@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { duplicateOnNode, duplicateReply, pinOffset, rootOf, threadsSince } from "./figma-comments.mjs";
-import { alreadyPosted, findQuoteRange, tokenFromDump } from "./gdoc-comments.mjs";
+import { alreadyPosted, editTarget, findQuoteRange, tokenFromDump } from "./gdoc-comments.mjs";
 
 test("a Figma pin sits at half the width and three quarters of the height of the node", () => {
   assert.deepEqual(pinOffset({ x: 100, y: 200, width: 375, height: 812 }), { x: 188, y: 609 });
@@ -90,4 +90,13 @@ test("a Doc reply or anchored comment already posted is found before posting aga
   assert.ok(!alreadyPosted(comments, "reply", "BBB", "E hỏi thêm: ví nào trả a?"));
   assert.ok(alreadyPosted(comments, "anchor", undefined, "Mục này PRD ghi 30 ký tự a?"));
   assert.ok(!alreadyPosted(comments, "anchor", undefined, "Câu hỏi mới a?"));
+});
+
+test("a Doc edit targets only this account's own comment or reply", () => {
+  const comments = [{ id: "C1", content: "hỏi", author: { displayName: "Tedy", me: true }, replies: [{ id: "R1", content: "ok", author: { displayName: "PM", me: false } }, { id: "R2", content: "a nhé", author: { displayName: "Tedy", me: true } }] }];
+  assert.equal(editTarget(comments, "C1").id, "C1");
+  assert.equal(editTarget(comments, "C1", "R2").id, "R2");
+  assert.throws(() => editTarget(comments, "C1", "R1"), /reply by PM, not by this account/);
+  assert.throws(() => editTarget(comments, "C9"), /no comment C9/);
+  assert.throws(() => editTarget(comments, "C1", "R9"), /no reply R9 in thread C1/);
 });

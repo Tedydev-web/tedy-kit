@@ -35,6 +35,7 @@ test("writes through the tracker, Doc, Figma and review scripts are classified; 
   assert.equal(bash("node /k/scripts/openproject.mjs set 21298 --status Closed"), null);
   assert.equal(bash("python3 ~/.agents/skills/pg-project-management/scripts/pg.py set 183 21298 --status Closed").kind, "tracker");
   assert.equal(bash("cd plans && node /k/scripts/gdoc-comments.mjs reply AAA --body-file b.txt").kind, "doc-figma");
+  assert.equal(bash("node /k/scripts/gdoc-comments.mjs edit AAA --reply BBB --body-file b.txt").kind, "doc-figma");
   assert.equal(bash("node /k/scripts/figma-comments.mjs post 1:2 --body-file b.txt").kind, "doc-figma");
   assert.equal(bash("node /k/scripts/doc-comment-file.mjs items.json").kind, "doc-figma");
   assert.equal(bash("node /k/scripts/figma-comments.mjs list --since 2026-10-07"), null);

@@ -18,7 +18,7 @@ const PROTECTED_BRANCHES = new Set(["main", "master", "dev", "develop", "product
 const KIT_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const PREFIX_WORDS = new Set(["command", "exec", "builtin", "nohup", "time"]);
 const HEREDOC = /<<(-?)\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/g;
-const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve|pr-body)|openproject\.mjs["']?\s+(?:apply\b|set\b.*--apply|comment\b.*--apply|rollback\b.*--apply)|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor))\b/;
+const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve|pr-body)|openproject\.mjs["']?\s+(?:apply\b|set\b.*--apply|comment\b.*--apply|rollback\b.*--apply)|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor|edit))\b/;
 const REWRITING_PUSH = /^(-f|--force|--force-with-lease(=.*)?|--force-if-includes|--mirror|--all|--prune|-d|--delete)$/;
 
 function skipHeredocs(command, index, line) {
