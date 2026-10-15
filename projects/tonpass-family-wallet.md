@@ -88,7 +88,8 @@ Family Wallet only; Gift-Card work in this workspace is out of scope. Written by
     { "name": "Review PR - Family Wallet", "role": "review" },
     { "name": "Dev TMA - Family Wallet", "role": "dev", "repos": ["tonpass-wallet-fe"] },
     { "name": "Dev Admin - Family Wallet", "role": "dev", "repos": ["onedollar-wallet-admin-fe", "tonpass-wallet-admin-be"] },
-    { "name": "DevOps - Family Wallet", "role": "devops" }
+    { "name": "DevOps - Family Wallet", "role": "devops" },
+    { "name": "Điều phối - Family Wallet", "role": "dispatch" }
   ],
   "learned_until": "2026-10-07",
   "last_reply_check": "2026-10-14T07:20:24Z",

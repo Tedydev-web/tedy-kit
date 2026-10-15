@@ -12,6 +12,7 @@ const map = {
     { name: "Dev TMA - Family Wallet", role: "dev", repos: ["tonpass-wallet-fe"] },
     { name: "Dev Admin - Family Wallet", role: "dev", repos: ["tonpass-wallet-admin-be"] },
     { name: "DevOps - Family Wallet", role: "devops" },
+    { name: "Điều phối - Family Wallet", role: "dispatch" },
   ],
 };
 const bash = (command, cwd = "/w/tonpass") => classifyAction({ tool_name: "Bash", cwd, tool_input: { command } }, map);
@@ -79,4 +80,14 @@ test("the session name comes from the fleet list, and the role card names the se
   assert.match(card, /"PM - Family Wallet" \(pm\)/);
   assert.match(card, /stop looking into it/);
   assert.equal(roleCard(map, "Agent Assistant"), "");
+});
+
+test("the dispatch session writes nothing itself and its card routes every request", () => {
+  const name = "Điều phối - Family Wallet";
+  for (const kind of ["code", "tracker", "doc-figma", "pr-review"]) assert.match(decide(map, name, { kind, repo: null }), /the dispatch session; .* belongs to the (dev|pm|review) session/);
+  const card = roleCard(map, name);
+  assert.match(card, /^Role: this session is "Điều phối - Family Wallet", the dispatch session of tonpass-family-wallet\. It does no role work itself/);
+  assert.match(card, /"PM - Family Wallet" \(pm\)/);
+  assert.match(card, /without the Chuyển việc question/);
+  assert.doesNotMatch(roleCard(map, "PM - Family Wallet"), /dispatch section/);
 });
