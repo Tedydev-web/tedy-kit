@@ -142,16 +142,50 @@ const byName = (items, wanted, kind) => {
   return hit._links.self.href;
 };
 
-export function setPayload(lockVersion, { status, assignee, priority, estimate }, refs) {
+const isoDate = (value, flag) => {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value) || new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) !== value) throw new Error(`--${flag} takes a date as YYYY-MM-DD, not "${value}"`);
+  return value;
+};
+
+export function setPayload(lockVersion, { status, assignee, priority, estimate, start, due }, refs) {
   const links = {};
   if (status) links.status = { href: byName(refs.statuses, status, "status") };
   if (assignee) links.assignee = { href: matchName(refs.assignees, assignee).href };
   if (priority) links.priority = { href: byName(refs.priorities, priority, "priority") };
-  if (!Object.keys(links).length && estimate === undefined) throw new Error("nothing to set; pass --status, --assignee, --priority or --estimate");
+  if (!Object.keys(links).length && estimate === undefined && start === undefined && due === undefined) throw new Error("nothing to set; pass --status, --assignee, --priority, --estimate, --start or --due");
   const payload = { lockVersion };
   if (estimate !== undefined) payload.estimatedTime = isoDuration(estimate);
+  if (start !== undefined) payload.startDate = isoDate(start, "start");
+  if (due !== undefined) payload.dueDate = isoDate(due, "due");
+  if (start !== undefined && due !== undefined && start > due) throw new Error(`--start ${start} is after --due ${due}`);
+  if (start !== undefined || due !== undefined) payload.scheduleManually = true;
   if (Object.keys(links).length) payload._links = links;
   return payload;
+}
+
+const idOf = (href) => href.split("/").pop();
+
+export function workPackageFilters({ parent, assignee, status, type }, refs) {
+  const filters = [];
+  if (parent !== undefined) {
+    if (!/^\d+$/.test(String(parent))) throw new Error(`--parent takes a work package id, not "${parent}"`);
+    filters.push({ parent: { operator: "=", values: [String(parent)] } });
+  }
+  if (assignee !== undefined) filters.push({ assignee: { operator: "=", values: [idOf(matchName(refs.assignees, assignee).href)] } });
+  if (status !== undefined) filters.push(String(status).toLowerCase() === "open" ? { status: { operator: "o", values: [] } } : { status: { operator: "=", values: [idOf(byName(refs.statuses, status, "status"))] } });
+  if (type !== undefined) {
+    const href = refs.types[String(type).toLowerCase()];
+    if (!href) throw new Error(`type "${type}" does not exist in this project; choose one of: ${Object.keys(refs.types).join(", ")}`);
+    filters.push({ type: { operator: "=", values: [idOf(href)] } });
+  }
+  return filters;
+}
+
+export const workPackageLine = (wp) => `#${wp.id} ${wp._links.type?.title ?? "?"} [${wp._links.status?.title ?? "?"}] ${wp._links.assignee?.title ?? "unassigned"} ${wp.startDate ?? "-"}..${wp.dueDate ?? wp.date ?? "-"} ${wp.subject}`;
+
+export function foreignActivity(activity, me) {
+  const author = activity._links?.user?.href;
+  return author && author === me._links.self.href ? null : `refused: activity ${activity.id} was written by ${activity._links?.user?.title ?? author ?? "an unknown user"}, not ${me.name} (${me._links.self.href}); only your own comments can be edited`;
 }
 
 export function readSidecar(path) {

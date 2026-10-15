@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { alreadyOnPr, buildReviewPayload, labelEdits, replyExists, verifyComment } from "./github-write.mjs";
+import { alreadyOnPr, buildReviewPayload, labelEdits, replyExists, threadMutation, verifyComment } from "./github-write.mjs";
 
 const c = (path, line, body) => ({ path, line, body });
 
@@ -58,4 +58,9 @@ test("draft comments already on the PR are found by path and text, wherever the 
   assert.deepEqual(alreadyOnPr(existing, draft).map((twin) => [twin.comment.line, twin.id]), [[12, 901]]);
   assert.equal(replyExists(existing, 800, "Sheet  đóng sớm ạ."), 902);
   assert.equal(replyExists(existing, 801, "Sheet đóng sớm ạ."), null);
+});
+
+test("resolve and unresolve send their own thread mutation and read back isResolved", () => {
+  assert.deepEqual(threadMutation(true), { name: "resolveReviewThread", verb: "resolve", query: "mutation($id: ID!) { resolveReviewThread(input: {threadId: $id}) { thread { isResolved } } }" });
+  assert.deepEqual(threadMutation(false), { name: "unresolveReviewThread", verb: "unresolve", query: "mutation($id: ID!) { unresolveReviewThread(input: {threadId: $id}) { thread { isResolved } } }" });
 });

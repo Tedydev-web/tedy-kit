@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { duplicateOnNode, duplicateReply, pinOffset, rootOf, threadsSince } from "./figma-comments.mjs";
-import { alreadyPosted, editTarget, findQuoteRange, tokenFromDump } from "./gdoc-comments.mjs";
+import { alreadyPosted, deleteTarget, editTarget, findQuoteRange, revisionsSince, stillThere, tokenFromDump } from "./gdoc-comments.mjs";
 
 test("a Figma pin sits at half the width and three quarters of the height of the node", () => {
   assert.deepEqual(pinOffset({ x: 100, y: 200, width: 375, height: 812 }), { x: 188, y: 609 });
@@ -99,4 +99,29 @@ test("a Doc edit targets only this account's own comment or reply", () => {
   assert.throws(() => editTarget(comments, "C1", "R1"), /reply by PM, not by this account/);
   assert.throws(() => editTarget(comments, "C9"), /no comment C9/);
   assert.throws(() => editTarget(comments, "C1", "R9"), /no reply R9 in thread C1/);
+});
+
+test("Doc revisions are filtered by modifiedTime, and all are kept without a mark", () => {
+  const revisions = [{ id: "1", modifiedTime: "2026-10-12T10:00:00.000Z" }, { id: "2", modifiedTime: "2026-10-14T02:00:00.000Z" }];
+  assert.deepEqual(revisionsSince(revisions, "2026-10-13T00:00:00Z").map((revision) => revision.id), ["2"]);
+  assert.equal(revisionsSince(revisions).length, 2);
+});
+
+test("a Doc delete takes only this account's own text and never a thread carrying others' replies", () => {
+  const comments = [
+    { id: "C1", content: "hỏi", author: { displayName: "Tedy", me: true }, replies: [{ id: "R1", content: "ok", author: { displayName: "PM", me: false } }, { id: "R2", content: "a nhé", author: { displayName: "Tedy", me: true } }] },
+    { id: "C2", content: "nháp", author: { displayName: "Tedy", me: true }, replies: [{ id: "R3", content: "", deleted: true, author: { displayName: "PM", me: false } }] },
+  ];
+  assert.equal(deleteTarget(comments, "C1", "R2").id, "R2");
+  assert.equal(deleteTarget(comments, "C2").id, "C2");
+  assert.throws(() => deleteTarget(comments, "C1"), /1 replies by others/);
+  assert.throws(() => deleteTarget(comments, "C1", "R1"), /reply by PM, not by this account/);
+});
+
+test("a deleted Doc comment or reply no longer reads back", () => {
+  const comments = [{ id: "C1", replies: [{ id: "R1" }, { id: "R2", deleted: true }] }];
+  assert.ok(stillThere(comments, "C1"));
+  assert.ok(stillThere(comments, "C1", "R1"));
+  assert.ok(!stillThere(comments, "C1", "R2"));
+  assert.ok(!stillThere(comments, "C9"));
 });

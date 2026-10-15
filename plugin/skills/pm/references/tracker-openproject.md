@@ -35,15 +35,19 @@ A JSON array, one object per work package:
 
 | Command | Writes | What it does |
 |---|---|---|
-| `get <api path>` | no | Any GET, for example `/api/v3/work_packages/21298` |
+| `get <id> [--relations] [--activities]` | no | One work package by id, with its relations or activities when asked |
+| `get <api path>` | no | Any other GET, for example `/api/v3/statuses` |
+| `list [--parent <id>] [--assignee <name>] [--status open\|<name>] [--type <name>]` | no | One line per matching work package (id, type, status, assignee, dates, subject), every page; use it instead of hand-built `filters=` |
 | `preview <drafts.json>` | no | `task-lint` on every draft, then the `/form` endpoint validates each payload; prints create or update per slug, lint warnings, story warnings (a new story with a UI task and no wire task, or the reverse), glossary drift against the map's `glossary`, the closest existing work package of the same type for each create (`similar HIGH|MID #id score [status]`; HIGH from 0.85, MID from 0.60), what each merge adds, then a `readiness đủ|mỏng|thiếu nặng` line (descriptions without a BLOCK, estimates on new leaf tasks, blocking open questions; the same thresholds as `pg-project-management`'s `readiness`) and the `WRITE →` line. A HIGH row becomes a `merge` unless the ledger says why it is new work; a MID row is listed in the `Duyệt` menu for the user to pick merge, new with `relates`, or drop; a closed match gets a new work package with `relates`, never a merge |
-| `set <id> [--status] [--assignee] [--priority] [--estimate]` | no | One-line preview of a quick change to one work package: before → after for each named field, the `/form` result, and its lock |
+| `set <id> [--status] [--assignee] [--priority] [--estimate] [--start] [--due]` | no | One-line preview of a quick change to one work package: before → after for each named field, the `/form` result, and its lock |
 | `set <id> … --apply --lock <n>` | yes | Patches only the named fields; refuses when the work package moved past the previewed lock; reads it back |
 | `rollback` | no | Lists the work packages the last `apply` created, with status and last update |
 | `rollback --apply [--delete]` | yes | Closes them, or deletes them with `--delete`, children first; never touches anything that apply updated or merged; a deleted slug leaves the sidecar |
 | `apply <drafts.json>` | yes | Refuses unless preview is clean; creates, updates or merges, adds relations and status, adds new slugs to the sidecar, reads every work package back and prints `verified N/N` |
 | `comment <id> --body-file <file>` | no | Preview of one comment on a work package; refuses a comment that is already there |
 | `comment <id> --body-file <file> --apply` | yes | Posts the comment and reads it back |
+| `comment-edit <activity-id> --body-file <file>` | no | Preview of rewriting a comment the token's user posted (activity id from `get <id> --activities`); refuses anyone else's |
+| `comment-edit <activity-id> --body-file <file> --apply` | yes | Rewrites it and reads it back |
 
 Every command that writes triggers the permission prompt. The sidecar `~/.config/op/sync/<host>__<project>.map.json` is shared with `pg-project-management`: `apply` appends new slug keys and records `_last_apply` (`{ at, created }`) in the same format, so either tool's rollback undoes the latest batch; `_relations`, `_merged` and `_forced_pushes` are never touched.
 

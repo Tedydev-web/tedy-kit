@@ -1,14 +1,14 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { requestJson } from "./api-request.mjs";
+import { redact, requestJson } from "./api-request.mjs";
 import { lintChatComment } from "./draft-lint.mjs";
 import { logPostedText } from "./edit-log.mjs";
 import { resolveMap } from "./project-map.mjs";
 
 const DRIVE = "https://www.googleapis.com/drive/v3";
 const DOCS = "https://docs.googleapis.com/v1";
-const COMMENT_FIELDS = "id,content,createdTime,modifiedTime,resolved,author(displayName,me),quotedFileContent(value),replies(id,content,createdTime,author(displayName,me))";
+const COMMENT_FIELDS = "id,content,createdTime,modifiedTime,resolved,anchor,author(displayName,me),quotedFileContent(value),replies(id,content,createdTime,deleted,author(displayName,me))";
 const OWN_CLIENT_STEPS = "anchored comments need your own Google OAuth client; until then write the question into the HTML hand-off file described in comment-channels.md. To enable anchoring: create a Desktop OAuth client with the Drive and Docs APIs enabled, then `rclone config update gdrive client_id=… client_secret=…` and `rclone config reconnect gdrive:` (plugin/skills/pm/references/comment-channels.md)";
 
 export function tokenFromDump(dumpText, remote) {
@@ -60,7 +60,7 @@ async function session(flags, needOwnClient = false) {
   const doc = flags.doc ?? resolveMap(process.cwd())?.map.prd?.doc;
   if (!doc) throw new Error("no --doc and no prd.doc in the project map");
   const bearer = await accessToken(flags.remote ?? "gdrive", needOwnClient);
-  return { doc, request: (url, options = {}) => requestJson(url, { ...options, headers: { Authorization: `Bearer ${bearer}` } }) };
+  return { doc, bearer, request: (url, options = {}) => requestJson(url, { ...options, headers: { Authorization: `Bearer ${bearer}` } }) };
 }
 
 const readBody = (flags) => {
@@ -86,6 +86,20 @@ export function editTarget(comments, commentId, replyId) {
   return item;
 }
 
+export const revisionsSince = (revisions, since) => (since ? revisions.filter((revision) => revision.modifiedTime >= since) : revisions);
+
+export function deleteTarget(comments, commentId, replyId) {
+  const item = editTarget(comments, commentId, replyId);
+  const others = replyId ? [] : item.replies.filter((reply) => !reply.deleted && !reply.author.me);
+  if (others.length) throw new Error(`thread ${commentId} has ${others.length} replies by others that would be deleted with it; delete your own replies instead`);
+  return item;
+}
+
+export const stillThere = (comments, commentId, replyId) => {
+  const comment = comments.find((candidate) => candidate.id === commentId);
+  return Boolean(comment && (!replyId || comment.replies.some((reply) => reply.id === replyId && !reply.deleted)));
+};
+
 async function listComments(google) {
   const comments = [];
   let page = "";
@@ -105,7 +119,7 @@ async function main([command, target, ...rest]) {
     for (const comment of await listComments(google)) {
       const last = comment.replies.at(-1) ?? comment;
       if (flags.since && ![comment, ...comment.replies].some((item) => item.createdTime >= flags.since)) continue;
-      console.log(`${comment.id} ${comment.createdTime.slice(0, 16)} ${comment.author.displayName}${comment.resolved ? " resolved" : ""} · ${comment.replies.length} replies, last by ${last.author.displayName}${last.author.me ? " (me)" : ""}\n  ${comment.quotedFileContent?.value ? `[${comment.quotedFileContent.value.slice(0, 60)}] ` : ""}${comment.content.replace(/\s+/g, " ").slice(0, 240)}`);
+      console.log(`${comment.id} ${comment.createdTime.slice(0, 16)} ${comment.author.displayName}${comment.resolved ? " resolved" : ""} · ${comment.replies.length} replies, last by ${last.author.displayName}${last.author.me ? " (me)" : ""}${comment.anchor ? ` · anchor ${comment.anchor}` : ""}\n  ${comment.quotedFileContent?.value ? `[${comment.quotedFileContent.value.slice(0, 60)}] ` : ""}${comment.content.replace(/\s+/g, " ").slice(0, 240)}`);
       for (const reply of comment.replies) console.log(`  ↳ ${reply.id} ${reply.author.displayName}: ${reply.content.replace(/\s+/g, " ").slice(0, 200)}`);
     }
     return 0;
@@ -146,7 +160,49 @@ async function main([command, target, ...rest]) {
     logPostedText(flags.reply ? "doc-reply" : "doc-comment", flags["body-file"], flags.reply ?? target, body);
     return 0;
   }
-  console.error("usage: gdoc-comments.mjs list [--since <ISO>] [--doc <id>] | reply <comment-id> --body-file <f> | anchor --tab <t.id> --quote <exact text> --body-file <f> | edit <comment-id> [--reply <reply-id>] --body-file <f>");
+  if (command === "changed") {
+    const google = await session(flags);
+    const file = await google.request(`${DRIVE}/files/${google.doc}?fields=modifiedTime,version,lastModifyingUser(displayName),capabilities(canReadRevisions)`);
+    console.log(`${google.doc} modified ${file.modifiedTime} by ${file.lastModifyingUser?.displayName ?? "-"} · version ${file.version}`);
+    if (!file.capabilities?.canReadRevisions) {
+      console.log("revisions hidden: this account cannot read the Doc's revision history (needs editor access); only the last modification above is known");
+      return 0;
+    }
+    const revisions = [];
+    let page = "";
+    do {
+      const data = await google.request(`${DRIVE}/files/${google.doc}/revisions?pageSize=1000&fields=nextPageToken,revisions(id,modifiedTime,lastModifyingUser(displayName))${page ? `&pageToken=${page}` : ""}`);
+      revisions.push(...(data.revisions ?? []));
+      page = data.nextPageToken ?? "";
+    } while (page);
+    const recent = revisionsSince(revisions, flags.since);
+    console.log(`${recent.length} of ${revisions.length} revisions${flags.since ? ` since ${flags.since}` : ""}`);
+    for (const revision of recent) console.log(`  ${revision.id} ${revision.modifiedTime} ${revision.lastModifyingUser?.displayName ?? "-"}`);
+    return 0;
+  }
+  if (command === "export") {
+    const google = await session(flags);
+    const response = await fetch(`${DRIVE}/files/${google.doc}/export?mimeType=text/plain`, { headers: { Authorization: `Bearer ${google.bearer}` } });
+    if (!response.ok) throw new Error(`export returned HTTP ${response.status}: ${redact((await response.text()).slice(0, 200))}`);
+    const text = await response.text();
+    if (!flags.out) {
+      process.stdout.write(text);
+      return 0;
+    }
+    writeFileSync(flags.out, text);
+    console.log(`${flags.out}: ${text.length} characters of ${google.doc}`);
+    return 0;
+  }
+  if (command === "delete" && target) {
+    const google = await session(flags);
+    deleteTarget(await listComments(google), target, flags.reply);
+    console.log(`WRITE → Google Doc ${google.doc} thread ${target}${flags.reply ? ` reply ${flags.reply}` : ""} : delete 1 own ${flags.reply ? "reply" : "comment"}`);
+    await google.request(`${DRIVE}/files/${google.doc}/comments/${target}${flags.reply ? `/replies/${flags.reply}` : ""}`, { method: "DELETE" });
+    if (stillThere(await listComments(google), target, flags.reply)) throw new Error(`${flags.reply ? `reply ${flags.reply}` : `comment ${target}`} still reads back after the delete`);
+    console.log("deleted and confirmed gone");
+    return 0;
+  }
+  console.error("usage: gdoc-comments.mjs list [--since <ISO>] [--doc <id>] | reply <comment-id> --body-file <f> | anchor --tab <t.id> --quote <exact text> --body-file <f> | edit <comment-id> [--reply <reply-id>] --body-file <f> | delete <comment-id> [--reply <reply-id>] | changed [--since <ISO>] | export [--out <f>]");
   return 2;
 }
 
