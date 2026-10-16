@@ -123,6 +123,20 @@ test("Doc and Figma comments speak business: build words, crowded threads and ar
   assert.ok(lintChatComment("@TON CORP Contract mới: duyệt xong Owner còn ký, FE làm theo PRD nha", "figma").some((problem) => /business rules/.test(problem)));
 });
 
+test("a PR diff GitHub refuses as too large is rebuilt from the per-file patches", async () => {
+  const { readDiff, diffLines } = await import("./draft-lint.mjs");
+  const calls = [];
+  const run = (args) => {
+    calls.push(args.slice(0, 2).join(" "));
+    if (args[0] === "pr") throw Object.assign(new Error("Command failed"), { stderr: "HTTP 406: Sorry, the diff exceeded the maximum number of lines (20000)\nPullRequest.diff too_large" });
+    return "+++ b/src/a.ts\n@@ -88,2 +89,3 @@\n ctx\n+added\n ctx\n";
+  };
+  const lines = diffLines(readDiff(1010, "o/r", run));
+  assert.deepEqual(calls, ["pr diff", "api repos/o/r/pulls/1010/files"]);
+  assert.ok(lines.get("src/a.ts").has(90));
+  assert.throws(() => readDiff(1, "o/r", () => { throw Object.assign(new Error("boom"), { stderr: "HTTP 404" }); }), /boom/);
+});
+
 test("every sample in the Doc and Figma style guide passes the lint it teaches", async () => {
   const { lintChatComment } = await import("./draft-lint.mjs");
   const guide = readFileSync(new URL("../shared/style/doc-figma-comment.md", import.meta.url), "utf8");

@@ -136,9 +136,15 @@ export function snapshotOnce(file, text, dir) {
   return path;
 }
 
-export function readDiff(pr, repo) {
-  const args = ["pr", "diff", String(pr), ...(repo ? ["--repo", repo] : [])];
-  return execFileSync("gh", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+export const TOO_LARGE = /too_large|exceeded the maximum number of lines/i;
+
+export function readDiff(pr, repo, run = (args) => execFileSync("gh", args, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] })) {
+  try {
+    return run(["pr", "diff", String(pr), ...(repo ? ["--repo", repo] : [])]);
+  } catch (error) {
+    if (!TOO_LARGE.test(`${error.stderr ?? ""}${error.message}`)) throw error;
+    return run(["api", `repos/${repo ?? "{owner}/{repo}"}/pulls/${pr}/files`, "--paginate", "--jq", '.[] | "+++ b/" + .filename + "\\n" + (.patch // "")']);
+  }
 }
 
 function main([kind, file, ...flags]) {
