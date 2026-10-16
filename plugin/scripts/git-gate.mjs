@@ -278,6 +278,9 @@ export function evaluate(command, cwd, projectsDir) {
       continue;
     }
     if (action.kind !== "github-write") continue;
+    if (/\bgh\s+pr\s+(merge|ready)\b/.test(segment)) {
+      return { allow: false, ask: true, reason: "tedy gate: merging or marking a PR ready belongs to the user (working-style rule 4). Allow it only if the user asked for this exact PR in this turn." };
+    }
     if (/\bgh\s+(pr|issue)\s+(merge|close|reopen|ready|edit|lock|unlock)\b/.test(segment)) {
       return { allow: false, reason: "tedy gate: merging, closing or editing a PR or issue belongs to the user (working-style rule 4). Tell the user what is ready and let them do it." };
     }

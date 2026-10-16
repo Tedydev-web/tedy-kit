@@ -54,10 +54,19 @@ test("direct GitHub writes are denied with the approved path in the reason", () 
   assert.match(result.reason, /github-write\.mjs/);
 });
 
-test("merging or closing a PR is denied as the user's call, not routed to github-write.mjs", () => {
-  const result = evaluate("cd x && gh pr merge 12 --squash", "/w");
-  assert.equal(result.allow, false);
-  assert.match(result.reason, /belongs to the user/);
+test("merging or marking a PR ready asks the user, closing or editing stays denied", () => {
+  for (const command of ["cd x && gh pr merge 12 --squash", "gh pr ready 12"]) {
+    const result = evaluate(command, "/w");
+    assert.equal(result.allow, false, command);
+    assert.equal(result.ask, true, command);
+    assert.match(result.reason, /belongs to the user/, command);
+  }
+  for (const command of ["gh pr close 12", "gh pr edit 12 --base dev", "gh issue close 3"]) {
+    const result = evaluate(command, "/w");
+    assert.equal(result.allow, false, command);
+    assert.notEqual(result.ask, true, command);
+    assert.match(result.reason, /belongs to the user/, command);
+  }
 });
 
 test("gh pr create must open a draft", () => {
