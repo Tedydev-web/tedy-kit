@@ -1,6 +1,6 @@
 import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { redact } from "./api-request.mjs";
 import { loadConfig, profileDir } from "./profile.mjs";
 
@@ -10,6 +10,7 @@ export function readHookInput() {
   try {
     return JSON.parse(readFileSync(0, "utf8"));
   } catch {
+    logGate({ hook: basename(process.argv[1] ?? "", ".mjs"), decision: "hook-input-unreadable" });
     return {};
   }
 }
@@ -18,7 +19,7 @@ export function logGate(entry) {
   try {
     mkdirSync(STATE_DIR, { recursive: true });
     const fields = Object.fromEntries(Object.entries(entry).map(([key, value]) => [key, typeof value === "string" ? redact(value) : value]));
-    appendFileSync(join(STATE_DIR, "gate-log.jsonl"), JSON.stringify({ at: new Date().toISOString(), ...fields }) + "\n");
+    appendFileSync(join(STATE_DIR, "gate-log.jsonl"), JSON.stringify({ at: new Date().toISOString(), root: process.env.CLAUDE_PLUGIN_ROOT, ...fields }) + "\n");
   } catch (error) {
     process.stderr.write(`tedy gate log failed: ${error.message}\n`);
   }

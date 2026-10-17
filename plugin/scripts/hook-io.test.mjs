@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { profileWith, tempDir } from "./temp-dir-for-tests.mjs";
@@ -41,4 +42,24 @@ test("a profile with rules but no config turns every personal gate on; no profil
   assert.deepEqual(gateSwitches(), DEFAULT_CONFIG.gates);
   process.env.TEDY_PROFILE_DIR = join(tempDir("tedy-profile-none-"), "missing");
   assert.deepEqual(gateSwitches(), DEFAULT_CONFIG.gates);
+});
+
+test("every gate log entry names the plugin root, and a bearer token in a command is masked", async () => {
+  const { logGate, STATE_DIR } = await import("./hook-io.mjs");
+  process.env.CLAUDE_PLUGIN_ROOT = "/x/plugin";
+  logGate({ hook: "git-gate", decision: "deny", command: 'curl -H "Authorization: Bearer abc123" https://example.com' });
+  delete process.env.CLAUDE_PLUGIN_ROOT;
+  const entry = JSON.parse(readFileSync(join(STATE_DIR, "gate-log.jsonl"), "utf8").trim().split("\n").at(-1));
+  assert.equal(entry.root, "/x/plugin");
+  assert.ok(!entry.command.includes("abc123"));
+  assert.match(entry.command, /\*\*\*/);
+});
+
+test("unreadable hook input is logged and the gate prints nothing", () => {
+  const state = tempDir("tedy-state-");
+  const gate = new URL("./git-gate.mjs", import.meta.url).pathname;
+  const run = spawnSync("node", [gate], { input: "not json", encoding: "utf8", env: { ...process.env, TEDY_STATE_DIR: state } });
+  assert.equal(run.status, 0);
+  assert.equal(run.stdout, "");
+  assert.match(readFileSync(join(state, "gate-log.jsonl"), "utf8"), /"decision":"hook-input-unreadable"/);
 });
