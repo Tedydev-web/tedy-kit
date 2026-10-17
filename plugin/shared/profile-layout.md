@@ -11,6 +11,7 @@ The engine (this plugin) holds no personal or project data. Everything that belo
   projects/<name>/       notes too long for a map, such as review-calibration.md
   public-denylist.txt    terms public-scan.mjs must never find in a public repository
   reports/               /tedy:learn reports
+  docs/                  your own guides, such as a user guide naming your projects and sessions
 ```
 
 A file at `<profile>/style/<name>.md` overrides `plugin/shared/style/<name>.md`. Skills read style samples through `node <plugin>/scripts/profile.mjs path style/<name>.md`, which prints the profile copy when it exists and the engine copy otherwise.
