@@ -1,6 +1,6 @@
 # Tracker contract
 
-A tracker adapter is one script under `plugin/scripts` that `/tedy:pm` calls to read and write work items. The only adapter today is `openproject.mjs`, for maps with `tracker.type: "openproject"`; its specifics are in `plugin/skills/pm/references/tracker-openproject.md`. A new adapter implements every command below with the same arguments, output lines and exit codes, adds its type to `SUPPORTED_TRACKERS` in `project-map.mjs` (so `doctor` stops reporting it as unsupported), and documents its own details in `plugin/skills/pm/references/tracker-<type>.md`.
+A tracker adapter is one script under `plugin/lib` (with its shim in `plugin/scripts`) that `/tedy:pm` calls to read and write work items. The only adapter today is `openproject.mjs`, for maps with `tracker.type: "openproject"`; its specifics are in `plugin/skills/pm/references/tracker-openproject.md`. A new adapter implements every command below with the same arguments, output lines and exit codes, adds its type to `SUPPORTED_TRACKERS` in `project-map.mjs` (so `doctor` stops reporting it as unsupported), and documents its own details in `plugin/skills/pm/references/tracker-<type>.md`.
 
 ## Inputs
 

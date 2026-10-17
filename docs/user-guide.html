@@ -173,7 +173,7 @@
     <li>Kit chạy thẳng từ <code>~/Documents/workspace/tedy-kit</code>. Sửa kit thì mở phiên mới hoặc gõ <code>/reload-plugins</code>. Compact không nạp lại hook: script chạy bản mới nhưng gate mới trong <code>hooks.json</code> thì chưa, nên role card sau compact nhắc <code>/reload-plugins</code> khi phiên còn chạy hook cũ.</li>
     <li>Dòng <code>@~/.config/tedy/rules.md</code> phải luôn có trong <code>~/.claude/CLAUDE.md</code>.</li>
     <li>Sau mỗi lần Claude Code tự cập nhật: <code>bash evals/probes/run-probes.sh</code>.</li>
-    <li>Test của kit: <code>node --test plugin/scripts/*.test.mjs</code>.</li>
+    <li>Test của kit: <code>npm test</code>.</li>
     <li>Chưa có: neo comment vào đoạn văn trong Google Doc cần một OAuth client riêng. Trước khi có, câu hỏi PRD nằm trong file HTML để anh tự đăng.</li>
   </ul>
   <div class="okbox">Muốn đổi một luật, một mẫu comment hay thêm dự án: nói với em trong phiên làm kit, hoặc chạy <code>/tedy:learn</code>. Không cần sửa file tay.</div>

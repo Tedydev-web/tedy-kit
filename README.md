@@ -107,9 +107,11 @@ Uninstalling the plugin removes none of these.
 
 ```bash
 claude --plugin-dir ./plugin
-node --test plugin/scripts/*.test.mjs
+npm test
 node plugin/scripts/public-scan.mjs tree . --denylist <your-profile>/public-denylist.txt
 ```
+
+`plugin/gates/` holds the PreToolUse gates, `plugin/lib/` everything else, `plugin/tests/` the tests; each `plugin/scripts/<name>.mjs` is a two-line shim so older paths keep working. Terms are defined in [GLOSSARY.md](GLOSSARY.md), and decisions with their history in [docs/adr/](docs/adr/).
 
 `--plugin-dir` replaces the installed `tedy` for that session only. `public-scan.mjs history <repo>` checks every object a push would publish for home paths, email addresses, secrets and the terms in your denylist. After a Claude Code update, `bash evals/probes/run-probes.sh` re-checks the platform behaviour the hooks rely on, and `evals/pressure/run-pressure.sh` replays scenarios where the agent is pushed to skip an approval (`ARMS`, `PLUGIN_DIR` and `LABEL` select what runs).
 
@@ -117,7 +119,7 @@ Authoring rules for skills:
 - Each SKILL.md opens with a persona, the iron laws and a "not for this skill" section naming the sibling that owns that work.
 - A skill is model-invocable only when the agent must reach it on its own; otherwise it sets `disable-model-invocation: true`.
 - Every step ends on a checkable completion criterion. Rules are stated positively with a one-clause reason.
-- Menu labels are keys of `plugin/scripts/labels.mjs`, never literal text.
+- Menu labels are keys of `plugin/lib/labels.mjs`, never literal text.
 - A description stays under 1,024 characters and must parse as plain YAML: no ` #` and no `: ` inside it.
 
 ## License
