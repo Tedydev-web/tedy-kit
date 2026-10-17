@@ -98,6 +98,17 @@ test("doctor reports the profile, config, rules, overrides and maps, and exits 1
   assert.match(invalid.stdout, /^fail config: invalid: .*gates\.roleGate must be a boolean/m);
 });
 
+test("doctor fails when rules.md is over 6000 bytes", () => {
+  const within = runDoctor({ TEDY_PROFILE_DIR: profileWith({ "config.json": "{}", "rules.md": "r".repeat(6000) }) });
+  assert.equal(within.status, 0, within.stdout);
+  assert.match(within.stdout, /^ok rules-size: 6000 bytes$/m);
+  const over = runDoctor({ TEDY_PROFILE_DIR: profileWith({ "config.json": "{}", "rules.md": "r".repeat(6001) }) });
+  assert.equal(over.status, 1);
+  assert.match(over.stdout, /^fail rules-size: 6001 bytes, over 6000$/m);
+  const none = runDoctor({ TEDY_PROFILE_DIR: profileWith({ "config.json": "{}" }) });
+  assert.doesNotMatch(none.stdout, /rules-size/);
+});
+
 test("doctor fails on a relative profile dir, a missing CLAUDE.md import and an old Claude Code", () => {
   const dir = profileWith({ "config.json": "{}" });
   const relative = runDoctor({ TEDY_PROFILE_DIR: "relative/profile" });

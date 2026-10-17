@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -99,6 +99,7 @@ export function initProfile(dir = profileDir()) {
 }
 
 const MIN_CLAUDE_VERSION = [2, 1, 301];
+const RULES_BUDGET = 6000;
 
 function git(dir, ...args) {
   try {
@@ -174,6 +175,10 @@ function doctor(dir, env = process.env) {
   check("claude-md-imports", claudeMdImports(env));
   check("claude-version", claudeVersion(env));
   check("release-worktree", releaseWorktree(resolve(dir), env));
+  if (existsSync(join(dir, "rules.md"))) {
+    const size = statSync(join(dir, "rules.md")).size;
+    check("rules-size", [size <= RULES_BUDGET, `${size} bytes${size > RULES_BUDGET ? `, over ${RULES_BUDGET}` : ""}`]);
+  }
   lines.push(existsSync(join(dir, "rules.md")) ? "rules: present" : "rules: missing; run profile.mjs init");
   const shadowed = overrides(dir);
   lines.push(`overrides: ${shadowed.length ? shadowed.join(", ") : "none"}`);
