@@ -2,6 +2,7 @@ import { closeSync, existsSync, fstatSync, openSync, readSync, statSync } from "
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { listPending, reportsDir } from "./handoff.mjs";
+import { waitingText } from "./pending.mjs";
 import { currentTurn, gateSwitches, logGate, readHookInput, readTranscriptTail, toolUses } from "./hook-io.mjs";
 import { loadConfig, profileDir } from "./profile.mjs";
 import { resolveMap } from "./project-map.mjs";
@@ -152,11 +153,16 @@ export function pendingNotice(pending, procedure) {
   return `Pending hand-offs in this project:\n${lines.join("\n")}\nIf one is addressed to this session (ListAgents prints this session's name), take it as described in ${procedure}; the others belong to their own sessions.`;
 }
 
+export function waitingNotice(map) {
+  const text = waitingText(map, { offline: true, handoffs: false });
+  return text && `Waiting on the user in this project (\`pending.mjs list\` adds draft PRs; \`pending.mjs done <file>\` archives a finished draft):\n${text}`;
+}
+
 function runPendingHandoffs() {
   const input = readHookInput();
   try {
     const resolved = resolveMap(input.cwd ?? process.cwd());
-    const notice = [configWarning(), resolved && sessionRoleCard(input), resolved && pendingNotice(listPending(reportsDir(resolved.map)), fileURLToPath(new URL("../shared/handoff.md", import.meta.url)))].filter(Boolean).join("\n\n");
+    const notice = [configWarning(), resolved && sessionRoleCard(input), resolved && pendingNotice(listPending(reportsDir(resolved.map)), fileURLToPath(new URL("../shared/handoff.md", import.meta.url))), resolved && waitingNotice(resolved.map)].filter(Boolean).join("\n\n");
     if (notice) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: notice } }));
   } catch (error) {
     logGate({ hook: "pending-handoffs", decision: "skip-on-error", error: error.message });
