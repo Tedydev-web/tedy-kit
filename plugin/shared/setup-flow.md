@@ -17,7 +17,7 @@ Every run starts with `node <plugin>/scripts/profile.mjs doctor`. When its first
    - `profile.elsewhere`: the user types a folder in "Other"; back up `~/.claude/settings.json`, then set `TEDY_PROFILE_DIR` to that folder in its `env` block so hooks and commands find it.
    - `profile.stop`: stop setup; nothing is written.
 2. `node <plugin>/scripts/profile.mjs init`, with `TEDY_PROFILE_DIR=<folder>` in front for another folder. It creates `config.json` (every personal gate off), `rules.md` from the template and `projects/`, and never overwrites a file.
-3. When `~/.claude/CLAUDE.md` has no `@<profile>/rules.md` line, back it up and append that line, so the rules load in every new session.
+3. When no line of `~/.claude/CLAUDE.md` imports the profile's `rules.md` (any `@` path that resolves to it, `~` included), ask one `AskUserQuestion` before touching it; on approval back it up and append `@<profile>/rules.md`, so the rules load in every new session.
 4. Quote the `profile.mjs doctor` output and say which gates the user can turn on in `config.json`: `noComments`, `draftPrOnly`, `roleGate`, `ghWrites` and `publishQuote` (`<plugin>/shared/profile-layout.md`). Then continue with the bare run or the update.
 
 ## Bare run: `/tedy:setup`
@@ -36,14 +36,12 @@ Every run starts with `node <plugin>/scripts/profile.mjs doctor`. When its first
 
 ## Update: `/tedy:setup update`
 
-One `AskUserQuestion` with these options, then the matching question:
+Two `AskUserQuestion` steps, because one question holds at most four options. First: sources, repositories, tracker, or people and language. Then the matching question:
 
-- Add an epic, a PRD tab or a Figma node.
-- Change an integration branch or a readonly flag.
-- Change tracker rules.
-- Change review or tracker language.
-- Repoint a source that moved (new tracker host, new doc, new Figma file).
-- Change the team split.
+- Sources: add an epic, a PRD tab or a Figma node; repoint a source that moved (new tracker host, new doc, new Figma file).
+- Repositories: change an integration branch or a readonly flag.
+- Tracker: change tracker rules.
+- People and language: change the team split; change review or tracker language.
 
 Apply the answer, run `doctor`, commit as in step 6.
 

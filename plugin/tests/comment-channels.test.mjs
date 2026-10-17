@@ -146,3 +146,9 @@ test("a deleted Doc comment or reply no longer reads back", () => {
   assert.ok(!stillThere(comments, "C1", "R2"));
   assert.ok(!stillThere(comments, "C9"));
 });
+
+test("a reply-check time with an offset compares as an instant, not as text", () => {
+  const comments = [{ id: "1", created_at: "2026-10-17T03:30:00Z", message: "late reply" }];
+  assert.equal(threadsSince(comments, "2026-10-17T09:00:00+07:00").length, 1);
+  assert.equal(threadsSince(comments, "2026-10-17T11:00:00+07:00").length, 0);
+});

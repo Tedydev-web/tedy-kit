@@ -12,7 +12,7 @@ For a review pasted by the user or posted on their PR by a bot, Gemini or a coll
 
    The verdict is `rebut.right`, `rebut.wrong` or `rebut.partly`. Evidence is `path:line`, a PRD locator with its quote, or the command and its output. The proposal says what would change, without changing it.
 5. **Stop for the user.** No Edit or Write before the answer. One `AskUserQuestion`, header `rebut.header`, multiSelect, one option per `rebut.right` or `rebut.partly` claim and per reviewer finding (more than four → the user types numbers in "Other"), plus `rebut.none`.
-6. **Apply only what was picked**, then follow the task procedure from step 5 (commit, verify on the commit, report).
-7. **Replies.** When the review sits on a GitHub thread and a claim is wrong, draft a one-sentence reply that states the evidence and passes the `pr-comment` rules of `draft-lint.mjs` for the map's `language.pr_review`. Post it with `node <plugin>/scripts/github-write.mjs reply <pr> <comment-id> --body-file <file>` only after the user approves it in the menu.
+6. **Apply only what was picked** on the PR's own branch, then follow the task procedure steps 5 and 6 (commit, verify on the commit) and `git push`; the PR already exists, so step 8 only reports.
+7. **Replies.** When the review sits on a GitHub thread and a claim is wrong, draft a one-sentence reply that states the evidence, in the map's `language.pr_review` and the voice of `pr-comment.md`. Quote the exact reply text, ask one `AskUserQuestion` with header `approve.header`, and only on approval post it with `node <plugin>/scripts/github-write.mjs reply <pr> <comment-id> --body-file <file>`.
 
 Done when every claim has a verdict with evidence, the reviewer agent returned, and nothing was edited before the user picked.

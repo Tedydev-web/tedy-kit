@@ -16,3 +16,12 @@ PRD EPIC <nn> · <UC_XX_nn> <locator>:
 ```
 
 Follow `pr-comment.md`: the samples carry the voice, the avoid list carries the corrections. UI copy and PRD wording in straight double quotes; identifiers and library messages in backticks.
+
+## Approval menu
+
+One `AskUserQuestion`, header `post.header`:
+
+- `post.asIs`: posts K comments as they are.
+- `post.trim`: a follow-up question lists comment numbers (multiSelect; more than four comments → the user types numbers in "Other").
+- `post.reword`: the user says what to change in "Other"; edit the draft, lint, quote it again, ask again.
+- `post.hold`: keep the draft; the next-step menu follows.

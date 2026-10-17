@@ -29,7 +29,7 @@ export function threadsSince(comments, since) {
   const roots = comments.filter((comment) => !comment.parent_id);
   return roots
     .map((root) => ({ root, replies: comments.filter((comment) => comment.parent_id === root.id).sort((a, b) => a.created_at.localeCompare(b.created_at)) }))
-    .filter(({ root, replies }) => !since || [root, ...replies].some((comment) => comment.created_at >= since));
+    .filter(({ root, replies }) => !since || [root, ...replies].some((comment) => Date.parse(comment.created_at) >= Date.parse(since)));
 }
 
 export function client(flags) {
