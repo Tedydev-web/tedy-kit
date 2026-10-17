@@ -1,6 +1,6 @@
 ---
 name: review-pr
-description: Review a teammate's pull request against the PRD, Figma and the backend or contract code, draft line-by-line hints in the user's style and the map's review language, and post them only after the user approves. Use for "review PR", "review pull request" or the same request in any language, a pasted PR link, and for any request about an existing review draft (plans/reports/review-*-line-comments.md), such as showing it for approval, trimming or rewording a comment, posting it, or checking replies. Not for reviewing your own branch before opening a PR; that is /tedy:dev.
+description: Review a teammate's pull request against the PRD, Figma and the backend or contract code, draft line-by-line hints in the user's style and the map's review language, and post them only after the user approves. Use for "review PR", "review pull request" or the same request in any language, a pasted PR link, and for any request about an existing review draft (plans/drafts/review-*-line-comments.md), such as showing it for approval, trimming or rewording a comment, posting it, or checking replies. Not for reviewing your own branch before opening a PR; that is /tedy:dev.
 argument-hint: "<PR number or URL> [more PRs]"
 ---
 
@@ -18,7 +18,7 @@ You are the tech lead reviewing a teammate's PR on the user's behalf. The user p
 
 ## Not this skill
 
-Your own branch before a PR → `/tedy:dev`. Cross-checking sources without a PR → `/tedy:reconcile`. A missing map or map field → the setup flow. A tracker task or a Doc or Figma comment the review suggests → a draft under `plans/reports/` for `/tedy:pm`; this skill writes only to GitHub. When the map's `sessions` gives that role its own session, hand the work over through `${CLAUDE_PLUGIN_ROOT}/shared/handoff.md` instead of switching skills here.
+Your own branch before a PR → `/tedy:dev`. Cross-checking sources without a PR → `/tedy:reconcile`. A missing map or map field → the setup flow. A tracker task or a Doc or Figma comment the review suggests → a draft under `plans/drafts/` for `/tedy:pm`; this skill writes only to GitHub. When the map's `sessions` gives that role its own session, hand the work over through `${CLAUDE_PLUGIN_ROOT}/shared/handoff.md` instead of switching skills here.
 
 ## Procedure
 
@@ -42,7 +42,7 @@ Entry points: a new PR starts at step 1. A request about an existing draft for t
     - `post.hold`: keep the draft; the next-step menu follows.
 
     When the user says they edited the file themselves, re-read it, lint it, and quote it again.
-11. **Post.** `node ${CLAUDE_PLUGIN_ROOT}/scripts/github-write.mjs post <draft>` from the reviewed repo. An approval prompt is expected; a headless run refuses the post. On `refused`, fix what it names, lint, and quote the changed comment before asking again. Report the `K/K` listing it prints. The publish-quote hook denies a body not quoted verbatim since the draft last changed; then quote the draft and ask again.
+11. **Post.** `node ${CLAUDE_PLUGIN_ROOT}/scripts/github-write.mjs post <draft>` from the reviewed repo. An approval prompt is expected; a headless run refuses the post. On `refused`, fix what it names, lint, and quote the changed comment before asking again. Report the `K/K` listing it prints, then `pending.mjs done <draft>`. The publish-quote hook denies a body not quoted verbatim since the draft last changed; then quote the draft and ask again.
 12. **Next step.** One `AskUserQuestion`, header `next.header`: the next PR waiting on the user (`gh pr list --search "review-requested:@me" --state open`) as recommended when one exists; checking replies on threads already posted (`references/follow-up.md`); `next.stop` with an 80-character summary.
 
 Several PRs in one request: steps 1–9 for each, one approval menu per PR.

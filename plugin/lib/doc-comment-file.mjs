@@ -137,7 +137,7 @@ async function main([itemsFile, ...rest]) {
     console.error(`doc-comment-file: no file written; fix these first:\n${problems.map((problem) => `- ${problem}`).join("\n")}`);
     return 1;
   }
-  const dir = join(map.paths[0], "plans", "reports");
+  const dir = join(map.paths[0], "plans", "drafts");
   mkdirSync(dir, { recursive: true });
   const path = join(dir, `pm-comments-${stamp()}-${slugOf(title)}.html`);
   writeFileSync(path, renderFile({ title, doc: map.prd.doc, items, checkedAt, lang }));

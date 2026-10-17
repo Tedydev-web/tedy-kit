@@ -1,6 +1,6 @@
 # Line-comment draft format
 
-File: `plans/reports/review-<yymmdd-hhmm>-pr<n>-line-comments.md` in the reviewed repo.
+File: `plans/drafts/review-<yymmdd-hhmm>-pr<n>-line-comments.md` in the reviewed repo.
 
 ```text
 # PR #<n>: comment line by line (head <sha8>)
