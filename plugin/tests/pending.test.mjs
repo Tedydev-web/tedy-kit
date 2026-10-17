@@ -185,3 +185,16 @@ test("done refuses a file that reaches plans/ only through a symlink to somewher
   assert.throws(() => archive(join(root, "plans", "link", "secret.txt"), map), /not under plans\/ of this project/);
   assert.ok(existsSync(join(outside, "secret.txt")));
 });
+
+test("a tag named like the checked-out branch does not hide the branch's unpushed commits", () => {
+  const { fe } = project();
+  git(fe, "tag", "feat", "main");
+  assert.deepEqual(gitWaiting(fe), ["feat: 2 commits on no remote", "main: 1 commit ahead of origin/main"]);
+});
+
+test("done archives into the project's own plans/archive even when a folder below plans is also named plans", () => {
+  const { root, map } = project();
+  mkdirSync(join(root, "plans", "drafts", "plans"), { recursive: true });
+  writeFileSync(join(root, "plans", "drafts", "plans", "x.md"), "x\n");
+  assert.equal(archive(join(root, "plans", "drafts", "plans", "x.md"), map), join(root, "plans", "archive", "drafts", "plans", "x.md"));
+});

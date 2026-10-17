@@ -161,7 +161,7 @@ export function waitingNotice(map) {
     logGate({ hook: "pending-handoffs", decision: "waiting-list-skipped", error: error.message });
     return "";
   }
-  return text && `Waiting on the user in this project (\`pending.mjs list\` adds draft PRs; \`pending.mjs done <file>\` archives a finished draft):\n${text}`;
+  return text && `Waiting on the user in this project (\`pending.mjs list\` adds draft PRs; \`pending.mjs done <file>\` archives a draft once the publishing tool confirms it):\n${text}`;
 }
 
 function runPendingHandoffs() {

@@ -7,7 +7,7 @@ import { resolveMap } from "./project-map.mjs";
 
 const capture = (command, args, cwd) => {
   try {
-    return execFileSync(command, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 15000 });
+    return execFileSync(command, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 3000 });
   } catch {
     return null;
   }
@@ -33,12 +33,13 @@ export function draftFiles(dirs) {
 const isRepoRoot = (dir) => capture("git", ["-C", dir, "rev-parse", "--show-toplevel"], dir)?.trim() === realpathSync(dir);
 
 export function gitWaiting(dir) {
-  const refs = capture("git", ["-C", dir, "for-each-ref", "refs/heads", "--format=%(refname:short)\t%(upstream:short)\t%(upstream:track)"], dir);
+  const refs = capture("git", ["-C", dir, "for-each-ref", "refs/heads", "--format=%(refname)\t%(upstream:short)\t%(upstream:track)"], dir);
   if (refs === null || !isRepoRoot(dir)) return [];
   const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
   const checkedOut = new Set((capture("git", ["-C", dir, "worktree", "list", "--porcelain"], dir) ?? "").split("\n").filter((line) => line.startsWith("branch refs/heads/")).map((line) => line.slice("branch refs/heads/".length)));
   return refs.split("\n").filter(Boolean).flatMap((line) => {
-    const [branch, upstream, track] = line.split("\t");
+    const [ref, upstream, track] = line.split("\t");
+    const branch = ref.slice("refs/heads/".length);
     if (upstream && !track.includes("gone")) {
       const ahead = Number(track.match(/ahead (\d+)/)?.[1] ?? 0);
       return ahead ? [`${branch}: ${plural(ahead, "commit")} ahead of ${upstream}`] : [];
@@ -63,14 +64,12 @@ export function archive(file, map) {
   const path = resolve(file);
   if (!existsSync(path) || !statSync(path).isFile()) throw new Error(`${file} is not a file`);
   const real = realpathSync(path);
-  const plansRoots = repoDirs(map).map((dir) => join(dir, "plans")).filter((dir) => existsSync(dir)).map((dir) => realpathSync(dir));
-  if (!plansRoots.some((root) => real.startsWith(root + sep))) throw new Error(`${file} is not under plans/ of this project`);
+  const plans = repoDirs(map).map((dir) => join(dir, "plans")).filter((dir) => existsSync(dir)).map((dir) => realpathSync(dir)).filter((root) => real.startsWith(root + sep)).sort((a, b) => b.length - a.length)[0];
+  if (!plans) throw new Error(`${file} is not under plans/ of this project`);
+  const inside = relative(plans, real);
+  if (inside.startsWith(`archive${sep}`)) throw new Error(`${file} is already in plans/archive`);
   if (path.startsWith(reportsDir(map) + sep) && /^handoff-.*\.md$/.test(path.slice(reportsDir(map).length + 1))) throw new Error(`${file} is a hand-off; close it with handoff.mjs done`);
-  const marker = `${sep}plans${sep}`;
-  const at = path.lastIndexOf(marker);
-  if (at === -1 || path.slice(at + marker.length).startsWith(`archive${sep}`)) throw new Error(`${file} is not under a plans directory`);
-  const plans = path.slice(0, at + marker.length - 1);
-  const to = join(plans, "archive", path.slice(at + marker.length));
+  const to = join(plans, "archive", inside);
   if (existsSync(to)) throw new Error(`${to} is already archived; rename ${file} first`);
   mkdirSync(dirname(to), { recursive: true });
   renameSync(path, to);
