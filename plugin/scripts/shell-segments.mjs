@@ -39,6 +39,12 @@ export function splitSegments(command, unwrap = true) {
       line += char;
       continue;
     }
+    if (char === "\\" && index + 1 < command.length && command[index + 1] !== "\n") {
+      current += pair;
+      line += pair;
+      index += 1;
+      continue;
+    }
     if (pair === "&&" || pair === "||") {
       line += pair;
       segments.push(current);
@@ -77,10 +83,25 @@ export function tokenize(segment) {
   let current = "";
   let quote = null;
   let started = false;
-  for (const char of segment) {
+  for (let index = 0; index < segment.length; index += 1) {
+    const char = segment[index];
     if (quote) {
       if (char === quote) quote = null;
+      else if (char === "\\" && quote === '"' && /["\\$`]/.test(segment[index + 1] ?? "")) current += segment[(index += 1)];
       else current += char;
+      continue;
+    }
+    if (char === "\\") {
+      const next = segment[(index += 1)];
+      if (next !== undefined && next !== "\n") {
+        current += next;
+        started = true;
+      }
+      continue;
+    }
+    if (char === "$" && (segment[index + 1] === "'" || segment[index + 1] === '"')) {
+      quote = segment[(index += 1)];
+      started = true;
       continue;
     }
     if (char === "'" || char === '"') {
@@ -99,4 +120,40 @@ export function tokenize(segment) {
   }
   if (started) tokens.push(current);
   return tokens;
+}
+
+const MAX_SUBSTITUTION_DEPTH = 20;
+
+export function substitutions(command) {
+  const bodies = [];
+  const open = [];
+  let quote = null;
+  let tick = -1;
+  for (let index = 0; index < command.length; index += 1) {
+    const char = command[index];
+    if (quote === "'") {
+      if (char === "'") quote = null;
+      continue;
+    }
+    if (char === "\\") {
+      index += 1;
+      continue;
+    }
+    if (char === "'" && !quote) quote = "'";
+    else if (char === '"') quote = quote ? null : '"';
+    else if (char === "`") {
+      if (tick === -1) tick = index + 1;
+      else {
+        bodies.push(command.slice(tick, index));
+        tick = -1;
+      }
+    } else if (command[index + 1] === "(" && (char === "$" || char === "<" || char === ">")) {
+      open.push(index + 2);
+      if (open.length > MAX_SUBSTITUTION_DEPTH) return null;
+      index += 1;
+    } else if (char === ")" && open.length) bodies.push(command.slice(open.pop(), index));
+  }
+  if (tick !== -1) bodies.push(command.slice(tick));
+  for (const start of open) bodies.push(command.slice(start));
+  return bodies;
 }

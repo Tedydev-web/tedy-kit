@@ -241,3 +241,63 @@ test("the quote check runs only when gates.publishQuote is on", () => {
   assert.equal(JSON.parse(run(true)).hookSpecificOutput.permissionDecision, "deny");
   assert.equal(run(false), "");
 });
+
+test("hidden or wrapped gh merges ask, and a deny anywhere in the command wins over an ask", () => {
+  const off = { ...ALL_GATES_ON, ghWrites: false };
+  const asks = (command, gates = off) => {
+    const result = evaluate(command, "/w", { gates });
+    return result.allow === false && result.ask === true;
+  };
+  const denied = (command, gates = ALL_GATES_ON) => {
+    const result = evaluate(command, "/w", { gates });
+    return result.allow === false && !result.ask;
+  };
+  for (const command of ["gh pr merge 1 && gh issue close 3", "git push --force && gh issue close 3", "x=$(gh issue close 3) && gh pr merge 1"]) assert.ok(denied(command), command);
+  for (const command of [
+    "echo $(gh pr merge 1)",
+    "echo `gh pr ready 2`",
+    "timeout 5 gh pr merge 1",
+    "sudo gh pr merge 1",
+    "nice -n 5 gh pr merge 1",
+    "echo 1 | xargs gh pr merge",
+    "env -C /tmp gh pr merge 1",
+    "exec -a x gh pr merge 1",
+    "command -p gh pr merge 1",
+    "( gh pr merge 1 )",
+    "{ gh pr merge 1; }",
+    "! gh pr merge 1",
+    "\\gh pr merge 1",
+    "$'gh' pr merge 1",
+    "gh pr m\\erge 12",
+    "gh p\\r merge 12",
+    "gh pr $ACTION 12",
+    "gh pr ${A} 12",
+    "gh mymerge 12",
+  ]) assert.ok(asks(command), command);
+  for (const command of ["gh api -X PUT repos/o/r/pulls/12/merge", "gh api graphql -f query='mutation { mergePullRequest(input: {}) { clientMutationId } }'", "gh api graphql -f query='mutation { markPullRequestReadyForReview(input: {}) { clientMutationId } }'"]) {
+    assert.ok(asks(command), command);
+    assert.ok(asks(command, ALL_GATES_ON), command);
+  }
+  assert.ok(asks("gh api -X POST repos/o/r/pulls -f title=x -f head=b -f base=main"));
+  assert.ok(denied("gh api -X POST repos/o/r/pulls -f title=x -f head=b -f base=main"));
+  for (const command of ["rg \"gh pr merge\" docs", "git commit -m \"gh pr merge 1\"", "gh issue close 3", "gh pr view 1", "gh api repos/o/r/pulls/12/merge"]) assert.equal(evaluate(command, "/w", { gates: off }).allow, true, command);
+});
+
+test("the draft check reads gh's flag forms the way gh does", () => {
+  const create = (flags) => evaluate(`gh pr create ${flags} --body x`, "/w", { gates: { ...ALL_GATES_ON, ghWrites: false } }).allow;
+  for (const flags of ["--draft", "-d", "--draft=true", "-dt x", "-dF b.md", "-t x -d"]) assert.equal(create(flags), true, flags);
+  for (const flags of ["-td", "-t -d", "--title -d", "--draft=false", ""]) assert.equal(create(flags), false, flags);
+});
+
+test("a project map that cannot be read makes gh pr create ask instead of passing", () => {
+  const dir = tempDir("tedy-broken-maps-");
+  writeFileSync(join(dir, "broken.md"), "# no json block\n");
+  const result = evaluate("gh pr create --draft --body x", "/w", { projectsDir: dir });
+  assert.equal(result.ask, true);
+  assert.match(result.reason, /project map/);
+});
+
+test("command substitution nested past the gate's depth limit asks", () => {
+  assert.equal(evaluate("echo " + "$(".repeat(30) + "gh pr view 1" + ")".repeat(30), "/w").ask, true);
+  assert.equal(evaluate("echo $(echo $(gh pr view 1))", "/w").allow, true);
+});

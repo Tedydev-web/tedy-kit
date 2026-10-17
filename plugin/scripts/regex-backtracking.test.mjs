@@ -29,6 +29,9 @@ const SHAPES = {
   "locators": "step 1 BR1a ".repeat(SIZE / 12),
   "sentence punctuation": ". ".repeat(SIZE / 2),
   "draft headers": "## 1. `a:1`\n".repeat(SIZE / 12),
+  "nested substitutions": "$(".repeat(SIZE / 2),
+  "closed nested substitutions": `${"$(".repeat(SIZE / 4)}${")".repeat(SIZE / 4)}`,
+  "many substitutions": "$(a) ".repeat(SIZE / 5),
 };
 
 const TARGETS = {
@@ -51,7 +54,9 @@ test("no gate regex takes longer than 250 ms on a crafted 200,000-character inpu
       const start = performance.now();
       try {
         run(text);
-      } catch {}
+      } catch (error) {
+        if (error instanceof RangeError) slow.push(`${target} / ${shape}: threw ${error.message}`);
+      }
       const elapsed = performance.now() - start;
       if (elapsed > LIMIT_MS) slow.push(`${target} / ${shape}: ${elapsed.toFixed(0)} ms`);
     }

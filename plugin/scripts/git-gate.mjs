@@ -5,7 +5,7 @@ import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ALL_GATES_ON, ask, deny, gateSwitches, logGate, readHookInput } from "./hook-io.mjs";
 import { resolveMap } from "./project-map.mjs";
-import { splitSegments, tokenize } from "./shell-segments.mjs";
+import { splitSegments, substitutions, tokenize } from "./shell-segments.mjs";
 import { check as checkQuoted } from "./publish-quote-gate.mjs";
 import { evaluate as trackerToken, trackerHost } from "./tracker-token-gate.mjs";
 
@@ -18,7 +18,25 @@ const READ_ONLY_GH_AREAS = new Set(["search", "status", "browse", "help", "versi
 const GH_HELP = new Set(["-h", "--help"]);
 const LOCAL_GH = new Set(["pr checkout", "repo clone", "auth", "config", "alias", "extension", "completion"]);
 const PROTECTED_BRANCHES = new Set(["main", "master", "dev", "develop", "production", "staging"]);
-const PREFIX_WORDS = new Set(["command", "exec", "builtin", "nohup", "time"]);
+const GH_COMMANDS = new Set(["agent-task", "alias", "api", "attestation", "auth", "browse", "cache", "codespace", "completion", "config", "copilot", "discussion", "extension", "gist", "gpg-key", "help", "issue", "label", "licenses", "org", "pr", "preview", "project", "release", "repo", "ruleset", "run", "search", "secret", "skill", "ssh-key", "status", "variable", "version", "workflow"]);
+const WRAPPERS = new Map([
+  ["command", []],
+  ["exec", ["-a"]],
+  ["builtin", []],
+  ["nohup", []],
+  ["time", ["-f", "-o"]],
+  ["timeout", ["-s", "--signal", "-k", "--kill-after"]],
+  ["sudo", ["-u", "-g", "-C", "-D", "-h", "-p", "-U", "-r", "-t", "-T"]],
+  ["doas", ["-u", "-C"]],
+  ["nice", ["-n", "--adjustment"]],
+  ["ionice", ["-c", "-n", "-p"]],
+  ["stdbuf", ["-i", "-o", "-e"]],
+  ["xargs", ["-I", "-n", "-P", "-L", "-d", "-E", "-s", "-a"]],
+  ["env", ["-u", "-C", "-S", "--unset", "--chdir", "--split-string"]],
+]);
+const WRAPPER_ARGUMENTS = new Map([["timeout", 1]]);
+const PR_CREATE_VALUE_FLAGS = new Set(["-t", "--title", "-b", "--body", "-F", "--body-file", "-B", "--base", "-H", "--head", "-a", "--assignee", "-l", "--label", "-m", "--milestone", "-p", "--project", "-r", "--reviewer", "-T", "--template"]);
+const MERGE_REASON = "tedy gate: merging or marking a PR ready belongs to the user. Allow it only if the user asked for this exact PR in this turn.";
 const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve|unresolve|pr-body)|openproject\.mjs["']?\s+apply|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor|edit|delete))\b|^(?=[\s\S]*--apply\b)[\s\S]*?(?:openproject\.mjs["']?\s+(?:set|comment|comment-edit|relation|relation-delete|rollback)|doc-comment-file\.mjs["']?\s+post)\b/;
 export const CLAUDE_SETTINGS = process.env.TEDY_CLAUDE_SETTINGS ?? join(homedir(), ".claude", "settings.json");
 const REWRITING_PUSH = /^(-f|--force|--force-with-lease(=.*)?|--force-if-includes|--mirror|--all|--prune|-d|--delete)$/;
@@ -45,28 +63,37 @@ function classifyGitHubApi(args) {
       endpoint = token;
     }
   }
-  if (endpoint === "graphql") return args.some((token) => /^--input(=|$)|\bmutation\b|=@/.test(token)) ? "github-write" : null;
-  if (method) return method === "GET" ? null : "github-write";
-  return hasFields ? "github-write" : null;
+  if (endpoint === "graphql") {
+    if (args.some((token) => /mergePullRequest|markPullRequestReadyForReview|enablePullRequestAutoMerge/.test(token))) return "pr-merge";
+    return args.some((token) => /^--input(=|$)|\bmutation\b|=@/.test(token)) ? "github-write" : null;
+  }
+  const effective = method ?? (hasFields ? "POST" : "GET");
+  if (effective === "PUT" && /\/pulls\/\d+\/merge\/?$/.test(endpoint ?? "")) return "pr-merge";
+  if (effective === "POST" && /\/pulls\/?$/.test(endpoint ?? "")) return "pr-open";
+  return effective === "GET" ? null : "github-write";
 }
 
 function commandTokens(segment) {
   const all = tokenize(segment);
   let at = 0;
   for (;;) {
-    while (at < all.length && ENV_ASSIGNMENT.test(all[at])) at += 1;
-    if (all[at] === "env") {
-      at += 1;
-      while (at < all.length && (all[at].startsWith("-") || ENV_ASSIGNMENT.test(all[at]))) at += all[at] === "-u" ? 2 : 1;
-      continue;
+    while (at < all.length && (ENV_ASSIGNMENT.test(all[at]) || /^[({!]+$/.test(all[at]))) at += 1;
+    if (at < all.length) all[at] = all[at].replace(/^[({!]+/, "");
+    const flags = WRAPPERS.get(all[at]);
+    if (!flags) break;
+    let positionals = WRAPPER_ARGUMENTS.get(all[at]) ?? 0;
+    at += 1;
+    while (at < all.length) {
+      if (ENV_ASSIGNMENT.test(all[at])) at += 1;
+      else if (all[at].startsWith("-")) at += flags.includes(all[at]) ? 2 : 1;
+      else if (positionals > 0) {
+        positionals -= 1;
+        at += 1;
+      } else break;
     }
-    if (PREFIX_WORDS.has(all[at])) {
-      at += 1;
-      continue;
-    }
-    const tokens = all.slice(at);
-    return tokens.length && tokens[0].includes("/") ? [basename(tokens[0]), ...tokens.slice(1)] : tokens;
   }
+  const tokens = all.slice(at);
+  return tokens.length && tokens[0].includes("/") ? [basename(tokens[0]), ...tokens.slice(1)] : tokens;
 }
 
 export function loadAskRules(path) {
@@ -162,10 +189,15 @@ export function classify(segment, cwd) {
     const verbs = plainAction ? [action] : words;
     if (plainArea && (GH_HELP.has(action) || (plainAction && GH_HELP.has(rest[1])))) return { kind: "read", dir: cwd };
     if (pr && verbs.some((word) => word === "create" || word === "new")) return { kind: "pr-create", dir: cwd, args: rest };
-    if (plainArea && area === "api") return { kind: classifyGitHubApi(rest) ?? "read", dir: cwd };
+    if (plainArea && area === "api") {
+      const api = classifyGitHubApi(rest);
+      if (api === "pr-merge") return { kind: "github-write", dir: cwd, pr: true, verbs: ["merge"] };
+      if (api === "pr-open") return { kind: "github-write", dir: cwd, pr: true, verbs: ["api-pr-create"] };
+      return { kind: api ?? "read", dir: cwd };
+    }
     if (plainArea && (READ_ONLY_GH_AREAS.has(area) || (plainAction && READ_ONLY_GH_ACTIONS.has(action)))) return { kind: "read", dir: cwd };
     if (plainArea && (LOCAL_GH.has(area) || (plainAction && LOCAL_GH.has(`${area} ${action}`)))) return { kind: "other", dir: cwd };
-    return { kind: "github-write", dir: cwd, pr, verbs };
+    return { kind: "github-write", dir: cwd, pr, verbs, unknown: plainArea && !GH_COMMANDS.has(area) };
   }
   return { kind: "other", dir: cwd };
 }
@@ -216,13 +248,35 @@ export function prBody(args, dir) {
   return null;
 }
 
+export function isDraft(args) {
+  for (let index = 0; index < args.length; index += 1) {
+    if (PR_CREATE_VALUE_FLAGS.has(args[index])) index += 1;
+    else if (args[index] === "--draft" || args[index] === "--draft=true" || /^-d[A-Za-z]*$/.test(args[index])) return true;
+  }
+  return false;
+}
+
+function mentionsGhMerge(segment) {
+  const tokens = commandTokens(segment);
+  const at = tokens.findIndex((token) => basename(token) === "gh");
+  if (at < 1) return false;
+  const rest = tokens.slice(at + 1);
+  return rest.includes("pr") && rest.some((word) => word === "merge" || word === "ready");
+}
+
 export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, settingsFile } = {}) {
+  let asked = null;
+  const askFor = (reason) => {
+    asked ??= { allow: false, ask: true, reason };
+  };
   const hidden = hiddenPublish(command);
-  if (hidden) return { allow: false, ask: true, reason: `tedy gate: this publishes through a kit script in a form the permission rules do not match (\`${hidden.slice(0, 120)}\`). Allow it only if the user approved this exact publish; otherwise run it as a plain \`node <script> …\` command.` };
+  if (hidden) askFor(`tedy gate: this publishes through a kit script in a form the permission rules do not match (\`${hidden.slice(0, 120)}\`). Allow it only if the user approved this exact publish; otherwise run it as a plain \`node <script> …\` command.`);
   const uncovered = settingsFile ? uncoveredPublish(command, settingsFile) : null;
-  if (uncovered) return { allow: false, ask: true, reason: uncovered };
+  if (uncovered) askFor(uncovered);
+  const nested = substitutions(command);
+  if (nested === null) askFor("tedy gate: this command nests command substitutions too deeply to check. Allow it only if the user asked for it.");
   let dir = cwd;
-  for (const segment of splitSegments(command)) {
+  for (const segment of [...splitSegments(command), ...(nested ?? []).flatMap((body) => splitSegments(body))]) {
     const action = classify(segment, dir);
     if (action.kind === "cd") {
       dir = action.dir;
@@ -230,28 +284,42 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
     }
     if (action.kind === "push") {
       const risk = pushRisk(action.args, action.dir, gates.pushExempt);
-      if (risk) return { allow: false, ask: true, reason: `tedy gate: ${risk}, which belongs to the user. Allow it only if the user asked for this push.` };
+      if (risk) askFor(`tedy gate: ${risk}, which belongs to the user. Allow it only if the user asked for this push.`);
       continue;
     }
     if (action.kind === "pr-create") {
-      if (gates.draftPrOnly && !action.args.some((arg) => arg === "--draft" || arg === "-d")) return { allow: false, reason: "tedy gate: open the PR as a draft with `--draft`; the user marks it ready." };
-      const tracked = (projectsDir ? resolveMap(action.dir, projectsDir) : resolveMap(action.dir))?.map?.tracker;
-      if (tracked && !/\bOP#\d+\b/.test(prBody(action.args, action.dir) ?? "")) {
+      if (gates.draftPrOnly && !isDraft(action.args)) return { allow: false, reason: "tedy gate: open the PR as a draft with `--draft`; the user marks it ready." };
+      let found;
+      try {
+        found = projectsDir ? resolveMap(action.dir, projectsDir) : resolveMap(action.dir);
+      } catch {
+        askFor("tedy gate: a project map could not be read, so the work-package check for this PR did not run. Allow it only if this PR needs no work package, then fix the map.");
+        continue;
+      }
+      if (found?.map?.tracker && !/\bOP#\d+\b/.test(prBody(action.args, action.dir) ?? "")) {
         return { allow: false, reason: "tedy gate: this project tracks work in OpenProject, so every PR carries its work package as `--body \"OP#<id>\"`. No work package yet: stop, hand the task to the PM session (shared/handoff.md), and open the PR once it exists. A body file must already exist when the command runs." };
       }
       continue;
     }
-    if (action.kind !== "github-write") continue;
-    if (action.pr && action.verbs.some((verb) => verb === "merge" || verb === "ready")) {
-      return { allow: false, ask: true, reason: "tedy gate: merging or marking a PR ready belongs to the user. Allow it only if the user asked for this exact PR in this turn." };
+    if (action.kind !== "github-write") {
+      if (mentionsGhMerge(segment)) askFor(MERGE_REASON);
+      continue;
     }
-    if (!gates.ghWrites) continue;
+    if (action.pr && action.verbs.some((verb) => verb === "merge" || verb === "ready" || /^\$|`/.test(verb))) {
+      askFor(MERGE_REASON);
+      continue;
+    }
+    if (!gates.ghWrites) {
+      if (action.verbs?.includes("api-pr-create")) askFor("tedy gate: opening a PR through `gh api` skips the draft and work-package checks. Use `gh pr create`, or allow this only if the user asked for it.");
+      else if (action.unknown) askFor("tedy gate: this `gh` command is not one the gate knows, so it may be an alias that merges or publishes. Allow it only if the user asked for it.");
+      continue;
+    }
     if (/\bgh\s+(pr|issue)\s+(merge|close|reopen|ready|edit|lock|unlock)\b/.test(segment)) {
       return { allow: false, reason: "tedy gate: merging, closing or editing a PR or issue belongs to the user. Tell the user what is ready and let them do it." };
     }
     return { allow: false, reason: "tedy gate: publish to GitHub through github-write.mjs after the user approves the draft. Reading with gh (view, diff, list, GET, GraphQL queries) stays open." };
   }
-  return { allow: true };
+  return asked ?? { allow: true };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -260,13 +328,18 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     const gates = gateSwitches();
     let result = evaluate(command, input.cwd ?? process.cwd(), { gates, settingsFile: CLAUDE_SETTINGS });
-    if (result.allow) {
+    if (result.allow || result.ask) {
       const token = trackerToken(input.tool_input, trackerHost(), { cwd: input.cwd ?? process.cwd() });
       if (token) result = { allow: false, reason: token };
     }
-    if (result.allow && gates.publishQuote) {
-      const quoted = checkQuoted(input);
-      if (quoted) result = { allow: false, ...quoted };
+    if ((result.allow || result.ask) && gates.publishQuote) {
+      let quoted = null;
+      try {
+        quoted = checkQuoted(input);
+      } catch (error) {
+        if (result.allow) throw error;
+      }
+      if (quoted && (!quoted.ask || result.allow)) result = { allow: false, ...quoted };
     }
     if (!result.allow) logGate({ hook: "git-gate", decision: result.ask ? "ask" : "deny", command: command.slice(0, 200), cwd: input.cwd, reason: result.reason });
     if (result.ask) ask(result.reason);
