@@ -1,7 +1,7 @@
 import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { compactFrames, diffSnapshots, subtreeHash, versionsSince } from "../lib/figma-read.mjs";
+import { compactFrames, diffSnapshots, morePages, subtreeHash, versionsSince } from "../lib/figma-read.mjs";
 
 const box = (x, y) => ({ x, y, width: 375, height: 812 });
 
@@ -45,4 +45,12 @@ test("diffSnapshots reports added, removed, renamed and changed frames with page
 
 test("a version mark with an offset compares as an instant", () => {
   assert.deepEqual(versionsSince([{ id: "1", created_at: "2026-10-17T03:30:00Z" }], "2026-10-17T09:00:00+07:00").map((version) => version.id), ["1"]);
+});
+
+test("paging continues while the last version is still inside the window, whatever offset the mark carries", () => {
+  const page = { versions: [{ id: "3", created_at: "2026-10-17T06:00:00Z" }, { id: "2", created_at: "2026-10-17T05:00:00Z" }], pagination: { next_page: "x" } };
+  assert.equal(morePages(page, "2026-10-17T10:00:00+07:00"), true);
+  assert.equal(morePages(page, "2026-10-17T12:30:00+07:00"), false);
+  assert.equal(morePages({ ...page, pagination: {} }, "2026-10-17T10:00:00+07:00"), false);
+  assert.equal(morePages(page, undefined), false);
 });

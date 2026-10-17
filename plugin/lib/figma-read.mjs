@@ -16,6 +16,8 @@ export function textLines(node, depth = 0, lines = []) {
   return lines;
 }
 
+export const morePages = (data, since) => Boolean(since && data.versions.at(-1) && data.pagination?.next_page && notBefore(data.versions.at(-1).created_at, since));
+
 export const versionsSince = (versions, since) => (since ? versions.filter((version) => notBefore(version.created_at, since)) : versions);
 
 export function subtreeHash(node) {
@@ -104,9 +106,8 @@ async function main([command, target, ...rest]) {
     for (;;) {
       const data = await figma.request(`/files/${figma.file}/versions?page_size=50${before ? `&before=${before}` : ""}`);
       versions.push(...data.versions);
-      const last = data.versions.at(-1);
-      if (!flags.since || !last || !data.pagination?.next_page || last.created_at < flags.since) break;
-      before = last.id;
+      if (!morePages(data, flags.since)) break;
+      before = data.versions.at(-1).id;
     }
     for (const version of versionsSince(versions, flags.since)) {
       const note = [version.label, version.description].filter(Boolean).join(" · ").replace(/\s+/g, " ");
