@@ -19,6 +19,26 @@ The plugin holds no personal or project data. Everything that belongs to one use
 
 The `#v0.1.0` pins a release: the plugin changes only when you move the pin and run `claude plugin marketplace update tedy-kit`.
 
+### Local release worktree
+
+A `directory` marketplace loads the plugin in place and ignores `version`, so the way to pin a local install is a git worktree checked out at a tag. Keep the development clone (here `~/Documents/workspace/tedy-kit`) for work, and point the marketplace at a release worktree:
+
+```text
+git -C ~/Documents/workspace/tedy-kit worktree add --detach ~/Documents/workspace/tedy-kit-release v0.1.0
+claude plugin marketplace add ~/Documents/workspace/tedy-kit-release
+claude plugin install tedy@tedy-kit
+```
+
+Write the tag to `<profile>/release-tag`; `profile.mjs doctor` fails when the worktree is dirty or sits at another tag. Changing an existing marketplace path needs `claude plugin uninstall`, `claude plugin marketplace remove`, then the two commands above; editing the path in settings does not move the install.
+
+Release steps:
+1. Change on a branch in the development clone, and test with `claude --plugin-dir <clone>/plugin`.
+2. Merge to `main`, and tag `vX.Y.Z` with `plugin.json` `version` equal to the tag.
+3. Smoke the tag in a temporary worktree, then push the branch and the tag.
+4. Write the tag to `<profile>/release-tag` and commit it in the profile.
+5. `git -C ~/Documents/workspace/tedy-kit-release checkout --detach <tag>`; the profile guard asks first.
+6. Run `/reload-plugins` in each open session.
+
 ## Set up your profile
 
 Run `/tedy:setup` in a project. On the first run it creates your profile: it asks where (default `~/.config/tedy`, or another folder it then sets as `TEDY_PROFILE_DIR` in `~/.claude/settings.json`), writes a default `config.json`, a starter `rules.md` and an empty `projects/` folder without overwriting anything, and adds `@<profile>/rules.md` to `~/.claude/CLAUDE.md` after a backup. It then builds the project map. To create the profile by hand instead, run `node <plugin>/scripts/profile.mjs init`.
