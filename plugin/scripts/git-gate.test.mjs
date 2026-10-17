@@ -43,6 +43,16 @@ test("classify recognises git and gh actions through env vars and -C", () => {
   assert.equal(classify("npm test", "/w").kind, "other");
 });
 
+test("gh api write flags count in attached and = forms, and help or version is a read", () => {
+  for (const command of ["gh api -XPUT repos/o/r/pulls/12/merge", "gh api -X=PUT repos/o/r/pulls/12/merge", "gh api -XPOST repos/o/r/pulls/12/merge", "gh api repos/o/r/issues/1/comments -fbody=x", "gh api repos/o/r/issues/1/comments -Fbody=@f", "gh api repos/o/r/issues/1/comments --input=b.json", "gh api graphql --input=q.json"]) {
+    assert.equal(classify(command, "/w").kind, "github-write", command);
+  }
+  for (const command of ["gh api -XGET repos/o/r/pulls", "gh pr --help", "gh pr merge --help", "gh pr ready -h", "gh pr create --help", "gh version"]) {
+    assert.equal(classify(command, "/w").kind, "read", command);
+  }
+  assert.equal(evaluate("gh pr merge --subject --help 12", "/w", { gates: { ...ALL_GATES_ON, ghWrites: false } }).ask, true);
+});
+
 test("git commit and push are never blocked, chained or not", () => {
   for (const command of ["git add -A && git commit -m x && git push", "npm test && git push -u origin feat", "git commit -m 'why > because'", "gh pr create --draft --fill"]) {
     assert.equal(evaluate(command, "/w").allow, true, command);

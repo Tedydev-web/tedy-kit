@@ -12,7 +12,8 @@ const SHELL_WRAPPER = /^(?:bash|sh|zsh)\s+-c\s+(['"])([\s\S]*)\1$/;
 const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 const READ_ONLY_GIT = new Set(["status", "diff", "log", "show", "fetch", "rev-parse", "branch", "ls-files", "remote", "describe", "blame", "reflog"]);
 const READ_ONLY_GH_ACTIONS = new Set(["view", "list", "diff", "checks", "status", "watch", "download"]);
-const READ_ONLY_GH_AREAS = new Set(["search", "status", "browse", "help", "--version", "--help", undefined]);
+const READ_ONLY_GH_AREAS = new Set(["search", "status", "browse", "help", "version"]);
+const GH_HELP = new Set(["-h", "--help"]);
 const LOCAL_GH = new Set(["pr checkout", "repo clone", "auth", "config", "alias", "extension", "completion"]);
 const PROTECTED_BRANCHES = new Set(["main", "master", "dev", "develop", "production", "staging"]);
 const PREFIX_WORDS = new Set(["command", "exec", "builtin", "nohup", "time"]);
@@ -131,16 +132,18 @@ function classifyGitHubApi(args) {
       index += 1;
     } else if (token.startsWith("--method=")) {
       method = token.slice("--method=".length).toUpperCase();
+    } else if (/^-X./.test(token)) {
+      method = token.replace(/^-X=?/, "").toUpperCase();
     } else if (["-f", "-F", "--field", "--raw-field", "--input"].includes(token)) {
       hasFields = true;
       index += 1;
-    } else if (/^--(raw-)?field=/.test(token)) {
+    } else if (/^(--(raw-)?field=|--input=|-[fF].)/.test(token)) {
       hasFields = true;
     } else if (!token.startsWith("-") && endpoint === null) {
       endpoint = token;
     }
   }
-  if (endpoint === "graphql") return args.includes("--input") || args.some((token) => /\bmutation\b|=@/.test(token)) ? "github-write" : null;
+  if (endpoint === "graphql") return args.some((token) => /^--input(=|$)|\bmutation\b|=@/.test(token)) ? "github-write" : null;
   if (method) return method === "GET" ? null : "github-write";
   return hasFields ? "github-write" : null;
 }
@@ -217,6 +220,7 @@ export function classify(segment, cwd) {
     const plainAction = plainArea && action !== undefined && !action.startsWith("-");
     const pr = plainArea ? area === "pr" : words.includes("pr");
     const verbs = plainAction ? [action] : words;
+    if (plainArea && (GH_HELP.has(action) || (plainAction && GH_HELP.has(rest[1])))) return { kind: "read", dir: cwd };
     if (pr && verbs.some((word) => word === "create" || word === "new")) return { kind: "pr-create", dir: cwd, args: rest };
     if (plainArea && area === "api") return { kind: classifyGitHubApi(rest) ?? "read", dir: cwd };
     if (plainArea && (READ_ONLY_GH_AREAS.has(area) || (plainAction && READ_ONLY_GH_ACTIONS.has(action)))) return { kind: "read", dir: cwd };
