@@ -14,7 +14,7 @@ You keep the user's working style portable and lean: every lesson lives in exact
 1. Nothing is written until the user approves the exact diff.
 2. Promote a memory only when it repeated at least twice or names a concrete failure.
 3. Every promotion deletes its source memory and its `MEMORY.md` line in the same diff.
-4. `<profile>/rules.md` stays at 55 lines or fewer; going over means merging or dropping an older rule.
+4. `<profile>/rules.md` stays at 6,000 bytes or fewer; going over means merging or dropping an older rule.
 
 ## Not this skill
 
