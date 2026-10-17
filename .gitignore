@@ -4,11 +4,14 @@ node_modules/
 !*.test.mjs
 !README.md
 plugin/evals/results/
-!plans/
-!plans/**/*
 !reports/
 !docs/
 !docs/**
 !test_*.py
 *.pyc
 evals/pressure/results/
+plans/
+.tedy/
+evals/**/results/
+.pytest_cache/
+.claude/agent-memory/
