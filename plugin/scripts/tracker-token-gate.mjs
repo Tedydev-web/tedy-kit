@@ -3,7 +3,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join, matchesGlob, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { deny, logGate, readHookInput } from "./hook-io.mjs";
-import { splitSegments, tokenize } from "./shell-segments.mjs";
+import { expandHome, walkSegments } from "./shell-segments.mjs";
 
 const TOKEN_FILE = [/\.config\/op\/config\.json/, /["']op["']\s*[,/+]\s*["']config\.json["']/];
 const CONFIG_FILE = join(homedir(), ".config", "op", "config.json");
@@ -30,8 +30,6 @@ export function trackerHost(read = () => readFileSync(CONFIG_FILE, "utf8")) {
   }
 }
 
-const expandHome = (path) => (path === "~" || path.startsWith("~/") ? join(homedir(), path.slice(1)) : path);
-
 function real(path) {
   try {
     return realpathSync(path);
@@ -43,13 +41,7 @@ function real(path) {
 function bashPaths(command, cwd) {
   const paths = new Set();
   const searched = new Set();
-  let dir = cwd;
-  for (const segment of splitSegments(command)) {
-    const tokens = tokenize(segment);
-    if (tokens[0] === "cd") {
-      dir = resolve(dir, expandHome(tokens[1] ?? "~"));
-      continue;
-    }
+  for (const { dir, tokens } of walkSegments(command, cwd)) {
     const reader = RECURSIVE_READERS.has(basename(tokens[0] ?? ""));
     for (const token of tokens) {
       paths.add(resolve(dir, expandHome(token)));

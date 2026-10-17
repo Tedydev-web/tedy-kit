@@ -1,3 +1,6 @@
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
+
 const SHELL_WRAPPER = /^(?:bash|sh|zsh)\s+-c\s+(['"])([\s\S]*)\1$/;
 const HEREDOC = /<<(-?)\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/g;
 
@@ -156,4 +159,18 @@ export function substitutions(command) {
   if (tick !== -1) bodies.push(command.slice(tick));
   for (const start of open) bodies.push(command.slice(start));
   return bodies;
+}
+
+export const expandHome = (path) => (path === "~" || path.startsWith("~/") ? join(homedir(), path.slice(1)) : path);
+
+export function* walkSegments(command, cwd) {
+  let dir = cwd;
+  for (const segment of splitSegments(command)) {
+    const tokens = tokenize(segment);
+    if (tokens[0] === "cd") {
+      dir = resolve(dir, expandHome(tokens[1] ?? "~"));
+      continue;
+    }
+    yield { dir, tokens };
+  }
 }

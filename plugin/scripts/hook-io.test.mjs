@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { profileWith, tempDir } from "./temp-dir-for-tests.mjs";
 
@@ -28,4 +28,17 @@ test("gate switches come from the profile config, and a broken config turns ever
   process.env.TEDY_PROFILE_DIR = profileWith({ gates: { roleGate: "yes" } });
   assert.deepEqual(gateSwitches(), ALL_GATES_ON);
   assert.match(readFileSync(join(STATE_DIR, "gate-log.jsonl"), "utf8"), /"hook":"profile-config","decision":"invalid-gates-on"/);
+});
+
+test("a profile with rules but no config turns every personal gate on; no profile keeps the defaults", async () => {
+  const { ALL_GATES_ON, gateSwitches } = await import("./hook-io.mjs");
+  const { DEFAULT_CONFIG } = await import("./profile.mjs");
+  const rulesOnly = tempDir("tedy-profile-rules-");
+  writeFileSync(join(rulesOnly, "rules.md"), "# rules\n");
+  process.env.TEDY_PROFILE_DIR = rulesOnly;
+  assert.deepEqual(gateSwitches(), ALL_GATES_ON);
+  process.env.TEDY_PROFILE_DIR = tempDir("tedy-profile-empty-");
+  assert.deepEqual(gateSwitches(), DEFAULT_CONFIG.gates);
+  process.env.TEDY_PROFILE_DIR = join(tempDir("tedy-profile-none-"), "missing");
+  assert.deepEqual(gateSwitches(), DEFAULT_CONFIG.gates);
 });

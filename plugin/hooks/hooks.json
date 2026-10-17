@@ -20,6 +20,12 @@
         ]
       },
       {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash",
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/profile-guard-gate.mjs\"", "timeout": 15 }
+        ]
+      },
+      {
         "matcher": "Bash|Read|Grep|mcp__.*ctx_(execute|execute_file|batch_execute|index|fetch_and_index)",
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/tracker-token-gate.mjs\"", "timeout": 15 }

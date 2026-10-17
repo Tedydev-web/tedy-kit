@@ -1,8 +1,8 @@
-import { appendFileSync, closeSync, fstatSync, mkdirSync, openSync, readFileSync, readSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { redact } from "./api-request.mjs";
-import { loadConfig } from "./profile.mjs";
+import { loadConfig, profileDir } from "./profile.mjs";
 
 export const STATE_DIR = process.env.TEDY_STATE_DIR ?? join(homedir(), ".local", "state", "tedy");
 
@@ -28,7 +28,9 @@ export const ALL_GATES_ON = Object.freeze({ noComments: true, draftPrOnly: true,
 
 export function gateSwitches() {
   try {
-    return loadConfig().gates;
+    const dir = profileDir();
+    if (!existsSync(join(dir, "config.json")) && existsSync(join(dir, "rules.md"))) return ALL_GATES_ON;
+    return loadConfig(dir).gates;
   } catch (error) {
     logGate({ hook: "profile-config", decision: "invalid-gates-on", error: error.message });
     return ALL_GATES_ON;
