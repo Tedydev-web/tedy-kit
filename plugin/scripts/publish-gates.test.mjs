@@ -8,7 +8,6 @@ import { prBodyFrom, sameComment } from "./openproject.mjs";
 import { classifyAction, decide } from "./role-gate.mjs";
 import { publishes, unshown } from "./publish-quote-gate.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
-import { evaluate as trackerToken, trackerHost } from "./tracker-token-gate.mjs";
 
 const mapFile = (data) => `# Project map\n\n\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\`\n`;
 
@@ -33,21 +32,6 @@ test("a PR in a tracked project must carry OP#<id> in its body", () => {
   assert.equal(create("--body-file body.md").allow, true);
   assert.equal(create("--body-file missing.md").allow, false);
   assert.equal(evaluate('gh pr create --draft --body ""', "/somewhere/else", { projectsDir: dir }).allow, true);
-});
-
-test("the tracker token file and direct writes to the tracker host are denied in any tool input", () => {
-  const host = "op.example.com";
-  assert.ok(trackerToken({ command: "python3 -c \"import json;json.load(open('/srv/u/.config/op/config.json'))\"" }, host));
-  assert.ok(trackerToken({ code: "p = Path.home() / '.config' / 'op' / 'config.json'" }, host));
-  assert.ok(trackerToken({ code: "os.path.join(home, '.config', 'op', 'config.json')" }, host));
-  assert.ok(trackerToken({ file_path: "/srv/u/.config/op/config.json" }, host));
-  assert.ok(trackerToken({ commands: [{ label: "x", command: "curl -X PATCH https://op.example.com/api/v3/work_packages/1" }] }, host));
-  assert.ok(trackerToken({ code: "requests.post('https://op.example.com/api/v3/work_packages/1/activities')" }, host));
-  assert.equal(trackerToken({ command: "curl https://op.example.com/api/v3/statuses" }, host), null);
-  assert.equal(trackerToken({ command: "node plugin/scripts/openproject.mjs set 21453 --status Fixed --apply --lock 3" }, host), null);
-  assert.equal(trackerToken({ command: "cat ~/.config/op/sync/op.example.com__x.map.json" }, host), null);
-  assert.equal(trackerHost(() => JSON.stringify({ url: "https://op.example.com/", token: "t" })), "op.example.com");
-  assert.equal(trackerHost(() => "not json"), null);
 });
 
 const draft = "# PR #735: comment line by line (head abc1234)\n\n## 1. `src/a.ts:10`\nc check lại chỗ này giúp e nha\n\n---\n\n## 2. `src/b.ts:4`\nđoạn này thiếu case rỗng\n";

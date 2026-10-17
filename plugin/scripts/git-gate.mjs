@@ -5,10 +5,12 @@ import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ALL_GATES_ON, ask, deny, gateSwitches, logGate, readHookInput } from "./hook-io.mjs";
 import { resolveMap } from "./project-map.mjs";
+import { splitSegments, tokenize } from "./shell-segments.mjs";
 import { check as checkQuoted } from "./publish-quote-gate.mjs";
 import { evaluate as trackerToken, trackerHost } from "./tracker-token-gate.mjs";
 
-const SHELL_WRAPPER = /^(?:bash|sh|zsh)\s+-c\s+(['"])([\s\S]*)\1$/;
+export { splitSegments, tokenize };
+
 const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 const READ_ONLY_GIT = new Set(["status", "diff", "log", "show", "fetch", "rev-parse", "branch", "ls-files", "remote", "describe", "blame", "reflog"]);
 const READ_ONLY_GH_ACTIONS = new Set(["view", "list", "diff", "checks", "status", "watch", "download"]);
@@ -17,110 +19,9 @@ const GH_HELP = new Set(["-h", "--help"]);
 const LOCAL_GH = new Set(["pr checkout", "repo clone", "auth", "config", "alias", "extension", "completion"]);
 const PROTECTED_BRANCHES = new Set(["main", "master", "dev", "develop", "production", "staging"]);
 const PREFIX_WORDS = new Set(["command", "exec", "builtin", "nohup", "time"]);
-const HEREDOC = /<<(-?)\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/g;
 const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve|unresolve|pr-body)|openproject\.mjs["']?\s+apply|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor|edit|delete))\b|^(?=[\s\S]*--apply\b)[\s\S]*?(?:openproject\.mjs["']?\s+(?:set|comment|comment-edit|relation|relation-delete|rollback)|doc-comment-file\.mjs["']?\s+post)\b/;
 export const CLAUDE_SETTINGS = process.env.TEDY_CLAUDE_SETTINGS ?? join(homedir(), ".claude", "settings.json");
 const REWRITING_PUSH = /^(-f|--force|--force-with-lease(=.*)?|--force-if-includes|--mirror|--all|--prune|-d|--delete)$/;
-
-function skipHeredocs(command, index, line) {
-  let at = index;
-  for (const [, dash, , tag] of line.matchAll(HEREDOC)) {
-    while (at < command.length) {
-      const end = command.indexOf("\n", at + 1);
-      const body = command.slice(at + 1, end === -1 ? command.length : end);
-      at = end === -1 ? command.length : end;
-      if ((dash ? body.replace(/^\t+/, "") : body) === tag) break;
-    }
-  }
-  return at;
-}
-
-export function splitSegments(command, unwrap = true) {
-  const segments = [];
-  let current = "";
-  let line = "";
-  let quote = null;
-  for (let index = 0; index < command.length; index += 1) {
-    const char = command[index];
-    const pair = command.slice(index, index + 2);
-    if (quote) {
-      if (char === "\\" && quote === '"') {
-        current += char + (command[index + 1] ?? "");
-        index += 1;
-        continue;
-      }
-      if (char === quote) quote = null;
-      current += char;
-      line += char;
-      continue;
-    }
-    if (char === "'" || char === '"') {
-      quote = char;
-      current += char;
-      line += char;
-      continue;
-    }
-    if (pair === "&&" || pair === "||") {
-      line += pair;
-      segments.push(current);
-      current = "";
-      index += 1;
-      continue;
-    }
-    if (char === "\n") {
-      index = skipHeredocs(command, index, line);
-      line = "";
-      segments.push(current);
-      current = "";
-      continue;
-    }
-    if (char === ";" || char === "|") {
-      line += char;
-      segments.push(current);
-      current = "";
-      continue;
-    }
-    line += char;
-    current += char;
-  }
-  segments.push(current);
-  return segments
-    .map((segment) => segment.trim())
-    .filter(Boolean)
-    .flatMap((segment) => {
-      const wrapped = unwrap && segment.match(SHELL_WRAPPER);
-      return wrapped ? splitSegments(wrapped[2]) : [segment];
-    });
-}
-
-export function tokenize(segment) {
-  const tokens = [];
-  let current = "";
-  let quote = null;
-  let started = false;
-  for (const char of segment) {
-    if (quote) {
-      if (char === quote) quote = null;
-      else current += char;
-      continue;
-    }
-    if (char === "'" || char === '"') {
-      quote = char;
-      started = true;
-      continue;
-    }
-    if (/\s/.test(char)) {
-      if (started) tokens.push(current);
-      current = "";
-      started = false;
-      continue;
-    }
-    current += char;
-    started = true;
-  }
-  if (started) tokens.push(current);
-  return tokens;
-}
 
 function classifyGitHubApi(args) {
   let method = null;
@@ -360,7 +261,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const gates = gateSwitches();
     let result = evaluate(command, input.cwd ?? process.cwd(), { gates, settingsFile: CLAUDE_SETTINGS });
     if (result.allow) {
-      const token = trackerToken(input.tool_input, trackerHost());
+      const token = trackerToken(input.tool_input, trackerHost(), { cwd: input.cwd ?? process.cwd() });
       if (token) result = { allow: false, reason: token };
     }
     if (result.allow && gates.publishQuote) {
