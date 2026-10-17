@@ -172,3 +172,57 @@ test("with ghWrites off gh may write directly except merge and ready; with it on
   for (const command of ["gh issue -c view close 3", "gh pr -t view merge 12", "gh issue -c list close 3", "gh pr --body diff edit 1 --title y", "gh --body auth pr edit 1"]) assert.equal(evaluate(command, "/w").allow, false, command);
   for (const command of ["gh -R o/r pr create --title x --body y", "gh pr -R o/r create --title x --body y", "gh -Ro/r pr create --title x --body y", "gh pr -Ro/r create --title x --body y", "gh pr -t view create --body x", "gh pr --title view create --body x", "gh pr new --title x --body y"]) assert.equal(evaluate(command, "/w", { gates: off }).allow, false, command);
 });
+
+const GATE_ENTRY = join(dirname(fileURLToPath(import.meta.url)), "git-gate.mjs");
+const F2_PUBLISH_RULES = ["post", "reply", "edit", "minimize", "resolve", "unresolve", "pr-body"].map((verb) => `Bash(*github-write.mjs*${verb}*)`)
+  .concat(["Bash(*openproject.mjs*apply*)"], ["set", "comment", "comment-edit", "relation", "relation-delete", "rollback"].map((verb) => `Bash(*openproject.mjs*${verb}*--apply*)`))
+  .concat(["post", "reply", "delete"].map((verb) => `Bash(*figma-comments.mjs*${verb}*)`), ["reply", "anchor", "edit", "delete"].map((verb) => `Bash(*gdoc-comments.mjs*${verb}*)`), ["Bash(*doc-comment-file.mjs*post*--apply*)"]);
+
+function settingsWith(text) {
+  const file = join(tempDir("tedy-settings-"), "settings.json");
+  writeFileSync(file, text);
+  return file;
+}
+
+function runEntry(command, { cwd = "/tmp", settings = settingsWith(JSON.stringify({ permissions: { ask: F2_PUBLISH_RULES } })) } = {}) {
+  const input = JSON.stringify({ tool_name: "Bash", tool_input: { command }, cwd });
+  const out = execFileSync("node", [GATE_ENTRY], { input, encoding: "utf8", env: { ...process.env, TEDY_STATE_DIR: tempDir("tedy-state-"), TEDY_CLAUDE_SETTINGS: settings } });
+  return out ? JSON.parse(out).hookSpecificOutput : null;
+}
+
+test("a publish command the gate cannot check asks and names the error", () => {
+  const dir = tempDir("tedy-draft-");
+  writeFileSync(join(dir, "d.md"), "no header here\n");
+  for (const [command, error] of [
+    ["node x/github-write.mjs post", /argument/],
+    ["node x/github-write.mjs post /tmp/tedy-does-not-exist.md", /ENOENT/],
+    ["node x/github-write.mjs post d.md", /header/],
+  ]) {
+    const result = runEntry(command, { cwd: dir });
+    assert.equal(result?.permissionDecision, "ask", command);
+    assert.match(result.permissionDecisionReason, /could not check this publish command/, command);
+    assert.match(result.permissionDecisionReason, error, command);
+  }
+});
+
+test("a node publish that no ask rule covers asks; one the rules cover passes through", () => {
+  const settingsFile = settingsWith(JSON.stringify({ permissions: { ask: F2_PUBLISH_RULES } }));
+  for (const command of ["node /k/github-write.mjs post d.md", "node \"/k/github-write.mjs\" post d.md", "node /k/github-write.mjs --repo x/y post d.md", "cd /tmp && node /k/github-write.mjs post d.md", "node /k/openproject.mjs set 12 --status Done --apply", "node /k/github-write.mjs\tpost d.md", "node /k/openproject.mjs relation-delete 1 2 --apply", "node /k/doc-comment-file.mjs post f --apply"]) {
+    assert.equal(evaluate(command, "/w", { settingsFile }).allow, true, command);
+  }
+  const withoutPost = settingsWith(JSON.stringify({ permissions: { ask: F2_PUBLISH_RULES.filter((rule) => !rule.includes("github-write.mjs*post")) } }));
+  const result = evaluate("node /k/github-write.mjs post d.md", "/w", { settingsFile: withoutPost });
+  assert.equal(result.ask, true);
+  assert.match(result.reason, /no permission rule covers/);
+  assert.equal(evaluate("node /k/github-write.mjs view 1", "/w", { settingsFile: withoutPost }).allow, true);
+});
+
+test("missing or unreadable ask rules make a node publish ask, without quoting the settings file", () => {
+  for (const settings of [settingsWith(JSON.stringify({ permissions: {} })), settingsWith("{}"), join(tempDir("tedy-settings-"), "missing.json")]) {
+    assert.equal(runEntry("node /k/github-write.mjs post d.md", { settings })?.permissionDecision, "ask", settings);
+  }
+  const broken = runEntry("node /k/github-write.mjs post d.md", { settings: settingsWith('{"env": {"TEDY_SECRET_MARKER": "x"') });
+  assert.equal(broken?.permissionDecision, "ask");
+  assert.equal(broken.permissionDecisionReason, "tedy gate: could not read the ask rules; approve only if you have seen the exact draft.");
+  assert.equal(runEntry("git status", { settings: settingsWith("{") }), null);
+});

@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ALL_GATES_ON, ask, deny, gateSwitches, logGate, readHookInput } from "./hook-io.mjs";
 import { resolveMap } from "./project-map.mjs";
@@ -19,6 +19,7 @@ const PROTECTED_BRANCHES = new Set(["main", "master", "dev", "develop", "product
 const PREFIX_WORDS = new Set(["command", "exec", "builtin", "nohup", "time"]);
 const HEREDOC = /<<(-?)\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/g;
 const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve|unresolve|pr-body)|openproject\.mjs["']?\s+apply|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor|edit|delete))\b|^(?=[\s\S]*--apply\b)[\s\S]*?(?:openproject\.mjs["']?\s+(?:set|comment|comment-edit|relation|relation-delete|rollback)|doc-comment-file\.mjs["']?\s+post)\b/;
+export const CLAUDE_SETTINGS = process.env.TEDY_CLAUDE_SETTINGS ?? join(homedir(), ".claude", "settings.json");
 const REWRITING_PUSH = /^(-f|--force|--force-with-lease(=.*)?|--force-if-includes|--mirror|--all|--prune|-d|--delete)$/;
 
 function skipHeredocs(command, index, line) {
@@ -167,6 +168,42 @@ function commandTokens(segment) {
   }
 }
 
+export function loadAskRules(path) {
+  try {
+    const rules = JSON.parse(readFileSync(path, "utf8")).permissions?.ask ?? [];
+    return rules.flatMap((rule) => (typeof rule === "string" ? (rule.match(/^Bash\(([\s\S]*)\)$/)?.slice(1) ?? []) : []));
+  } catch {
+    return null;
+  }
+}
+
+export function globMatches(glob, text) {
+  const parts = glob.split("*");
+  if (parts.length === 1) return glob === text;
+  const first = parts[0];
+  const last = parts.at(-1);
+  if (text.length < first.length + last.length || !text.startsWith(first) || !text.endsWith(last)) return false;
+  const end = text.length - last.length;
+  let at = first.length;
+  for (const part of parts.slice(1, -1)) {
+    const found = text.indexOf(part, at);
+    if (found === -1 || found + part.length > end) return false;
+    at = found + part.length;
+  }
+  return true;
+}
+
+function uncoveredPublish(command, settingsFile) {
+  let rules;
+  for (const segment of splitSegments(command, false)) {
+    if (!PUBLISH.test(segment)) continue;
+    rules ??= loadAskRules(settingsFile);
+    if (rules === null) return "tedy gate: could not read the ask rules; approve only if you have seen the exact draft.";
+    if (!rules.some((glob) => globMatches(glob, segment))) return `tedy gate: no permission rule covers this publish (\`${segment.slice(0, 120)}\`); approve only if you have seen the exact draft.`;
+  }
+  return null;
+}
+
 export function hiddenPublish(command) {
   for (const segment of splitSegments(command, false)) {
     if (!PUBLISH.test(segment)) continue;
@@ -278,9 +315,11 @@ export function prBody(args, dir) {
   return null;
 }
 
-export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir } = {}) {
+export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, settingsFile } = {}) {
   const hidden = hiddenPublish(command);
   if (hidden) return { allow: false, ask: true, reason: `tedy gate: this publishes through a kit script in a form the permission rules do not match (\`${hidden.slice(0, 120)}\`). Allow it only if the user approved this exact publish; otherwise run it as a plain \`node <script> …\` command.` };
+  const uncovered = settingsFile ? uncoveredPublish(command, settingsFile) : null;
+  if (uncovered) return { allow: false, ask: true, reason: uncovered };
   let dir = cwd;
   for (const segment of splitSegments(command)) {
     const action = classify(segment, dir);
@@ -318,7 +357,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const input = readHookInput();
   const command = input.tool_input?.command ?? "";
   try {
-    let result = evaluate(command, input.cwd ?? process.cwd(), { gates: gateSwitches() });
+    let result = evaluate(command, input.cwd ?? process.cwd(), { gates: gateSwitches(), settingsFile: CLAUDE_SETTINGS });
     if (result.allow) {
       const token = trackerToken(input.tool_input, trackerHost());
       if (token) result = { allow: false, reason: token };
@@ -331,7 +370,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     if (result.ask) ask(result.reason);
     else if (!result.allow) deny(result.reason);
   } catch (error) {
-    logGate({ hook: "git-gate", decision: "allow-on-error", command: command.slice(0, 200), error: error.message });
-    process.stderr.write(`tedy gate could not classify this command: ${error.message}\n`);
+    if (PUBLISH.test(command)) {
+      logGate({ hook: "git-gate", decision: "ask", command: command.slice(0, 200), error: error.message });
+      ask(`tedy gate: could not check this publish command (${error.message}). Approve only if you have seen the exact draft.`);
+    } else {
+      logGate({ hook: "git-gate", decision: "allow-on-error", command: command.slice(0, 200), error: error.message });
+      process.stderr.write(`tedy gate could not classify this command: ${error.message}\n`);
+    }
   }
 }
