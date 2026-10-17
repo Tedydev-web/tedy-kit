@@ -2,7 +2,7 @@ import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { evaluate } from "./profile-guard-gate.mjs";
@@ -55,4 +55,14 @@ test("the guard entry asks through the hook output", () => {
   const input = JSON.stringify({ tool_name: "Write", tool_input: { file_path: join(profile, "config.json"), content: "{}" }, cwd: "/" });
   const out = execFileSync("node", [GATE_ENTRY], { input, encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: profile, TEDY_RELEASE_DIR: release, TEDY_STATE_DIR: tempDir("tedy-state-") } });
   assert.equal(JSON.parse(out).hookSpecificOutput.permissionDecision, "ask");
+});
+
+test("the guard entry fails closed and asks when the check itself throws", () => {
+  const { profile, release } = places();
+  const stateDir = tempDir("tedy-state-");
+  const input = JSON.stringify({ tool_name: "Edit", tool_input: { file_path: "x" }, cwd: 123 });
+  const out = execFileSync("node", [GATE_ENTRY], { input, encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: profile, TEDY_RELEASE_DIR: release, TEDY_STATE_DIR: stateDir } });
+  assert.equal(JSON.parse(out).hookSpecificOutput.permissionDecision, "ask");
+  const log = readFileSync(join(stateDir, "gate-log.jsonl"), "utf8");
+  assert.match(log, /"decision":"ask-on-error"/);
 });

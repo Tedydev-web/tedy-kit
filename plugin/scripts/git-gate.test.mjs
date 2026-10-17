@@ -175,6 +175,14 @@ test("with ghWrites off gh may write directly except merge and ready; with it on
   for (const command of ["gh -R o/r pr create --title x --body y", "gh pr -R o/r create --title x --body y", "gh -Ro/r pr create --title x --body y", "gh pr -Ro/r create --title x --body y", "gh pr -t view create --body x", "gh pr --title view create --body x", "gh pr new --title x --body y"]) assert.equal(evaluate(command, "/w", { gates: off }).allow, false, command);
 });
 
+test("a gh merge reached through an unknown leading command still asks", () => {
+  for (const command of ["watch gh pr merge 1", "ssh host gh pr merge 1", "foo gh pr ready 2"]) {
+    const result = evaluate(command, "/w");
+    assert.equal(result.ask, true, command);
+    assert.match(result.reason, /belongs to the user/, command);
+  }
+});
+
 const GATE_ENTRY = join(dirname(fileURLToPath(import.meta.url)), "git-gate.mjs");
 const F2_PUBLISH_RULES = ["post", "reply", "edit", "minimize", "resolve", "unresolve", "pr-body"].map((verb) => `Bash(*github-write.mjs*${verb}*)`)
   .concat(["Bash(*openproject.mjs*apply*)"], ["set", "comment", "comment-edit", "relation", "relation-delete", "rollback"].map((verb) => `Bash(*openproject.mjs*${verb}*--apply*)`))

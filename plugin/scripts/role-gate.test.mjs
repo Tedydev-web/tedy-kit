@@ -2,7 +2,7 @@ import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { classifyAction, decide, roleCard, roleOf, sessionName } from "./role-gate.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
@@ -110,6 +110,33 @@ test("the dispatch session writes nothing itself and its card routes every reque
   assert.match(card, /"PM - Shop" \(pm\)/);
   assert.match(card, /without the hand-off question/);
   assert.doesNotMatch(roleCard(map, "PM - Shop"), /dispatch section/);
+});
+
+test("the gate entry asks and names the owning session when a write belongs to another role", () => {
+  const root = tempDir("tedy-role-root-");
+  const profile = tempDir("tedy-role-profile-");
+  writeFileSync(join(profile, "config.json"), JSON.stringify({ gates: { roleGate: true } }));
+  mkdirSync(join(profile, "projects"));
+  const data = {
+    name: "acme-shop",
+    paths: [root],
+    repos: [{ path: "fe", role: "FE" }],
+    sessions: [{ name: "Dev - Shop", role: "dev", repos: ["fe"] }, { name: "PM - Shop", role: "pm" }],
+  };
+  writeFileSync(join(profile, "projects", "shop.md"), `# map\n\n\`\`\`json\n${JSON.stringify(data)}\n\`\`\`\n`);
+  const bin = tempDir("tedy-role-bin-");
+  writeFileSync(join(bin, "claude"), `#!/usr/bin/env node\nprocess.stdout.write(JSON.stringify([{ sessionId: "sess-1", name: "Dev - Shop" }]));\n`);
+  chmodSync(join(bin, "claude"), 0o755);
+  const stateDir = tempDir("tedy-role-state-");
+  const input = JSON.stringify({ tool_name: "Bash", tool_input: { command: "node /k/openproject.mjs apply d.json" }, cwd: root, session_id: "sess-1" });
+  const out = execFileSync("node", [new URL("./role-gate.mjs", import.meta.url).pathname], {
+    input,
+    encoding: "utf8",
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: stateDir },
+  });
+  const decision = JSON.parse(out).hookSpecificOutput;
+  assert.equal(decision.permissionDecision, "ask");
+  assert.match(decision.permissionDecisionReason, /this is "Dev - Shop", the dev session; writing to the tracker belongs to the pm session "PM - Shop"/);
 });
 
 test("role-gate asks when it cannot read the project maps", () => {

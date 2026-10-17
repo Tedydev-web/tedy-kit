@@ -7,7 +7,7 @@ import { evaluate } from "./git-gate.mjs";
 import { prBodyRefusal } from "./github-write.mjs";
 import { prBodyFrom, sameComment } from "./openproject.mjs";
 import { classifyAction, decide } from "./role-gate.mjs";
-import { publishes, unshown } from "./publish-quote-gate.mjs";
+import { check, publishes, unshown } from "./publish-quote-gate.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const mapFile = (data) => `# Project map\n\n\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\`\n`;
@@ -60,6 +60,13 @@ test("posting needs every comment body shown to the user after the draft's last 
   const reply = publishes("node /k/github-write.mjs reply 735 99 --body \"đã sửa ạ.\"", "/", read);
   assert.deepEqual(unshown(reply, [say(10, "Reply: đã sửa ạ.")], mtime), []);
   assert.equal(unshown(reply, [say(10, "Reply thread 5?")], mtime).length, 1);
+});
+
+test("the quote check asks when there is no transcript path to confirm what the user saw", () => {
+  const input = { tool_name: "Bash", tool_input: { command: 'node /k/github-write.mjs reply 1 2 --body "Fixed it."' }, cwd: "/w" };
+  const result = check(input);
+  assert.equal(result.ask, true);
+  assert.match(result.reason, /cannot read this session's transcript/);
 });
 
 test("an OpenProject comment already on the work package is refused as a duplicate", () => {
