@@ -378,7 +378,7 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
   return asked ?? { allow: true };
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+export function run() {
   const input = readHookInput({ askOnFailure: true });
   const command = input.tool_input?.command ?? "";
   try {
@@ -405,3 +405,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     ask(PUBLISH.test(command) ? `tedy gate: could not check this publish command (${error.message}). Approve only if you have seen the exact draft.` : `tedy gate: could not check this command (${error.message}). Allow it only if the user asked for it.`);
   }
 }
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();

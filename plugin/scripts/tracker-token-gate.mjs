@@ -94,7 +94,7 @@ export function evaluate(toolInput, host, { configFile = CONFIG_FILE, cwd = proc
   return null;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+export function run() {
   const input = readHookInput({ askOnFailure: true });
   try {
     const reason = evaluate(input.tool_input, trackerHost(), { cwd: input.cwd ?? process.cwd() });
@@ -107,3 +107,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     deny(`tedy gate: could not check this call for the tracker token (${error.message}). ${REASON}`);
   }
 }
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();

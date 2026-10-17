@@ -53,7 +53,7 @@ export function evaluate(input, { profile = profileDir(), release = releaseDir()
   return null;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+export function run() {
   const input = readHookInput({ askOnFailure: true });
   try {
     const reason = evaluate(input);
@@ -66,3 +66,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     ask(REASON);
   }
 }
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();

@@ -70,7 +70,7 @@ export function reportText(dir, { dirty, comments }) {
   return parts.join("\n");
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+export function run() {
   const input = readHookInput();
   const command = input.tool_input?.command ?? "";
   try {
@@ -91,3 +91,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PostToolUse", additionalContext: `tedy report could not check this push (${error.message}). Tell the user, and check \`git status\` and the pushed diff by hand.` } }));
   }
 }
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();

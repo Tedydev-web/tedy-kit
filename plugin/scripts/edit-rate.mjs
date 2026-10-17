@@ -39,4 +39,8 @@ function main([path = EDIT_LOG]) {
   return 0;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) process.exit(main(process.argv.slice(2)));
+export function run() {
+  process.exit(main(process.argv.slice(2)));
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();

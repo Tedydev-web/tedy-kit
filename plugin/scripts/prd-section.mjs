@@ -154,9 +154,11 @@ async function main([command, doc, tab, ...queryWords]) {
   for (const hit of hits) console.log(`## ${hit.label}\n${hit.text}\n`);
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+export function run() {
   main(process.argv.slice(2)).catch((error) => {
     console.error(`prd-section: ${error.message}`);
     process.exit(1);
   });
 }
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();

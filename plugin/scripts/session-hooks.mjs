@@ -163,8 +163,10 @@ function runPendingHandoffs() {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+export function run() {
   if (process.argv[2] === "decision-nudge") runDecisionNudge();
   if (process.argv[2] === "role-reminder") runRoleReminder();
   if (process.argv[2] === "pending-handoffs") runPendingHandoffs();
 }
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();

@@ -173,4 +173,8 @@ function main(files) {
   return blocked ? 1 : 0;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) process.exit(main(process.argv.slice(2)));
+export function run() {
+  process.exit(main(process.argv.slice(2)));
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();

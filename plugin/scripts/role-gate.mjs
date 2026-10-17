@@ -102,7 +102,7 @@ export function listSessions() {
   return JSON.parse(execFileSync("claude", ["agents", "--json", "--all"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 10_000 }));
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+export function run() {
   const input = readHookInput({ askOnFailure: true });
   try {
     const resolved = gateSwitches().roleGate && resolveMap(input.cwd ?? process.cwd());
@@ -118,3 +118,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     ask(`tedy gate: could not check which session role owns this write (${error.message}). Allow it only if the user asked for it, then fix the project map.`);
   }
 }
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();

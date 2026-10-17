@@ -194,7 +194,7 @@ function main([kind, file, ...flags]) {
   return 1;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+export function run() {
   try {
     process.exit(main(process.argv.slice(2)));
   } catch (error) {
@@ -202,3 +202,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     process.exit(1);
   }
 }
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();
