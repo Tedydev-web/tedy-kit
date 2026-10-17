@@ -301,3 +301,36 @@ test("command substitution nested past the gate's depth limit asks", () => {
   assert.equal(evaluate("echo " + "$(".repeat(30) + "gh pr view 1" + ")".repeat(30), "/w").ask, true);
   assert.equal(evaluate("echo $(echo $(gh pr view 1))", "/w").allow, true);
 });
+
+test("commands the gate cannot read literally ask, with every gate on or ghWrites off", () => {
+  const off = { ...ALL_GATES_ON, ghWrites: false };
+  for (const command of [
+    'bash -lc "gh pr merge 1"',
+    'bash -c -- "gh pr merge 1"',
+    'echo "gh pr merge 1" | bash',
+    'bash <<< "gh pr merge 1"',
+    "g=gh; $g pr merge 1",
+    "$(which gh) pr merge 1",
+    'gh api graphql -f query="$(cat /tmp/q.graphql)"',
+    'curl -X PUT -H "Authorization: token $(gh auth token)" https://api.github.com/repos/o/r/pulls/1/merge',
+    "python3 -c \"import subprocess; subprocess.run(['gh','pr','merge','1'])\"",
+    'eval "gh pr merge 1"',
+    'git -c alias.x="!gh pr merge 1" x',
+    "if gh pr merge 1; then echo merged; fi",
+    `echo ${"a".repeat(10_001)}`,
+  ]) {
+    for (const gates of [ALL_GATES_ON, off]) assert.equal(evaluate(command, "/w", { gates }).allow, false, command);
+  }
+  for (const command of [
+    "[ -f x ] && echo y",
+    "for f in *.md; do echo $f; done",
+    "git -c user.name=x log -1",
+    "gh api graphql -f query='query { viewer { login } }'",
+    "gh api graphql -F owner=o -f query='query($owner: String!) { repository(owner: $owner, name: \"r\") { name } }'",
+    "python3 -c 'print(1)'",
+    "bash scripts/build.sh",
+    "x=$(git rev-parse HEAD) && echo $x",
+  ]) {
+    assert.equal(evaluate(command, "/w").allow, true, command);
+  }
+});

@@ -1,6 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { classifyAction, decide, roleCard, roleOf, sessionName } from "./role-gate.mjs";
+import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const map = {
   name: "acme-shop",
@@ -105,4 +109,14 @@ test("the dispatch session writes nothing itself and its card routes every reque
   assert.match(card, /"PM - Shop" \(pm\)/);
   assert.match(card, /without the hand-off question/);
   assert.doesNotMatch(roleCard(map, "PM - Shop"), /dispatch section/);
+});
+
+test("role-gate asks when it cannot read the project maps", () => {
+  const profile = tempDir("tedy-role-profile-");
+  writeFileSync(join(profile, "config.json"), JSON.stringify({ gates: { roleGate: true } }));
+  mkdirSync(join(profile, "projects"));
+  writeFileSync(join(profile, "projects", "broken.md"), "# no json block\n");
+  const input = JSON.stringify({ tool_name: "Bash", tool_input: { command: "git commit -m x" }, cwd: "/tmp", session_id: "s" });
+  const out = execFileSync("node", [new URL("./role-gate.mjs", import.meta.url).pathname], { input, encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: tempDir("tedy-state-") } });
+  assert.equal(JSON.parse(out).hookSpecificOutput.permissionDecision, "ask");
 });

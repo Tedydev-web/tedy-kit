@@ -114,6 +114,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
       if (reason) ask(reason);
     }
   } catch (error) {
-    logGate({ hook: "role-gate", decision: "allow-on-error", error: error.message });
+    logGate({ hook: "role-gate", decision: "ask-on-error", error: error.message });
+    ask(`tedy gate: could not check which session role owns this write (${error.message}). Allow it only if the user asked for it, then fix the project map.`);
   }
 }

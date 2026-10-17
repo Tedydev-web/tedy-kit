@@ -20,6 +20,13 @@ const LOCAL_GH = new Set(["pr checkout", "repo clone", "auth", "config", "alias"
 const PROTECTED_BRANCHES = new Set(["main", "master", "dev", "develop", "production", "staging"]);
 const GH_COMMANDS = new Set(["agent-task", "alias", "api", "attestation", "auth", "browse", "cache", "codespace", "completion", "config", "copilot", "discussion", "extension", "gist", "gpg-key", "help", "issue", "label", "licenses", "org", "pr", "preview", "project", "release", "repo", "ruleset", "run", "search", "secret", "skill", "ssh-key", "status", "variable", "version", "workflow"]);
 const WRAPPERS = new Map([
+  ["if", []],
+  ["then", []],
+  ["else", []],
+  ["elif", []],
+  ["do", []],
+  ["while", []],
+  ["until", []],
   ["command", []],
   ["exec", ["-a"]],
   ["builtin", []],
@@ -36,10 +43,26 @@ const WRAPPERS = new Map([
 ]);
 const WRAPPER_ARGUMENTS = new Map([["timeout", 1]]);
 const PR_CREATE_VALUE_FLAGS = new Set(["-t", "--title", "-b", "--body", "-F", "--body-file", "-B", "--base", "-H", "--head", "-a", "--assignee", "-l", "--label", "-m", "--milestone", "-p", "--project", "-r", "--reviewer", "-T", "--template"]);
+const SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh", "fish"]);
+const INTERPRETER = /^(?:python|node|perl|ruby|deno|bun)[\d.]*$/;
+const EVAL_WORDS = new Set(["eval", "source", "."]);
+const NOT_LITERAL = /[$`(*?]|^\[(?!\[?$)/;
+const API_MERGE = /pulls\/\d+\/merge\b|mergePullRequest|markPullRequestReadyForReview|enablePullRequestAutoMerge/;
+const MAX_COMMAND = 10_000;
+const UNREADABLE_REASON = "tedy gate: this command runs code the gate cannot read (a command word built at run time, eval, a shell reading code from stdin or -c, an interpreter one-liner that mentions gh, or git -c alias/core). Allow it only if the user asked for it.";
 const MERGE_REASON = "tedy gate: merging or marking a PR ready belongs to the user. Allow it only if the user asked for this exact PR in this turn.";
 const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve|unresolve|pr-body)|openproject\.mjs["']?\s+apply|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor|edit|delete))\b|^(?=[\s\S]*--apply\b)[\s\S]*?(?:openproject\.mjs["']?\s+(?:set|comment|comment-edit|relation|relation-delete|rollback)|doc-comment-file\.mjs["']?\s+post)\b/;
 export const CLAUDE_SETTINGS = process.env.TEDY_CLAUDE_SETTINGS ?? join(homedir(), ".claude", "settings.json");
 const REWRITING_PUSH = /^(-f|--force|--force-with-lease(=.*)?|--force-if-includes|--mirror|--all|--prune|-d|--delete)$/;
+
+function graphQuery(args) {
+  for (let index = 0; index < args.length; index += 1) {
+    const token = args[index];
+    const value = ["-f", "-F", "--field", "--raw-field"].includes(token) ? args[index + 1] : token.match(/^(?:-[fF]|--(?:raw-)?field=)(.*)$/)?.[1];
+    if (value?.startsWith("query=")) return value.slice("query=".length);
+  }
+  return null;
+}
 
 function classifyGitHubApi(args) {
   let method = null;
@@ -65,7 +88,9 @@ function classifyGitHubApi(args) {
   }
   if (endpoint === "graphql") {
     if (args.some((token) => /mergePullRequest|markPullRequestReadyForReview|enablePullRequestAutoMerge/.test(token))) return "pr-merge";
-    return args.some((token) => /^--input(=|$)|\bmutation\b|=@/.test(token)) ? "github-write" : null;
+    if (args.some((token) => /^--input(=|$)|\bmutation\b|=@/.test(token))) return "github-write";
+    const query = graphQuery(args);
+    return query !== null && /^\s*(query\b|\{)/.test(query) && !/\$\(|`/.test(query) ? null : "pr-merge";
   }
   const effective = method ?? (hasFields ? "POST" : "GET");
   if (effective === "PUT" && /\/pulls\/\d+\/merge\/?$/.test(endpoint ?? "")) return "pr-merge";
@@ -74,6 +99,11 @@ function classifyGitHubApi(args) {
 }
 
 function commandTokens(segment) {
+  const tokens = strippedTokens(segment);
+  return tokens.length && tokens[0].includes("/") ? [basename(tokens[0]), ...tokens.slice(1)] : tokens;
+}
+
+function strippedTokens(segment) {
   const all = tokenize(segment);
   let at = 0;
   for (;;) {
@@ -92,8 +122,23 @@ function commandTokens(segment) {
       } else break;
     }
   }
-  const tokens = all.slice(at);
-  return tokens.length && tokens[0].includes("/") ? [basename(tokens[0]), ...tokens.slice(1)] : tokens;
+  return all.slice(at);
+}
+
+function unreadable(segment) {
+  const tokens = strippedTokens(segment);
+  const [word = "", ...args] = tokens;
+  if (NOT_LITERAL.test(word) || EVAL_WORDS.has(word)) return true;
+  const program = basename(word);
+  if (SHELLS.has(program)) return args.some((arg) => /^-[a-zA-Z]*[cs]/.test(arg) || arg === "<<<" || arg === "<") || !args.some((arg) => !arg.startsWith("-"));
+  if (INTERPRETER.test(program)) return args.some((arg) => /^(-[a-zA-Z]*[ce][a-zA-Z]*|--eval|--print)$/.test(arg)) && /\bgh\b|github/i.test(segment);
+  if (program === "git") {
+    for (let index = 0; index < args.length && args[index].startsWith("-"); index += 1) {
+      if (/^--config-env/.test(args[index])) return true;
+      if (args[index] === "-c" && /^(alias|core)\./i.test(args[index + 1] ?? "")) return true;
+    }
+  }
+  return false;
 }
 
 export function loadAskRules(path) {
@@ -273,6 +318,7 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
   if (hidden) askFor(`tedy gate: this publishes through a kit script in a form the permission rules do not match (\`${hidden.slice(0, 120)}\`). Allow it only if the user approved this exact publish; otherwise run it as a plain \`node <script> …\` command.`);
   const uncovered = settingsFile ? uncoveredPublish(command, settingsFile) : null;
   if (uncovered) askFor(uncovered);
+  if (command.length > MAX_COMMAND) askFor(`tedy gate: this command is longer than ${MAX_COMMAND} characters, too long to check. Allow it only if the user asked for it.`);
   const nested = substitutions(command);
   if (nested === null) askFor("tedy gate: this command nests command substitutions too deeply to check. Allow it only if the user asked for it.");
   let dir = cwd;
@@ -282,6 +328,7 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
       dir = action.dir;
       continue;
     }
+    if (unreadable(segment)) askFor(UNREADABLE_REASON);
     if (action.kind === "push") {
       const risk = pushRisk(action.args, action.dir, gates.pushExempt);
       if (risk) askFor(`tedy gate: ${risk}, which belongs to the user. Allow it only if the user asked for this push.`);
@@ -302,7 +349,7 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
       continue;
     }
     if (action.kind !== "github-write") {
-      if (mentionsGhMerge(segment)) askFor(MERGE_REASON);
+      if (mentionsGhMerge(segment) || (commandTokens(segment)[0] !== "gh" && API_MERGE.test(segment) && /https?:\/\/|graphql/i.test(segment))) askFor(MERGE_REASON);
       continue;
     }
     if (action.pr && action.verbs.some((verb) => verb === "merge" || verb === "ready" || /^\$|`/.test(verb))) {
@@ -345,12 +392,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     if (result.ask) ask(result.reason);
     else if (!result.allow) deny(result.reason);
   } catch (error) {
-    if (PUBLISH.test(command)) {
-      logGate({ hook: "git-gate", decision: "ask", command: command.slice(0, 200), error: error.message });
-      ask(`tedy gate: could not check this publish command (${error.message}). Approve only if you have seen the exact draft.`);
-    } else {
-      logGate({ hook: "git-gate", decision: "allow-on-error", command: command.slice(0, 200), error: error.message });
-      process.stderr.write(`tedy gate could not classify this command: ${error.message}\n`);
-    }
+    logGate({ hook: "git-gate", decision: "ask", command: String(command).slice(0, 200), error: error.message });
+    ask(PUBLISH.test(command) ? `tedy gate: could not check this publish command (${error.message}). Approve only if you have seen the exact draft.` : `tedy gate: could not check this command (${error.message}). Allow it only if the user asked for it.`);
   }
 }
