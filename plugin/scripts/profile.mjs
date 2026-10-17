@@ -4,10 +4,10 @@ import { isAbsolute, join, normalize, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SHARED = fileURLToPath(new URL("../shared/", import.meta.url));
-const PERSONAL_GATES = ["noComments", "draftPrOnly", "roleGate", "ghWrites"];
+const PERSONAL_GATES = ["noComments", "draftPrOnly", "roleGate", "ghWrites", "publishQuote"];
 
 export const DEFAULT_CONFIG = Object.freeze({
-  gates: Object.freeze({ noComments: false, draftPrOnly: false, roleGate: false, ghWrites: false, pushExempt: Object.freeze([]) }),
+  gates: Object.freeze({ noComments: false, draftPrOnly: false, roleGate: false, ghWrites: false, publishQuote: false, pushExempt: Object.freeze([]) }),
   language: Object.freeze({ chat: "en" }),
 });
 

@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import { parseFlags } from "./cli-flags.mjs";
 import { lintComment, lintDraft, mapLanguage, parseDraft, readDiff, snapshotPath } from "./draft-lint.mjs";
 import { appendEditLog, labelText } from "./edit-log.mjs";
 import { fetchTab, indexTab, quoteInText, UC_ID } from "./prd-section.mjs";
@@ -253,17 +254,6 @@ function prBody(number, flags) {
   const same = view().body.trim() === body;
   console.log(same ? `updated #${number} body` : `written, but the read-back differs; open #${number} and check`);
   return same ? 0 : 1;
-}
-
-function parseFlags(args) {
-  const positional = [];
-  const flags = {};
-  for (let index = 0; index < args.length; index += 1) {
-    if (!args[index].startsWith("--")) positional.push(args[index]);
-    else if (args[index] === "--dry-run") flags["dry-run"] = true;
-    else flags[args[index].slice(2)] = args[(index += 1)];
-  }
-  return { positional, flags };
 }
 
 const USAGE = `usage:

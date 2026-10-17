@@ -357,12 +357,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const input = readHookInput();
   const command = input.tool_input?.command ?? "";
   try {
-    let result = evaluate(command, input.cwd ?? process.cwd(), { gates: gateSwitches(), settingsFile: CLAUDE_SETTINGS });
+    const gates = gateSwitches();
+    let result = evaluate(command, input.cwd ?? process.cwd(), { gates, settingsFile: CLAUDE_SETTINGS });
     if (result.allow) {
       const token = trackerToken(input.tool_input, trackerHost());
       if (token) result = { allow: false, reason: token };
     }
-    if (result.allow) {
+    if (result.allow && gates.publishQuote) {
       const quoted = checkQuoted(input);
       if (quoted) result = { allow: false, ...quoted };
     }

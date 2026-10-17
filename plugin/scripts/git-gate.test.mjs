@@ -7,7 +7,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { evaluate, splitSegments, classify, hiddenPublish } from "./git-gate.mjs";
 import { ALL_GATES_ON } from "./hook-io.mjs";
-import { tempDir } from "./temp-dir-for-tests.mjs";
+import { profileWith, tempDir } from "./temp-dir-for-tests.mjs";
 
 test("splitSegments handles chains, pipes, newlines and shell wrappers", () => {
   assert.deepEqual(splitSegments("cd x && git push; echo ok | cat\ngit status"), ["cd x", "git push", "echo ok", "cat", "git status"]);
@@ -184,9 +184,9 @@ function settingsWith(text) {
   return file;
 }
 
-function runEntry(command, { cwd = "/tmp", settings = settingsWith(JSON.stringify({ permissions: { ask: F2_PUBLISH_RULES } })) } = {}) {
+function runEntry(command, { cwd = "/tmp", settings = settingsWith(JSON.stringify({ permissions: { ask: F2_PUBLISH_RULES } })), profile = profileWith({ gates: { publishQuote: true } }) } = {}) {
   const input = JSON.stringify({ tool_name: "Bash", tool_input: { command }, cwd });
-  const out = execFileSync("node", [GATE_ENTRY], { input, encoding: "utf8", env: { ...process.env, TEDY_STATE_DIR: tempDir("tedy-state-"), TEDY_CLAUDE_SETTINGS: settings } });
+  const out = execFileSync("node", [GATE_ENTRY], { input, encoding: "utf8", env: { ...process.env, TEDY_STATE_DIR: tempDir("tedy-state-"), TEDY_CLAUDE_SETTINGS: settings, TEDY_PROFILE_DIR: profile } });
   return out ? JSON.parse(out).hookSpecificOutput : null;
 }
 
@@ -225,4 +225,19 @@ test("missing or unreadable ask rules make a node publish ask, without quoting t
   assert.equal(broken?.permissionDecision, "ask");
   assert.equal(broken.permissionDecisionReason, "tedy gate: could not read the ask rules; approve only if you have seen the exact draft.");
   assert.equal(runEntry("git status", { settings: settingsWith("{") }), null);
+});
+
+test("the quote check runs only when gates.publishQuote is on", () => {
+  const dir = tempDir("tedy-quote-");
+  writeFileSync(join(dir, "d.md"), "# PR #7: comment line by line (head abcdef1)\n\n## 1. `a.ts:3`\n\nc check lại chỗ này giúp e nha\n");
+  const transcript = join(dir, "t.jsonl");
+  writeFileSync(transcript, "");
+  const settings = settingsWith(JSON.stringify({ permissions: { ask: F2_PUBLISH_RULES } }));
+  const run = (publishQuote) => {
+    const input = JSON.stringify({ tool_name: "Bash", tool_input: { command: "node /k/github-write.mjs post d.md" }, cwd: dir, transcript_path: transcript });
+    const env = { ...process.env, TEDY_STATE_DIR: tempDir("tedy-state-"), TEDY_CLAUDE_SETTINGS: settings, TEDY_PROFILE_DIR: profileWith({ gates: { publishQuote } }) };
+    return execFileSync("node", [GATE_ENTRY], { input, encoding: "utf8", env });
+  };
+  assert.equal(JSON.parse(run(true)).hookSpecificOutput.permissionDecision, "deny");
+  assert.equal(run(false), "");
 });

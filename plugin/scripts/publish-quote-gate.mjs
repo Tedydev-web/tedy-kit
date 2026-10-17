@@ -1,5 +1,6 @@
 import { closeSync, fstatSync, openSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
+import { parseFlags } from "./cli-flags.mjs";
 import { parseDraft } from "./draft-lint.mjs";
 import { classify, splitSegments, tokenize } from "./git-gate.mjs";
 import { readTranscriptTail } from "./hook-io.mjs";
@@ -34,24 +35,21 @@ export function publishes(command, cwd, read) {
     const tokens = tokenize(segment);
     const at = tokens.findIndex((token) => SCRIPT.test(token));
     if (at === -1) continue;
-    const [name, ...rest] = tokens.slice(at + 1);
-    if (!PUBLISH_COMMANDS.has(name) || rest.includes("--dry-run")) continue;
-    const flag = (key) => {
-      const index = rest.indexOf(key);
-      return index === -1 ? undefined : rest[index + 1];
-    };
+    const { positional, flags } = parseFlags(tokens.slice(at + 1));
+    const [name] = positional;
+    if (!PUBLISH_COMMANDS.has(name) || flags["dry-run"]) continue;
     if (name === "post") {
-      const file = resolve(dir, rest[0]);
+      const file = resolve(dir, positional[1]);
       found.push({ file, bodies: parseDraft(read(file)).comments.map((comment) => ({ label: `comment ${comment.index}`, text: comment.body })) });
       continue;
     }
-    const bodyFile = flag("--body-file");
+    const bodyFile = flags["body-file"];
     if (bodyFile) {
       const file = resolve(dir, bodyFile);
       found.push({ file, bodies: [{ label: `${name} body`, text: read(file) }] });
       continue;
     }
-    const body = flag("--body");
+    const body = flags.body;
     if (body !== undefined) found.push({ file: null, bodies: [{ label: `${name} body`, text: body }] });
   }
   return found;
