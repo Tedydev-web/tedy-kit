@@ -103,7 +103,7 @@ export function listSessions() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const input = readHookInput();
+  const input = readHookInput({ askOnFailure: true });
   try {
     const resolved = gateSwitches().roleGate && resolveMap(input.cwd ?? process.cwd());
     const action = resolved && classifyAction(input, resolved.map);

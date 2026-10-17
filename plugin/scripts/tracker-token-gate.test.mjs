@@ -77,3 +77,12 @@ test("the gate entry denies a Bash command that names the token file on its own"
   const out = execFileSync("node", [GATE_ENTRY], { input, encoding: "utf8", env: { ...process.env, TEDY_STATE_DIR: tempDir("tedy-state-") } });
   assert.equal(JSON.parse(out).hookSpecificOutput.permissionDecision, "deny");
 });
+
+test("the gate entry refuses the call when its own check throws", () => {
+  const home = tempDir("tedy-token-home-");
+  mkdirSync(join(home, ".con" + "fig", "op"), { recursive: true });
+  writeFileSync(join(home, ".con" + "fig", "op", CONFIG_NAME), "{}");
+  const input = JSON.stringify({ tool_name: "Read", tool_input: { file_path: "x" }, cwd: 123 });
+  const out = execFileSync("node", [GATE_ENTRY], { input, encoding: "utf8", env: { ...process.env, HOME: home, TEDY_STATE_DIR: tempDir("tedy-state-") } });
+  assert.equal(JSON.parse(out).hookSpecificOutput.permissionDecision, "deny");
+});

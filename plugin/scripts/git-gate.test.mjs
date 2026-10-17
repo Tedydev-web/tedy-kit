@@ -344,3 +344,14 @@ test("commands the gate cannot read literally ask, with every gate on or ghWrite
     assert.equal(evaluate(command, "/w").allow, true, command);
   }
 });
+
+test("a here-string or a quoted << does not hide the lines after it", () => {
+  for (const command of ["cat <<<word\ngh pr merge 1", 'echo "a <<END b"\ngh pr merge 1', "echo '<<EOF'\ngh pr merge 1"]) assert.equal(evaluate(command, "/w").ask, true, JSON.stringify(command));
+  assert.deepEqual(splitSegments("cat <<'EOF'\ngh pr merge 1\nEOF\ngh pr view 1"), ["cat <<'EOF'", "gh pr view 1"]);
+});
+
+test("a GraphQL request read from a file asks instead of passing or being refused as a plain write", () => {
+  for (const command of ["gh api graphql -F query=@q.graphql", "gh api graphql --input q.json", "gh api graphql -f query=@m.graphql"]) {
+    for (const gates of [ALL_GATES_ON, { ...ALL_GATES_ON, ghWrites: false }]) assert.equal(evaluate(command, "/w", { gates }).ask, true, command);
+  }
+});

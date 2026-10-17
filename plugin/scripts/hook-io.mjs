@@ -6,11 +6,15 @@ import { loadConfig, profileDir } from "./profile.mjs";
 
 export const STATE_DIR = process.env.TEDY_STATE_DIR ?? join(homedir(), ".local", "state", "tedy");
 
-export function readHookInput() {
+export function readHookInput({ askOnFailure = false } = {}) {
   try {
     return JSON.parse(readFileSync(0, "utf8"));
   } catch {
     logGate({ hook: basename(process.argv[1] ?? "", ".mjs"), decision: "hook-input-unreadable" });
+    if (askOnFailure) {
+      ask("tedy gate: could not read this tool call, so it was not checked. Allow it only if the user asked for it.");
+      process.exit(0);
+    }
     return {};
   }
 }

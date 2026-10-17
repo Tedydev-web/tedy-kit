@@ -4,6 +4,7 @@ import { tempDir } from "./temp-dir-for-tests.mjs";
 const scratch = tempDir("tedy-test-env-");
 
 Object.assign(process.env, {
+  HOME: join(scratch, "home"),
   TEDY_PROFILE_DIR: join(scratch, "profile"),
   TEDY_STATE_DIR: join(scratch, "state"),
   TEDY_CLAUDE_SETTINGS: join(scratch, "settings.json"),

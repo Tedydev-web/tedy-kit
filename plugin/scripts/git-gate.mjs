@@ -88,7 +88,8 @@ function classifyGitHubApi(args) {
   }
   if (endpoint === "graphql") {
     if (args.some((token) => /mergePullRequest|markPullRequestReadyForReview|enablePullRequestAutoMerge/.test(token))) return "pr-merge";
-    if (args.some((token) => /^--input(=|$)|\bmutation\b|=@/.test(token))) return "github-write";
+    if (args.some((token) => /\bmutation\b/.test(token))) return "github-write";
+    if (args.some((token) => /^--input(=|$)|=@/.test(token))) return "pr-merge";
     const query = graphQuery(args);
     return query !== null && /^\s*(query\b|\{)/.test(query) && !/\$\(|`/.test(query) ? null : "pr-merge";
   }
@@ -370,7 +371,7 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const input = readHookInput();
+  const input = readHookInput({ askOnFailure: true });
   const command = input.tool_input?.command ?? "";
   try {
     const gates = gateSwitches();

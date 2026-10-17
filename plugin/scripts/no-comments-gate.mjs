@@ -22,7 +22,7 @@ export function checkEdit(toolName, toolInput) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const input = readHookInput();
+  const input = readHookInput({ askOnFailure: true });
   try {
     const result = gateSwitches().noComments ? checkEdit(input.tool_name, input.tool_input) : { allow: true };
     if (!result.allow) {

@@ -54,7 +54,7 @@ export function evaluate(input, { profile = profileDir(), release = releaseDir()
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const input = readHookInput();
+  const input = readHookInput({ askOnFailure: true });
   try {
     const reason = evaluate(input);
     if (reason) {

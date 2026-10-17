@@ -56,11 +56,11 @@ test("every gate log entry names the plugin root, and a bearer token in a comman
   assert.match(entry.command, /\*\*\*/);
 });
 
-test("unreadable hook input is logged and the gate prints nothing", () => {
+test("unreadable hook input is logged and the gate asks", () => {
   const state = tempDir("tedy-state-");
   const gate = new URL("./git-gate.mjs", import.meta.url).pathname;
   const run = spawnSync("node", [gate], { input: "not json", encoding: "utf8", env: { ...process.env, TEDY_STATE_DIR: state } });
   assert.equal(run.status, 0);
-  assert.equal(run.stdout, "");
+  assert.equal(JSON.parse(run.stdout).hookSpecificOutput.permissionDecision, "ask");
   assert.match(readFileSync(join(state, "gate-log.jsonl"), "utf8"), /"decision":"hook-input-unreadable"/);
 });
