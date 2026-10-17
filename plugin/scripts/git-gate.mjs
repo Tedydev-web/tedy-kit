@@ -18,7 +18,7 @@ const LOCAL_GH = new Set(["pr checkout", "repo clone", "auth", "config", "alias"
 const PROTECTED_BRANCHES = new Set(["main", "master", "dev", "develop", "production", "staging"]);
 const PREFIX_WORDS = new Set(["command", "exec", "builtin", "nohup", "time"]);
 const HEREDOC = /<<(-?)\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/g;
-const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve|unresolve|pr-body)|openproject\.mjs["']?\s+(?:apply\b|set\b.*--apply|comment\b.*--apply|comment-edit\b.*--apply|relation(?:-delete)?\b.*--apply|rollback\b.*--apply)|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor|edit|delete)|doc-comment-file\.mjs["']?\s+post\b.*--apply)\b/;
+const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve|unresolve|pr-body)|openproject\.mjs["']?\s+apply|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor|edit|delete))\b|^(?=[\s\S]*--apply\b)[\s\S]*?(?:openproject\.mjs["']?\s+(?:set|comment|comment-edit|relation|relation-delete|rollback)|doc-comment-file\.mjs["']?\s+post)\b/;
 const REWRITING_PUSH = /^(-f|--force|--force-with-lease(=.*)?|--force-if-includes|--mirror|--all|--prune|-d|--delete)$/;
 
 function skipHeredocs(command, index, line) {
@@ -149,18 +149,20 @@ function classifyGitHubApi(args) {
 }
 
 function commandTokens(segment) {
-  let tokens = tokenize(segment);
+  const all = tokenize(segment);
+  let at = 0;
   for (;;) {
-    while (tokens.length && ENV_ASSIGNMENT.test(tokens[0])) tokens = tokens.slice(1);
-    if (tokens[0] === "env") {
-      tokens = tokens.slice(1);
-      while (tokens.length && (tokens[0].startsWith("-") || ENV_ASSIGNMENT.test(tokens[0]))) tokens = tokens.slice(tokens[0] === "-u" ? 2 : 1);
+    while (at < all.length && ENV_ASSIGNMENT.test(all[at])) at += 1;
+    if (all[at] === "env") {
+      at += 1;
+      while (at < all.length && (all[at].startsWith("-") || ENV_ASSIGNMENT.test(all[at]))) at += all[at] === "-u" ? 2 : 1;
       continue;
     }
-    if (PREFIX_WORDS.has(tokens[0])) {
-      tokens = tokens.slice(1);
+    if (PREFIX_WORDS.has(all[at])) {
+      at += 1;
       continue;
     }
+    const tokens = all.slice(at);
     return tokens.length && tokens[0].includes("/") ? [basename(tokens[0]), ...tokens.slice(1)] : tokens;
   }
 }
