@@ -1,7 +1,8 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { addSlugs, buildPayload, forgetSlugs, loadConfig, loadRefs, mergePayload, planWrites, readSidecar, recordLastApply, setPayload, sidecarPath, writeSidecar } from "./openproject-client.mjs";
+import { addSlugs, buildPayload, foreignActivity, forgetSlugs, loadConfig, loadRefs, mergePayload, planWrites, readSidecar, recordLastApply, setPayload, sidecarPath, workPackageFilters, workPackageLine, writeSidecar } from "./openproject-client.mjs";
 import { closedStatuses, closestWorkPackage, listWorkPackages } from "./openproject-dedup.mjs";
+import { deleteRelation, setRelation } from "./openproject-relation.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { snapshotOnce, snapshotPath } from "./draft-lint.mjs";
 import { appendEditLog, frozenOriginal, labelText } from "./edit-log.mjs";
@@ -22,7 +23,7 @@ const resolveParent = (draft, mapping, created) => (typeof draft.parent === "str
 async function check(client, project, drafts) {
   const mapping = JSON.parse(readSidecar(sidecarPath(client.host, project)));
   const plan = planWrites(drafts, mapping);
-  const refs = await loadRefs(client, project);
+  const refs = await loadRefs(client, project, drafts);
   const closed = plan.some((step) => step.action !== "update") ? await closedStatuses(client) : new Set();
   const existing = plan.some((step) => step.action === "create") ? await listWorkPackages(client, project, closed) : [];
   let failed = false;
@@ -153,9 +154,9 @@ async function quickSet(client, id, flags) {
     priorities: flags.priority ? (await client.request("/api/v3/priorities"))._embedded.elements : [],
     assignees: flags.assignee ? (await loadRefs(client, project)).assignees : [],
   };
-  const payload = setPayload(current.lockVersion, { status: flags.status, assignee: flags.assignee, priority: flags.priority, estimate: flags.estimate === undefined ? undefined : Number(flags.estimate) }, refs);
-  const before = { status: current._links.status?.title, assignee: current._links.assignee?.title ?? "none", priority: current._links.priority?.title, estimate: current.estimatedTime ?? "none" };
-  const changes = ["status", "assignee", "priority", "estimate"].filter((field) => flags[field] !== undefined).map((field) => `${field} ${before[field]} → ${flags[field]}`);
+  const payload = setPayload(current.lockVersion, { status: flags.status, assignee: flags.assignee, priority: flags.priority, estimate: flags.estimate === undefined ? undefined : Number(flags.estimate), start: flags.start, due: flags.due }, refs);
+  const before = { status: current._links.status?.title, assignee: current._links.assignee?.title ?? "none", priority: current._links.priority?.title, estimate: current.estimatedTime ?? "none", start: current.startDate ?? "none", due: current.dueDate ?? "none" };
+  const changes = ["status", "assignee", "priority", "estimate", "start", "due"].filter((field) => flags[field] !== undefined).map((field) => `${field} ${before[field]} → ${flags[field]}`);
   const form = await client.request(`/api/v3/work_packages/${id}/form`, { method: "POST", body: payload });
   const errors = Object.values(form?._embedded?.validationErrors ?? {}).map((error) => error.message);
   console.log(`${describe(current)} | ${changes.join(", ")} | ${errors.length ? `form errors: ${errors.join("; ")}` : "form ok"} | lock ${current.lockVersion}`);
@@ -170,8 +171,102 @@ async function quickSet(client, id, flags) {
   }
   await client.request(`/api/v3/work_packages/${id}`, { method: "PATCH", body: payload });
   const read = await client.request(`/api/v3/work_packages/${id}`);
-  console.log(`set ${describe(read)} assignee ${read._links.assignee?.title ?? "none"} priority ${read._links.priority?.title} estimate ${read.estimatedTime ?? "none"}`);
+  console.log(`set ${describe(read)} assignee ${read._links.assignee?.title ?? "none"} priority ${read._links.priority?.title} estimate ${read.estimatedTime ?? "none"} dates ${read.startDate ?? "none"}..${read.dueDate ?? "none"}`);
   return 0;
+}
+
+export const prBodyFrom = (wp) => [`OP#${wp.id}`, "", `Task read at ${wp.updatedAt}`, "", `## ${wp.subject}`, "", (wp.description?.raw ?? "").trim()].join("\n").trim() + "\n";
+
+export const sameComment = (activities, body) => activities.find((activity) => (activity.comment?.raw ?? "").trim() === body.trim()) ?? null;
+
+async function comment(client, id, flags) {
+  if (typeof flags["body-file"] !== "string") throw new Error("comment needs --body-file <file>");
+  const body = readFileSync(flags["body-file"], "utf8").trim();
+  if (!body) throw new Error("comment body is empty");
+  const current = await client.request(`/api/v3/work_packages/${id}`);
+  const activities = (await client.request(`/api/v3/work_packages/${id}/activities`))._embedded.elements;
+  const twin = sameComment(activities, body);
+  if (twin) {
+    console.log(`refused: #${id} already has this comment as activity ${twin.id}`);
+    return 1;
+  }
+  console.log(`${describe(current)} | comment of ${body.length} characters`);
+  if (flags.apply === undefined) {
+    console.log(`WRITE → ${client.host} · #${id} : 1 comment; run again with --apply`);
+    return 0;
+  }
+  await client.request(`/api/v3/work_packages/${id}/activities`, { method: "POST", body: { comment: { raw: body } } });
+  const read = sameComment((await client.request(`/api/v3/work_packages/${id}/activities`))._embedded.elements, body);
+  console.log(read ? `commented #${id} activity ${read.id}` : `posted but not found on read-back; open #${id} and check`);
+  return read ? 0 : 1;
+}
+
+async function commentEdit(client, id, flags) {
+  if (typeof flags["body-file"] !== "string") throw new Error("comment-edit needs --body-file <file>");
+  const body = readFileSync(flags["body-file"], "utf8").trim();
+  if (!body) throw new Error("comment body is empty");
+  const activity = await client.request(`/api/v3/activities/${id}`);
+  const refusal = foreignActivity(activity, await client.request("/api/v3/users/me"));
+  if (refusal) {
+    console.log(refusal);
+    return 1;
+  }
+  const old = (activity.comment?.raw ?? "").trim();
+  if (!old) {
+    console.log(`refused: activity ${id} has no comment to edit; post a new one with comment <work package id>`);
+    return 1;
+  }
+  if (old === body) {
+    console.log(`refused: activity ${id} already says this`);
+    return 1;
+  }
+  const wpPath = activity._links.workPackage.href;
+  const current = await client.request(wpPath);
+  const twin = sameComment((await client.request(`${wpPath}/activities`))._embedded.elements.filter((other) => other.id !== activity.id), body);
+  if (twin) {
+    console.log(`refused: #${current.id} already has this comment as activity ${twin.id}`);
+    return 1;
+  }
+  console.log(`${describe(current)} | activity ${id} | comment of ${old.length} → ${body.length} characters`);
+  if (flags.apply === undefined) {
+    console.log(`WRITE → ${client.host} · #${current.id} : 1 comment edit; run again with --apply`);
+    return 0;
+  }
+  await client.request(`/api/v3/activities/${id}`, { method: "PATCH", body: { comment: { raw: body } } });
+  const read = (await client.request(`/api/v3/activities/${id}`)).comment?.raw?.trim() === body;
+  console.log(read ? `edited #${current.id} activity ${id}` : `sent but the read-back differs; open #${current.id} and check activity ${id}`);
+  return read ? 0 : 1;
+}
+
+export const getPaths = (target, flags) => {
+  if (!/^\d+$/.test(target)) {
+    if (!target.startsWith("/")) throw new Error(`get takes a work package id or an API path starting with /, not "${target}"`);
+    return [target];
+  }
+  const base = `/api/v3/work_packages/${target}`;
+  const parts = ["relations", "activities"].filter((part) => flags[part] !== undefined);
+  return parts.length ? parts.map((part) => `${base}/${part}`) : [base];
+};
+
+async function list(client, flags) {
+  const project = projectOf(flags);
+  const refs = {
+    statuses: flags.status !== undefined && String(flags.status).toLowerCase() !== "open" ? (await client.request("/api/v3/statuses"))._embedded.elements : [],
+    ...(flags.assignee !== undefined || flags.type !== undefined ? await loadRefs(client, project) : { types: {}, assignees: [] }),
+  };
+  const filters = encodeURIComponent(JSON.stringify(workPackageFilters({ parent: flags.parent, assignee: flags.assignee, status: flags.status, type: flags.type }, refs)));
+  const sort = encodeURIComponent(JSON.stringify([["id", "asc"]]));
+  let shown = 0;
+  for (let offset = 1; ; offset += 1) {
+    const page = await client.request(`/api/v3/projects/${project}/work_packages?pageSize=100&offset=${offset}&filters=${filters}&sortBy=${sort}`);
+    const elements = page._embedded.elements;
+    for (const wp of elements) console.log(workPackageLine(wp));
+    shown += elements.length;
+    if (!elements.length || shown >= page.total) {
+      console.log(`${shown} work package(s) in project ${project}`);
+      return 0;
+    }
+  }
 }
 
 async function rollback(client, project, flags) {
@@ -216,14 +311,23 @@ async function rollback(client, project, flags) {
 }
 
 async function main([command, target, ...rest]) {
-  const args = command === "rollback" ? [target, ...rest].filter((arg) => arg !== undefined) : rest;
+  const args = command === "rollback" || command === "list" ? [target, ...rest].filter((arg) => arg !== undefined) : rest;
   const flags = Object.fromEntries(args.flatMap((arg, index) => (arg.startsWith("--") ? [[arg.slice(2), args[index + 1] === undefined || args[index + 1].startsWith("--") ? true : args[index + 1]]] : [])));
   const client = loadConfig();
   if (command === "get" && target) {
-    console.log(JSON.stringify(await client.request(target), null, 1));
+    for (const path of getPaths(target, flags)) console.log(JSON.stringify(await client.request(path), null, 1));
     return 0;
   }
+  if (command === "list") return list(client, flags);
   if (command === "set" && /^\d+$/.test(target ?? "")) return quickSet(client, Number(target), flags);
+  if (command === "comment" && /^\d+$/.test(target ?? "")) return comment(client, Number(target), flags);
+  if (command === "comment-edit" && /^\d+$/.test(target ?? "")) return commentEdit(client, Number(target), flags);
+  if (command === "relation" && /^\d+$/.test(target ?? "") && /^\d+$/.test(rest[0] ?? "")) return setRelation(client, Number(target), Number(rest[0]), flags);
+  if (command === "relation-delete" && /^\d+$/.test(target ?? "")) return deleteRelation(client, Number(target), flags);
+  if (command === "pr-body" && /^\d+$/.test(target ?? "")) {
+    process.stdout.write(prBodyFrom(await client.request(`/api/v3/work_packages/${target}`)));
+    return 0;
+  }
   if (command === "rollback") return rollback(client, projectOf(flags), flags);
   if ((command === "preview" || command === "apply") && target) {
     const drafts = JSON.parse(readFileSync(target, "utf8"));
@@ -249,7 +353,7 @@ async function main([command, target, ...rest]) {
     ]);
     return code;
   }
-  console.error("usage: openproject.mjs get <api path> | preview <drafts.json> [--project <id>] | apply <drafts.json> [--project <id>] | set <id> [--status <name>] [--assignee <name>] [--priority <name>] [--estimate <hours>] [--apply --lock <n>] | rollback [--project <id>] [--delete] [--apply]");
+  console.error("usage: openproject.mjs get <id> [--relations] [--activities] | get <api path> | list [--parent <id>] [--assignee <name>] [--status open|<name>] [--type <name>] [--project <id>] | preview <drafts.json> [--project <id>] | apply <drafts.json> [--project <id>] | set <id> [--status <name>] [--assignee <name>] [--priority <name>] [--estimate <hours>] [--start <YYYY-MM-DD>] [--due <YYYY-MM-DD>] [--apply --lock <n>] | comment <id> --body-file <file> [--apply] | comment-edit <activity-id> --body-file <file> [--apply] | relation <from-id> <to-id> --type <relates|blocks|precedes|follows|…> [--apply] | relation-delete <relation-id> [--apply] | pr-body <id> | rollback [--project <id>] [--delete] [--apply]");
   return 2;
 }
 

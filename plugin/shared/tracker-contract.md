@@ -26,6 +26,10 @@ A tracker adapter is one script under `plugin/scripts` that `/tedy:pm` calls to 
 
 Read-only request to the tracker API; prints the JSON response.
 
+### `list [--parent <id>] [--assignee <name>] [--status open|<name>] [--type <name>]`
+
+Read-only. One line per matching item (id, type, status, assignee, dates, subject), across every page.
+
 ### `preview <drafts.json>`
 
 Read-only. Lints every draft (`task-lint.mjs`), has the tracker validate each payload, and prints one line per draft: `create`, `update #id` or `merge #id`, the slug, lint and validation results, warnings, and the closest existing item for each create. Ends with a readiness line and `WRITE → <host> · project <id> : N create · N update · N merge`. Records the versions of the items it read, so `apply` can tell what changed since. Exit 1 when any draft has a lint block or a validation error.
@@ -34,9 +38,29 @@ Read-only. Lints every draft (`task-lint.mjs`), has the tracker validate each pa
 
 Writes. Refuses (exit 1) unless the last preview of this file was clean and no item changed since. Creates, updates or merges in file order, adds relations and statuses, records new slugs and `_last_apply` in the sidecar after each create, then reads every item back and prints `verified N/N`. Exit 1 when an item differs from its draft or a relation was not created.
 
-### `set <id> [--status <name>] [--assignee <name>] [--priority <name>] [--estimate <hours>]`
+### `set <id> [--status <name>] [--assignee <name>] [--priority <name>] [--estimate <hours>] [--start <YYYY-MM-DD>] [--due <YYYY-MM-DD>]`
 
 Read-only without `--apply`: one line with the item, each named field as before → after, the validation result and the item's version (`lock`), then `WRITE → …`. With `--apply --lock <n>` it writes only the named fields, refuses when the item is no longer at version `n`, and prints the item as read back.
+
+### `comment <id> --body-file <file>`
+
+Read-only without `--apply`: previews one comment on an item and refuses a comment that is already there. With `--apply` it posts the comment and reads it back.
+
+### `comment-edit <comment-id> --body-file <file>`
+
+Read-only without `--apply`: previews rewriting a comment the token's user posted, and refuses anyone else's. With `--apply` it rewrites it and reads it back.
+
+### `relation <from-id> <to-id> --type <type>`
+
+Read-only without `--apply`: previews setting the one relation between two items, showing an existing one as replaced. With `--apply` it replaces the old relation, reads the new one back, and puts the old one back when the tracker refuses the new one.
+
+### `relation-delete <relation-id>`
+
+Read-only without `--apply`: shows the relation. With `--apply` it removes it and checks it is gone.
+
+### `pr-body <id>`
+
+Read-only. Prints a pull request body built from the item: `OP#<id>` as the first line, the time it was read, the goal, checklist and acceptance criteria.
 
 ### `rollback [--delete]`
 

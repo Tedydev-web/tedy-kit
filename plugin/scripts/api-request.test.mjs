@@ -32,6 +32,16 @@ test("a rate-limited POST is retried, because the server refused it before savin
   assert.deepEqual(calls, ["POST", "POST"]);
 });
 
+test("a Google quota 403 is retried and waits longer each time; a permission 403 is not", async () => {
+  const waits = [];
+  let n = 0;
+  globalThis.fetch = async () => (n++ < 2 ? new Response('{"error":{"message":"Quota exceeded for quota metric \'Queries\'"}}', { status: 403 }) : new Response('{"id":"1"}', { status: 200 }));
+  assert.deepEqual(await requestJson("https://www.googleapis.com/drive/v3/files/x", { wait: async (s) => waits.push(s) }), { id: "1" });
+  assert.deepEqual(waits, [15, 30]);
+  globalThis.fetch = async () => new Response('{"error":{"message":"The user does not have sufficient permissions"}}', { status: 403 });
+  await assert.rejects(requestJson("https://www.googleapis.com/drive/v3/files/x", { wait: noWait }), /HTTP 403: The user does not have sufficient permissions/);
+});
+
 test("redact masks key-value secrets and token-shaped values but keeps the rest of the message", () => {
   const masked = redact("invalid apikey=" + "abcd1234efgh" + ', "token": "' + "s3cr3tvalue" + '", Authorization: Basic ' + "YXBpa2V5OmFiY2RlZmdoaWprbG1ub3A=" + ", sha " + "0123456789abcdef".repeat(2) + ", ghp_" + "abcdefghijklmnopqrstuvwxyz01");
   assert.doesNotMatch(masked, /abcd1234efgh|s3cr3tvalue|YXBpa2V5|0123456789abcdef0123|ghp_abcdef/);

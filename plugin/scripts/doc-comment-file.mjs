@@ -2,6 +2,8 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { lintChatComment } from "./draft-lint.mjs";
+import { logPostedText } from "./edit-log.mjs";
+import { anchorComment, session } from "./gdoc-comments.mjs";
 import { chatLanguage, fill, labels } from "./labels.mjs";
 import { slugOf, stamp } from "./handoff.mjs";
 import { fetchTab, quoteCount } from "./prd-section.mjs";
@@ -28,11 +30,18 @@ export function checkItems(items, tabsText, tabOf, lang) {
   return problems;
 }
 
-function card(item, number, text) {
+export const commentLink = (doc, id) => `https://docs.google.com/document/d/${doc}/edit?disco=${id}`;
+
+const done = (item, doc, text) =>
+  item.posted
+    ? `<label class=d><input type=checkbox checked disabled> ${escape(fill(text["doc.postedAt"], { at: item.posted.at }))} · <a href="${escape(commentLink(doc, item.posted.id))}">${escape(fill(text["doc.openComment"], { id: item.posted.id }))}</a></label>`
+    : `<label class=d><input type=checkbox> ${escape(text["doc.done"])}</label>`;
+
+function card(item, number, doc, text) {
   return `<article><div class=h><span class=k>${number}</span><b>EPIC ${escape(item.epic)} · ${escape(item.where)}</b><span class=s>${escape(item.note ?? "")}</span></div>
 <label>${escape(text["doc.cardFind"])} <button onclick="cp(this)" data-t="${escape(item.quote)}">${escape(text["doc.copy"])}</button></label><pre class=a>${escape(item.quote)}</pre>
 <label>${escape(text["doc.cardComment"])} <button onclick="cp(this)" data-t="${escape(item.comment.trim())}">${escape(text["doc.copy"])}</button></label><pre class=c>${escape(item.comment.trim())}</pre>
-<label class=d><input type=checkbox> ${escape(text["doc.done"])}</label></article>`;
+${done(item, doc, text)}</article>`;
 }
 
 export function renderFile({ title, doc, items, checkedAt, lang }) {
@@ -44,7 +53,7 @@ export function renderFile({ title, doc, items, checkedAt, lang }) {
   };
   const sections = ["A", "B"]
     .filter((group) => ordered.some((item) => item.group === group))
-    .map((group) => `<h2>${escape(text[`doc.group${group}`])}</h2>${ordered.map((item, index) => (item.group === group ? card(item, index + 1, text) : "")).join("")}`)
+    .map((group) => `<h2>${escape(text[`doc.group${group}`])}</h2>${ordered.map((item, index) => (item.group === group ? card(item, index + 1, doc, text) : "")).join("")}`)
     .join("\n");
   return `<!doctype html><html lang=${escape(lang)}><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1"><title>${escape(fill(text["doc.pageTitle"], { title }))}</title><style>
 body{margin:0;background:#f6f5f2;color:#17211b;font:14px/1.55 system-ui,sans-serif}main{max-width:1000px;margin:auto;padding:24px 28px 60px}h1{font-size:21px;margin:0 0 6px}h2{font-size:16px;margin:26px 0 6px}
@@ -63,7 +72,53 @@ ${sections}
 `;
 }
 
-async function main([itemsFile]) {
+export const pendingItems = (items) => items.filter((item) => !item.posted);
+
+async function post(itemsFile, flags) {
+  if (!itemsFile || !flags.html) {
+    console.error("usage: doc-comment-file.mjs post <items.json> --html <pm-comments-….html> [--apply]");
+    return 2;
+  }
+  const resolved = resolveMap(process.cwd());
+  if (!resolved) throw new Error(`no project map covers ${process.cwd()}; run /tedy:setup`);
+  const { map } = resolved;
+  const data = JSON.parse(readFileSync(itemsFile, "utf8"));
+  const tabOf = (epic) => map.prd?.tabs?.[epic]?.tab;
+  const todo = pendingItems(data.items);
+  const tabsText = {};
+  for (const tab of new Set(todo.map((item) => tabOf(item.epic)).filter(Boolean))) tabsText[tab] = await fetchTab(map.prd.doc, tab);
+  const problems = checkItems(todo, tabsText, tabOf, map.language?.doc_figma ?? chatLanguage());
+  if (problems.length) {
+    console.error(`doc-comment-file: nothing posted; fix these first:\n${problems.map((problem) => `- ${problem}`).join("\n")}`);
+    return 1;
+  }
+  for (const item of todo) console.log(`- EPIC ${item.epic} · ${item.where} · tab ${tabOf(item.epic)}\n  [${item.quote.slice(0, 80)}]\n  ${item.comment.trim().replace(/\s+/g, " ")}`);
+  console.log(`WRITE → Google Doc ${map.prd.doc} : ${todo.length} anchored comments (${data.items.length - todo.length} already posted)`);
+  if (!flags.apply) return 0;
+  const google = await session({ doc: map.prd.doc }, true);
+  const save = () => {
+    writeFileSync(itemsFile, `${JSON.stringify(data, null, 2)}\n`);
+    const lang = chatLanguage();
+    const checkedAt = new Date().toLocaleString(labels(lang)["doc.locale"], { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    writeFileSync(flags.html, renderFile({ title: data.title, doc: map.prd.doc, items: data.items, checkedAt, lang }));
+  };
+  for (const item of todo) {
+    const body = item.comment.trim();
+    const id = await anchorComment(google, tabOf(item.epic), item.quote, body);
+    item.posted = { id, at: new Date().toISOString() };
+    logPostedText("doc-comment", itemsFile, id, body);
+    save();
+    console.log(`posted ${id} · EPIC ${item.epic} · ${item.where}`);
+  }
+  console.log(`posted and read back ${todo.length}/${todo.length}; ${flags.html} updated`);
+  return 0;
+}
+
+async function main([itemsFile, ...rest]) {
+  if (itemsFile === "post") {
+    const html = rest.includes("--html") ? rest[rest.indexOf("--html") + 1] : undefined;
+    return post(rest[0]?.startsWith("--") ? undefined : rest[0], { html, apply: rest.includes("--apply") });
+  }
   if (!itemsFile) {
     console.error('usage: doc-comment-file.mjs <items.json>   items.json = { "title": "...", "items": [{ "group": "A|B", "epic": "09", "where": "UC_SW_13 BR1", "quote": "...", "comment": "...", "note": "..." }] }');
     return 2;
@@ -77,7 +132,7 @@ async function main([itemsFile]) {
   for (const tab of new Set(items.map((item) => tabOf(item.epic)).filter(Boolean))) tabsText[tab] = await fetchTab(map.prd.doc, tab);
   const lang = chatLanguage();
   const checkedAt = new Date().toLocaleString(labels(lang)["doc.locale"], { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-  const problems = checkItems(items, tabsText, tabOf, map.language?.doc_figma ?? "en");
+  const problems = checkItems(items, tabsText, tabOf, map.language?.doc_figma ?? chatLanguage());
   if (problems.length) {
     console.error(`doc-comment-file: no file written; fix these first:\n${problems.map((problem) => `- ${problem}`).join("\n")}`);
     return 1;

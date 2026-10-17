@@ -55,6 +55,9 @@ Family Wallet only; Gift-Card work in this workspace is out of scope. Written by
     "instance": "https://task.toncorp.io",
     "project": 183,
     "merge_status": { "Task": "Merged/Code Review", "Bug": "Fixed (Dev Done)" },
+    "open_status": { "Task": "In progress", "Bug": "In progress" },
+    "revert_status": { "Task": "In progress", "Bug": "Re-Work" },
+    "not_started": ["New", "In specification", "Specified", "Confirmed", "To be scheduled", "Scheduled"],
     "rules": [
       "One task is one branch and one PR into dev; never merge.",
       "Write [FE] tasks by default; write [BE] or [Admin-BE] tasks only when the user asks (2026-10-05, 2026-10-06), checked against PRD and design with extra care, and never for the backend team's own queue (Tân, 2026-10-05). A missing API otherwise goes into the FE wire task's open questions.",
@@ -75,7 +78,8 @@ Family Wallet only; Gift-Card work in this workspace is out of scope. Written by
     "Shared wallet Settings (Plans, Display currency, handover)": "Phúc",
     "Ledger History tab": "Tedy",
     "Ledger, everything else": "Tín",
-    "Admin console epic #20938": "Tedy",
+    "Personal wallet and onboarding (EPIC 01, 02)": "Tedy",
+    "Admin console epic #20938": "Tín (from 2026-10-13; was Tedy)",
     "Figma change to a built screen, UI only": "Tedy",
     "Figma change to a built screen, touching its logic": "the original builder"
   },
@@ -84,10 +88,11 @@ Family Wallet only; Gift-Card work in this workspace is out of scope. Written by
     { "name": "Review PR - Family Wallet", "role": "review" },
     { "name": "Dev TMA - Family Wallet", "role": "dev", "repos": ["tonpass-wallet-fe"] },
     { "name": "Dev Admin - Family Wallet", "role": "dev", "repos": ["onedollar-wallet-admin-fe", "tonpass-wallet-admin-be"] },
-    { "name": "DevOps - Family Wallet", "role": "devops" }
+    { "name": "DevOps - Family Wallet", "role": "devops" },
+    { "name": "Điều phối - Family Wallet", "role": "dispatch" }
   ],
   "learned_until": "2026-10-07",
-  "last_reply_check": "2026-10-08T06:30:00Z",
+  "last_reply_check": "2026-10-16T03:45:00Z",
   "open_questions": [
     { "q": "Which PRD tab holds EPIC 06?", "tried": "resolved 2026-10-07: tab ids read from the Doc page; t.h6w8ajg2mxhw is EPIC 06 Recovery (draft, UC_RC); t.432ud3jdzos6 and t.dplz1vp0m5kx are the epic table" },
     { "q": "The 2026-10-06 brief's \"Epic Ledger\" PRD link points at Figma 2802:5083, not the Doc.", "tried": "resolved: tab t.mgu51yavprk8 is EPIC 07 Ledger (UC_LG), confirmed by prd-section index" }

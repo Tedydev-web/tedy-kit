@@ -24,6 +24,27 @@ test("a draft becomes an OpenProject payload with markdown, type, assignee, pare
   assert.throws(() => buildPayload({ ...draft, type: "Spike" }, refs), /type "Spike"/);
 });
 
+test("custom fields resolve by name: text, markdown and option lists", () => {
+  const refs = {
+    types: { bug: "/api/v3/types/7" },
+    assignees: [],
+    fields: {
+      "/api/v3/types/7": {
+        customField31: { name: "Environment", type: "[]CustomOption", options: [{ name: "Dev", href: "/api/v3/custom_options/77" }, { name: "Staging", href: "/api/v3/custom_options/78" }] },
+        customField33: { name: "Expected Result", type: "Formattable", options: [] },
+        customField34: { name: "Module", type: "String", options: [] },
+      },
+    },
+  };
+  const draft = { slug: "bug-x", type: "Bug", subject: "[Bug] X", description: "## Problem\nX.", fields: { environment: "dev", Module: "Shared cart", "Expected Result": "Y." } };
+  const payload = buildPayload(draft, refs);
+  assert.equal(payload.customField34, "Shared cart");
+  assert.deepEqual(payload.customField33, { format: "markdown", raw: "Y." });
+  assert.deepEqual(payload._links.customField31, [{ href: "/api/v3/custom_options/77" }]);
+  assert.throws(() => buildPayload({ ...draft, fields: { Device: "x" } }, refs), /no custom field named "Device"/);
+  assert.throws(() => buildPayload({ ...draft, fields: { Environment: "QA" } }, refs), /"QA" is not an option of Environment: Dev, Staging/);
+});
+
 test("names match without diacritics and must be unique", () => {
   const people = [{ name: "Hoàng Lâm" }, { name: "Phan Bình" }, { name: "Phan Hiếu" }];
   assert.equal(matchName(people, "lam").name, "Hoàng Lâm");

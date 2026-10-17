@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { evaluate, splitSegments, classify, hiddenPublish } from "./git-gate.mjs";
@@ -18,6 +19,8 @@ test("classify recognises git and gh actions through env vars and -C", () => {
   assert.deepEqual(classify("git push origin x", "/w"), { kind: "push", dir: "/w", args: ["origin", "x"] });
   assert.deepEqual(classify("FOO=1 git -C sub commit -am msg", "/w"), { kind: "commit", dir: "/w/sub", all: true });
   assert.deepEqual(classify("git -c core.x=y push", "/w"), { kind: "push", dir: "/w", args: [] });
+  assert.deepEqual(classify("cd ~/kit", "/w"), { kind: "cd", dir: join(homedir(), "kit") });
+  assert.deepEqual(classify("cd", "/w"), { kind: "cd", dir: homedir() });
   assert.equal(classify("gh pr create --fill", "/w").kind, "pr-create");
   assert.equal(classify("gh pr review 12 --comment -b hi", "/w").kind, "github-write");
   assert.equal(classify("gh api -X POST repos/o/r/pulls/1/reviews", "/w").kind, "github-write");
@@ -52,10 +55,19 @@ test("direct GitHub writes are denied with the approved path in the reason", () 
   assert.match(result.reason, /github-write\.mjs/);
 });
 
-test("merging or closing a PR is denied as the user's call, not routed to github-write.mjs", () => {
-  const result = evaluate("cd x && gh pr merge 12 --squash", "/w");
-  assert.equal(result.allow, false);
-  assert.match(result.reason, /belongs to the user/);
+test("merging or marking a PR ready asks the user, closing or editing stays denied", () => {
+  for (const command of ["cd x && gh pr merge 12 --squash", "gh pr ready 12"]) {
+    const result = evaluate(command, "/w");
+    assert.equal(result.allow, false, command);
+    assert.equal(result.ask, true, command);
+    assert.match(result.reason, /belongs to the user/, command);
+  }
+  for (const command of ["gh pr close 12", "gh pr edit 12 --base dev", "gh issue close 3"]) {
+    const result = evaluate(command, "/w");
+    assert.equal(result.allow, false, command);
+    assert.notEqual(result.ask, true, command);
+    assert.match(result.reason, /belongs to the user/, command);
+  }
 });
 
 test("gh pr create must open a draft", () => {
@@ -92,15 +104,15 @@ test("a repository listed in gates.pushExempt pushes to main without asking, but
   const kit = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
   assert.equal(evaluate("git push origin main", kit).ask, true);
   const gates = { ...ALL_GATES_ON, pushExempt: [kit] };
-  assert.equal(evaluate("git push origin main", kit, gates).allow, true);
-  assert.equal(evaluate(`git -C ${kit} push -q origin main`, "/w", gates).allow, true);
-  assert.equal(evaluate("git push -f origin main", kit, gates).ask, true);
+  assert.equal(evaluate("git push origin main", kit, { gates }).allow, true);
+  assert.equal(evaluate(`git -C ${kit} push -q origin main`, "/w", { gates }).allow, true);
+  assert.equal(evaluate("git push -f origin main", kit, { gates }).ask, true);
 });
 
 test("with draftPrOnly off a ready PR may be opened; the user-owned gh writes stay blocked", () => {
   const gates = { ...ALL_GATES_ON, draftPrOnly: false };
-  assert.equal(evaluate("gh pr create --fill", "/w", gates).allow, true);
-  assert.equal(evaluate("gh pr merge 12", "/w", gates).allow, false);
+  assert.equal(evaluate("gh pr create --fill", "/w", { gates }).allow, true);
+  assert.equal(evaluate("gh pr merge 12", "/w", { gates }).allow, false);
 });
 
 test("git and gh are recognised behind command, exec, env and absolute paths", () => {
@@ -120,6 +132,15 @@ test("heredoc bodies are data, not commands", () => {
 test("a publishing script hidden from the permission rules asks; a plain node call is left to them", () => {
   assert.match(hiddenPublish("bash -c 'node /k/scripts/github-write.mjs post d.md'"), /github-write\.mjs post/);
   assert.ok(hiddenPublish("env X=1 node /k/scripts/gdoc-comments.mjs reply AAA --body-file b.txt"));
+  assert.ok(hiddenPublish("env X=1 node /k/scripts/gdoc-comments.mjs edit AAA --body-file b.txt"));
+  assert.ok(hiddenPublish("env X=1 node /k/scripts/gdoc-comments.mjs delete AAA"));
+  assert.ok(hiddenPublish("env X=1 node /k/scripts/doc-comment-file.mjs post items.json --html f.html --apply"));
+  assert.equal(hiddenPublish("env X=1 node /k/scripts/doc-comment-file.mjs post items.json --html f.html"), null);
+  assert.ok(hiddenPublish("bash -c 'node /k/scripts/github-write.mjs unresolve PRRT_1'"));
+  assert.ok(hiddenPublish("env X=1 node /k/scripts/openproject.mjs comment-edit 991 --body-file b.txt --apply"));
+  assert.ok(hiddenPublish("env X=1 node /k/scripts/openproject.mjs relation 21448 21450 --type blocks --apply"));
+  assert.ok(hiddenPublish("env X=1 node /k/scripts/openproject.mjs relation-delete 1000 --apply"));
+  assert.equal(hiddenPublish("env X=1 node /k/scripts/openproject.mjs relation 21448 21450 --type blocks"), null);
   assert.ok(hiddenPublish("/usr/bin/node /k/scripts/figma-comments.mjs delete 12"));
   assert.ok(hiddenPublish("command node /k/scripts/openproject.mjs apply d.json"));
   assert.ok(hiddenPublish("eval 'node /k/scripts/openproject.mjs set 1 --status x --apply --lock 2'"));
@@ -130,11 +151,14 @@ test("a publishing script hidden from the permission rules asks; a plain node ca
   assert.equal(evaluate("sh -c 'node /k/scripts/github-write.mjs reply 1 2 --body-file r.txt'", "/w").ask, true);
 });
 
-test("with ghWrites off gh may write directly; with it on every gh write goes through github-write.mjs", () => {
+test("with ghWrites off gh may write directly except merge and ready; with it on every gh write goes through github-write.mjs", () => {
   const off = { ...ALL_GATES_ON, ghWrites: false };
-  for (const command of ["gh pr merge 12", "gh pr comment 12 --body x", "gh api -X POST repos/o/r/issues/1/comments -f body=x"]) {
-    assert.equal(evaluate(command, "/w", off).allow, true, command);
+  for (const command of ["gh pr merge 12", "gh pr ready 12", "gh pr 'merge' 12 --squash", "\"gh\" pr ready 12", "gh pr -R o/r merge 12", "gh pr --repo=o/r merge 12", "gh -R o/r pr merge 12", "gh --repo o/r pr ready 12", "gh -Ro/r pr merge 12", "gh pr -R=o/r merge 12", "gh pr --admin=true merge 12", "gh --help=false pr ready 12", "gh pr --subject x merge 12", "gh pr -t x merge 12", "gh pr -t view merge 12", "gh pr --subject view merge 1", "gh pr -b x merge 1", "gh --body x pr merge 1", "gh --body status pr merge 1"]) assert.equal(evaluate(command, "/w", { gates: off }).ask, true, command);
+  for (const command of ["gh pr comment 12 --body x", "gh api -X POST repos/o/r/issues/1/comments -f body=x"]) {
+    assert.equal(evaluate(command, "/w", { gates: off }).allow, true, command);
     assert.equal(evaluate(command, "/w").allow, false, command);
   }
-  assert.equal(evaluate("git push origin main", "/w", off).ask, true);
+  assert.equal(evaluate("git push origin main", "/w", { gates: off }).ask, true);
+  for (const command of ["gh issue -c view close 3", "gh pr -t view merge 12", "gh issue -c list close 3", "gh pr --body diff edit 1 --title y", "gh --body auth pr edit 1"]) assert.equal(evaluate(command, "/w").allow, false, command);
+  for (const command of ["gh -R o/r pr create --title x --body y", "gh pr -R o/r create --title x --body y", "gh -Ro/r pr create --title x --body y", "gh pr -Ro/r create --title x --body y", "gh pr -t view create --body x", "gh pr --title view create --body x", "gh pr new --title x --body y"]) assert.equal(evaluate(command, "/w", { gates: off }).allow, false, command);
 });

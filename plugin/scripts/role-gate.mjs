@@ -8,9 +8,10 @@ import { resolveMap } from "./project-map.mjs";
 
 const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 const SCRIPT_WRITES = [
-  { kind: "tracker", pattern: /openproject\.mjs["']?\s+(apply\b|set\b.*--apply|rollback\b.*--apply)|op_apply\.py\b.*--apply|pg\.py["']?\s+(set\b|(sync|rollback)\b.*--apply)/ },
-  { kind: "doc-figma", pattern: /gdoc-comments\.mjs["']?\s+(reply|anchor|post)\b|figma-comments\.mjs["']?\s+(post|reply|delete)\b|doc-comment-file\.mjs/ },
-  { kind: "pr-review", pattern: /github-write\.mjs["']?\s+(post|resolve|edit|minimize)\b/ },
+  { kind: "tracker", pattern: /openproject\.mjs["']?\s+(apply\b|set\b.*--apply|comment\b.*--apply|comment-edit\b.*--apply|relation(-delete)?\b.*--apply|rollback\b.*--apply)|op_apply\.py\b.*--apply|pg\.py["']?\s+(set\b|(sync|rollback)\b.*--apply)/ },
+  { kind: "doc-figma", pattern: /gdoc-comments\.mjs["']?\s+(reply|anchor|post|edit|delete)\b|figma-comments\.mjs["']?\s+(post|reply|delete)\b|doc-comment-file\.mjs/ },
+  { kind: "code", pattern: /github-write\.mjs["']?\s+pr-body\b/ },
+  { kind: "pr-review", pattern: /github-write\.mjs["']?\s+(post|resolve|unresolve|edit|minimize)\b/ },
 ];
 const OWNER = { tracker: "pm", "doc-figma": "pm", "pr-review": "review", code: "dev" };
 const WHAT = {
@@ -24,6 +25,7 @@ const FORBIDDEN = {
   devops: new Set(["tracker", "doc-figma", "pr-review"]),
   review: new Set(["code", "tracker", "doc-figma"]),
   pm: new Set(["code", "pr-review"]),
+  dispatch: new Set(["code", "tracker", "doc-figma", "pr-review"]),
 };
 
 function repoOf(map, path) {
@@ -92,6 +94,7 @@ export function roleCard(map, name, gateOn = true) {
   if (!role) return "";
   const repos = (map.sessions.find((session) => session.name === name).repos ?? []).join(", ");
   const others = (map.sessions ?? []).filter((session) => session.name !== name).map((session) => `"${session.name}" (${session.role}${session.repos ? `: ${session.repos.join(", ")}` : ""})`).join(", ");
+  if (role === "dispatch") return `Role: this session is "${name}", the dispatch session of ${map.name}. It does no role work itself and publishes nothing. The role sessions are ${others}. Route every request per the dispatch section of ${fileURLToPath(new URL("../shared/handoff.md", import.meta.url))}: hand it to the owning session without the hand-off question, ask only when the owner is unclear or the request spans two roles, and relay each session's reply in one line.`;
   return `Role: this session is "${name}", the ${role} session of ${map.name}${repos ? ` for ${repos}` : ""}. The other sessions are ${others}. When work for another role turns up (a PRD or Figma question, a tracker task, a PR review, code in another session's repository), stop looking into it, write what you saw and where (file:line, PRD locator, frame) into a hand-off per ${fileURLToPath(new URL("../shared/handoff.md", import.meta.url))}, and return to this session's task; the receiving session does the research.${gateOn ? " A write that belongs to another role asks the user first." : ""}`;
 }
 

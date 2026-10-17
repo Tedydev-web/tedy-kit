@@ -18,6 +18,12 @@
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/git-gate.mjs\"", "timeout": 60 }
         ]
+      },
+      {
+        "matcher": "Read|Grep|mcp__.*ctx_(execute|execute_file|batch_execute)",
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/tracker-token-gate.mjs\"", "timeout": 15 }
+        ]
       }
     ],
     "PostToolUse": [

@@ -32,8 +32,31 @@ export function buildPayload(draft, refs, lockVersion) {
   if (draft.dueDate) payload.dueDate = draft.dueDate;
   if (draft.startDate || draft.dueDate) payload.scheduleManually = true;
   if (lockVersion !== undefined) payload.lockVersion = lockVersion;
-  payload._links = links;
+  const fields = fieldValues(draft.fields, refs.fields?.[type] ?? {});
+  Object.assign(payload, fields.payload);
+  payload._links = { ...links, ...fields.links };
   return payload;
+}
+
+export function fieldValues(fields, schema) {
+  const payload = {};
+  const links = {};
+  for (const [name, value] of Object.entries(fields ?? {})) {
+    const entry = Object.entries(schema).find(([, field]) => fold(field.name) === fold(name));
+    if (!entry) throw new Error(`no custom field named "${name}" on this type`);
+    const [key, field] = entry;
+    if (!field.type.endsWith("CustomOption")) {
+      payload[key] = field.type === "Formattable" ? { format: "markdown", raw: value } : value;
+      continue;
+    }
+    const hrefs = [value].flat().map((wanted) => {
+      const option = field.options.find((candidate) => fold(candidate.name) === fold(wanted));
+      if (!option) throw new Error(`"${wanted}" is not an option of ${field.name}: ${field.options.map((candidate) => candidate.name).join(", ")}`);
+      return { href: option.href };
+    });
+    links[key] = field.type.startsWith("[]") ? hrefs : hrefs[0];
+  }
+  return { payload, links };
 }
 
 export function mergeDescription(old, incoming, date) {
@@ -89,7 +112,7 @@ export function loadConfig() {
   return {
     url: config.url.replace(/\/$/, ""),
     host,
-    request: (path, options = {}) => requestJson(`${config.url.replace(/\/$/, "")}${path}`, { ...options, headers: { Authorization: auth, ...options.headers } }),
+    request: (path, options = {}) => requestJson(`${config.url.replace(/\/$/, "")}${path}`, { ...options, headers: { Authorization: auth, "Content-Type": "application/json", ...options.headers } }),
   };
 }
 
@@ -119,16 +142,50 @@ const byName = (items, wanted, kind) => {
   return hit._links.self.href;
 };
 
-export function setPayload(lockVersion, { status, assignee, priority, estimate }, refs) {
+const isoDate = (value, flag) => {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value) || new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) !== value) throw new Error(`--${flag} takes a date as YYYY-MM-DD, not "${value}"`);
+  return value;
+};
+
+export function setPayload(lockVersion, { status, assignee, priority, estimate, start, due }, refs) {
   const links = {};
   if (status) links.status = { href: byName(refs.statuses, status, "status") };
   if (assignee) links.assignee = { href: matchName(refs.assignees, assignee).href };
   if (priority) links.priority = { href: byName(refs.priorities, priority, "priority") };
-  if (!Object.keys(links).length && estimate === undefined) throw new Error("nothing to set; pass --status, --assignee, --priority or --estimate");
+  if (!Object.keys(links).length && estimate === undefined && start === undefined && due === undefined) throw new Error("nothing to set; pass --status, --assignee, --priority, --estimate, --start or --due");
   const payload = { lockVersion };
   if (estimate !== undefined) payload.estimatedTime = isoDuration(estimate);
+  if (start !== undefined) payload.startDate = isoDate(start, "start");
+  if (due !== undefined) payload.dueDate = isoDate(due, "due");
+  if (start !== undefined && due !== undefined && start > due) throw new Error(`--start ${start} is after --due ${due}`);
+  if (start !== undefined || due !== undefined) payload.scheduleManually = true;
   if (Object.keys(links).length) payload._links = links;
   return payload;
+}
+
+const idOf = (href) => href.split("/").pop();
+
+export function workPackageFilters({ parent, assignee, status, type }, refs) {
+  const filters = [];
+  if (parent !== undefined) {
+    if (!/^\d+$/.test(String(parent))) throw new Error(`--parent takes a work package id, not "${parent}"`);
+    filters.push({ parent: { operator: "=", values: [String(parent)] } });
+  }
+  if (assignee !== undefined) filters.push({ assignee: { operator: "=", values: [idOf(matchName(refs.assignees, assignee).href)] } });
+  if (status !== undefined) filters.push(String(status).toLowerCase() === "open" ? { status: { operator: "o", values: [] } } : { status: { operator: "=", values: [idOf(byName(refs.statuses, status, "status"))] } });
+  if (type !== undefined) {
+    const href = refs.types[String(type).toLowerCase()];
+    if (!href) throw new Error(`type "${type}" does not exist in this project; choose one of: ${Object.keys(refs.types).join(", ")}`);
+    filters.push({ type: { operator: "=", values: [idOf(href)] } });
+  }
+  return filters;
+}
+
+export const workPackageLine = (wp) => `#${wp.id} ${wp._links.type?.title ?? "?"} [${wp._links.status?.title ?? "?"}] ${wp._links.assignee?.title ?? "unassigned"} ${wp.startDate ?? "-"}..${wp.dueDate ?? wp.date ?? "-"} ${wp.subject}`;
+
+export function foreignActivity(activity, me) {
+  const author = activity._links?.user?.href;
+  return author && author === me._links.self.href ? null : `refused: activity ${activity.id} was written by ${activity._links?.user?.title ?? author ?? "an unknown user"}, not ${me.name} (${me._links.self.href}); only your own comments can be edited`;
 }
 
 export function readSidecar(path) {
@@ -140,11 +197,22 @@ export function writeSidecar(path, text) {
   writeFileSync(path, text);
 }
 
-export async function loadRefs(client, project) {
+export async function loadRefs(client, project, drafts = []) {
   const types = await client.request(`/api/v3/projects/${project}/types`);
   const assignees = await client.request(`/api/v3/projects/${project}/available_assignees?pageSize=200`);
-  return {
+  const refs = {
     types: Object.fromEntries(types._embedded.elements.map((type) => [type.name.toLowerCase(), type._links.self.href])),
     assignees: assignees._embedded.elements.map((user) => ({ name: user.name, href: user._links.self.href })),
+    fields: {},
   };
+  const typed = new Set(drafts.filter((draft) => draft.fields).map((draft) => refs.types[String(draft.type).toLowerCase()]).filter(Boolean));
+  for (const href of typed) {
+    const form = await client.request(`/api/v3/projects/${project}/work_packages/form`, { method: "POST", body: { _links: { type: { href } } } });
+    refs.fields[href] = Object.fromEntries(
+      Object.entries(form._embedded.schema)
+        .filter(([key]) => key.startsWith("customField"))
+        .map(([key, field]) => [key, { name: field.name, type: field.type, options: (field._embedded?.allowedValues ?? []).map((option) => ({ name: option.value ?? option.name, href: option._links.self.href })) }]),
+    );
+  }
+  return refs;
 }

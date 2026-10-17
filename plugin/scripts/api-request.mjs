@@ -1,4 +1,5 @@
 const SERVER_ERRORS = new Set([500, 502, 503, 504]);
+const QUOTA = /quota exceeded|rateLimitExceeded|userRateLimitExceeded/i;
 
 function parse(text) {
   try {
@@ -26,12 +27,13 @@ export async function requestJson(url, { method = "GET", headers = {}, body, ret
       headers: body === undefined ? headers : { "Content-Type": "application/json", ...headers },
       body: body === undefined ? undefined : JSON.stringify(body),
     });
-    if ((response.status === 429 || (method === "GET" && SERVER_ERRORS.has(response.status))) && attempt < retries) {
-      await wait(Number(response.headers.get("retry-after")) || 2 ** (attempt + 1));
-      continue;
-    }
     const text = await response.text();
     const data = text ? parse(text) : null;
+    const quota = response.status === 403 && QUOTA.test(apiMessage(data, text) + JSON.stringify(data?.error?.errors ?? []));
+    if ((response.status === 429 || quota || (method === "GET" && SERVER_ERRORS.has(response.status))) && attempt < retries) {
+      await wait(Number(response.headers.get("retry-after")) || (quota ? 15 * (attempt + 1) : 2 ** (attempt + 1)));
+      continue;
+    }
     if (!response.ok) {
       const limit = response.headers.get("x-figma-rate-limit-type");
       throw new Error(`${method} ${new URL(url).pathname} returned HTTP ${response.status}: ${redact(apiMessage(data, text))}${limit ? ` (rate limit type ${limit})` : ""}`);

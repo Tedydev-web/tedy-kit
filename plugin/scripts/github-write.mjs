@@ -194,13 +194,18 @@ function minimize(nodeId) {
   return 0;
 }
 
-function resolveThreads(threadIds) {
-  const query = "mutation($id: ID!) { resolveReviewThread(input: {threadId: $id}) { thread { isResolved } } }";
+export function threadMutation(resolved) {
+  const name = resolved ? "resolveReviewThread" : "unresolveReviewThread";
+  return { name, verb: resolved ? "resolve" : "unresolve", query: `mutation($id: ID!) { ${name}(input: {threadId: $id}) { thread { isResolved } } }` };
+}
+
+function setThreadsResolved(threadIds, resolved) {
+  const { name, verb, query } = threadMutation(resolved);
   for (const threadId of threadIds) {
-    console.log(`WRITE → resolve review thread ${threadId}`);
+    console.log(`WRITE → ${verb} review thread ${threadId}`);
     const result = JSON.parse(gh(["api", "graphql", "-f", `query=${query}`, "-f", `id=${threadId}`]));
-    if (result.data?.resolveReviewThread?.thread?.isResolved !== true) throw new Error(`${threadId} is not resolved: ${JSON.stringify(result.errors ?? result)}`);
-    console.log(`resolved ${threadId}`);
+    if (result.data?.[name]?.thread?.isResolved !== resolved) throw new Error(`${threadId} is not ${verb}d: ${JSON.stringify(result.errors ?? result)}`);
+    console.log(`${verb}d ${threadId}`);
   }
   return 0;
 }
@@ -220,6 +225,36 @@ function reply(pr, id, flags) {
   return 0;
 }
 
+export function prBodyRefusal(pr, me, body) {
+  if (!/\bOP#\d+\b/.test(body)) return "the body has no OP#<id>";
+  if (!pr.isDraft) return `#${pr.number} is not a draft; a ready PR belongs to the user`;
+  if (pr.author?.login !== me) return `#${pr.number} belongs to ${pr.author?.login}, not ${me}`;
+  return null;
+}
+
+function prBody(number, flags) {
+  if (typeof flags["body-file"] !== "string") throw new Error("pr-body needs --body-file <file>");
+  const repo = currentRepo(flags);
+  const body = readFileSync(flags["body-file"], "utf8").trim();
+  const view = () => JSON.parse(gh(["pr", "view", String(number), "--repo", repo, "--json", "number,isDraft,author,body"]));
+  const pr = view();
+  const refusal = prBodyRefusal(pr, gh(["api", "user", "-q", ".login"]).trim(), body);
+  if (refusal) {
+    console.log(`refused: ${refusal}`);
+    return 1;
+  }
+  if (pr.body.trim() === body) {
+    console.log(`#${number} already has this body; nothing written`);
+    return 0;
+  }
+  console.log(`WRITE → ${repo}#${number} : PR body`);
+  if (flags["dry-run"]) return 0;
+  gh(["api", "-X", "PATCH", `repos/${repo}/pulls/${number}`, "--input", "-"], JSON.stringify({ body }));
+  const same = view().body.trim() === body;
+  console.log(same ? `updated #${number} body` : `written, but the read-back differs; open #${number} and check`);
+  return same ? 0 : 1;
+}
+
 function parseFlags(args) {
   const positional = [];
   const flags = {};
@@ -236,15 +271,19 @@ const USAGE = `usage:
   github-write.mjs edit <comment-id> --body-file <file> [--repo <owner/repo>]
   github-write.mjs minimize <node-id>
   github-write.mjs resolve <thread-node-id>...
-  github-write.mjs reply <pr> <comment-id> --body-file <file> [--repo <owner/repo>]`;
+  github-write.mjs unresolve <thread-node-id>...
+  github-write.mjs reply <pr> <comment-id> --body-file <file> [--repo <owner/repo>]
+  github-write.mjs pr-body <pr> --body-file <file> [--repo <owner/repo>] [--dry-run]`;
 
 async function main([command, ...args]) {
   const { positional, flags } = parseFlags(args);
   if (command === "post" && positional[0]) return post(positional[0], flags);
   if (command === "edit" && positional[0]) return edit(positional[0], flags);
   if (command === "minimize" && positional[0]) return minimize(positional[0]);
-  if (command === "resolve" && positional.length) return resolveThreads(positional);
+  if (command === "resolve" && positional.length) return setThreadsResolved(positional, true);
+  if (command === "unresolve" && positional.length) return setThreadsResolved(positional, false);
   if (command === "reply" && positional[1]) return reply(positional[0], positional[1], flags);
+  if (command === "pr-body" && positional[0]) return prBody(positional[0], flags);
   console.error(USAGE);
   return 2;
 }

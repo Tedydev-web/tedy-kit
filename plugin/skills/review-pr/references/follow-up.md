@@ -26,6 +26,7 @@ node <plugin>/scripts/github-write.mjs reply <pr> <comment-databaseId> --body-fi
 node <plugin>/scripts/github-write.mjs edit <comment-databaseId> --body-file <file>
 node <plugin>/scripts/github-write.mjs minimize <comment-node-id>
 node <plugin>/scripts/github-write.mjs resolve <thread-node-id>...
+node <plugin>/scripts/github-write.mjs unresolve <thread-node-id>...
 ```
 
 - `reply`: one sentence in the map's `language.pr_review`, same lint as a review comment; for "not fixed yet" or a rebuttal.
@@ -33,4 +34,5 @@ node <plugin>/scripts/github-write.mjs resolve <thread-node-id>...
 - `edit`: rewording a comment the user asked to change; the old text stays in the edit log.
 - `minimize`: hides an outdated comment as OUTDATED instead of deleting it, for a request to delete old comments.
 - `resolve <thread-node-id>...`: only when the user asks in that turn to resolve, and only threads whose fix you verified in code at the current head (or whose question was answered and checked); list them with the evidence first, then resolve. Threads waiting on BE/PM or on an open reply stay open.
+- `unresolve <thread-node-id>...`: only when the user asks in that turn to reopen a thread, for example one resolved before its fix was verified.
 - New findings on the new head are a new review: run the main procedure again with the new head SHA.

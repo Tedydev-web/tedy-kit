@@ -1,8 +1,12 @@
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ALL_GATES_ON, ask, deny, gateSwitches, logGate, readHookInput } from "./hook-io.mjs";
+import { resolveMap } from "./project-map.mjs";
+import { check as checkQuoted } from "./publish-quote-gate.mjs";
+import { evaluate as trackerToken, trackerHost } from "./tracker-token-gate.mjs";
 
 const SHELL_WRAPPER = /^(?:bash|sh|zsh)\s+-c\s+(['"])([\s\S]*)\1$/;
 const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
@@ -13,7 +17,7 @@ const LOCAL_GH = new Set(["pr checkout", "repo clone", "auth", "config", "alias"
 const PROTECTED_BRANCHES = new Set(["main", "master", "dev", "develop", "production", "staging"]);
 const PREFIX_WORDS = new Set(["command", "exec", "builtin", "nohup", "time"]);
 const HEREDOC = /<<(-?)\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/g;
-const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve)|openproject\.mjs["']?\s+(?:apply\b|set\b.*--apply|rollback\b.*--apply)|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor))\b/;
+const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve|unresolve|pr-body)|openproject\.mjs["']?\s+(?:apply\b|set\b.*--apply|comment\b.*--apply|comment-edit\b.*--apply|relation(?:-delete)?\b.*--apply|rollback\b.*--apply)|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor|edit|delete)|doc-comment-file\.mjs["']?\s+post\b.*--apply)\b/;
 const REWRITING_PUSH = /^(-f|--force|--force-with-lease(=.*)?|--force-if-includes|--mirror|--all|--prune|-d|--delete)$/;
 
 function skipHeredocs(command, index, line) {
@@ -87,7 +91,7 @@ export function splitSegments(command, unwrap = true) {
     });
 }
 
-function tokenize(segment) {
+export function tokenize(segment) {
   const tokens = [];
   let current = "";
   let quote = null;
@@ -168,9 +172,18 @@ export function hiddenPublish(command) {
   return null;
 }
 
+function withoutRepoFlags(args) {
+  const kept = [];
+  for (let index = 0; index < args.length; index += 1) {
+    if (args[index] === "-R" || args[index] === "--repo") index += 1;
+    else if (!/^(-R.|--repo=)/.test(args[index])) kept.push(args[index]);
+  }
+  return kept;
+}
+
 export function classify(segment, cwd) {
   const [program, ...args] = commandTokens(segment);
-  if (program === "cd") return { kind: "cd", dir: resolve(cwd, args[0] ?? homedir()) };
+  if (program === "cd") return { kind: "cd", dir: resolve(cwd, (args[0] ?? "~").replace(/^~(?=\/|$)/, homedir())) };
   if (program === "git") {
     let dir = cwd;
     let index = 0;
@@ -194,12 +207,21 @@ export function classify(segment, cwd) {
     return { kind: READ_ONLY_GIT.has(subcommand) ? "read" : "other", dir };
   }
   if (program === "gh") {
-    const [area, action] = args;
-    if (area === "pr" && action === "create") return { kind: "pr-create", dir: cwd, args: args.slice(2) };
-    if (area === "api") return { kind: classifyGitHubApi(args.slice(1)) ?? "read", dir: cwd };
-    if (READ_ONLY_GH_AREAS.has(area) || READ_ONLY_GH_ACTIONS.has(action)) return { kind: "read", dir: cwd };
-    if (LOCAL_GH.has(area) || LOCAL_GH.has(`${area} ${action}`)) return { kind: "other", dir: cwd };
-    return { kind: "github-write", dir: cwd };
+    const ghArgs = withoutRepoFlags(args);
+    const words = ghArgs.filter((token) => !token.startsWith("-"));
+    if (!words.length) return { kind: "read", dir: cwd };
+    const [area] = words;
+    const rest = ghArgs.slice(ghArgs.indexOf(area) + 1);
+    const action = rest[0];
+    const plainArea = !ghArgs[0].startsWith("-");
+    const plainAction = plainArea && action !== undefined && !action.startsWith("-");
+    const pr = plainArea ? area === "pr" : words.includes("pr");
+    const verbs = plainAction ? [action] : words;
+    if (pr && verbs.some((word) => word === "create" || word === "new")) return { kind: "pr-create", dir: cwd, args: rest };
+    if (plainArea && area === "api") return { kind: classifyGitHubApi(rest) ?? "read", dir: cwd };
+    if (plainArea && (READ_ONLY_GH_AREAS.has(area) || (plainAction && READ_ONLY_GH_ACTIONS.has(action)))) return { kind: "read", dir: cwd };
+    if (plainArea && (LOCAL_GH.has(area) || (plainAction && LOCAL_GH.has(`${area} ${action}`)))) return { kind: "other", dir: cwd };
+    return { kind: "github-write", dir: cwd, pr, verbs };
   }
   return { kind: "other", dir: cwd };
 }
@@ -233,7 +255,24 @@ export function pushRisk(args, dir, exempt = []) {
   return null;
 }
 
-export function evaluate(command, cwd, gates = ALL_GATES_ON) {
+export function prBody(args, dir) {
+  for (let index = 0; index < args.length; index += 1) {
+    const match = args[index].match(/^(--body|-b|--body-file|-F)(?:=([\s\S]*))?$/);
+    if (!match) continue;
+    const value = match[2] ?? args[index + 1];
+    if (value === undefined) return null;
+    if (match[1] === "--body" || match[1] === "-b") return value;
+    if (value === "-") return null;
+    try {
+      return readFileSync(resolve(dir, value), "utf8");
+    } catch {
+      return null;
+    }
+  }
+  return null;
+}
+
+export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir } = {}) {
   const hidden = hiddenPublish(command);
   if (hidden) return { allow: false, ask: true, reason: `tedy gate: this publishes through a kit script in a form the permission rules do not match (\`${hidden.slice(0, 120)}\`). Allow it only if the user approved this exact publish; otherwise run it as a plain \`node <script> …\` command.` };
   let dir = cwd;
@@ -250,9 +289,17 @@ export function evaluate(command, cwd, gates = ALL_GATES_ON) {
     }
     if (action.kind === "pr-create") {
       if (gates.draftPrOnly && !action.args.some((arg) => arg === "--draft" || arg === "-d")) return { allow: false, reason: "tedy gate: open the PR as a draft with `--draft`; the user marks it ready." };
+      const tracked = (projectsDir ? resolveMap(action.dir, projectsDir) : resolveMap(action.dir))?.map?.tracker;
+      if (tracked && !/\bOP#\d+\b/.test(prBody(action.args, action.dir) ?? "")) {
+        return { allow: false, reason: "tedy gate: this project tracks work in OpenProject, so every PR carries its work package as `--body \"OP#<id>\"`. No work package yet: stop, hand the task to the PM session (shared/handoff.md), and open the PR once it exists. A body file must already exist when the command runs." };
+      }
       continue;
     }
-    if (action.kind !== "github-write" || !gates.ghWrites) continue;
+    if (action.kind !== "github-write") continue;
+    if (action.pr && action.verbs.some((verb) => verb === "merge" || verb === "ready")) {
+      return { allow: false, ask: true, reason: "tedy gate: merging or marking a PR ready belongs to the user. Allow it only if the user asked for this exact PR in this turn." };
+    }
+    if (!gates.ghWrites) continue;
     if (/\bgh\s+(pr|issue)\s+(merge|close|reopen|ready|edit|lock|unlock)\b/.test(segment)) {
       return { allow: false, reason: "tedy gate: merging, closing or editing a PR or issue belongs to the user. Tell the user what is ready and let them do it." };
     }
@@ -265,7 +312,15 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const input = readHookInput();
   const command = input.tool_input?.command ?? "";
   try {
-    const result = evaluate(command, input.cwd ?? process.cwd(), gateSwitches());
+    let result = evaluate(command, input.cwd ?? process.cwd(), { gates: gateSwitches() });
+    if (result.allow) {
+      const token = trackerToken(input.tool_input, trackerHost());
+      if (token) result = { allow: false, reason: token };
+    }
+    if (result.allow) {
+      const quoted = checkQuoted(input);
+      if (quoted) result = { allow: false, ...quoted };
+    }
     if (!result.allow) logGate({ hook: "git-gate", decision: result.ask ? "ask" : "deny", command: command.slice(0, 200), cwd: input.cwd, reason: result.reason });
     if (result.ask) ask(result.reason);
     else if (!result.allow) deny(result.reason);

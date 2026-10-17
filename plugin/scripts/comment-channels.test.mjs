@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { duplicateOnNode, duplicateReply, pinOffset, rootOf, threadsSince } from "./figma-comments.mjs";
-import { alreadyPosted, findQuoteRange, tokenFromDump } from "./gdoc-comments.mjs";
+import { alreadyPosted, deleteTarget, editTarget, findQuoteRange, revisionsSince, stillThere, tokenFromDump } from "./gdoc-comments.mjs";
 
 test("a Figma pin sits at half the width and three quarters of the height of the node", () => {
   assert.deepEqual(pinOffset({ x: 100, y: 200, width: 375, height: 812 }), { x: 188, y: 609 });
@@ -55,6 +55,26 @@ test("findQuoteRange maps a quote across text runs to UTF-16 document indexes in
   assert.throws(() => findQuoteRange(document, "t.p59op2unmr", "t"), /appears \d+ times/);
 });
 
+test("findQuoteRange finds a quote inside a table cell of a child tab the way Ctrl+F does", () => {
+  const cell = (startIndex, content) => ({ content: [{ startIndex, paragraph: { elements: [{ startIndex, textRun: { content } }] } }] });
+  const document = {
+    tabs: [
+      {
+        tabProperties: { tabId: "t.parent" },
+        documentTab: { body: { content: [] } },
+        childTabs: [
+          {
+            tabProperties: { tabId: "t.qfq5co4ax5ij" },
+            documentTab: { body: { content: [{ startIndex: 1, table: { tableRows: [{ tableCells: [cell(4, "BR6\n"), cell(10, "The vote is the only act —  on quorum\n")] }] } }] } },
+          },
+        ],
+      },
+    ],
+  };
+  assert.deepEqual(findQuoteRange(document, "t.qfq5co4ax5ij", "the vote is the only act — on quorum"), { startIndex: 10, endIndex: 47, tabId: "t.qfq5co4ax5ij" });
+  assert.throws(() => findQuoteRange(document, "t.qfq5co4ax5ij", "BR6 The vote"), /not found/);
+});
+
 test("a Figma post that repeats an open comment on the same node is caught; another node or a resolved thread is not", () => {
   const comments = [
     { id: "1", parent_id: "", resolved_at: null, client_meta: { node_id: "3445:6702" }, message: "@pm_minh  nút này\nđổi tên chưa a?" },
@@ -90,4 +110,38 @@ test("a Doc reply or anchored comment already posted is found before posting aga
   assert.ok(!alreadyPosted(comments, "reply", "BBB", "E hỏi thêm: ví nào trả a?"));
   assert.ok(alreadyPosted(comments, "anchor", undefined, "Mục này PRD ghi 30 ký tự a?"));
   assert.ok(!alreadyPosted(comments, "anchor", undefined, "Câu hỏi mới a?"));
+});
+
+test("a Doc edit targets only this account's own comment or reply", () => {
+  const comments = [{ id: "C1", content: "hỏi", author: { displayName: "Tedy", me: true }, replies: [{ id: "R1", content: "ok", author: { displayName: "PM", me: false } }, { id: "R2", content: "a nhé", author: { displayName: "Tedy", me: true } }] }];
+  assert.equal(editTarget(comments, "C1").id, "C1");
+  assert.equal(editTarget(comments, "C1", "R2").id, "R2");
+  assert.throws(() => editTarget(comments, "C1", "R1"), /reply by PM, not by this account/);
+  assert.throws(() => editTarget(comments, "C9"), /no comment C9/);
+  assert.throws(() => editTarget(comments, "C1", "R9"), /no reply R9 in thread C1/);
+});
+
+test("Doc revisions are filtered by modifiedTime, and all are kept without a mark", () => {
+  const revisions = [{ id: "1", modifiedTime: "2026-10-12T10:00:00.000Z" }, { id: "2", modifiedTime: "2026-10-14T02:00:00.000Z" }];
+  assert.deepEqual(revisionsSince(revisions, "2026-10-13T00:00:00Z").map((revision) => revision.id), ["2"]);
+  assert.equal(revisionsSince(revisions).length, 2);
+});
+
+test("a Doc delete takes only this account's own text and never a thread carrying others' replies", () => {
+  const comments = [
+    { id: "C1", content: "hỏi", author: { displayName: "Tedy", me: true }, replies: [{ id: "R1", content: "ok", author: { displayName: "PM", me: false } }, { id: "R2", content: "a nhé", author: { displayName: "Tedy", me: true } }] },
+    { id: "C2", content: "nháp", author: { displayName: "Tedy", me: true }, replies: [{ id: "R3", content: "", deleted: true, author: { displayName: "PM", me: false } }] },
+  ];
+  assert.equal(deleteTarget(comments, "C1", "R2").id, "R2");
+  assert.equal(deleteTarget(comments, "C2").id, "C2");
+  assert.throws(() => deleteTarget(comments, "C1"), /1 replies by others/);
+  assert.throws(() => deleteTarget(comments, "C1", "R1"), /reply by PM, not by this account/);
+});
+
+test("a deleted Doc comment or reply no longer reads back", () => {
+  const comments = [{ id: "C1", replies: [{ id: "R1" }, { id: "R2", deleted: true }] }];
+  assert.ok(stillThere(comments, "C1"));
+  assert.ok(stillThere(comments, "C1", "R1"));
+  assert.ok(!stillThere(comments, "C1", "R2"));
+  assert.ok(!stillThere(comments, "C9"));
 });

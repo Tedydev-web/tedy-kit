@@ -12,6 +12,7 @@ const map = {
     { name: "Dev TMA - Shop", role: "dev", repos: ["acme-shop-fe"] },
     { name: "Dev Admin - Shop", role: "dev", repos: ["acme-shop-admin-be"] },
     { name: "DevOps - Shop", role: "devops" },
+    { name: "Dispatch - Shop", role: "dispatch" },
   ],
 };
 const bash = (command, cwd = "/w/acme") => classifyAction({ tool_name: "Bash", cwd, tool_input: { command } }, map);
@@ -34,6 +35,16 @@ test("writes through the tracker, Doc, Figma and review scripts are classified; 
   assert.equal(bash("node /k/scripts/openproject.mjs set 21298 --status Closed"), null);
   assert.equal(bash("python3 ~/.agents/skills/pg-project-management/scripts/pg.py set 183 21298 --status Closed").kind, "tracker");
   assert.equal(bash("cd plans && node /k/scripts/gdoc-comments.mjs reply AAA --body-file b.txt").kind, "doc-figma");
+  assert.equal(bash("node /k/scripts/gdoc-comments.mjs edit AAA --reply BBB --body-file b.txt").kind, "doc-figma");
+  assert.equal(bash("node /k/scripts/gdoc-comments.mjs delete AAA --reply BBB").kind, "doc-figma");
+  assert.equal(bash("node /k/scripts/gdoc-comments.mjs changed --since 2026-10-13"), null);
+  assert.equal(bash("node /k/scripts/openproject.mjs comment-edit 991 --body-file b.txt --apply").kind, "tracker");
+  assert.equal(bash("node /k/scripts/openproject.mjs comment-edit 991 --body-file b.txt"), null);
+  assert.equal(bash("node /k/scripts/openproject.mjs relation 21448 21450 --type blocks --apply").kind, "tracker");
+  assert.equal(bash("node /k/scripts/openproject.mjs relation-delete 1000 --apply").kind, "tracker");
+  assert.equal(bash("node /k/scripts/openproject.mjs relation 21448 21450 --type blocks"), null);
+  assert.equal(bash("node /k/scripts/openproject.mjs set 21298 --due 2026-10-20 --apply --lock 3").kind, "tracker");
+  assert.equal(bash("node /k/scripts/github-write.mjs unresolve PRRT_1").kind, "pr-review");
   assert.equal(bash("node /k/scripts/figma-comments.mjs post 1:2 --body-file b.txt").kind, "doc-figma");
   assert.equal(bash("node /k/scripts/doc-comment-file.mjs items.json").kind, "doc-figma");
   assert.equal(bash("node /k/scripts/figma-comments.mjs list --since 2026-10-07"), null);
@@ -84,4 +95,14 @@ test("the session name comes from the fleet list, and the role card names the se
 test("the role card promises a prompt only when the role gate is on", () => {
   assert.match(roleCard(map, "PM - Shop"), /asks the user first/);
   assert.doesNotMatch(roleCard(map, "PM - Shop", false), /asks the user first/);
+});
+
+test("the dispatch session writes nothing itself and its card routes every request", () => {
+  const name = "Dispatch - Shop";
+  for (const kind of ["code", "tracker", "doc-figma", "pr-review"]) assert.match(decide(map, name, { kind, repo: null }), /the dispatch session; .* belongs to the (dev|pm|review) session/);
+  const card = roleCard(map, name);
+  assert.match(card, /^Role: this session is "Dispatch - Shop", the dispatch session of acme-shop\. It does no role work itself/);
+  assert.match(card, /"PM - Shop" \(pm\)/);
+  assert.match(card, /without the hand-off question/);
+  assert.doesNotMatch(roleCard(map, "PM - Shop"), /dispatch section/);
 });
