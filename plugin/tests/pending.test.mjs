@@ -209,3 +209,18 @@ test("done refuses a pending hand-off reached through a symlinked alias of the p
   assert.throws(() => archive(join(alias, "plans", "reports", "handoff-1-to-pm.md"), map), /handoff\.mjs done/);
   assert.ok(existsSync(join(root, "plans", "reports", "handoff-1-to-pm.md")));
 });
+
+test("done follows symlinks inside plans/ to the real file: a hand-off behind a link is refused and a draft behind a link is archived itself", async () => {
+  const { symlinkSync } = await import("node:fs");
+  const { root, map } = project();
+  mkdirSync(join(root, "plans", "reports"), { recursive: true });
+  writeFileSync(join(root, "plans", "reports", "handoff-2.md"), "status: pending\n");
+  symlinkSync(join(root, "plans", "reports"), join(root, "plans", "r2"));
+  symlinkSync(join(root, "plans", "reports", "handoff-2.md"), join(root, "plans", "f.md"));
+  assert.throws(() => archive(join(root, "plans", "r2", "handoff-2.md"), map), /handoff\.mjs done/);
+  assert.throws(() => archive(join(root, "plans", "f.md"), map), /handoff\.mjs done/);
+  const outside = join(tempDir("tedy-pending-out-"), "l.md");
+  symlinkSync(join(root, "plans", "drafts", "doc-comments.md"), outside);
+  assert.equal(archive(outside, map), join(root, "plans", "archive", "drafts", "doc-comments.md"));
+  assert.ok(!existsSync(join(root, "plans", "drafts", "doc-comments.md")));
+});

@@ -41,7 +41,7 @@ Release steps:
 
 ## Set up your profile
 
-Run `/tedy:setup` in a project. On the first run it creates your profile: it asks where (default `~/.config/tedy`, or another folder it then sets as `TEDY_PROFILE_DIR` in `~/.claude/settings.json`), writes a default `config.json`, a starter `rules.md` and an empty `projects/` folder without overwriting anything, and adds `@<profile>/rules.md` to `~/.claude/CLAUDE.md` after a backup. It then builds the project map. To create the profile by hand instead, run `node <plugin>/scripts/profile.mjs init`.
+Run `/tedy:setup` in a project. On the first run it creates your profile: it asks where (default `~/.config/tedy`, or another folder it then sets as `TEDY_PROFILE_DIR` in `~/.claude/settings.json`), writes a default `config.json`, a starter `rules.md` and an empty `projects/` folder without overwriting anything, and asks before adding `@<profile>/rules.md` to `~/.claude/CLAUDE.md`, and backs that file up first. It then builds the project map. To create the profile by hand instead, run `node <plugin>/scripts/profile.mjs init`.
 
 `profile.mjs doctor` shows what the plugin will read. The layout and every config key are in [`plugin/shared/profile-layout.md`](plugin/shared/profile-layout.md).
 
