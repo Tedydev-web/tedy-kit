@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, matchesGlob, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -54,10 +54,20 @@ function bashPaths(command, cwd) {
 
 const contains = (dir, path) => path === dir || path.startsWith(dir.endsWith(sep) ? dir : dir + sep);
 
-function namesConfig(path, config) {
-  if (!GLOB.test(path)) return real(path) === config;
+function sameFile(path, config) {
   try {
-    return matchesGlob(config, path);
+    const [a, b] = [statSync(path), statSync(config)];
+    return a.dev === b.dev && a.ino === b.ino;
+  } catch {
+    return false;
+  }
+}
+
+function namesConfig(path, config) {
+  const pattern = path.replace(/\$\{?[A-Za-z_][A-Za-z0-9_]*\}?/g, "*");
+  if (!GLOB.test(pattern)) return real(path) === config || sameFile(path, config);
+  try {
+    return matchesGlob(config, pattern);
   } catch {
     return false;
   }

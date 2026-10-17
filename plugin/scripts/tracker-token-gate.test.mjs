@@ -2,7 +2,7 @@ import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { linkSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { evaluate as trackerToken, trackerHost } from "./tracker-token-gate.mjs";
@@ -85,4 +85,23 @@ test("the gate entry refuses the call when its own check throws", () => {
   const input = JSON.stringify({ tool_name: "Read", tool_input: { file_path: "x" }, cwd: 123 });
   const out = execFileSync("node", [GATE_ENTRY], { input, encoding: "utf8", env: { ...process.env, HOME: home, TEDY_STATE_DIR: tempDir("tedy-state-") } });
   assert.equal(JSON.parse(out).hookSpecificOutput.permissionDecision, "deny");
+});
+
+test("approved hostile token-file inputs are refused (phase 03 case list G)", () => {
+  const { root, op, configFile } = opHome();
+  const hardLink = join(tempDir("tedy-op-link-"), "x");
+  linkSync(configFile, hardLink);
+  const check = (toolInput, cwd = "/") => trackerToken(toolInput, null, { configFile, cwd });
+  const cases = [
+    [{ command: `cat ../${CONFIG_NAME}` }, join(op, "sync")],
+    [{ command: `cat ${op}/./${CONFIG_NAME}` }],
+    [{ command: `cat ${op}/sync/../${CONFIG_NAME}` }],
+    [{ command: `cat ${hardLink}` }],
+    [{ command: `F=op; cat ${root}/$F/${CONFIG_NAME}` }],
+    [{ file_path: `${root}/op/../op/${CONFIG_NAME}` }],
+    [{ file_path: hardLink }],
+    [{ pattern: "x", path: op, glob: "*.json" }],
+  ];
+  assert.deepEqual(cases.filter(([toolInput, cwd]) => !check(toolInput, cwd)).map(([toolInput]) => JSON.stringify(toolInput)), []);
+  for (const toolInput of [{ file_path: join(op, "sync", "h__p.map.json") }, { command: `cat ${join(op, "sync", "h__p.map.json")}` }, { command: `ls ${root}` }]) assert.equal(check(toolInput), null, JSON.stringify(toolInput));
 });

@@ -45,8 +45,9 @@ const WRAPPER_ARGUMENTS = new Map([["timeout", 1]]);
 const PR_CREATE_VALUE_FLAGS = new Set(["-t", "--title", "-b", "--body", "-F", "--body-file", "-B", "--base", "-H", "--head", "-a", "--assignee", "-l", "--label", "-m", "--milestone", "-p", "--project", "-r", "--reviewer", "-T", "--template"]);
 const SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh", "fish"]);
 const INTERPRETER = /^(?:python|node|perl|ruby|deno|bun)[\d.]*$/;
-const EVAL_WORDS = new Set(["eval", "source", "."]);
-const NOT_LITERAL = /[$`(*?]|^\[(?!\[?$)/;
+const EVAL_WORDS = new Set(["eval", "source", ".", "alias", "function"]);
+const NOT_LITERAL = /[$`(*?,{]|^\[(?!\[?$)|.}/;
+const RUNNERS = new Set(["env", "script", "ssh", "su", "runuser", "sg", "setsid", "flock", "watch", "parallel", "tmux", "screen", "expect", "unbuffer", "at", "batch", "chroot", "systemd-run", "nsenter", "unshare", "firejail", "bwrap"]);
 const API_MERGE = /pulls\/\d+\/merge\b|mergePullRequest|markPullRequestReadyForReview|enablePullRequestAutoMerge/;
 const MAX_COMMAND = 10_000;
 const UNREADABLE_REASON = "tedy gate: this command runs code the gate cannot read (a command word built at run time, eval, a shell reading code from stdin or -c, an interpreter one-liner that mentions gh, or git -c alias/core). Allow it only if the user asked for it.";
@@ -131,13 +132,19 @@ function unreadable(segment) {
   const [word = "", ...args] = tokens;
   if (NOT_LITERAL.test(word) || EVAL_WORDS.has(word)) return true;
   const program = basename(word);
+  if (/\$'[^']*\\/.test(segment)) return true;
+  const raw = tokenize(segment);
+  if (raw.some((token, index) => RUNNERS.has(basename(token)) && raw.slice(index + 1).some((arg) => /\s/.test(arg) && /\bgh\b|github/i.test(arg)))) return true;
   if (SHELLS.has(program)) return args.some((arg) => /^-[a-zA-Z]*[cs]/.test(arg) || arg === "<<<" || arg === "<") || !args.some((arg) => !arg.startsWith("-"));
   if (INTERPRETER.test(program)) return args.some((arg) => /^(-[a-zA-Z]*[ce][a-zA-Z]*|--eval|--print)$/.test(arg)) && /\bgh\b|github/i.test(segment);
   if (program === "git") {
-    for (let index = 0; index < args.length && args[index].startsWith("-"); index += 1) {
+    let index = 0;
+    for (; index < args.length && args[index].startsWith("-"); index += 1) {
       if (/^--config-env/.test(args[index])) return true;
       if (args[index] === "-c" && /^(alias|core)\./i.test(args[index + 1] ?? "")) return true;
+      if (args[index] === "-c" || args[index] === "-C") index += 1;
     }
+    if (args[index] === "config" && args.slice(index + 1).some((arg) => /^(alias|core)\./i.test(arg))) return true;
   }
   return false;
 }
@@ -235,6 +242,7 @@ export function classify(segment, cwd) {
     const verbs = plainAction ? [action] : words;
     if (plainArea && (GH_HELP.has(action) || (plainAction && GH_HELP.has(rest[1])))) return { kind: "read", dir: cwd };
     if (pr && verbs.some((word) => word === "create" || word === "new")) return { kind: "pr-create", dir: cwd, args: rest };
+    if (plainArea && area === "extension" && action === "exec") return { kind: "github-write", dir: cwd, pr: false, verbs: [action], unknown: true };
     if (plainArea && area === "api") {
       const api = classifyGitHubApi(rest);
       if (api === "pr-merge") return { kind: "github-write", dir: cwd, pr: true, verbs: ["merge"] };

@@ -42,7 +42,11 @@ export function splitSegments(command, unwrap = true) {
       line += char;
       continue;
     }
-    if (char === "\\" && index + 1 < command.length && command[index + 1] !== "\n") {
+    if (char === "\\" && command[index + 1] === "\n") {
+      index += 1;
+      continue;
+    }
+    if (char === "\\" && index + 1 < command.length) {
       current += pair;
       line += pair;
       index += 1;

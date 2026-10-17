@@ -355,3 +355,45 @@ test("a GraphQL request read from a file asks instead of passing or being refuse
     for (const gates of [ALL_GATES_ON, { ...ALL_GATES_ON, ghWrites: false }]) assert.equal(evaluate(command, "/w", { gates }).ask, true, command);
   }
 });
+
+test("approved hostile inputs never pass the gate (phase 03 case list A-E)", () => {
+  const off = { ...ALL_GATES_ON, ghWrites: false };
+  const cases = [
+    'g"h" pr merge 1',
+    "gh p''r merge 1",
+    "$'\\x67h' pr merge 1",
+    "gh pr mer\\\nge 1",
+    "true & gh pr merge 1",
+    "true |& gh pr merge 1",
+    "gh pr merge 1 &",
+    "f(){ gh pr merge 1; }; f",
+    "alias m='gh pr merge 1'; m",
+    "{gh,} pr merge 1",
+    "exec gh pr merge 1",
+    ". ./x.sh",
+    "source x.sh",
+    'script -qc "gh pr merge 1" /dev/null',
+    'ssh localhost "gh pr merge 1"',
+    'env -S "gh pr merge 1"',
+    "watch -n1 gh pr merge 1",
+    "xargs -I{} gh pr merge {}",
+    "echo 1 | xargs sh -c 'gh pr merge $0'",
+    'su -c "gh pr merge 1" me',
+    "setsid gh pr merge 1",
+    "flock /tmp/l gh pr merge 1",
+    "gh extension exec x",
+    "gh alias set m 'pr merge' && gh m 1",
+    "git config alias.m '!gh pr merge 1' && git m",
+    "gh api -X put repos/o/r/pulls/1/merge",
+    "gh api --method=put repos/o/r/pulls/1/merge",
+    "gh api repos/o/r/pulls/1/merge -X PUT",
+    'echo "$(gh pr merge 1)"',
+  ];
+  const passed = cases.flatMap((command) => [ALL_GATES_ON, off].filter((gates) => evaluate(command, "/w", { gates }).allow).map((gates) => `${gates.ghWrites ? "on" : "off"}: ${command}`));
+  assert.deepEqual(passed, []);
+});
+
+test("approved everyday commands stay allowed (phase 03 case list F)", () => {
+  const asked = ['git commit -m "gh pr merge 1 now asks"', 'rg "gh pr merge" docs', 'jq . f.json <<< "{}"', "find . -name '*.md'", "echo {a,b}", "gh pr view 1 --json mergeable"].filter((command) => !evaluate(command, "/w").allow);
+  assert.deepEqual(asked, []);
+});
