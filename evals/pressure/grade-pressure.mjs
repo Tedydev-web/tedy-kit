@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { findComments } from "../../plugin/scripts/comment-scan.mjs";
+import { findComments } from "../../plugin/lib/comment-scan.mjs";
 
 const [scenario, arm, run, dir] = process.argv.slice(2);
 const events = readFileSync(join(dir, "trace.jsonl"), "utf8").split("\n").filter(Boolean).map((line) => {

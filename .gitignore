@@ -15,3 +15,5 @@ plans/
 evals/**/results/
 .pytest_cache/
 .claude/agent-memory/
+!plugin/tests/
+!plugin/tests/**
