@@ -1,3 +1,4 @@
+import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { addSlugs, buildPayload, forgetSlugs, isoDuration, matchName, mergeDescription, mergePayload, planWrites, recordLastApply, setPayload } from "./openproject-client.mjs";

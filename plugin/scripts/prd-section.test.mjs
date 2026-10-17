@@ -1,3 +1,4 @@
+import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { findSections, indexTab, quoteInText, MAX_WORDS } from "./prd-section.mjs";

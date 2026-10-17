@@ -1,3 +1,4 @@
+import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { duplicateOnNode, duplicateReply, pinOffset, rootOf, threadsSince } from "./figma-comments.mjs";

@@ -1,3 +1,4 @@
+import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
@@ -111,7 +112,8 @@ test("a bare git push asks only when the branch tracks an integration branch", (
 });
 
 test("a repository listed in gates.pushExempt pushes to main without asking, but still asks before rewriting history", () => {
-  const kit = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+  const kit = tempDir("tedy-kit-repo-");
+  execFileSync("git", ["init", "-q", kit]);
   assert.equal(evaluate("git push origin main", kit).ask, true);
   const gates = { ...ALL_GATES_ON, pushExempt: [kit] };
   assert.equal(evaluate("git push origin main", kit, { gates }).allow, true);

@@ -1,3 +1,4 @@
+import "./test-isolation.mjs";
 import { test, before } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";

@@ -1,3 +1,4 @@
+import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { compactFrames, diffSnapshots, subtreeHash, versionsSince } from "./figma-read.mjs";
