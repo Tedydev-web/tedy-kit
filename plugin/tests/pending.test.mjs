@@ -51,13 +51,14 @@ test("the waiting list covers drafts in the project and its writable repos, and 
 });
 
 test("done moves a file under plans into plans/archive and logs the move", () => {
-  const { root } = project();
+  const { root, map } = project();
   const from = join(root, "plans", "drafts", "doc-comments.md");
-  const to = archive(from);
+  const to = archive(from, map);
   assert.equal(to, join(root, "plans", "archive", "drafts", "doc-comments.md"));
   assert.ok(existsSync(to) && !existsSync(from));
   assert.equal(readFileSync(join(root, "plans", "archive", "MOVES.tsv"), "utf8"), `from\tto\n${from}\t${to}\n`);
-  assert.throws(() => archive(join(root, "outside.md")), /not under a plans directory/);
+  writeFileSync(join(root, "outside.md"), "x\n");
+  assert.throws(() => archive(join(root, "outside.md"), map), /not under plans\/ of this project/);
 });
 
 test("stub writes a one-line draft for an action with no file of its own", () => {
@@ -99,11 +100,11 @@ test("stub never overwrites another stub and refuses an action with no words", (
 });
 
 test("done refuses to overwrite a file already archived under the same name", () => {
-  const { root } = project();
+  const { root, map } = project();
   const from = join(root, "plans", "drafts", "doc-comments.md");
-  archive(from);
+  archive(from, map);
   writeFileSync(from, "again\n");
-  assert.throws(() => archive(from), /already archived/);
+  assert.throws(() => archive(from, map), /already archived/);
   assert.ok(existsSync(from));
 });
 
@@ -123,4 +124,44 @@ test("the session-start notice shows at most ten drafts and counts the rest", as
   const notice = waitingNotice(map);
   assert.match(notice, /^- … 4 more$/m);
   assert.equal(waitingText(map, { offline: true }).split("\n").filter((line) => line.includes("extra-")).length, 12);
+});
+
+test("done archives only a file under plans/ of this project, and never a hand-off", () => {
+  const { root, map } = project();
+  const other = tempDir("tedy-pending-other-");
+  mkdirSync(join(other, "plans", "x"), { recursive: true });
+  writeFileSync(join(other, "plans", "x", "keep.md"), "x\n");
+  assert.throws(() => archive(join(other, "plans", "x", "keep.md"), map), /not under plans\/ of this project/);
+  assert.throws(() => archive(join(root, "plans", "drafts"), map), /not a file/);
+  mkdirSync(join(root, "plans", "reports"), { recursive: true });
+  writeFileSync(join(root, "plans", "reports", "handoff-1.md"), "to: a\nstatus: pending\n");
+  assert.throws(() => archive(join(root, "plans", "reports", "handoff-1.md"), map), /handoff\.mjs done/);
+  assert.ok(existsSync(join(other, "plans", "x", "keep.md")));
+});
+
+test("a checked-out branch whose upstream is gone, and a repo reached through a symlink, still show unpushed work", async () => {
+  const { symlinkSync } = await import("node:fs");
+  const { root, fe } = project();
+  git(fe, "push", "-q", "-u", "origin", "feat");
+  writeFileSync(join(fe, "e.txt"), "e\n");
+  git(fe, "add", "e.txt");
+  git(fe, "commit", "-q", "-m", "e");
+  git(fe, "push", "-q", "origin", "--delete", "feat");
+  git(fe, "fetch", "-q", "--prune");
+  assert.deepEqual(gitWaiting(fe), ["feat: 3 commits on no remote", "main: 1 commit ahead of origin/main"]);
+  symlinkSync(fe, join(root, "fe-link"));
+  assert.deepEqual(gitWaiting(join(root, "fe-link")), gitWaiting(fe));
+});
+
+test("a GitHub read that fails is reported, not shown as an empty list", async () => {
+  const { map } = project();
+  const bin = tempDir("tedy-pending-bin-");
+  writeFileSync(join(bin, "gh"), "#!/bin/sh\necho 'To get started with GitHub CLI, please run:  gh auth login' >&2\nexit 4\n", { mode: 0o755 });
+  const saved = process.env.PATH;
+  process.env.PATH = `${bin}:${saved}`;
+  try {
+    assert.match(waitingText(map), /^Could not check:\n- fe draft PRs: To get started with GitHub CLI/m);
+  } finally {
+    process.env.PATH = saved;
+  }
 });

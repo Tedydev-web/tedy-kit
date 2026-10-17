@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { listPending, reportsDir, slugOf, stamp } from "./handoff.mjs";
@@ -30,14 +30,16 @@ export function draftFiles(dirs) {
   });
 }
 
+const isRepoRoot = (dir) => capture("git", ["-C", dir, "rev-parse", "--show-toplevel"], dir)?.trim() === realpathSync(dir);
+
 export function gitWaiting(dir) {
   const refs = capture("git", ["-C", dir, "for-each-ref", "refs/heads", "--format=%(refname:short)\t%(upstream:short)\t%(upstream:track)"], dir);
-  if (refs === null || capture("git", ["-C", dir, "rev-parse", "--show-toplevel"], dir)?.trim() !== resolve(dir)) return [];
+  if (refs === null || !isRepoRoot(dir)) return [];
   const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
   const checkedOut = new Set((capture("git", ["-C", dir, "worktree", "list", "--porcelain"], dir) ?? "").split("\n").filter((line) => line.startsWith("branch refs/heads/")).map((line) => line.slice("branch refs/heads/".length)));
   return refs.split("\n").filter(Boolean).flatMap((line) => {
     const [branch, upstream, track] = line.split("\t");
-    if (upstream) {
+    if (upstream && !track.includes("gone")) {
       const ahead = Number(track.match(/ahead (\d+)/)?.[1] ?? 0);
       return ahead ? [`${branch}: ${plural(ahead, "commit")} ahead of ${upstream}`] : [];
     }
@@ -48,12 +50,20 @@ export function gitWaiting(dir) {
 }
 
 export function draftPrs(dir) {
-  const out = capture("gh", ["pr", "list", "--draft", "--author", "@me", "--json", "number,title,url"], dir);
-  return out ? JSON.parse(out).map((pr) => `#${pr.number} ${pr.title} ${pr.url}`) : [];
+  try {
+    const out = execFileSync("gh", ["pr", "list", "--draft", "--author", "@me", "--limit", "100", "--json", "number,title,url"], { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 15000 });
+    return { items: JSON.parse(out).map((pr) => `#${pr.number} ${pr.title} ${pr.url}`) };
+  } catch (error) {
+    const reason = String(error.stderr ?? "").split("\n").find((line) => line.trim()) ?? error.message;
+    return /not a git repository|no git remotes|none of the git remotes/i.test(reason) ? { items: [] } : { items: [], error: reason.trim() };
+  }
 }
 
-export function archive(file) {
+export function archive(file, map) {
   const path = resolve(file);
+  if (!existsSync(path) || !statSync(path).isFile()) throw new Error(`${file} is not a file`);
+  if (!repoDirs(map).some((dir) => path.startsWith(join(dir, "plans") + sep))) throw new Error(`${file} is not under plans/ of this project`);
+  if (path.startsWith(reportsDir(map) + sep) && /^handoff-.*\.md$/.test(path.slice(reportsDir(map).length + 1))) throw new Error(`${file} is a hand-off; close it with handoff.mjs done`);
   const marker = `${sep}plans${sep}`;
   const at = path.lastIndexOf(marker);
   if (at === -1 || path.slice(at + marker.length).startsWith(`archive${sep}`)) throw new Error(`${file} is not under a plans directory`);
@@ -82,11 +92,13 @@ export function stub(map, action) {
 export function waitingText(map, { offline = false, handoffs = true, limit = Infinity } = {}) {
   const dirs = repoDirs(map);
   const label = (dir) => relative(map.paths[0], dir) || ".";
+  const prs = offline ? [] : dirs.filter(isRepoRoot).map((dir) => ({ dir, ...draftPrs(dir) }));
   const groups = [
     ["Hand-offs not taken yet", (handoffs ? listPending(reportsDir(map)) : []).map((item) => `to ${item.to}: ${item.title} ${item.path}`)],
     ["Drafts waiting on the user", draftFiles(dirs)],
     ["Unpushed work", dirs.flatMap((dir) => gitWaiting(dir).map((line) => `${label(dir)} ${line}`))],
-    ["Draft PRs", offline ? [] : dirs.flatMap((dir) => draftPrs(dir).map((line) => `${label(dir)} ${line}`))],
+    ["Draft PRs", prs.flatMap(({ dir, items }) => items.map((line) => `${label(dir)} ${line}`))],
+    ["Could not check", prs.filter(({ error }) => error).map(({ dir, error }) => `${label(dir)} draft PRs: ${error}`)],
   ];
   return groups.filter(([, items]) => items.length).map(([title, items]) => `${title}:\n${items.slice(0, limit).map((item) => `- ${item}`).join("\n")}${items.length > limit ? `\n- … ${items.length - limit} more` : ""}`).join("\n\n");
 }
@@ -99,7 +111,7 @@ function main([command, ...args]) {
     return 0;
   }
   if (command === "done" && args[0]) {
-    console.log(`archived: ${archive(args[0])}`);
+    console.log(`archived: ${archive(args[0], resolved.map)}`);
     return 0;
   }
   if (command === "stub" && args.join(" ").trim()) {
