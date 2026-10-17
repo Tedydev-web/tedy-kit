@@ -66,3 +66,14 @@ test("each command-line shim matches its module on failure, and on success where
     assert.deepEqual(passing, run(home_(cli), cli, PASSING[cli]), cli);
   }
 });
+
+test("a shim reached through a symlinked plugin root still runs its module", async () => {
+  const { symlinkSync } = await import("node:fs");
+  const link = join(tempDir("tedy-shim-link-"), "plugin");
+  symlinkSync(PLUGIN, link);
+  const direct = spawnSync("node", [join(PLUGIN, "scripts", "labels.mjs")], { encoding: "utf8", env });
+  const linked = spawnSync("node", [join(link, "scripts", "labels.mjs")], { encoding: "utf8", env });
+  assert.equal(linked.status, 0);
+  assert.notEqual(linked.stdout, "");
+  assert.equal(linked.stdout, direct.stdout);
+});

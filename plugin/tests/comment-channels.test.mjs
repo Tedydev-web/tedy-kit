@@ -160,3 +160,12 @@ test("an invalid reply-check time is refused instead of hiding every thread", ()
 test("a revision mark with an offset compares as an instant", () => {
   assert.equal(revisionsSince([{ id: "1", modifiedTime: "2026-10-17T03:30:00Z" }], "2026-10-17T09:00:00+07:00").length, 1);
 });
+
+test("every reader refuses a --since that is not a date before it reaches the network", async () => {
+  const { spawnSync } = await import("node:child_process");
+  for (const [script, args] of [["figma-comments", ["list"]], ["figma-read", ["versions"]], ["gdoc-comments", ["list"]]]) {
+    const out = spawnSync("node", [new URL(`../scripts/${script}.mjs`, import.meta.url).pathname, ...args, "--since", "last monday"], { encoding: "utf8", env: { ...process.env, PATH: "/usr/bin:/bin" } });
+    assert.equal(out.status, 1, script);
+    assert.match(out.stderr, /--since is not a date: last monday/, script);
+  }
+});

@@ -87,3 +87,11 @@ test("a hand-off body must carry the user decisions, the first safe step and the
   assert.match(refused.stderr, /## User decisions, ## First safe step, ## Sources/);
   assert.equal(listPending(join(work, "plans", "reports")).length, 0);
 });
+
+test("a section heading inside a code fence does not count, and a folder named like a hand-off is not read", () => {
+  assert.deepEqual(missingSections("```\n## User decisions\n## First safe step\n## Sources\n```\n"), ["## User decisions", "## First safe step", "## Sources"]);
+  const dir = tempDir("tedy-handoff-dirs-");
+  mkdirSync(join(dir, "handoff-folder.md"));
+  writeFileSync(join(dir, "handoff-1.md"), render({ to: "a", from: "b", title: "t", body: "x", created: "c" }));
+  assert.equal(listPending(dir).length, 1);
+});

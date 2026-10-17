@@ -63,3 +63,11 @@ test("maps are read from the profile's projects folder, and a miss names that fo
   assert.equal(missing.status, 1);
   assert.equal(missing.stdout.trim(), `no project map in ${join(profile, "projects")} covers /elsewhere; run /tedy:setup`);
 });
+
+test("a map path written with a trailing slash still covers the project root itself", () => {
+  const profile = tempDir("tedy-maps-slash-");
+  mkdirSync(join(profile, "projects"));
+  const root = tempDir("tedy-maps-root-");
+  writeFileSync(join(profile, "projects", "x.md"), `# x\n\n\`\`\`json\n${JSON.stringify({ name: "x", paths: [`${root}/`] })}\n\`\`\`\n`);
+  assert.equal(resolveMap(root, join(profile, "projects"))?.map.name, "x");
+});

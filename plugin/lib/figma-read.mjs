@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { client } from "./figma-comments.mjs";
-import { notBefore } from "./since.mjs";
+import { notBefore, sinceTime } from "./since.mjs";
 
 const FRAME_TYPES = ["FRAME", "SECTION", "COMPONENT", "COMPONENT_SET"];
 const BOX_KEYS = ["absoluteBoundingBox", "absoluteRenderBounds"];
@@ -75,6 +75,7 @@ async function fullPages(figma, version) {
 async function main([command, target, ...rest]) {
   const args = target?.startsWith("--") ? [target, ...rest] : rest;
   const flags = Object.fromEntries(args.flatMap((arg, index) => (arg.startsWith("--") ? [[arg.slice(2), args[index + 1]]] : [])));
+  if (flags.since !== undefined) sinceTime(flags.since);
   if (command === "diff" && target && rest[0]) {
     const [before, after] = [target, rest[0]].map((path) => JSON.parse(readFileSync(path, "utf8")));
     const lines = diffSnapshots(before, after);

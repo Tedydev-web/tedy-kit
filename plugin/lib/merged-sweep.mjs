@@ -7,6 +7,9 @@ import { STATE_DIR } from "./hook-io.mjs";
 import { loadConfig } from "./openproject-client.mjs";
 import { chatLanguage, fill, labels } from "./labels.mjs";
 import { resolveMap } from "./project-map.mjs";
+import { notBefore, sinceTime } from "./since.mjs";
+
+export const searchSince = (since) => `${new Date(sinceTime(since)).toISOString().slice(0, 19)}Z`;
 
 const LINK = /\bOP#(\d+)\b|\/work_packages\/(\d+)\b/g;
 const FIRST_RUN_DAYS = 7;
@@ -44,7 +47,7 @@ export function pickUpdates({ prs, workPackages, meId, targets, notStarted = [] 
 
 export function handoffBody(updates) {
   const event = (pr) => ({ open: `opened in ${pr.repo}#${pr.number} ${pr.url}`, revert: `reverted in ${pr.repo}#${pr.number} ${pr.url} on ${pr.mergedAt?.slice(0, 10)}`, merged: `merged in ${pr.repo}#${pr.number} ${pr.url} on ${pr.mergedAt?.slice(0, 10)}` })[kindOf(pr)];
-  const rows = updates.map((update) => `- #${update.id} ${update.subject.replace(/\s+/g, " ")} (${update.type}, ${update.from} → ${update.to}) · ${event(update.pr)}`);
+  const rows = updates.map((update) => `- #${update.id} ${String(update.subject ?? "").replace(/\s+/g, " ")} (${update.type}, ${update.from} → ${update.to}) · ${event(update.pr)}`);
   const commands = updates.map((update) => `node <plugin>/scripts/openproject.mjs set ${update.id} --status "${update.to}"`);
   return `Status from the user's own PRs (opened, merged or reverted), found by merged-sweep.mjs. Run each command without --apply, quote the preview lines, ask one approval for the whole batch, then run them again with --apply --lock <n>.\n\n${rows.join("\n")}\n\n\`\`\`\n${commands.join("\n")}\n\`\`\`\n\n## User decisions\nNone yet: the batch waits for one approval in the PM session.\n\n## First safe step\nRun the first command above without --apply and quote its preview.\n\n## Sources\nmerged-sweep.mjs over the user's PRs; each row links its PR.\n`;
 }
@@ -69,8 +72,8 @@ function listedPrs(map, since, withOpen) {
     const dir = isAbsolute(repo.path) ? repo.path : resolve(map.paths[0], repo.path);
     const list = (args) => JSON.parse(execFileSync("gh", ["pr", "list", ...args, "--limit", "100", "--json", "number,title,body,mergedAt,createdAt,url"], { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }));
     try {
-      prs.push(...list(["--state", "merged", "--search", `merged:>=${since.slice(0, 19)}Z`]).filter((pr) => pr.mergedAt >= since).map((pr) => ({ ...pr, repo: repo.path })));
-      if (withOpen) prs.push(...list(["--state", "open", "--author", "@me"]).filter((pr) => pr.createdAt >= since).map((pr) => ({ ...pr, mergedAt: null, repo: repo.path })));
+      prs.push(...list(["--state", "merged", "--search", `merged:>=${searchSince(since)}`]).filter((pr) => notBefore(pr.mergedAt, since)).map((pr) => ({ ...pr, repo: repo.path })));
+      if (withOpen) prs.push(...list(["--state", "open", "--author", "@me"]).filter((pr) => notBefore(pr.createdAt, since)).map((pr) => ({ ...pr, mergedAt: null, repo: repo.path })));
     } catch (error) {
       console.log(`skip ${repo.path}: ${String(error.stderr || error.message).split("\n")[0]}`);
     }

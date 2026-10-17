@@ -5,7 +5,7 @@ import { redact, requestJson } from "./api-request.mjs";
 import { lintChatComment, mapLanguage } from "./draft-lint.mjs";
 import { logPostedText } from "./edit-log.mjs";
 import { resolveMap } from "./project-map.mjs";
-import { notBefore } from "./since.mjs";
+import { notBefore, sinceTime } from "./since.mjs";
 
 const DRIVE = "https://www.googleapis.com/drive/v3";
 const DOCS = "https://docs.googleapis.com/v1";
@@ -135,6 +135,7 @@ export async function listComments(google) {
 async function main([command, target, ...rest]) {
   const args = target?.startsWith("--") ? [target, ...rest] : rest;
   const flags = Object.fromEntries(args.flatMap((arg, index) => (arg.startsWith("--") ? [[arg.slice(2), args[index + 1]]] : [])));
+  if (flags.since !== undefined) sinceTime(flags.since);
   if (command === "list") {
     const google = await session(flags);
     for (const comment of await listComments(google)) {

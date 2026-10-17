@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readdirSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { listPending, reportsDir, slugOf, stamp } from "./handoff.mjs";
@@ -16,17 +16,32 @@ const capture = (command, args, cwd) => {
 export function repoDirs(map) {
   const root = map.paths[0];
   const repos = (map.repos ?? []).filter((repo) => !repo.readonly).map((repo) => (isAbsolute(repo.path) ? repo.path : resolve(root, repo.path)));
-  return [...new Set([root, ...repos])].filter((dir) => existsSync(dir));
+  const seen = new Set();
+  return [root, ...repos].filter((dir) => existsSync(dir)).filter((dir) => {
+    const real = realpathSync(dir);
+    if (seen.has(real)) return false;
+    seen.add(real);
+    return true;
+  });
 }
 
-export function draftFiles(dirs) {
+function walk(folder, problems) {
+  let entries;
+  try {
+    entries = readdirSync(folder, { withFileTypes: true });
+  } catch (error) {
+    problems.push(`${folder}: ${error.code ?? error.message}`);
+    return [];
+  }
+  return entries
+    .filter((entry) => !entry.name.startsWith("."))
+    .flatMap((entry) => (entry.isDirectory() ? walk(join(folder, entry.name), problems) : entry.isFile() ? [join(folder, entry.name)] : []));
+}
+
+export function draftFiles(dirs, problems = []) {
   return dirs.flatMap((dir) => {
     const drafts = join(dir, "plans", "drafts");
-    if (!existsSync(drafts)) return [];
-    return readdirSync(drafts, { recursive: true, withFileTypes: true })
-      .filter((entry) => entry.isFile() && !entry.name.startsWith("."))
-      .map((entry) => join(entry.parentPath, entry.name))
-      .sort();
+    return existsSync(drafts) && lstatSync(drafts).isDirectory() ? walk(drafts, problems).sort() : [];
   });
 }
 
@@ -40,11 +55,7 @@ export function gitWaiting(dir) {
   return refs.split("\n").filter(Boolean).flatMap((line) => {
     const [ref, upstream, track] = line.split("\t");
     const branch = ref.slice("refs/heads/".length);
-    if (upstream && !track.includes("gone")) {
-      const ahead = Number(track.match(/ahead (\d+)/)?.[1] ?? 0);
-      return ahead ? [`${branch}: ${plural(ahead, "commit")} ahead of ${upstream}`] : [];
-    }
-    if (!checkedOut.has(branch)) return [];
+    if (!(upstream && !track.includes("gone")) && !checkedOut.has(branch)) return [];
     const local = Number(capture("git", ["-C", dir, "rev-list", "--count", `refs/heads/${branch}`, "--not", "--remotes"], dir) ?? 0);
     return local ? [`${branch}: ${plural(local, "commit")} on no remote`] : [];
   });
@@ -81,26 +92,36 @@ export function archive(file, map) {
 }
 
 export function stub(map, action) {
-  const dir = join(map.paths[0], "plans", "drafts");
-  mkdirSync(dir, { recursive: true });
   const slug = slugOf(action);
   if (!slug) throw new Error(`the action has no words: ${action}`);
+  const dir = join(map.paths[0], "plans", "drafts");
+  mkdirSync(dir, { recursive: true });
   let file = join(dir, `${stamp()}-${slug}.md`);
   for (let n = 2; existsSync(file); n += 1) file = join(dir, `${stamp()}-${slug}-${n}.md`);
   writeFileSync(file, `${action.trim()}\n`);
   return file;
 }
 
-export function waitingText(map, { offline = false, handoffs = true, limit = Infinity } = {}) {
+export function waitingText(map, { offline = false, handoffs = true, limit = Infinity, budgetMs = Infinity } = {}) {
   const dirs = repoDirs(map);
+  const deadline = Date.now() + budgetMs;
+  const problems = [];
+  const drafts = draftFiles(dirs, problems);
+  const unpushed = dirs.flatMap((dir) => {
+    if (Date.now() > deadline) {
+      problems.push(`${relative(map.paths[0], dir) || "."} git: skipped, the session-start time budget ran out`);
+      return [];
+    }
+    return gitWaiting(dir).map((line) => `${relative(map.paths[0], dir) || "."} ${line}`);
+  });
   const label = (dir) => relative(map.paths[0], dir) || ".";
   const prs = offline ? [] : dirs.filter(isRepoRoot).map((dir) => ({ dir, ...draftPrs(dir) }));
   const groups = [
     ["Hand-offs not taken yet", (handoffs ? listPending(reportsDir(map)) : []).map((item) => `to ${item.to}: ${item.title} ${item.path}`)],
-    ["Drafts waiting on the user", draftFiles(dirs)],
-    ["Unpushed work", dirs.flatMap((dir) => gitWaiting(dir).map((line) => `${label(dir)} ${line}`))],
+    ["Drafts waiting on the user", drafts],
+    ["Unpushed work", unpushed],
     ["Draft PRs", prs.flatMap(({ dir, items }) => items.map((line) => `${label(dir)} ${line}`))],
-    ["Could not check", prs.filter(({ error }) => error).map(({ dir, error }) => `${label(dir)} draft PRs: ${error}`)],
+    ["Could not check", [...problems, ...prs.filter(({ error }) => error).map(({ dir, error }) => `${label(dir)} draft PRs: ${error}`)]],
   ];
   return groups.filter(([, items]) => items.length).map(([title, items]) => `${title}:\n${items.slice(0, limit).map((item) => `- ${item}`).join("\n")}${items.length > limit ? `\n- … ${items.length - limit} more` : ""}`).join("\n\n");
 }

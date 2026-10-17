@@ -156,7 +156,7 @@ export function pendingNotice(pending, procedure) {
 export function waitingNotice(map) {
   let text;
   try {
-    text = waitingText(map, { offline: true, handoffs: false, limit: 10 });
+    text = waitingText(map, { offline: true, handoffs: false, limit: 10, budgetMs: 8000 });
   } catch (error) {
     logGate({ hook: "pending-handoffs", decision: "waiting-list-skipped", error: error.message });
     return "";

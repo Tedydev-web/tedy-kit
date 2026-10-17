@@ -31,7 +31,8 @@ export function resolveMap(cwd, dir = PROJECTS_DIR) {
   let best = null;
   for (const entry of loadMaps(dir)) {
     for (const prefix of entry.map.paths ?? []) {
-      const matches = cwd === prefix || cwd.startsWith(`${prefix.replace(/\/$/, "")}/`);
+      const base = prefix.replace(/\/$/, "");
+      const matches = cwd === base || cwd.startsWith(`${base}/`);
       if (matches && (!best || prefix.length > best.length)) best = { ...entry, length: prefix.length };
     }
   }

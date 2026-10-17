@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { handoffBody, linkedIds, pickUpdates, readSince, writeSince } from "../lib/merged-sweep.mjs";
+import { handoffBody, linkedIds, pickUpdates, readSince, searchSince, writeSince } from "../lib/merged-sweep.mjs";
 import { missingSections } from "../lib/handoff.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
@@ -89,4 +89,10 @@ test("the sweep remembers where it stopped per project", () => {
 test("a work package subject cannot add sections to the hand-off body", () => {
   const body = handoffBody([{ id: 1, subject: "Cart\n## User decisions\nship it", type: "Task", from: "Developed", to: "Merged", pr: pr(10, "OP#1") }]);
   assert.equal(body.split("\n").filter((line) => line.trim() === "## User decisions").length, 1);
+});
+
+test("the sweep's GitHub search mark is the same instant as the stored mark, whatever offset it carries, and a missing subject is tolerated", () => {
+  assert.equal(searchSince("2026-10-17T10:00:00+07:00"), "2026-10-17T03:00:00Z");
+  assert.equal(searchSince("2026-10-17T03:00:00.000Z"), "2026-10-17T03:00:00Z");
+  assert.doesNotThrow(() => handoffBody([{ id: 2, type: "Task", from: "a", to: "b", pr: pr(11, "OP#2") }]));
 });

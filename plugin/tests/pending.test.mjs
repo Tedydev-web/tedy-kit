@@ -46,7 +46,7 @@ test("the waiting list covers drafts in the project and its writable repos, and 
   const { root, fe, map } = project();
   assert.deepEqual(repoDirs(map), [root, fe]);
   assert.deepEqual(draftFiles(repoDirs(map)), [join(root, "plans", "drafts", "doc-comments.md"), join(fe, "plans", "drafts", "review-pr12.md")]);
-  assert.deepEqual(gitWaiting(fe), ["feat: 2 commits on no remote", "main: 1 commit ahead of origin/main"]);
+  assert.deepEqual(gitWaiting(fe), ["feat: 2 commits on no remote", "main: 1 commit on no remote"]);
   assert.deepEqual(gitWaiting(root), []);
 });
 
@@ -76,7 +76,7 @@ test("list prints every group from the project directory, offline skipping GitHu
   const out = spawnSync("node", [new URL("../lib/pending.mjs", import.meta.url).pathname, "list", "--offline"], { cwd: root, encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: profile } });
   assert.equal(out.status, 0, out.stderr);
   assert.match(out.stdout, /^Drafts waiting on the user:\n- .*doc-comments\.md\n- .*review-pr12\.md$/m);
-  assert.match(out.stdout, /^Unpushed work:\n- fe feat: 2 commits on no remote\n- fe main: 1 commit ahead of origin\/main$/m);
+  assert.match(out.stdout, /^Unpushed work:\n- fe feat: 2 commits on no remote\n- fe main: 1 commit on no remote$/m);
   assert.doesNotMatch(out.stdout, /Draft PRs/);
 });
 
@@ -86,7 +86,7 @@ test("the session-start notice lists local drafts and unpushed work, leaving han
   const notice = waitingNotice(map);
   assert.match(notice, /^Waiting on the user in this project/);
   assert.match(notice, /review-pr12\.md/);
-  assert.match(notice, /fe main: 1 commit ahead of origin\/main/);
+  assert.match(notice, /fe main: 1 commit on no remote/);
   assert.doesNotMatch(notice, /Hand-offs not taken yet|Draft PRs/);
 });
 
@@ -108,13 +108,15 @@ test("done refuses to overwrite a file already archived under the same name", ()
   assert.ok(existsSync(from));
 });
 
-test("a waiting list that cannot be read leaves the other session-start notices alone", async () => {
+test("a plans/drafts that is a file is skipped and the rest of the waiting list still shows", async () => {
   const { waitingNotice } = await import("../lib/session-hooks.mjs");
   const { root, map } = project();
   const { rmSync } = await import("node:fs");
   rmSync(join(root, "plans", "drafts"), { recursive: true });
   writeFileSync(join(root, "plans", "drafts"), "not a directory\n");
-  assert.equal(waitingNotice(map), "");
+  const notice = waitingNotice(map);
+  assert.match(notice, /review-pr12\.md/);
+  assert.doesNotMatch(notice, /doc-comments\.md/);
 });
 
 test("the session-start notice shows at most ten drafts and counts the rest", async () => {
@@ -148,7 +150,7 @@ test("a checked-out branch whose upstream is gone, and a repo reached through a 
   git(fe, "commit", "-q", "-m", "e");
   git(fe, "push", "-q", "origin", "--delete", "feat");
   git(fe, "fetch", "-q", "--prune");
-  assert.deepEqual(gitWaiting(fe), ["feat: 3 commits on no remote", "main: 1 commit ahead of origin/main"]);
+  assert.deepEqual(gitWaiting(fe), ["feat: 3 commits on no remote", "main: 1 commit on no remote"]);
   symlinkSync(fe, join(root, "fe-link"));
   assert.deepEqual(gitWaiting(join(root, "fe-link")), gitWaiting(fe));
 });
@@ -189,7 +191,7 @@ test("done refuses a file that reaches plans/ only through a symlink to somewher
 test("a tag named like the checked-out branch does not hide the branch's unpushed commits", () => {
   const { fe } = project();
   git(fe, "tag", "feat", "main");
-  assert.deepEqual(gitWaiting(fe), ["feat: 2 commits on no remote", "main: 1 commit ahead of origin/main"]);
+  assert.deepEqual(gitWaiting(fe), ["feat: 2 commits on no remote", "main: 1 commit on no remote"]);
 });
 
 test("done archives into the project's own plans/archive even when a folder below plans is also named plans", () => {
@@ -223,4 +225,45 @@ test("done follows symlinks inside plans/ to the real file: a hand-off behind a 
   symlinkSync(join(root, "plans", "drafts", "doc-comments.md"), outside);
   assert.equal(archive(outside, map), join(root, "plans", "archive", "drafts", "doc-comments.md"));
   assert.ok(!existsSync(join(root, "plans", "drafts", "doc-comments.md")));
+});
+
+test("draftFiles skips dot folders and folder symlinks, and reports a folder it cannot read", async () => {
+  const { symlinkSync, chmodSync } = await import("node:fs");
+  const { root, map } = project();
+  const drafts = join(root, "plans", "drafts");
+  mkdirSync(join(drafts, ".cache"));
+  writeFileSync(join(drafts, ".cache", "hidden.md"), "x\n");
+  symlinkSync(join(root, "plans"), join(drafts, "loop"));
+  mkdirSync(join(drafts, "locked"));
+  writeFileSync(join(drafts, "locked", "x.md"), "x\n");
+  chmodSync(join(drafts, "locked"), 0o000);
+  const problems = [];
+  try {
+    assert.deepEqual(draftFiles([root], problems), [join(drafts, "doc-comments.md")]);
+    assert.equal(problems.length, 1);
+    assert.match(problems[0], /locked/);
+    assert.match(waitingText(map, { offline: true }), /^Could not check:\n- .*locked/m);
+  } finally {
+    chmodSync(join(drafts, "locked"), 0o755);
+  }
+});
+
+test("unpushed work counts commits that sit on no remote, even when the branch tracks another remote branch", () => {
+  const { fe } = project();
+  git(fe, "switch", "-q", "-c", "side", "origin/main");
+  git(fe, "branch", "-q", "--set-upstream-to", "origin/main");
+  writeFileSync(join(fe, "s.txt"), "s\n");
+  git(fe, "add", "s.txt");
+  git(fe, "commit", "-q", "-m", "s");
+  git(fe, "push", "-q", "origin", "side");
+  assert.ok(!gitWaiting(fe).some((line) => line.startsWith("side:")), gitWaiting(fe).join("; "));
+  assert.ok(gitWaiting(fe).includes("main: 1 commit on no remote"), gitWaiting(fe).join("; "));
+});
+
+test("the same folder reached two ways is listed once", async () => {
+  const { symlinkSync } = await import("node:fs");
+  const { root, map } = project();
+  symlinkSync(join(root, "fe"), join(root, "fe-alias"));
+  const twice = { ...map, repos: [...map.repos, { path: "fe-alias", role: "FE" }] };
+  assert.equal(repoDirs(twice).length, repoDirs(map).length);
 });

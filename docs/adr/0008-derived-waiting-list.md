@@ -11,7 +11,7 @@ Supersedes: the `plans/VIEC-CHO-ANH.md` ledger in 0003.
 
 ## Decision
 - A draft waiting on the user lives in `plans/drafts/` of its project or repository; an action with no file gets a one-line stub there.
-- `pending.mjs list` derives the list from hand-offs still `pending`, files in `plans/drafts/` of the project and its writable repositories, branches ahead of their upstream or checked out with commits on no remote, and open draft PRs by the user. Session start prints the local part; `/tedy:pending` prints all of it.
+- `pending.mjs list` derives the list from hand-offs still `pending`, files in `plans/drafts/` of the project and its writable repositories, branches that track a live upstream or are checked out, counted by their commits on no remote, and open draft PRs by the user. Session start prints the local part; `/tedy:pending` prints all of it.
 - `pending.mjs done <file>` moves a finished draft to `plans/archive/` under the same relative path and logs the move in `plans/archive/MOVES.tsv`.
 
 ## What it avoids

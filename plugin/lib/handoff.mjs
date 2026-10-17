@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { chatLanguage, fill, labels } from "./labels.mjs";
@@ -7,7 +7,18 @@ import { resolveMap } from "./project-map.mjs";
 const HEADER = /^(to|from|status|created|title|updated): (.*)$/;
 const SECTIONS = ["## User decisions", "## First safe step", "## Sources"];
 
-export const missingSections = (body) => SECTIONS.filter((heading) => !body.split("\n").some((line) => line.trim() === heading));
+const outsideFences = (body) => {
+  let fenced = false;
+  return body.split("\n").filter((line) => {
+    if (/^\s*(```|~~~)/.test(line)) {
+      fenced = !fenced;
+      return false;
+    }
+    return !fenced;
+  });
+};
+
+export const missingSections = (body) => SECTIONS.filter((heading) => !outsideFences(body).some((line) => line.trim() === heading));
 
 export const slugOf = (text) => text.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/g, "d").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
 
@@ -53,7 +64,7 @@ export function route(map, role, repo) {
 export function listPending(dir, to) {
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
-    .filter((name) => /^handoff-.*\.md$/.test(name))
+    .filter((name) => /^handoff-.*\.md$/.test(name) && statSync(join(dir, name)).isFile())
     .map((name) => ({ path: join(dir, name), ...parse(readFileSync(join(dir, name), "utf8")) }))
     .filter((item) => item.status === "pending" && (!to || item.to === to));
 }
