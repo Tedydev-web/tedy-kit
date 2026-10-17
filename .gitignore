@@ -9,10 +9,10 @@ plugin/evals/results/
 !docs/**
 !test_*.py
 *.pyc
-evals/pressure/results/
+plugin/evals/pressure/results/
 plans/
 .tedy/
-evals/**/results/
+plugin/evals/**/results/
 .pytest_cache/
 .claude/agent-memory/
 !plugin/tests/

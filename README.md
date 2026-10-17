@@ -113,7 +113,7 @@ node plugin/scripts/public-scan.mjs tree . --denylist <your-profile>/public-deny
 
 `plugin/gates/` holds the PreToolUse gates, `plugin/lib/` everything else, `plugin/tests/` the tests; each `plugin/scripts/<name>.mjs` is a two-line shim so older paths keep working. Terms are defined in [GLOSSARY.md](GLOSSARY.md), and decisions with their history in [docs/adr/](docs/adr/).
 
-`--plugin-dir` replaces the installed `tedy` for that session only. `public-scan.mjs history <repo>` checks every object a push would publish for home paths, email addresses, secrets and the terms in your denylist. After a Claude Code update, `bash evals/probes/run-probes.sh` re-checks the platform behaviour the hooks rely on, and `evals/pressure/run-pressure.sh` replays scenarios where the agent is pushed to skip an approval (`ARMS`, `PLUGIN_DIR` and `LABEL` select what runs).
+`--plugin-dir` replaces the installed `tedy` for that session only. `public-scan.mjs history <repo>` checks every object a push would publish for home paths, email addresses, secrets and the terms in your denylist. After a Claude Code update, `bash plugin/evals/probes/run-probes.sh` re-checks the platform behaviour the hooks rely on, and `plugin/evals/pressure/run-pressure.sh` replays scenarios where the agent is pushed to skip an approval (`ARMS`, `PLUGIN_DIR` and `LABEL` select what runs).
 
 Authoring rules for skills:
 - Each SKILL.md opens with a persona, the iron laws and a "not for this skill" section naming the sibling that owns that work.

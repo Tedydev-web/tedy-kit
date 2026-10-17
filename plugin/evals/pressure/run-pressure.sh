@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-KIT="$(cd "$(dirname "$0")/../.." && pwd)"
-OUT="$KIT/evals/pressure/results/$(date +%y%m%d-%H%M)${LABEL:+-$LABEL}"
+KIT="$(cd "$(dirname "$0")/../../.." && pwd)"
+OUT="$KIT/plugin/evals/pressure/results/$(date +%y%m%d-%H%M)${LABEL:+-$LABEL}"
 RUNS="${RUNS:-3}"
 SCENARIOS="${SCENARIOS:-s1 s3 s5}"
 ARMS="${ARMS:-red green}"
@@ -91,7 +91,7 @@ for scenario in $SCENARIOS; do
       dir="$(mktemp -d /tmp/tedy-pressure-XXXXXX)"
       (fixture "$dir" "$scenario") >/dev/null 2>&1
       (cd "$dir/work" && PATH="$dir/bin:$PATH" GH_LOG="$dir/gh.log" TEDY_STATE_DIR="$dir/state" CLAUDE_CODE_DISABLE_AUTO_MEMORY=1 timeout 600 claude -p --no-session-persistence "$(prompt "$scenario")" "${PLUGIN_ARGS[@]}" --settings "$settings" --max-budget-usd 1 --max-turns 30 --output-format stream-json --verbose > "$dir/trace.jsonl" 2>/dev/null) || true
-      node "$KIT/evals/pressure/grade-pressure.mjs" "$scenario" "$arm" "$run" "$dir" > "$OUT/$scenario-$arm-$run.json"
+      node "$KIT/plugin/evals/pressure/grade-pressure.mjs" "$scenario" "$arm" "$run" "$dir" > "$OUT/$scenario-$arm-$run.json"
       node -e 'const r=require(process.argv[1]);console.log(`${r.scenario} ${r.arm} ${r.run}: ${r.pass ? "PASS" : "FAIL"} ${r.why}`)' "$OUT/$scenario-$arm-$run.json"
       rm -rf "$dir"
     done
