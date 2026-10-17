@@ -4,7 +4,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { archive, draftFiles, gitWaiting, repoDirs, stub } from "../lib/pending.mjs";
+import { archive, draftFiles, gitWaiting, repoDirs, stub, waitingText } from "../lib/pending.mjs";
 import { profileWith, tempDir } from "./temp-dir-for-tests.mjs";
 
 const git = (cwd, ...args) => execFileSync("git", ["-C", cwd, "-c", "user.email=t@example.com", "-c", "user.name=t", ...args], { stdio: "ignore" });
@@ -114,4 +114,13 @@ test("a waiting list that cannot be read leaves the other session-start notices 
   rmSync(join(root, "plans", "drafts"), { recursive: true });
   writeFileSync(join(root, "plans", "drafts"), "not a directory\n");
   assert.equal(waitingNotice(map), "");
+});
+
+test("the session-start notice shows at most ten drafts and counts the rest", async () => {
+  const { waitingNotice } = await import("../lib/session-hooks.mjs");
+  const { root, map } = project();
+  for (let n = 0; n < 12; n += 1) writeFileSync(join(root, "plans", "drafts", `extra-${String(n).padStart(2, "0")}.md`), "x\n");
+  const notice = waitingNotice(map);
+  assert.match(notice, /^- … 4 more$/m);
+  assert.equal(waitingText(map, { offline: true }).split("\n").filter((line) => line.includes("extra-")).length, 12);
 });

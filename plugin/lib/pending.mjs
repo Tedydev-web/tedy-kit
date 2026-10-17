@@ -79,7 +79,7 @@ export function stub(map, action) {
   return file;
 }
 
-export function waitingText(map, { offline = false, handoffs = true } = {}) {
+export function waitingText(map, { offline = false, handoffs = true, limit = Infinity } = {}) {
   const dirs = repoDirs(map);
   const label = (dir) => relative(map.paths[0], dir) || ".";
   const groups = [
@@ -88,7 +88,7 @@ export function waitingText(map, { offline = false, handoffs = true } = {}) {
     ["Unpushed work", dirs.flatMap((dir) => gitWaiting(dir).map((line) => `${label(dir)} ${line}`))],
     ["Draft PRs", offline ? [] : dirs.flatMap((dir) => draftPrs(dir).map((line) => `${label(dir)} ${line}`))],
   ];
-  return groups.filter(([, items]) => items.length).map(([title, items]) => `${title}:\n${items.map((item) => `- ${item}`).join("\n")}`).join("\n\n");
+  return groups.filter(([, items]) => items.length).map(([title, items]) => `${title}:\n${items.slice(0, limit).map((item) => `- ${item}`).join("\n")}${items.length > limit ? `\n- … ${items.length - limit} more` : ""}`).join("\n\n");
 }
 
 function main([command, ...args]) {
