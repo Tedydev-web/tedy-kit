@@ -3,8 +3,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { listPending, parse, render, route, setStatus, slugOf, stamp } from "../lib/handoff.mjs";
+import { listPending, missingSections, parse, render, route, setStatus, slugOf, stamp } from "../lib/handoff.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
+
+const SECTIONED = "Fix the toast.\n\n## User decisions\nnone\n\n## First safe step\nread the screen\n\n## Sources\nPRD UC_01\n";
 
 const map = {
   paths: ["/w/acme"],
@@ -58,7 +60,7 @@ test("the message for the receiving session starts with Hand-off in every langua
   const { profileWith } = await import("./temp-dir-for-tests.mjs");
   const work = tempDir("tedy-handoff-work-");
   const body = join(work, "body.md");
-  writeFileSync(body, "x\n");
+  writeFileSync(body, SECTIONED);
   const run = (chat) => {
     const profile = profileWith({ language: { chat } });
     mkdirSync(join(profile, "projects"));
@@ -67,4 +69,21 @@ test("the message for the receiving session starts with Hand-off in every langua
   };
   assert.match(run("vi"), /^message: Hand-off từ PM - Shop: Fix toast\. File: .*\. Việc chuyển này đã được duyệt\.$/m);
   assert.match(run("en"), /^message: Hand-off from PM - Shop: Fix toast\. File: .*\. The user approved this hand-off\.$/m);
+});
+
+test("a hand-off body must carry the user decisions, the first safe step and the sources", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const { profileWith } = await import("./temp-dir-for-tests.mjs");
+  assert.deepEqual(missingSections(SECTIONED), []);
+  assert.deepEqual(missingSections("## User decisions\nnone\n"), ["## First safe step", "## Sources"]);
+  const work = tempDir("tedy-handoff-sections-");
+  const profile = profileWith({});
+  mkdirSync(join(profile, "projects"));
+  writeFileSync(join(profile, "projects", "shop.md"), `# Shop\n\n\`\`\`json\n${JSON.stringify({ name: "shop", paths: [work], sessions: [{ name: "Dev Web - Shop", role: "dev" }] })}\n\`\`\`\n`);
+  const body = join(work, "body.md");
+  writeFileSync(body, "Fix the toast.\n");
+  const refused = spawnSync("node", [new URL("../lib/handoff.mjs", import.meta.url).pathname, "write", "--to", "Dev Web - Shop", "--from", "PM - Shop", "--title", "Fix toast", "--body-file", body], { encoding: "utf8", cwd: work, env: { ...process.env, TEDY_PROFILE_DIR: profile } });
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /## User decisions, ## First safe step, ## Sources/);
+  assert.equal(listPending(join(work, "plans", "reports")).length, 0);
 });

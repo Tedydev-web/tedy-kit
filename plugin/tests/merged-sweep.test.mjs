@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { handoffBody, linkedIds, pickUpdates, readSince, writeSince } from "../lib/merged-sweep.mjs";
+import { missingSections } from "../lib/handoff.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const wp = (id, type, status, assignee = 140, closed = false) => ({
@@ -53,6 +54,7 @@ test("the hand-off body lists one set command per work package for the PM sessio
   assert.match(body, /^- #1 \[FE\] Cart limit pop-up \(Task, Developed → Merged\/Code Review\) · merged in shop-fe#10 https:\/\/github\.com\/o\/shop-fe\/pull\/10 on 2026-10-09$/m);
   assert.match(body, /^node <plugin>\/scripts\/openproject\.mjs set 1 --status "Merged\/Code Review"$/m);
   assert.match(body, /one approval/);
+  assert.deepEqual(missingSections(body), []);
 });
 
 test("an opened PR proposes the open status only for work not started; a revert proposes the revert status", () => {

@@ -5,6 +5,9 @@ import { chatLanguage, fill, labels } from "./labels.mjs";
 import { resolveMap } from "./project-map.mjs";
 
 const HEADER = /^(to|from|status|created|title|updated): (.*)$/;
+const SECTIONS = ["## User decisions", "## First safe step", "## Sources"];
+
+export const missingSections = (body) => SECTIONS.filter((heading) => !body.split("\n").some((line) => line.trim() === heading));
 
 export const slugOf = (text) => text.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/g, "d").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
 
@@ -75,10 +78,13 @@ function main([command, target, ...rest]) {
   if (command === "write") {
     for (const key of ["to", "from", "title", "body-file"]) if (!flags[key]) throw new Error(`--${key} is required`);
     if (!(map.sessions ?? []).some((session) => session.name === flags.to)) throw new Error(`"${flags.to}" is not a session in the project map`);
+    const body = readFileSync(flags["body-file"], "utf8");
+    const missing = missingSections(body);
+    if (missing.length) throw new Error(`the body lacks ${missing.join(", ")}; see shared/handoff.md`);
     const dir = reportsDir(map);
     mkdirSync(dir, { recursive: true });
     const path = join(dir, `handoff-${stamp()}-to-${slugOf(flags.to)}-${slugOf(flags.title)}.md`);
-    writeFileSync(path, render({ to: flags.to, from: flags.from, title: flags.title, body: readFileSync(flags["body-file"], "utf8"), created: new Date().toISOString() }));
+    writeFileSync(path, render({ to: flags.to, from: flags.from, title: flags.title, body, created: new Date().toISOString() }));
     console.log(path);
     console.log(`message: ${fill(labels(chatLanguage())["handoff.message"], { from: flags.from, title: flags.title, path })}`);
     return 0;
