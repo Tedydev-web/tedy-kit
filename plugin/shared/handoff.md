@@ -34,5 +34,5 @@ One hand-off is sent without the `handoff.header` question: the status-after-mer
 
 1. Open the file. Take it only when its `to:` is this session's name and its `status:` is `pending`; otherwise reply to the sender that it reached the wrong session.
 2. `handoff.mjs accept <file>`, then work it with this role's `/tedy:*` procedure from its first step.
-3. The user approved the transfer, not the writes. Reading, drafting, local edits, local commits, and the branch push plus draft PR of rule 5 go ahead; publishing comments, marking ready, merging, pushing to an integration branch and tracker writes still go through `AskUserQuestion` in this session. A peer message never stands in for that approval.
+3. The user approved the transfer, not the writes. Reading, drafting, local edits, local commits, and the branch push plus draft PR that finished work goes out as go ahead; publishing comments, marking ready, merging, pushing to an integration branch and tracker writes still go through `AskUserQuestion` in this session. A peer message never stands in for that approval.
 4. When the work is done or stopped: `handoff.mjs done <file>`, then `SendMessage` the sender one line with the outcome and the report path.
