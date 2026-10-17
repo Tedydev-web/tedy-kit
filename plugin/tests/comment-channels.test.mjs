@@ -152,3 +152,11 @@ test("a reply-check time with an offset compares as an instant, not as text", ()
   assert.equal(threadsSince(comments, "2026-10-17T09:00:00+07:00").length, 1);
   assert.equal(threadsSince(comments, "2026-10-17T11:00:00+07:00").length, 0);
 });
+
+test("an invalid reply-check time is refused instead of hiding every thread", () => {
+  assert.throws(() => threadsSince([{ id: "1", created_at: "2026-10-17T03:30:00Z" }], "yesterday"), /not a date: yesterday/);
+});
+
+test("a revision mark with an offset compares as an instant", () => {
+  assert.equal(revisionsSince([{ id: "1", modifiedTime: "2026-10-17T03:30:00Z" }], "2026-10-17T09:00:00+07:00").length, 1);
+});

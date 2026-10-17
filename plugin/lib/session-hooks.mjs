@@ -154,7 +154,13 @@ export function pendingNotice(pending, procedure) {
 }
 
 export function waitingNotice(map) {
-  const text = waitingText(map, { offline: true, handoffs: false });
+  let text;
+  try {
+    text = waitingText(map, { offline: true, handoffs: false });
+  } catch (error) {
+    logGate({ hook: "pending-handoffs", decision: "waiting-list-skipped", error: error.message });
+    return "";
+  }
   return text && `Waiting on the user in this project (\`pending.mjs list\` adds draft PRs; \`pending.mjs done <file>\` archives a finished draft):\n${text}`;
 }
 

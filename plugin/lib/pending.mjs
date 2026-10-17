@@ -59,6 +59,7 @@ export function archive(file) {
   if (at === -1 || path.slice(at + marker.length).startsWith(`archive${sep}`)) throw new Error(`${file} is not under a plans directory`);
   const plans = path.slice(0, at + marker.length - 1);
   const to = join(plans, "archive", path.slice(at + marker.length));
+  if (existsSync(to)) throw new Error(`${to} is already archived; rename ${file} first`);
   mkdirSync(dirname(to), { recursive: true });
   renameSync(path, to);
   const log = join(plans, "archive", "MOVES.tsv");
@@ -70,7 +71,10 @@ export function archive(file) {
 export function stub(map, action) {
   const dir = join(map.paths[0], "plans", "drafts");
   mkdirSync(dir, { recursive: true });
-  const file = join(dir, `${stamp()}-${slugOf(action)}.md`);
+  const slug = slugOf(action);
+  if (!slug) throw new Error(`the action has no words: ${action}`);
+  let file = join(dir, `${stamp()}-${slug}.md`);
+  for (let n = 2; existsSync(file); n += 1) file = join(dir, `${stamp()}-${slug}-${n}.md`);
   writeFileSync(file, `${action.trim()}\n`);
   return file;
 }

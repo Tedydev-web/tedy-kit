@@ -88,3 +88,30 @@ test("the session-start notice lists local drafts and unpushed work, leaving han
   assert.match(notice, /fe main: 1 commit ahead of origin\/main/);
   assert.doesNotMatch(notice, /Hand-offs not taken yet|Draft PRs/);
 });
+
+test("stub never overwrites another stub and refuses an action with no words", () => {
+  const { map } = project();
+  const first = stub(map, "Gọi PM");
+  const second = stub(map, "Gọi PM!");
+  assert.notEqual(first, second);
+  assert.equal(readFileSync(first, "utf8"), "Gọi PM\n");
+  assert.throws(() => stub(map, "!!!"), /no words/);
+});
+
+test("done refuses to overwrite a file already archived under the same name", () => {
+  const { root } = project();
+  const from = join(root, "plans", "drafts", "doc-comments.md");
+  archive(from);
+  writeFileSync(from, "again\n");
+  assert.throws(() => archive(from), /already archived/);
+  assert.ok(existsSync(from));
+});
+
+test("a waiting list that cannot be read leaves the other session-start notices alone", async () => {
+  const { waitingNotice } = await import("../lib/session-hooks.mjs");
+  const { root, map } = project();
+  const { rmSync } = await import("node:fs");
+  rmSync(join(root, "plans", "drafts"), { recursive: true });
+  writeFileSync(join(root, "plans", "drafts"), "not a directory\n");
+  assert.equal(waitingNotice(map), "");
+});

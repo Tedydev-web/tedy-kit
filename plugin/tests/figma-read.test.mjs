@@ -42,3 +42,7 @@ test("diffSnapshots reports added, removed, renamed and changed frames with page
   assert.deepEqual(diffSnapshots(before, after), ["changed  a P / Home", "renamed  b P / Old → Q / New", "added    e P / Fresh", "removed  c P / Gone"]);
   assert.deepEqual(diffSnapshots(before, before), []);
 });
+
+test("a version mark with an offset compares as an instant", () => {
+  assert.deepEqual(versionsSince([{ id: "1", created_at: "2026-10-17T03:30:00Z" }], "2026-10-17T09:00:00+07:00").map((version) => version.id), ["1"]);
+});

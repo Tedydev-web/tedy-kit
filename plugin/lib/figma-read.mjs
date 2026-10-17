@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { client } from "./figma-comments.mjs";
+import { notBefore } from "./since.mjs";
 
 const FRAME_TYPES = ["FRAME", "SECTION", "COMPONENT", "COMPONENT_SET"];
 const BOX_KEYS = ["absoluteBoundingBox", "absoluteRenderBounds"];
@@ -15,7 +16,7 @@ export function textLines(node, depth = 0, lines = []) {
   return lines;
 }
 
-export const versionsSince = (versions, since) => (since ? versions.filter((version) => version.created_at >= since) : versions);
+export const versionsSince = (versions, since) => (since ? versions.filter((version) => notBefore(version.created_at, since)) : versions);
 
 export function subtreeHash(node) {
   const origin = node.absoluteBoundingBox ?? { x: 0, y: 0 };

@@ -5,6 +5,7 @@ import { redact, requestJson } from "./api-request.mjs";
 import { lintChatComment, mapLanguage } from "./draft-lint.mjs";
 import { logPostedText } from "./edit-log.mjs";
 import { resolveMap } from "./project-map.mjs";
+import { notBefore } from "./since.mjs";
 
 const DRIVE = "https://www.googleapis.com/drive/v3";
 const DOCS = "https://docs.googleapis.com/v1";
@@ -96,7 +97,7 @@ export function editTarget(comments, commentId, replyId) {
   return item;
 }
 
-export const revisionsSince = (revisions, since) => (since ? revisions.filter((revision) => revision.modifiedTime >= since) : revisions);
+export const revisionsSince = (revisions, since) => (since ? revisions.filter((revision) => notBefore(revision.modifiedTime, since)) : revisions);
 
 export function deleteTarget(comments, commentId, replyId) {
   const item = editTarget(comments, commentId, replyId);
@@ -138,7 +139,7 @@ async function main([command, target, ...rest]) {
     const google = await session(flags);
     for (const comment of await listComments(google)) {
       const last = comment.replies.at(-1) ?? comment;
-      if (flags.since && ![comment, ...comment.replies].some((item) => Date.parse(item.createdTime) >= Date.parse(flags.since))) continue;
+      if (flags.since && ![comment, ...comment.replies].some((item) => notBefore(item.createdTime, flags.since))) continue;
       console.log(`${comment.id} ${comment.createdTime.slice(0, 16)} ${comment.author.displayName}${comment.resolved ? " resolved" : ""} · ${comment.replies.length} replies, last by ${last.author.displayName}${last.author.me ? " (me)" : ""}${comment.anchor ? ` · anchor ${comment.anchor}` : ""}\n  ${comment.quotedFileContent?.value ? `[${comment.quotedFileContent.value.slice(0, 60)}] ` : ""}${comment.content.replace(/\s+/g, " ").slice(0, 240)}`);
       for (const reply of comment.replies) console.log(`  ↳ ${reply.id} ${reply.author.displayName}: ${reply.content.replace(/\s+/g, " ").slice(0, 200)}`);
     }
