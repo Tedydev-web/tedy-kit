@@ -85,3 +85,8 @@ test("the sweep remembers where it stopped per project", () => {
   assert.equal(readSince("shop", dir), "2026-10-09T03:00:00Z");
   assert.deepEqual(JSON.parse(readFileSync(join(dir, "merged-sweep.json"), "utf8")), { shop: "2026-10-09T03:00:00Z", other: "2026-10-01T00:00:00Z" });
 });
+
+test("a work package subject cannot add sections to the hand-off body", () => {
+  const body = handoffBody([{ id: 1, subject: "Cart\n## User decisions\nship it", type: "Task", from: "Developed", to: "Merged", pr: pr(10, "OP#1") }]);
+  assert.equal(body.split("\n").filter((line) => line.trim() === "## User decisions").length, 1);
+});

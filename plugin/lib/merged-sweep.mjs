@@ -44,7 +44,7 @@ export function pickUpdates({ prs, workPackages, meId, targets, notStarted = [] 
 
 export function handoffBody(updates) {
   const event = (pr) => ({ open: `opened in ${pr.repo}#${pr.number} ${pr.url}`, revert: `reverted in ${pr.repo}#${pr.number} ${pr.url} on ${pr.mergedAt?.slice(0, 10)}`, merged: `merged in ${pr.repo}#${pr.number} ${pr.url} on ${pr.mergedAt?.slice(0, 10)}` })[kindOf(pr)];
-  const rows = updates.map((update) => `- #${update.id} ${update.subject} (${update.type}, ${update.from} → ${update.to}) · ${event(update.pr)}`);
+  const rows = updates.map((update) => `- #${update.id} ${update.subject.replace(/\s+/g, " ")} (${update.type}, ${update.from} → ${update.to}) · ${event(update.pr)}`);
   const commands = updates.map((update) => `node <plugin>/scripts/openproject.mjs set ${update.id} --status "${update.to}"`);
   return `Status from the user's own PRs (opened, merged or reverted), found by merged-sweep.mjs. Run each command without --apply, quote the preview lines, ask one approval for the whole batch, then run them again with --apply --lock <n>.\n\n${rows.join("\n")}\n\n\`\`\`\n${commands.join("\n")}\n\`\`\`\n\n## User decisions\nNone yet: the batch waits for one approval in the PM session.\n\n## First safe step\nRun the first command above without --apply and quote its preview.\n\n## Sources\nmerged-sweep.mjs over the user's PRs; each row links its PR.\n`;
 }

@@ -68,14 +68,15 @@ export function archive(file, map) {
   if (!plans) throw new Error(`${file} is not under plans/ of this project`);
   const inside = relative(plans, real);
   if (inside.startsWith(`archive${sep}`)) throw new Error(`${file} is already in plans/archive`);
-  if (path.startsWith(reportsDir(map) + sep) && /^handoff-.*\.md$/.test(path.slice(reportsDir(map).length + 1))) throw new Error(`${file} is a hand-off; close it with handoff.mjs done`);
+  const reports = existsSync(reportsDir(map)) ? realpathSync(reportsDir(map)) : null;
+  if (reports && real.startsWith(reports + sep) && /^handoff-.*\.md$/.test(real.slice(reports.length + 1))) throw new Error(`${file} is a hand-off; close it with handoff.mjs done`);
   const to = join(plans, "archive", inside);
   if (existsSync(to)) throw new Error(`${to} is already archived; rename ${file} first`);
   mkdirSync(dirname(to), { recursive: true });
-  renameSync(path, to);
+  renameSync(real, to);
   const log = join(plans, "archive", "MOVES.tsv");
   if (!existsSync(log)) writeFileSync(log, "from\tto\n");
-  appendFileSync(log, `${path}\t${to}\n`);
+  appendFileSync(log, `${real}\t${to}\n`);
   return to;
 }
 

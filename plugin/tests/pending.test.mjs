@@ -198,3 +198,14 @@ test("done archives into the project's own plans/archive even when a folder belo
   writeFileSync(join(root, "plans", "drafts", "plans", "x.md"), "x\n");
   assert.equal(archive(join(root, "plans", "drafts", "plans", "x.md"), map), join(root, "plans", "archive", "drafts", "plans", "x.md"));
 });
+
+test("done refuses a pending hand-off reached through a symlinked alias of the project", async () => {
+  const { symlinkSync } = await import("node:fs");
+  const { root, map } = project();
+  mkdirSync(join(root, "plans", "reports"), { recursive: true });
+  writeFileSync(join(root, "plans", "reports", "handoff-1-to-pm.md"), "to: PM - Shop\nstatus: pending\n");
+  const alias = join(tempDir("tedy-pending-alias-"), "link");
+  symlinkSync(root, alias);
+  assert.throws(() => archive(join(alias, "plans", "reports", "handoff-1-to-pm.md"), map), /handoff\.mjs done/);
+  assert.ok(existsSync(join(root, "plans", "reports", "handoff-1-to-pm.md")));
+});
