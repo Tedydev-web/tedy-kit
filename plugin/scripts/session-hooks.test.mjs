@@ -110,6 +110,10 @@ test("no hint when the transcript is missing or the hooks did not change after t
 test("a broken profile config is announced at session start, a valid or missing one is not", async () => {
   const { configWarning } = await import("./session-hooks.mjs");
   assert.equal(configWarning(profileWith({ gates: { noComments: true } })), "");
-  assert.equal(configWarning(tempDir("tedy-profile-none-")), "");
+  assert.equal(configWarning(join(tempDir("tedy-profile-none-"), "missing")), "");
+  const empty = tempDir("tedy-profile-empty-");
+  assert.match(configWarning(empty), /config\.json.*every personal gate is off/s);
+  writeFileSync(join(empty, "rules.md"), "# rules\n");
+  assert.match(configWarning(empty), /config\.json.*every personal gate is on/s);
   assert.match(configWarning(profileWith({ gates: { noComments: "on" } })), /config\.json.*gates\.noComments must be a boolean.*every personal gate stays on/s);
 });

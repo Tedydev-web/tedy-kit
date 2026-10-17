@@ -1,6 +1,7 @@
+import { execFileSync } from "node:child_process";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, normalize, relative } from "node:path";
+import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const SHARED = fileURLToPath(new URL("../shared/", import.meta.url));
@@ -97,19 +98,82 @@ export function initProfile(dir = profileDir()) {
   return result;
 }
 
-function doctor(dir) {
-  const lines = [`profile: ${dir}${existsSync(dir) ? "" : " (missing)"}`];
+const MIN_CLAUDE_VERSION = [2, 1, 301];
+
+function git(dir, ...args) {
+  try {
+    return execFileSync("git", ["-C", dir, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
+  } catch {
+    return null;
+  }
+}
+
+function claudeMdImports(env) {
+  const file = env.TEDY_CLAUDE_MD || join(homedir(), ".claude", "CLAUDE.md");
+  if (!existsSync(file)) return [true, `no ${file}`];
+  const targets = readFileSync(file, "utf8").split("\n").flatMap((line) => line.match(/^@(\S+)/)?.slice(1) ?? []);
+  const missing = targets.filter((target) => !existsSync(expandHome(target)));
+  return missing.length ? [false, `missing: ${missing.join(", ")}`] : [true, `${targets.length} import${targets.length === 1 ? "" : "s"} found`];
+}
+
+function claudeVersion(env) {
+  let text = env.TEDY_CLAUDE_VERSION;
+  if (!text) {
+    try {
+      text = execFileSync("claude", ["--version"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+    } catch {
+      return [false, "could not run claude --version"];
+    }
+  }
+  const found = text.match(/(\d+)\.(\d+)\.(\d+)/);
+  if (!found) return [false, `could not read a version from "${text.trim()}"`];
+  const version = found.slice(1).map(Number);
+  const below = version.findIndex((part, index) => part !== MIN_CLAUDE_VERSION[index]);
+  const ok = below === -1 || version[below] > MIN_CLAUDE_VERSION[below];
+  return [ok, `${found[0]}${ok ? "" : `, below ${MIN_CLAUDE_VERSION.join(".")}`}`];
+}
+
+function releaseWorktree(dir, env) {
+  const file = env.TEDY_KNOWN_MARKETPLACES || join(homedir(), ".claude", "plugins", "known_marketplaces.json");
+  let entry;
+  try {
+    entry = JSON.parse(readFileSync(file, "utf8"))["tedy-kit"];
+  } catch {
+    return [true, `no ${file}`];
+  }
+  const path = entry?.source?.path ?? entry?.installLocation;
+  if (!path) return [true, "the tedy-kit marketplace is not a local directory"];
+  const gitDir = git(path, "rev-parse", "--path-format=absolute", "--git-dir");
+  if (!gitDir || gitDir === git(path, "rev-parse", "--path-format=absolute", "--git-common-dir")) return [true, `${path} is not a linked worktree`];
+  if (git(path, "status", "--porcelain")) return [false, `${path} has uncommitted changes`];
+  const tag = git(path, "describe", "--exact-match", "--tags");
+  const tagFile = join(dir, "release-tag");
+  const expected = existsSync(tagFile) ? readFileSync(tagFile, "utf8").trim() : null;
+  if (!expected) return [false, `${tagFile} is missing`];
+  return tag === expected ? [true, `${path} at ${tag}`] : [false, `${path} is at ${tag ?? "no tag"}, ${tagFile} says ${expected}`];
+}
+
+function doctor(dir, env = process.env) {
+  const lines = [];
   let status = 0;
-  if (!existsSync(join(dir, "config.json"))) lines.push("config: missing, defaults apply (personal gates off)");
+  const check = (name, [ok, detail]) => {
+    lines.push(`${ok ? "ok" : "fail"} ${name}: ${detail}`);
+    if (!ok) status = 1;
+  };
+  const relativeDir = env.TEDY_PROFILE_DIR && !isAbsolute(env.TEDY_PROFILE_DIR);
+  check("profile-dir", relativeDir ? [false, `TEDY_PROFILE_DIR must be an absolute path, got ${env.TEDY_PROFILE_DIR}`] : [true, `${dir}${existsSync(dir) ? "" : " (missing)"}`]);
+  if (!existsSync(join(dir, "config.json"))) check("config", [true, existsSync(join(dir, "rules.md")) ? "missing; rules.md exists, so every personal gate is on" : "missing, defaults apply (personal gates off)"]);
   else {
     try {
       const on = PERSONAL_GATES.filter((key) => loadConfig(dir).gates[key]);
-      lines.push(`config: ok (${on.length ? `personal gates on: ${on.join(", ")}` : "personal gates off"})`);
+      check("config", [true, on.length ? `personal gates on: ${on.join(", ")}` : "personal gates off"]);
     } catch (error) {
-      lines.push(`config: invalid: ${error.message}`);
-      status = 1;
+      check("config", [false, `invalid: ${error.message}`]);
     }
   }
+  check("claude-md-imports", claudeMdImports(env));
+  check("claude-version", claudeVersion(env));
+  check("release-worktree", releaseWorktree(resolve(dir), env));
   lines.push(existsSync(join(dir, "rules.md")) ? "rules: present" : "rules: missing; run profile.mjs init");
   const shadowed = overrides(dir);
   lines.push(`overrides: ${shadowed.length ? shadowed.join(", ") : "none"}`);

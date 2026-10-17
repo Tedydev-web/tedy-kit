@@ -119,6 +119,7 @@ async function main(argv) {
     for (const skip of picked.skipped) console.log(`skip #${skip.id}: ${skip.why}`);
   }
   if (!handoff) return 0;
+  const autoMessage = labels(chatLanguage())["handoff.autoMessage"];
   if (updates.length) {
     const to = route(map, "pm").name;
     const title = `Status from PRs: ${updates.length} work package(s)`;
@@ -127,7 +128,7 @@ async function main(argv) {
     const path = join(dir, `handoff-${stamp()}-to-${slugOf(to)}-${slugOf(title)}.md`);
     writeFileSync(path, render({ to, from, title, body: handoffBody(updates), created: startedAt }));
     console.log(path);
-    console.log(`message: ${fill(labels(chatLanguage())["handoff.autoMessage"], { from, title, path })}`);
+    console.log(`message: ${fill(autoMessage, { from, title, path })}`);
   }
   writeSince(map.name, startedAt);
   return 0;

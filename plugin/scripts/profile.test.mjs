@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -9,6 +9,8 @@ import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const SCRIPT = new URL("./profile.mjs", import.meta.url).pathname;
 const SHARED = new URL("../shared/", import.meta.url).pathname;
+const doctorEnv = (extra) => ({ ...process.env, TEDY_CLAUDE_MD: "/nonexistent/CLAUDE.md", TEDY_KNOWN_MARKETPLACES: "/nonexistent/known.json", TEDY_CLAUDE_VERSION: "2.1.302", ...extra });
+const runDoctor = (extra) => spawnSync("node", [SCRIPT, "doctor"], { encoding: "utf8", env: doctorEnv(extra) });
 
 function profileWith(files) {
   const dir = tempDir("tedy-profile-");
@@ -77,21 +79,69 @@ test("init creates the config and rules from the template, and never overwrites 
 
 test("doctor reports the profile, config, rules, overrides and maps, and exits 1 on an invalid config", () => {
   const dir = profileWith({ "config.json": JSON.stringify({ gates: { roleGate: true, ghWrites: true } }), "rules.md": "r\n", "style/pr-comment.md": "mine\n", "projects/a.md": "x\n" });
-  const ok = spawnSync("node", [SCRIPT, "doctor"], { encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: dir } });
-  assert.equal(ok.status, 0);
-  assert.match(ok.stdout, new RegExp(`^profile: ${dir}$`, "m"));
-  assert.match(ok.stdout, /^config: ok \(personal gates on: roleGate, ghWrites\)$/m);
+  const ok = runDoctor({ TEDY_PROFILE_DIR: dir });
+  assert.equal(ok.status, 0, ok.stdout);
+  assert.match(ok.stdout, new RegExp(`^ok profile-dir: ${dir}$`, "m"));
+  assert.match(ok.stdout, /^ok config: personal gates on: roleGate, ghWrites$/m);
   assert.match(ok.stdout, /^rules: present$/m);
   assert.match(ok.stdout, /^overrides: style\/pr-comment\.md$/m);
   assert.match(ok.stdout, /^projects: 1 map$/m);
-  const empty = spawnSync("node", [SCRIPT, "doctor"], { encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: join(dir, "none") } });
+  for (const name of ["claude-md-imports", "claude-version", "release-worktree"]) assert.match(ok.stdout, new RegExp(`^ok ${name}: `, "m"));
+  const empty = runDoctor({ TEDY_PROFILE_DIR: join(dir, "none") });
   assert.equal(empty.status, 0);
-  assert.match(empty.stdout, /^config: missing, defaults apply \(personal gates off\)$/m);
+  assert.match(empty.stdout, /^ok config: missing, defaults apply \(personal gates off\)$/m);
   assert.match(empty.stdout, /^rules: missing; run profile\.mjs init$/m);
   const bad = profileWith({ "config.json": JSON.stringify({ gates: { roleGate: 1 } }) });
-  const invalid = spawnSync("node", [SCRIPT, "doctor"], { encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: bad } });
+  const invalid = runDoctor({ TEDY_PROFILE_DIR: bad });
   assert.equal(invalid.status, 1);
-  assert.match(invalid.stdout, /^config: invalid: .*gates\.roleGate must be a boolean/m);
+  assert.match(invalid.stdout, /^fail config: invalid: .*gates\.roleGate must be a boolean/m);
+});
+
+test("doctor fails on a relative profile dir, a missing CLAUDE.md import and an old Claude Code", () => {
+  const dir = profileWith({ "config.json": "{}" });
+  const relative = runDoctor({ TEDY_PROFILE_DIR: "relative/profile" });
+  assert.equal(relative.status, 1);
+  assert.match(relative.stdout, /^fail profile-dir: /m);
+  const claudeMd = join(tempDir("tedy-claude-md-"), "CLAUDE.md");
+  writeFileSync(claudeMd, `@${join(dir, "config.json")}\n@${join(dir, "missing-rules.md")}\n`);
+  const imports = runDoctor({ TEDY_PROFILE_DIR: dir, TEDY_CLAUDE_MD: claudeMd });
+  assert.equal(imports.status, 1);
+  assert.match(imports.stdout, /^fail claude-md-imports: .*missing-rules\.md/m);
+  const old = runDoctor({ TEDY_PROFILE_DIR: dir, TEDY_CLAUDE_VERSION: "2.1.300 (Claude Code)" });
+  assert.equal(old.status, 1);
+  assert.match(old.stdout, /^fail claude-version: 2\.1\.300/m);
+});
+
+test("doctor checks a release worktree against the profile's release tag", () => {
+  const root = tempDir("tedy-release-");
+  const git = (cwd, ...args) => execFileSync("git", ["-C", cwd, ...args], { stdio: "ignore" });
+  const repo = join(root, "repo");
+  execFileSync("git", ["init", "-q", "-b", "main", repo]);
+  writeFileSync(join(repo, "a.txt"), "a\n");
+  git(repo, "add", "a.txt");
+  git(repo, "-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-q", "-m", "a");
+  git(repo, "tag", "v0.1.0");
+  const release = join(root, "release");
+  git(repo, "worktree", "add", "-q", "--detach", release, "v0.1.0");
+  const known = (path) => {
+    const file = join(root, `known-${Math.random().toString(36).slice(2)}.json`);
+    writeFileSync(file, JSON.stringify({ "tedy-kit": { source: { source: "directory", path }, installLocation: path } }));
+    return file;
+  };
+  const dir = profileWith({ "config.json": "{}", "release-tag": "v0.1.0\n" });
+  const matching = runDoctor({ TEDY_PROFILE_DIR: dir, TEDY_KNOWN_MARKETPLACES: known(release) });
+  assert.equal(matching.status, 0, matching.stdout);
+  assert.match(matching.stdout, /^ok release-worktree: .*v0\.1\.0/m);
+  const plain = runDoctor({ TEDY_PROFILE_DIR: dir, TEDY_KNOWN_MARKETPLACES: known(repo) });
+  assert.equal(plain.status, 0, plain.stdout);
+  assert.match(plain.stdout, /^ok release-worktree: .*not a linked worktree/m);
+  const wrongTag = runDoctor({ TEDY_PROFILE_DIR: profileWith({ "config.json": "{}", "release-tag": "v0.2.0\n" }), TEDY_KNOWN_MARKETPLACES: known(release) });
+  assert.equal(wrongTag.status, 1);
+  assert.match(wrongTag.stdout, /^fail release-worktree: /m);
+  writeFileSync(join(release, "a.txt"), "changed\n");
+  const dirty = runDoctor({ TEDY_PROFILE_DIR: dir, TEDY_KNOWN_MARKETPLACES: known(release) });
+  assert.equal(dirty.status, 1);
+  assert.match(dirty.stdout, /^fail release-worktree: .*uncommitted/m);
 });
 
 test("path prints the file a skill should read", () => {

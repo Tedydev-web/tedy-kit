@@ -1,4 +1,5 @@
 import { closeSync, existsSync, fstatSync, openSync, readSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { listPending, reportsDir } from "./handoff.mjs";
 import { currentTurn, gateSwitches, logGate, readHookInput, readTranscriptTail, toolUses } from "./hook-io.mjs";
@@ -132,6 +133,11 @@ function runRoleReminder() {
 }
 
 export function configWarning(dir = profileDir()) {
+  if (!existsSync(dir)) return "";
+  if (!existsSync(join(dir, "config.json"))) {
+    const state = existsSync(join(dir, "rules.md")) ? "on" : "off";
+    return `tedy: the profile at ${dir} has no config.json, so every personal gate is ${state}. Run node <plugin>/scripts/profile.mjs doctor, and tell the user in this reply.`;
+  }
   try {
     loadConfig(dir);
     return "";
