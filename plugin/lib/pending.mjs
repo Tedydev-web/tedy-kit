@@ -44,7 +44,7 @@ export function gitWaiting(dir) {
       return ahead ? [`${branch}: ${plural(ahead, "commit")} ahead of ${upstream}`] : [];
     }
     if (!checkedOut.has(branch)) return [];
-    const local = Number(capture("git", ["-C", dir, "rev-list", "--count", branch, "--not", "--remotes"], dir) ?? 0);
+    const local = Number(capture("git", ["-C", dir, "rev-list", "--count", `refs/heads/${branch}`, "--not", "--remotes"], dir) ?? 0);
     return local ? [`${branch}: ${plural(local, "commit")} on no remote`] : [];
   });
 }
@@ -62,7 +62,9 @@ export function draftPrs(dir) {
 export function archive(file, map) {
   const path = resolve(file);
   if (!existsSync(path) || !statSync(path).isFile()) throw new Error(`${file} is not a file`);
-  if (!repoDirs(map).some((dir) => path.startsWith(join(dir, "plans") + sep))) throw new Error(`${file} is not under plans/ of this project`);
+  const real = realpathSync(path);
+  const plansRoots = repoDirs(map).map((dir) => join(dir, "plans")).filter((dir) => existsSync(dir)).map((dir) => realpathSync(dir));
+  if (!plansRoots.some((root) => real.startsWith(root + sep))) throw new Error(`${file} is not under plans/ of this project`);
   if (path.startsWith(reportsDir(map) + sep) && /^handoff-.*\.md$/.test(path.slice(reportsDir(map).length + 1))) throw new Error(`${file} is a hand-off; close it with handoff.mjs done`);
   const marker = `${sep}plans${sep}`;
   const at = path.lastIndexOf(marker);

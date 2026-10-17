@@ -165,3 +165,23 @@ test("a GitHub read that fails is reported, not shown as an empty list", async (
     process.env.PATH = saved;
   }
 });
+
+test("a checked-out branch named like a directory still shows its unpushed commits", () => {
+  const { fe } = project();
+  mkdirSync(join(fe, "docs"));
+  git(fe, "switch", "-q", "-c", "docs", "main~1");
+  writeFileSync(join(fe, "docs", "a.md"), "a\n");
+  git(fe, "add", "docs/a.md");
+  git(fe, "commit", "-q", "-m", "docs");
+  assert.ok(gitWaiting(fe).includes("docs: 1 commit on no remote"), gitWaiting(fe).join("; "));
+});
+
+test("done refuses a file that reaches plans/ only through a symlink to somewhere else", async () => {
+  const { symlinkSync } = await import("node:fs");
+  const { root, map } = project();
+  const outside = tempDir("tedy-pending-outside-");
+  writeFileSync(join(outside, "secret.txt"), "x\n");
+  symlinkSync(outside, join(root, "plans", "link"));
+  assert.throws(() => archive(join(root, "plans", "link", "secret.txt"), map), /not under plans\/ of this project/);
+  assert.ok(existsSync(join(outside, "secret.txt")));
+});
