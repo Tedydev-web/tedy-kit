@@ -1,6 +1,6 @@
 # Comment channels
 
-Every write below prints a `WRITE →` line, triggers the permission prompt, lints the body first, and reads the result back. Bodies live in files so the draft the user approved is the text that is posted.
+Every write below prints a `WRITE →` line, lints the body first, and reads the result back. In an interactive session it stops for the user's approval: a `permissions.ask` rule matches it, or git-gate asks when no rule does. A headless `claude -p` run cannot be approved, so the write is refused. Bodies live in files so the draft the user approved is the text that is posted.
 
 ## Figma
 

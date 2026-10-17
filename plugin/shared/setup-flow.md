@@ -18,7 +18,7 @@ Every run starts with `node <plugin>/scripts/profile.mjs doctor`. When its first
    - `profile.stop`: stop setup; nothing is written.
 2. `node <plugin>/scripts/profile.mjs init`, with `TEDY_PROFILE_DIR=<folder>` in front for another folder. It creates `config.json` (every personal gate off), `rules.md` from the template and `projects/`, and never overwrites a file.
 3. When `~/.claude/CLAUDE.md` has no `@<profile>/rules.md` line, back it up and append that line, so the rules load in every new session.
-4. Quote the `profile.mjs doctor` output and say which gates the user can turn on in `config.json` (`<plugin>/shared/profile-layout.md`). Then continue with the bare run or the update.
+4. Quote the `profile.mjs doctor` output and say which gates the user can turn on in `config.json`: `noComments`, `draftPrOnly`, `roleGate`, `ghWrites` and `publishQuote` (`<plugin>/shared/profile-layout.md`). Then continue with the bare run or the update.
 
 ## Bare run: `/tedy:setup`
 

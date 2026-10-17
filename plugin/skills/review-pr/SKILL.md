@@ -57,7 +57,7 @@ Entry points: a new PR starts at step 1. A request about an existing draft for t
     - `post.hold`: keep the draft; the next-step menu follows.
 
     When the user says they edited the file themselves, re-read it, lint it, and quote it again.
-11. **Post.** `node ${CLAUDE_PLUGIN_ROOT}/scripts/github-write.mjs post <draft>` from the reviewed repo. The permission prompt is expected. On `refused`, fix what it names, lint, and quote the changed comment before asking again. Report the `K/K` listing it prints. A hook denies `post`, `reply` and `edit` unless every body being published appears verbatim in this session's visible text after the draft file last changed; when it denies, quote the draft and ask again.
+11. **Post.** `node ${CLAUDE_PLUGIN_ROOT}/scripts/github-write.mjs post <draft>` from the reviewed repo. An approval prompt is expected; a headless run refuses the post. On `refused`, fix what it names, lint, and quote the changed comment before asking again. Report the `K/K` listing it prints. A hook denies `post`, `reply` and `edit` unless every body being published appears verbatim in this session's visible text after the draft file last changed; when it denies, quote the draft and ask again.
 12. **Next step.** One `AskUserQuestion`, header `next.header`: the next PR waiting on the user (`gh pr list --search "review-requested:@me" --state open`) as recommended when one exists; checking replies on threads already posted (`references/follow-up.md`); `next.stop` with an 80-character summary.
 
 Several PRs in one request: steps 1–9 for each, one approval menu per PR.
