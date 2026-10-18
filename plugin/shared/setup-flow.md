@@ -34,7 +34,7 @@ Any other `fail` line in the `profile.mjs doctor` output (`release-worktree`, `r
    Then, for each Doc tab found, `prd-section.mjs index <doc> <tab>` to learn its epic and use case prefix. When `links` lacks a Doc or Figma the map needs, one `AskUserQuestion` asks whether to read old session transcripts for links, with `setup.skip`; read them only on yes.
 4. Ask the tier-3 gaps, one topic per call, grouped: repositories (role, readonly), languages, PRD and Figma per epic, tracker, then optional team, gotchas and truth overrides. Offer `setup.skip` for optional groups.
 5. Write `<profile>/projects/<name>.md` with Write (`node <plugin>/scripts/profile.mjs doctor` prints the profile directory): a two-line note for people, then the ```json block. Run `doctor` again until `READY`.
-6. When the profile is a git repository, commit the map there (`git -C <profile> add projects/<name>.md`, then commit with `feat: add <name> project map` or `feat: update <name> project map`); otherwise the written file is enough. Push only after the user approves it through the push prompt.
+6. When the profile is a git repository, commit the map there (`git -C <profile> add projects/<name>.md`, then commit with `feat: add <name> project map` or `feat: update <name> project map`); otherwise the written file is enough. Before any push, one `AskUserQuestion` names the remote and branch; push only on yes.
 
 ## Update: `/tedy:setup update`
 
