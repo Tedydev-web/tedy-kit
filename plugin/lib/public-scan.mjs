@@ -124,17 +124,28 @@ export function scanHistory(repo, denylist) {
   return ordered(hits);
 }
 
-const USAGE = "usage: public-scan.mjs <tree|history> <dir> [--denylist <file>]";
+const USAGE = "usage: public-scan.mjs <tree|history> <dir> | file <path>   [--denylist <file>]";
+
+function scanFile(path, denylist) {
+  if (!existsSync(path) || !statSync(path).isFile()) throw new Error(`not a file: ${path}`);
+  return scanText(path, readFileSync(path, "utf8"), denylist);
+}
 
 function main(argv) {
   const [mode, dir] = argv;
   const flag = argv.indexOf("--denylist");
-  if (!["tree", "history"].includes(mode) || !dir || (flag !== -1 && !argv[flag + 1])) {
+  if (!["tree", "history", "file"].includes(mode) || !dir || (flag !== -1 && !argv[flag + 1])) {
     process.stderr.write(`${USAGE}\n`);
     return 2;
   }
   const denylist = flag === -1 ? [] : loadDenylist(argv[flag + 1]);
-  const hits = mode === "tree" ? scanTree(dir, denylist) : scanHistory(dir, denylist);
+  let hits;
+  try {
+    hits = mode === "file" ? scanFile(dir, denylist) : mode === "tree" ? scanTree(dir, denylist) : scanHistory(dir, denylist);
+  } catch (error) {
+    process.stderr.write(`${error.message}\n${USAGE}\n`);
+    return 2;
+  }
   const lines = [...new Set(hits.map((hit) => `${hit.label}:${hit.line} ${hit.rule}`))];
   if (lines.length) process.stdout.write(`${lines.join("\n")}\n`);
   process.stderr.write(lines.length ? `public-scan: ${lines.length} hit(s) in ${new Set(hits.map((hit) => hit.label)).size} file(s)\n` : `public-scan: clean (${denylist.length} denylist terms)\n`);

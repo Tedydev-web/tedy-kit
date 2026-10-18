@@ -119,3 +119,15 @@ test("the command prints only locations and rule names, exits 1 on hits and 0 wh
 test("the scanner and its tests pass their own scan", () => {
   for (const name of ["../lib/public-scan.mjs", "./public-scan.test.mjs"]) assert.deepEqual(scanText(name, readFileSync(new URL(name, import.meta.url), "utf8"), []), []);
 });
+
+test("file mode scans exactly the named file even inside a gitignored folder, where tree mode sees nothing", () => {
+  const repo = treeWith({ ".gitignore": "reports/\n", "reports/learn.leaving.md": "Promote: acmecorp rule\n" });
+  git(repo, "init", "-q");
+  const file = denylistFile(["acmecorp"]);
+  const tree = spawnSync("node", [SCRIPT, "tree", repo, "--denylist", file], { encoding: "utf8" });
+  assert.equal(tree.status, 0);
+  const scanned = spawnSync("node", [SCRIPT, "file", join(repo, "reports", "learn.leaving.md"), "--denylist", file], { encoding: "utf8" });
+  assert.equal(scanned.status, 1);
+  assert.equal(scanned.stdout, `${join(repo, "reports", "learn.leaving.md")}:1 denylist#1\n`);
+  assert.equal(spawnSync("node", [SCRIPT, "file", join(repo, "missing.md")], { encoding: "utf8" }).status, 2);
+});
