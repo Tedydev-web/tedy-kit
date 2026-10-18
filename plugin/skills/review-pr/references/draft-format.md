@@ -1,6 +1,6 @@
 # Line-comment draft format
 
-File: `plans/drafts/review-<yymmdd-hhmm>-pr<n>-line-comments.md` in the reviewed repo. `/tedy:pending` lists it only when that repo is a writable repo in the project map (the map's `paths[0]` or a repo not marked `readonly`).
+File: `plans/drafts/review-<yymmdd-hhmm>-pr<n>-line-comments.md` in the reviewed repo, or in the map's `paths[0]` when the map marks that repo `readonly`, so `/tedy:pending` lists every draft and nothing is written to a readonly repo.
 
 ```text
 # PR #<n>: comment line by line (head <sha8>)
