@@ -1,0 +1,41 @@
+{
+ "title": "Sweep 261018-dev: developer role, test integrity (P1 + P2), generic",
+ "role": "dev",
+ "date": "2026-10-18",
+ "criteria": "docs/prior-art/quality-criteria-v2.md",
+ "inventory_digest": "2e7feb769e350232",
+ "problems": ["P1", "P2"],
+ "terms_matched": ["tdd", "test", "tests", "testing", "test-first", "test-driven", "red-green", "failing", "assertion", "assertions"],
+ "stop": {
+  "config": "stop: effort bound at row 101 (rows 92-101 added no new mechanism in either session; N = 60 reached at row 61, extended four times). Longest no-new run: A 16 (rows 86-101), B 14 (rows 88-101).",
+  "product": "stop: effort bound at row 70 (rows 61-70 added no new mechanism in either session). Rows 71-120 (A) and 71-140 (B) were screened beyond the stop and are kept as data, not as decisions. Longest no-new run: A 29 (rows 61-89), B 38 (rows 52-89)."
+ },
+ "query_log": {
+  "config": [
+   "GitHub repository search, 15 queries ('claude code skills', 'agent skills', 'tdd claude', 'test driven development ai agent', ...), 100 each by stars",
+   "GitHub topics, 7 (claude-code, claude-skills, agent-skills, claude-code-plugin, claude-code-skills, cursor-rules, claude-code-subagents)",
+   "GitHub code search, 8 phrase-in-file queries ('failing test' in SKILL.md, AGENTS.md, CLAUDE.md; 'test-driven', 'red green refactor', 'write the test first', 'test first' in .cursorrules, 'acceptance criteria' test)",
+   "Awesome lists, top 3 of 5 searches, README links",
+   "Installed plugin marketplaces",
+   "X, 6 queries; Reddit, 8 subreddit queries; YouTube, 3 searches (descriptions)",
+   "Failures: 51 calls 'could not resolve' (renamed or deleted repositories), 1 timeout, of 253 calls"
+  ],
+  "product": [
+   "npm registry, 23 queries (harness name with P1 and P2 terms, keywords:claude-code-hook and others)",
+   "GitHub code search, hook fields (hook_event_name, hookSpecificOutput, permissionDecision) x 6 problem terms x 8 extensions, outside agent-asset paths; 3 of 342 calls failed (one timeout, two HTTP 503)",
+   "Reverse references: npx/uvx/bunx/pipx commands in the hook configs of the config pool; 7 calls failed",
+   "Social: X 5, Reddit 7, YouTube 3 queries",
+   "GitHub repository search, 15 problem-term queries, and topic intersections, 5 harness topics x 6 testing topics"
+  ]
+ },
+ "prisma": {
+  "config": {"identified": 5040, "resolved": 4916, "alive": 4813, "deduplicated": 4763, "aggregators snowballed": 245, "screenable": 4518, "screened": 110, "eligible": 18},
+  "product": {"identified npm": 323, "identified code search": 6347, "identified reverse": 5, "identified social": 150, "identified repository and topic search": 1526, "union": 8181, "not resolvable": 60, "aggregators removed": 238, "screenable": 7883, "screened to the stop": 70, "eligible": 44}
+ },
+ "recall": "Quasi-gold standard: 129 curated lists, 217 candidates, two blind judges (agreement 0.982, Cohen kappa 0.782), 4 disagreements settled by reading source. 8 repositories, 7 distinct mechanisms. Quasi-sensitivity after 3 rounds: 0.875 by repository, 1.0 by mechanism, an upper estimate (see product-stratum-qgs-log.md).",
+ "gaps": [
+  "Snowball repositories are not yet ranked or screened. They are 354 repositories held under aggregator paths and the problem-term links in 129 curated list READMEs. The criteria say they join the pool.",
+  "Product-stratum agreement on the judged cells is 0.886, below the 0.90 target. The 16 disputed decisions were all mechanism-recall differences, and reader C settled them by reading source, under the user's decision to adjudicate row by row.",
+  "Reader C scanned 10 product rows (24, 47, 54, 55, 61, 62, 63, 65, 68, 69) by keyword, not line by line."
+ ]
+}

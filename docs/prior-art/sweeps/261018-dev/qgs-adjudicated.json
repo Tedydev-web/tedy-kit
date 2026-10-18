@@ -1,0 +1,20 @@
+{
+ "rule": "QGS = candidates both judges said yes, plus disagreements settled by reading the shipped source; 404 repos excluded as unverifiable",
+ "final": [
+  "nizos/tdd-guard",
+  "databricks-solutions/consort",
+  "nirecom/agents",
+  "moonrunnerkc/swarm-orchestrator",
+  "karanb192/claude-code-hooks",
+  "BaseInfinity/agentic-ai-sdlc-wizard",
+  "BaseInfinity/claude-sdlc-harness",
+  "timini/agentic-verification"
+ ],
+ "adjudicated": {
+  "timini/agentic-verification": "yes: runner/src/tsa/cli.py _base_check runs selected tests on current and base source and reports tests that pass now and fail on base; mutation testing of changed lines",
+  "BaseInfinity/agentic-ai-sdlc-wizard": "yes: hooks/tdd-pretool-check.sh exits 2 on writes to src/ until a test file was touched this session (edit-order proxy, not a red run)",
+  "BaseInfinity/claude-sdlc-harness": "yes, copy: same hooks/tdd-pretool-check.sh as agentic-ai-sdlc-wizard, same owner",
+  "maxritter/claude-codepro": "no: pilot/hooks/_checkers/tdd.py warn() emits a PostToolUse reminder and returns 0",
+  "Guipetris/axiom": "excluded: repository returns 404"
+ }
+}

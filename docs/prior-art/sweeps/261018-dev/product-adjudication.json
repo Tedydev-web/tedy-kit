@@ -1,0 +1,147 @@
+{
+ "decided": "2026-10-18 22:45 by the team lead under the user's decisions 'Em phân xử từng dòng' (applied to the product stratum too) and 'Bảng phân loại chung'; criteria v2 as of that time",
+ "stop": "effort bound at row 70: rows 61-70 added no new mechanism in either session; rows 71-120 (A) and 71-140 (B) kept as screened-beyond-stop data",
+ "agreement": {
+  "judged_cells_rows_1_70": "310/350 = 0.886",
+  "all_cells_with_derived": 0.855,
+  "decisions": "54/70",
+  "note": "below the 90% target; the 16 disputed decisions were all mechanism-recall differences (one session coded a mechanism from the shipped code, the other none) and were settled by reader C reading the source"
+ },
+ "capture_recapture": {
+  "A": 44,
+  "B": 36,
+  "shared": 29,
+  "union": 51,
+  "chapman": 54.5,
+  "reader_C_extra": 5,
+  "union_with_C": 56
+ },
+ "rows": {
+  "9": {
+   "repo": "zernie/vigiles",
+   "decision": "eligible",
+   "why": "C: implements (bench fixture: PreToolUse requires a red suite). A's cells, sum 5.5. Flag: the committed bench calls a CLI verb that no longer exists at this sha, so it cannot reproduce its result; any non-zero exit counts as red."
+  },
+  "11": {
+   "repo": "Koroqe/claude-code-sdlc",
+   "decision": "exclude: below-threshold",
+   "why": "C: no P1/P2 mechanism; config-protection guards TS/lint strictness only and the red-phase contract check runs no test."
+  },
+  "15": {
+   "repo": "nesquikm/dev-process-toolkit",
+   "decision": "eligible",
+   "why": "C: skip baseline script invoked by the skill. B's derivation, sum 4.5."
+  },
+  "22": {
+   "repo": "artyhoo/getff",
+   "decision": "eligible",
+   "why": "C: implements (install self-verify of the generated gates). A's derivation, sum 5.5."
+  },
+  "25": {
+   "repo": "fsantibanezleal/CAOS_Batuta",
+   "decision": "eligible",
+   "why": "Owner also ships ADRA, an adversarial dev review agent: Authority 0.5 (B). C confirmed the history check, --replay and the locked-test guard exist at this sha. Sum 4.5."
+  },
+  "27": {
+   "repo": "sashabogi/trantor",
+   "decision": "exclude: irrelevant",
+   "why": "C: the hook only injects prose; no mechanism."
+  },
+  "36": {
+   "repo": "MrBekoX/agentic-sdlc",
+   "decision": "eligible",
+   "why": "C: implements. B's derivation, sum 5.0."
+  },
+  "37": {
+   "repo": "xyun92/trilane",
+   "decision": "exclude: copy",
+   "why": "C: derived from openai/codex."
+  },
+  "42": {
+   "repo": "Harshvardhan86/claude-wave-plugin",
+   "decision": "eligible",
+   "why": "C: hooks.json registers the phase gate. B's derivation, sum 5.5."
+  },
+  "45": {
+   "repo": "checkwright/checkwright",
+   "decision": "eligible",
+   "why": "C: implements. A's derivation, sum 5.0."
+  },
+  "46": {
+   "repo": "krzemienski/proofpunk",
+   "decision": "eligible",
+   "why": "C: end-user Stop proof gate plus own-CI mutation artifact. Position 0.5 or 0 both leave the sum >= 5.0."
+  },
+  "52": {
+   "repo": "ArcaneArts/Cantrip",
+   "decision": "exclude: copy",
+   "why": "C: vendors openai/codex rust-v0.160.1 (cantrip_codex/upstream.json)."
+  },
+  "56": {
+   "repo": "BrightGold70/skills",
+   "decision": "exclude: below-threshold",
+   "why": "C: the gate is original. But the only 'changelog' path is a changelog-generator skill, not a changelog: Methodology 0.5 (B). Sum 4.0."
+  },
+  "60": {
+   "repo": "cookys/autopilot",
+   "decision": "eligible",
+   "why": "C: base-red/head-green CLI check. Sum >= 5.5 with either Position."
+  },
+  "67": {
+   "repo": "hashgraph-online/hol-guard",
+   "decision": "eligible",
+   "why": "C: own-CI mutation score floor (counts, user rule on own-repo guards). B's derivation, sum 5.0."
+  },
+  "70": {
+   "repo": "jikig-ai/soleur",
+   "decision": "eligible",
+   "why": "C: own-CI mutation battery run by hand. Sum >= 4.5 with either Position."
+  }
+ },
+ "eligible_final_rows_1_70": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  9,
+  10,
+  12,
+  13,
+  14,
+  15,
+  16,
+  17,
+  18,
+  19,
+  21,
+  22,
+  23,
+  25,
+  28,
+  29,
+  31,
+  32,
+  33,
+  34,
+  35,
+  36,
+  38,
+  39,
+  40,
+  42,
+  43,
+  44,
+  45,
+  46,
+  49,
+  57,
+  60,
+  64,
+  66,
+  67,
+  70
+ ]
+}

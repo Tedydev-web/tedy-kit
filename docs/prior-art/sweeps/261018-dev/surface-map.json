@@ -1,0 +1,199 @@
+{
+ "considered": {
+  "PreToolUse": [
+   "product:llm-judge-write-gate",
+   "product:new-test-must-fail-before-impl",
+   "product:observed-red-before-write",
+   "product:test-touched-before-src",
+   "product:test-file-existence-check",
+   "product:intent-declaration-tdd-gate",
+   "product:paired-test-per-public-function",
+   "product:phase-order-gate",
+   "product:refactor-license",
+   "config:pretooluse-test-first-reminder",
+   "product:deny-skip-marker-edits",
+   "product:locked-test-files",
+   "product:one-new-test-per-write",
+   "product:config-weakening-guard",
+   "product:commit-deny-on-red",
+   "product:skill-gated-test-edits",
+   "product:test-env-override-deny",
+   "product:human-review-hold",
+   "config:separate-test-writer"
+  ],
+  "PostToolUse": [
+   "config:posttooluse-untested-edit-nudge",
+   "product:session-verified-flag",
+   "product:partial-pass-output-flag",
+   "product:command-grammar-evidence",
+   "config:test-summary-skip-report"
+  ],
+  "Stop": [
+   "product:stop-block-on-red",
+   "product:stop-requires-session-test-run",
+   "product:stop-claim-needs-proof-artifact",
+   "product:stop-mutation-gate",
+   "product:failure-admission-scan",
+   "config:full-suite-run-before-done",
+   "product:pristine-test-restore-verify",
+   "product:changed-function-untested-block"
+  ],
+  "SubagentStop": [
+   "config:agent-post-hook-test-run",
+   "product:stop-claim-needs-proof-artifact"
+  ],
+  "UserPromptSubmit": [
+   "product:tdd-instruction-injection"
+  ],
+  "SessionStart": [
+   "product:tdd-instruction-injection"
+  ],
+  "skill": [
+   "config:test-first-instruction",
+   "config:delete-code-written-before-test",
+   "config:explicit-no-test-justification",
+   "config:stub-first-red",
+   "config:no-engineered-red",
+   "config:outside-in-e2e-red-first",
+   "config:no-test-edit-to-pass",
+   "config:red-run-report",
+   "config:red-validity-check",
+   "config:must-fail-task-verdict",
+   "config:planned-red-gate-signature",
+   "config:spec-literal-oracle",
+   "config:false-pass-trap-catalog",
+   "config:attempt-cap-stop",
+   "config:heal-classify-not-weaken",
+   "config:annotated-skip-escape",
+   "config:ticketed-quarantine-not-skip",
+   "config:no-mock-to-pass",
+   "config:no-threshold-lowering-rule",
+   "config:assertion-removal-ledger",
+   "config:test-code-step-separation",
+   "config:before-after-state-evidence",
+   "config:repeated-run-stability-proof",
+   "config:cache-bypass-rerun",
+   "config:exit-code-verdict-rule",
+   "config:stub-out-red-check",
+   "config:test-imports-sut-static-check",
+   "config:trivial-test-ratio-gate",
+   "config:untested-function-audit",
+   "config:gate-waiver-flag-refused",
+   "config:same-command-red-green",
+   "config:expected-failure-marker"
+  ],
+  "subagent": [
+   "config:separate-test-writer",
+   "config:test-writer-blind-to-implementation",
+   "product:scored-test-review-gate",
+   "config:red-to-green-diff-cheat-review",
+   "config:headless-repair-loop"
+  ],
+  "hooks": [
+   "every PreToolUse, PostToolUse, Stop, SubagentStop, UserPromptSubmit and SessionStart mechanism above ships through hooks/hooks.json"
+  ],
+  "plugin": [
+   "every mechanism above ships as part of a plugin"
+  ],
+  "plugin eval": [
+   "product:gated-vs-prose-bench, a committed A/B measurement of a hook-gated arm against a prose arm; evidence, not a mechanism"
+  ],
+  "workflow": [
+   "product:phase-order-gate",
+   "config:must-fail-task-verdict"
+  ],
+  "executable": [
+   "product:base-red-replay",
+   "config:red-green-ledger",
+   "config:accept-command-is-test-gate",
+   "product:test-count-claim-check"
+  ]
+ },
+ "not relevant": {
+  "Setup": "runs once at install; no sweep mechanism checks tests there",
+  "InstructionsLoaded": "fires when instruction files load; the sweep's instruction mechanisms are carried by SessionStart, UserPromptSubmit and skills",
+  "UserPromptExpansion": "slash-command expansion; no sweep mechanism acts on it",
+  "MessageDisplay": "display only; cannot change what the agent does",
+  "PermissionRequest": "the sweep's guards deny at PreToolUse instead of answering permission prompts",
+  "PostToolUseFailure": "no sweep mechanism keys on a failed tool call; a failing test run is a successful Bash call",
+  "PostToolBatch": "no sweep mechanism needs a batch boundary",
+  "PermissionDenied": "observes denials only",
+  "Notification": "notification only",
+  "SubagentStart": "no sweep mechanism acts when a subagent starts; role limits are enforced on writes at PreToolUse",
+  "TaskCreated": "task bookkeeping; no sweep mechanism",
+  "TaskCompleted": "no sweep mechanism keys on task completion; completion claims are checked at Stop and SubagentStop",
+  "StopFailure": "fires on API errors, not on test state",
+  "TeammateIdle": "agent-team idle; no sweep mechanism",
+  "ConfigChange": "no sweep mechanism watches settings changes; config weakening is caught at PreToolUse",
+  "CwdChanged": "no sweep mechanism",
+  "DirectoryAdded": "no sweep mechanism",
+  "FileChanged": "no sweep mechanism watches files outside tool calls",
+  "WorktreeCreate": "worktree replays in the sweep run their own git worktree, not this hook",
+  "WorktreeRemove": "no sweep mechanism",
+  "PreCompact": "no sweep mechanism",
+  "PostCompact": "no sweep mechanism",
+  "PreModelSwitch": "no sweep mechanism",
+  "PostModelSwitch": "no sweep mechanism",
+  "SessionEnd": "no sweep mechanism; end-of-work checks use Stop, which can still block",
+  "Elicitation": "MCP elicitation; no sweep mechanism",
+  "ElicitationResult": "MCP elicitation; no sweep mechanism",
+  "slash command": "command files in the sweep carry the same instruction text as skills; counted under skill",
+  "output style": "no sweep mechanism",
+  "statusline": "display only",
+  "MCP server": "no sweep mechanism enforces P1 or P2 through an MCP server",
+  "LSP server": "no sweep mechanism",
+  "monitor": "no sweep mechanism streams test runs through a monitor",
+  "theme": "display only",
+  "channel": "no sweep mechanism",
+  "mod": "no sweep mechanism",
+  "model / effort pin": "no sweep mechanism depends on a model or effort pin"
+ },
+ "outside the inventory": {
+  "git commit and pre-commit hooks": [
+   "product:precommit-test-gate",
+   "product:commit-requires-tdd-evidence",
+   "product:commit-tdd-order-check",
+   "product:edit-after-run-untested",
+   "product:red-green-commit-grammar",
+   "product:gate-edit-isolation"
+  ],
+  "CI jobs": [
+   "config:controller-owned-test-run",
+   "product:mutation-proves-tests-can-fail",
+   "config:coverage-threshold-gate",
+   "config:coverage-no-decrease",
+   "product:red-phase-contract-ci-check",
+   "product:skipped-ci-check-not-pass",
+   "product:test-count-baseline",
+   "product:diff-test-weakening-detector",
+   "product:static-test-oracle-check",
+   "product:test-denominator-guard",
+   "product:implementation-echo-literal-check"
+  ],
+  "test runner, reporter and result parsing": [
+   "product:test-reporter-result-file",
+   "product:zero-tests-not-green",
+   "product:unmeasured-is-fail",
+   "product:skip-is-red",
+   "config:worktree-src-pinned-runner",
+   "product:llm-adjudicate-test-output",
+   "config:failing-placeholder-stub",
+   "product:test-file-digest-evidence",
+   "product:locked-test-runtime-presence",
+   "product:result-tally-consistency",
+   "product:runner-forgery-construct-scan"
+  ],
+  "git worktree replays and proof artifacts": [
+   "product:base-red-replay",
+   "product:base-test-replay",
+   "product:mutation-pin-proof",
+   "product:mutation-artifact-required",
+   "product:human-granted-exception",
+   "config:red-green-ledger",
+   "product:recorded-red-required"
+  ],
+  "permission rules in settings": [
+   "config:hook-bypass-deny-rules"
+  ]
+ }
+}

@@ -1,0 +1,17 @@
+{
+ "budget": "at most 3 sources per problem: P1 and P2 give 6, and the two sources that already have cards count against it",
+ "method": "Greedy over the eligible sources of both strata. Each step takes the source that adds the most new mechanisms (mechanism-table class new) not yet covered by the cards or by earlier picks; ties go to more closed issues on record. Script: pick-deep-study.py in the plan folder, output pasted in the record.",
+ "coverage": "The two cards plus four picks cover 21 of the 43 new mechanisms that eligible sources hold. The other 22 stay in the Variants table from screening evidence alone, each with its source row.",
+ "study": {
+  "obra/superpowers": "Existing card. Forced row: config #533 is eligible at 4.5, carrying the never-edit-the-test rule.",
+  "nizos/tdd-guard": "Existing card. Config #317 and product #2 are both eligible. It adds hook-bypass deny rules, the one-new-test-per-write AST count and the test-reporter result file.",
+  "IonDen/skills": "Greedy pick 1 (config #79, sum 5.0): 8 new mechanisms, among them stub-out red check, red-to-green diff cheat review, spec-literal oracle and attempt cap. It has its own evals, a CHANGELOG and a release tag. No closed issues are on record, so the failure modes come from its eval results.",
+  "fsantibanezleal/CAOS_Batuta": "Greedy pick 2 (product #25, sum 4.5): base-red replay, locked test files, diff weakening detector, zero tests not green. Reader C read three more at the pinned commit: locked-test runtime presence, result tally consistency and runner forgery scan. Weakest provenance of the picks: Authority 0.5, no release.",
+  "avelikiy/great_cto": "Greedy pick 3 (product #33): config weakening guard, a PreToolUse deny on added skip markers, and a human-signed expiring exception as the only way past the guard.",
+  "button-inc/batten": "Greedy pick 4 (product #57): base-test replay, where the old form of each changed test runs against the new code, and skipped CI checks not counted as passing. It has two closed issues on record, #1122 among them."
+ },
+ "flags": {
+  "zernie/vigiles": "Eligible but not picked. Its committed bench calls a CLI verb that no longer exists at the pinned commit, so it cannot reproduce its own result.",
+  "BrightGold70/skills": "Excluded: its only 'changelog' path is a changelog-generator skill."
+ }
+}

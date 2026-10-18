@@ -5,7 +5,12 @@ Every ADR from 0009 on has a `## Prior art` section, and every `feat`/`fix` comm
 ## Steps
 
 1. **Discover.** GitHub search and topics, awesome lists, plugin marketplaces; X (`twitter search`), Reddit (`rdt search`), YouTube (`yt-dlp` transcripts), Facebook (`opencli`). Try the channel itself; a doctor report that calls a channel unavailable is not evidence.
-2. **Select** at most three sources to study deeply: overlap with the kit role, recent commits, closed issues with real discussion. List the runners-up and why they lost.
+2. **Select** sources from a sweep record, never from memory. A sweep lives in `docs/prior-art/sweeps/<yymmdd>-<role>.md`, with its data in the folder of the same name. It is screened by two blind sessions under the pinned version of `quality-criteria-v<n>.md`. It is regenerated with `python3 plugin/evals/probes/prior-art-sweep-record.py . <sweep>`. Its rows marked `study` are the deep-study picks: at most three per problem, chosen from the eligible rows with written reasons, and each source that already has a card counts against the budget. `plugin/tests/sweep-record.test.mjs` checks that:
+   - the record pins the criteria hash;
+   - every stratum has a stop line;
+   - every row has a decision and a reason;
+   - the latest record per role lists every Claude Code surface of the inventory it pins;
+   - every card is the source of a `study` row.
 3. **Dissect within the budget.** Shallow clone at a tag or commit into `/tmp`; read at most 8 files (3 per skill in a multi-skill repo); at most 10 closed issues or merged PRs, sorted by reactions or comments; the changelog. Delete the clone after.
 4. **Write lessons.** For each pattern worth learning: the pinned link with a short verbatim excerpt, what broke for its users and how it was fixed, the kit file it would touch (`plugin/skills/dev/SKILL.md:<n>`), gap or overlap, cost to adopt.
 5. **Compare and propose.** Name the kit file and line each lesson changes; propose the strongest form (gate or test, then skill line, then rule).

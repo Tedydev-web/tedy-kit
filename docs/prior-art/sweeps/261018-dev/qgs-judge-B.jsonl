@@ -1,0 +1,217 @@
+{"id": 1, "repo": "gongdear/cline-pilot", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 2, "repo": "vostride/agent-qa", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 3, "repo": "Instant-Expert/skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 4, "repo": "testdriverai/testdriverai", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 5, "repo": "timini/agentic-verification", "verdict": "yes", "readme": true, "why": "mutation CLI/action checks new tests fail on old code"}
+{"id": 6, "repo": "openhook-dev/openhook-inbox", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 7, "repo": "alexyc9381/shark-skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 8, "repo": "alexyc9381/court-skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 9, "repo": "supercorp-ai/supercov", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 10, "repo": "awss1i/assay", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 11, "repo": "amElnagdy/guard-skills", "verdict": "no", "readme": true, "why": "skill text only, no executable scripts"}
+{"id": 12, "repo": "gooseworks-ai/goose-skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 13, "repo": "hafiz-actyte/idea-autopsy", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 14, "repo": "mattpocock/skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 15, "repo": "addyosmani/agent-skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 16, "repo": "rafsilva85/credit-optimizer-v5", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 17, "repo": "uberskillsdev/uberSKILLS", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 18, "repo": "tsilverberg/webapp-uat", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 19, "repo": "Wolfe-Jam/faf-skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 20, "repo": "LambdaTest/agent-skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 21, "repo": "flyingsquirrel0419/squirrel-skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 22, "repo": "CodeShuX/tokenwise", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 23, "repo": "axelfreeman/marketing-mindset", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 24, "repo": "hyhmrright/brooks-lint", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 25, "repo": "rohithzr/claudebase", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 26, "repo": "clankercode/claude-inject-idle-time", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 27, "repo": "anthonybono21-cloud/leapfrog", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 28, "repo": "2389-research/test-kitchen", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 29, "repo": "Aboudjem/sniff", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 30, "repo": "Whatsonyourmind/oraclaw", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 31, "repo": "avansaber/tailtest", "verdict": "no", "readme": true, "why": "hook generates tests after edits; no red-first or anti-weakening check"}
+{"id": 32, "repo": "sangrokjung/claude-forge", "verdict": "no", "readme": true, "why": "TDD via agents/commands prompts; hooks unrelated"}
+{"id": 33, "repo": "dioptx/weft", "verdict": "no", "readme": true, "why": "generic workflow-order hooks, testing incidental"}
+{"id": 34, "repo": "wenqingyu/magic-cc-codex-worker", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 35, "repo": "nirecom/agents", "verdict": "yes", "readme": true, "why": "PreToolUse hook blocks commit until test step done (tests before code)"}
+{"id": 36, "repo": "Anasss/qa-orchestra", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 37, "repo": "floomhq/floom", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 38, "repo": "Guipetris/axiom", "verdict": "unsure", "readme": false, "why": "repo 404; skill claims contract-enforced ATDD"}
+{"id": 39, "repo": "smorky850612/Aurakit", "verdict": "no", "readme": true, "why": "TDD mode is prompt; hooks are security"}
+{"id": 40, "repo": "ckorhonen/swe-skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 41, "repo": "ckorhonen/hone-skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 42, "repo": "conorluddy/ios-simulator-skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 43, "repo": "lackeyjb/playwright-skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 44, "repo": "jthack/ffuf_claude_skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 45, "repo": "WinterDDo/paul-graham-skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 46, "repo": "voidborne-d/sober-coding", "verdict": "no", "readme": false, "why": "repo 404; code-smell analyzer, not P1/P2"}
+{"id": 47, "repo": "gear-foundation/vara-skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 48, "repo": "redhuntlabs/superpower-builder", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 49, "repo": "yurukusa/cc-safe-setup", "verdict": "no", "readme": true, "why": "safety guards; no test-weakening or TDD gate"}
+{"id": 50, "repo": "sgroy10/speclock", "verdict": "no", "readme": false, "why": "generic constraint engine, testing incidental"}
+{"id": 51, "repo": "BaseInfinity/agentic-ai-sdlc-wizard", "verdict": "yes", "readme": true, "why": "TDD hooks plus CI scoring checks test-first"}
+{"id": 52, "repo": "obra/superpowers", "verdict": "no", "readme": false, "why": "skills prompt-only TDD"}
+{"id": 53, "repo": "AXe-app/axe-cli", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 54, "repo": "avelikiy/great_cto", "verdict": "no", "readme": true, "why": "subagent prompts, no TDD enforcement code"}
+{"id": 55, "repo": "sanjay3290/ai-skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 56, "repo": "omkamal/pypict-claude-skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 57, "repo": "mhattingpete/claude-skills-marketplace", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 58, "repo": "foryourhealth111-pixel/Vibe-Skills", "verdict": "no", "readme": true, "why": "TDD optional in governed workflow prompt"}
+{"id": 59, "repo": "Gentleman-Programming/gentle-shell", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 60, "repo": "vercel-labs/agent-browser", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 61, "repo": "edouard-claude/ironloop", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 62, "repo": "jeffallan/claude-skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 63, "repo": "chrisjacksonn/interview-sim", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 64, "repo": "Ifeanyiejindu/qarunbook", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 65, "repo": "aayushpokhrel1/delegation-pipeline", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 66, "repo": "ghorbanies/workflow-design", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 67, "repo": "Varalix-Digitech-Solutions/game-build-team-skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 68, "repo": "converlyio/converly-agent", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 69, "repo": "mtangoz/grill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 70, "repo": "nathanskill/niubiskill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 71, "repo": "apexbymanish/claude-ai-agents-ios", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 72, "repo": "anthropics/skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 73, "repo": "Barnett-Studios/cxpak", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 74, "repo": "TakaGoto/rag-learning-academy", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 75, "repo": "EndeavorYen/chrome-cdp-ex", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 76, "repo": "ypollak2/llm-router", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 77, "repo": "zakariagharzouli/sparda", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 78, "repo": "DevinoSolutions/anotifier-for-claude-codex-cursor", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 79, "repo": "sorkila/lockpaw", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 80, "repo": "0-AI-UG/cate", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 81, "repo": "leeguooooo/claude-code-usage-bar", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 82, "repo": "TevvvB/termagitchi", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 83, "repo": "LiveNL/tmux-claude-status-tabs", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 84, "repo": "SawyerHood/dev-browser", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 85, "repo": "conorbronsdon/avoid-ai-writing", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 86, "repo": "renezander030/capcut-cli", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 87, "repo": "antonbabenko/terraform-skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 88, "repo": "avifenesh/agentsys", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 89, "repo": "avifenesh/agnix", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 90, "repo": "databricks-solutions/consort", "verdict": "yes", "readme": true, "why": "deterministic orchestrator: failing test first, immutable tests"}
+{"id": 91, "repo": "frankbria/ralph-claude-code", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 92, "repo": "sara-star-quant/presence", "verdict": "no", "readme": true, "why": "Stop hook checks claims vs any verification, not P1/P2"}
+{"id": 93, "repo": "nizos/tdd-guard", "verdict": "yes", "readme": false, "why": "hooks block edits violating TDD"}
+{"id": 94, "repo": "maxritter/claude-codepro", "verdict": "unsure", "readme": true, "why": "TDD in workflows + stop guards; code enforcement unclear"}
+{"id": 95, "repo": "rehan-remade/universal-modder", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 96, "repo": "zhaoxuya520/reverse-skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 97, "repo": "modu-ai/moai-adk", "verdict": "no", "readme": true, "why": "TDD as agent workflow; gate runs tests only"}
+{"id": 98, "repo": "modiqo/skillspec", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 99, "repo": "Jakeschincariol/replica-skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 100, "repo": "ramziddin/solid-skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 101, "repo": "kaankiziltug/logo-design-skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 102, "repo": "lxfater/nano-image-generator-skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 103, "repo": "markmdev/meridian", "verdict": "no", "readme": true, "why": "optional TDD mode, no enforcement shown"}
+{"id": 104, "repo": "firstloophq/claude-code-test-runner", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 105, "repo": "BaseInfinity/claude-sdlc-harness", "verdict": "yes", "readme": true, "why": "same sdlc-wizard: TDD hooks + CI TDD scoring"}
+{"id": 106, "repo": "ericosiu/ai-marketing-skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 107, "repo": "FrancyJGLisboa/agent-skills-platform", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 108, "repo": "tripleyak/SkillForge", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 109, "repo": "joshsymonds/steward", "verdict": "no", "readme": true, "why": "statusline/lint hooks, no test integrity"}
+{"id": 110, "repo": "inkline/inkline", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 111, "repo": "mattgodbolt/jsbeeb", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 112, "repo": "spylang/spy", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 113, "repo": "KarpelesLab/tpl", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 114, "repo": "anthropics/claude-code", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 115, "repo": "noeltock/mod-builder", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 116, "repo": "storybookjs/storybook", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 117, "repo": "promptfoo/promptfoo", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 118, "repo": "m3yrin/NTM", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 119, "repo": "verypluming/JSICK", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 120, "repo": "DaisukeBekki/JSeM", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 121, "repo": "sbintuitions/safety-boundary-test", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 122, "repo": "netresearch/typo3-testing-skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 123, "repo": "netresearch/php-ast-edit-skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 124, "repo": "netresearch/go-development-skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 125, "repo": "browserstack/mcp-server", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 126, "repo": "mailtrap/mailtrap-mcp", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 127, "repo": "punkpeye/awesome-mcp-devtools", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 128, "repo": "mshumer/gpt-prompt-engineer", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 129, "repo": "utkusen/promptmap", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 130, "repo": "microsoft/promptflow", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 131, "repo": "judgmentlabs/judgeval", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 132, "repo": "nano-step/eval-harness", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 133, "repo": "noahshinn024/reflexion-human-eval", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 134, "repo": "devoxx/devoxxgenieideaplugin", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 135, "repo": "unit-mesh/unit-runtime", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 136, "repo": "azure-samples/contoso-real-estate", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 137, "repo": "juspay/neurolink", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 138, "repo": "manyoso/haltt4llm", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 139, "repo": "jquesnelle/sat-reading", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 140, "repo": "greydgl/pentestgpt", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 141, "repo": "jameshwade/gpttools", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 142, "repo": "bin123apple/autocoder", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 143, "repo": "vizra-ai/vizra-adk", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 144, "repo": "agent-field/swe-af", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 145, "repo": "talkdai/dialog", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 146, "repo": "helixml/helix", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 147, "repo": "zakirkun/deep-eye", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 148, "repo": "vxcontrol/pentagi", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 149, "repo": "yeahwu/check", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 150, "repo": "smol-ai/menubar", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 151, "repo": "blazity/next-enterprise", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 152, "repo": "microsoft/hydralab", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 153, "repo": "mcpjam/inspector", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 154, "repo": "openai/skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 155, "repo": "hashicorp/agent-skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 156, "repo": "garrytan/gstack", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 157, "repo": "kubestellar/console", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 158, "repo": "sametcelikbicak/coverage-guard", "verdict": "no", "readme": true, "why": "coverage-threshold skill, not P1/P2"}
+{"id": 159, "repo": "sametcelikbicak/flaky-test-detector", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 160, "repo": "eduardo-sl/go-agent-skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 161, "repo": "knot0-com/vibe-testing", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 162, "repo": "fockus/skill-memory-bank", "verdict": "no", "readme": true, "why": "TDD as rules text"}
+{"id": 163, "repo": "coreyhaines31/marketingskills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 164, "repo": "realkimbarrett/advertising-skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 165, "repo": "deanpeters/Product-Manager-Skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 166, "repo": "phuryn/pm-skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 167, "repo": "cypress-io/ai-toolkit", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 168, "repo": "mailtrap/mailtrap-skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 169, "repo": "alinaqi/maggy", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 170, "repo": "testdino-hq/playwright-skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 171, "repo": "NeoLabHQ/context-engineering-kit", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 172, "repo": "metalbear-co/skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 173, "repo": "saleh-alhaddad/itqan-engineering", "verdict": "no", "readme": true, "why": "zero-test rule is procedure, not enforced code"}
+{"id": 174, "repo": "vitest-dev/vitest", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 175, "repo": "Hmbown/Wizards-of-the-Ghosts", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 176, "repo": "Lethe044/hermes-skill-marketplace", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 177, "repo": "duruonanni/hermes-skill-kit", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 178, "repo": "liuyunnb666/hermes-skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 179, "repo": "MaikD77/hermes-tour-assistant", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 180, "repo": "rlaope/oh-my-hermes", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 181, "repo": "witt3rd/oh-my-hermes", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 182, "repo": "anpicasso/hermes-plugin-chrome-profiles", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 183, "repo": "ogallotti/rtk-hermes", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 184, "repo": "rtk-ai/rtk", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 185, "repo": "Saurav0989/hermes-eval", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 186, "repo": "bielcarpi/hermes-live-voice", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 187, "repo": "Love-AronaPlana/hermes-agent-heartbeat", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 188, "repo": "bbolinger/snapmaker-u1-toolkit", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 189, "repo": "EleutherAI/lm-evaluation-harness", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 190, "repo": "Giskard-AI/giskard", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 191, "repo": "akshaypimprikar/ios-swiftdata-testing-agent-skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 192, "repo": "twostraws/Swift-Testing-Agent-Skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 193, "repo": "bocato/swift-testing-agent-skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 194, "repo": "AvdLee/Swift-Testing-Agent-Skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 195, "repo": "e2b-dev/e2b", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 196, "repo": "ghostsecurity/skills", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 197, "repo": "P-r-e-m-i-u-m/ai-change-passport", "verdict": "no", "readme": true, "why": "reports test-file changes, no enforcement"}
+{"id": 198, "repo": "ejentum/agent-teams", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 199, "repo": "Ivy-Interactive/Ivy-Tendril", "verdict": "no", "readme": true, "why": "build/test gates, no P1/P2 check"}
+{"id": 200, "repo": "moonrunnerkc/swarm-orchestrator", "verdict": "yes", "readme": true, "why": "audits PRs for relaxed/deleted tests, opt-in merge gate"}
+{"id": 201, "repo": "h5i-dev/h5i", "verdict": "no", "readme": true, "why": "web security/formal verification toolkit"}
+{"id": 202, "repo": "Dmatut7/shoppay-audit-benchmark", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 203, "repo": "shinpr/claude-code-workflows", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 204, "repo": "affaan-m/everything-claude-code", "verdict": "no", "readme": true, "why": "TDD via skill/agent prompts"}
+{"id": 205, "repo": "glebis/claude-skills", "verdict": "no", "readme": true, "why": "TDD skill orchestration, prompt-driven"}
+{"id": 206, "repo": "NathanMaine/memoriant-test-coverage-skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 207, "repo": "NathanMaine/memoriant-perf-test-skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 208, "repo": "NathanMaine/memoriant-voice-test-skill", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 209, "repo": "ramakay/claude-organizer", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 210, "repo": "karanb192/claude-code-hooks", "verdict": "yes", "readme": true, "why": "protect-tests hook blocks deleting/skipping tests"}
+{"id": 211, "repo": "openai/codex", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 212, "repo": "temporalio/sdk-java", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 213, "repo": "typpo/promptfoo", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 214, "repo": "comet-ml/opik", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 215, "repo": "intelligentnode/IntelliServer", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 216, "repo": "evidentlyai/evidently", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}
+{"id": 217, "repo": "hegelai/prompttools", "verdict": "no", "readme": false, "why": "prompt-only, list, or testing incidental"}

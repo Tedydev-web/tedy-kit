@@ -1,0 +1,88 @@
+{
+ "decided": "2026-10-18 22:30 by the team lead under the user's decision 'Em phân xử từng dòng', criteria v2 as of that time (derived Novelty and Relevance, eligibility = Relevance 1, Novelty >= 0.5, sum >= 4.5). Supersedes the 21:45 adjudication.",
+ "stop": "effort bound at row 101: rows 92-101 added no new mechanism in either session",
+ "agreement": {
+  "judged_cells": "515/550 = 0.936",
+  "all_cells_with_derived": 0.917,
+  "decisions": "94/110"
+ },
+ "capture_recapture": {
+  "A": 42,
+  "B": 45,
+  "shared": 30,
+  "union": 57,
+  "chapman": 62.8,
+  "reader_C_extra_rows_1_80": 6,
+  "union_with_C": 63
+ },
+ "rules_applied": {
+  "Methodology": "1 needs tests that exercise the asset itself plus a changelog; repo tests that only cover other parts or only check file structure give 0.5",
+  "Objectivity": "an Enterprise Edition, hosted cloud or paid tier of the same product caps it at 0.5"
+ },
+ "rows": {
+  "2": {
+   "repo": "anudeeps28/claude-code-harness",
+   "decision": "eligible",
+   "why": "CHANGELOG and hook tests, none for the TDD skill: Methodology 0.5 (B). false-pass-trap-catalog coded by A is new: Novelty 1. Sum 4.5."
+  },
+  "28": {
+   "repo": "ehnruiz/claude-skills",
+   "decision": "eligible",
+   "why": "Not a copy: adds exit-code-only verdicts and the base-commit regression proof absent from mattpocock/skills (grep 0 matches). Methodology 0.5, Position 0.5. Sum 5.0."
+  },
+  "47": {
+   "repo": "ruvnet/ruflo",
+   "decision": "eligible",
+   "why": "Post hook runs npm test --if-present (K3 form): Novelty 0.5. README compares the product with LangGraph, AutoGen, CrewAI and states differences: Position 1, as for rows 21 and 81. Sum 4.5; weakest eligible row."
+  },
+  "96": {
+   "repo": "dev-toolings/superpowers-symfony",
+   "decision": "eligible",
+   "why": "README line 275 'Inspired by superpowers-laravel': Position 0.5 (A). Coverage threshold gate coded by A is new: Novelty 1. Sum 4.5. The coverage gate was not re-read by reader C (row beyond 80)."
+  },
+  "358": {
+   "repo": "OpenHands/OpenHands",
+   "decision": "exclude: below-threshold (forced)",
+   "why": "Hosted cloud product: Objectivity 0.5. Sum 4.0."
+  },
+  "426": {
+   "repo": "affaan-m/ECC",
+   "decision": "exclude: below-threshold (forced)",
+   "why": "ECC Pro is sold: Objectivity 0.5. tests/ci checks skill files structurally, not behaviour: Methodology 0.5. Reader C found A's never-edit attribution absent from the file; Novelty stays 1 on coverage gate and skip ban. Sum 4.0."
+  },
+  "558": {
+   "repo": "CherryHQ/cherry-studio",
+   "decision": "exclude: below-threshold (forced)",
+   "why": "README sells an Enterprise Edition (buyout or subscription, lines 197-226): Objectivity 0.5. Sum 4.0."
+  }
+ },
+ "eligible_final": [
+  2,
+  13,
+  21,
+  28,
+  29,
+  32,
+  33,
+  36,
+  47,
+  59,
+  60,
+  79,
+  81,
+  87,
+  96,
+  317,
+  533,
+  952
+ ],
+ "reader_c_misattributions": {
+  "426 A": "instruction-never-edit-test-to-pass not in file",
+  "47 A": "instruction-test-first not in file",
+  "70 B": "must-fail-task-verdict not in file",
+  "48 B": "stub-out-red-check is a thought experiment",
+  "6 A": "red-run-quoted-in-report refers to tests for existing code",
+  "50 B": "incomplete-run-not-pass weak",
+  "33 A note": "SKIP_TDD_LEDGER cannot bypass the gate at the pinned sha"
+ }
+}
