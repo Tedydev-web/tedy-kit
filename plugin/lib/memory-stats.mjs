@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
@@ -35,7 +35,7 @@ export function layoutOverride(env = process.env, settings = CLAUDE_SETTINGS) {
 function projectSlugs(map) {
   const root = map.paths[0];
   const paths = [root, ...(map.repos ?? []).map((repo) => (isAbsolute(repo.path) ? repo.path : resolve(root, repo.path)))];
-  return [...new Set(paths.map(projectSlug))];
+  return [...new Set(paths.map((path) => projectSlug(resolve(path))))];
 }
 
 const list = (dir) => {
@@ -45,6 +45,18 @@ const list = (dir) => {
     return [];
   }
 };
+
+const HEAD_BYTES = 4096;
+
+function head(path) {
+  const descriptor = openSync(path, "r");
+  try {
+    const buffer = Buffer.alloc(HEAD_BYTES);
+    return buffer.subarray(0, readSync(descriptor, buffer, 0, HEAD_BYTES, 0)).toString("utf8");
+  } finally {
+    closeSync(descriptor);
+  }
+}
 
 const frontmatter = (text) => (text.startsWith("---") ? text.slice(3, text.indexOf("\n---", 3) + 1) : "");
 
@@ -57,12 +69,16 @@ export function memoryStats(map, since, root = PROJECTS_ROOT) {
     if (!existsSync(dir)) continue;
     stats.dirs.push(dir);
     for (const entry of list(dir)) {
-      if (!entry.isFile() || !entry.name.endsWith(".md") || entry.name === "MEMORY.md") continue;
+      if (!entry.name.endsWith(".md") || entry.name === "MEMORY.md") continue;
+      if (!entry.isFile()) {
+        stats.skipped += 1;
+        continue;
+      }
       const path = join(dir, entry.name);
       let text;
       let mtimeMs;
       try {
-        text = readFileSync(path, "utf8");
+        text = head(path);
         mtimeMs = statSync(path).mtimeMs;
       } catch {
         stats.skipped += 1;
@@ -77,7 +93,7 @@ export function memoryStats(map, since, root = PROJECTS_ROOT) {
       stats.feedbackNewer += type === "feedback" && newer ? 1 : 0;
     }
   }
-  const folders = list(root).filter((entry) => entry.isDirectory() && slugs.some((slug) => entry.name === slug || entry.name.startsWith(`${slug}--claude-worktrees-`)));
+  const folders = list(root).filter((entry) => entry.isDirectory() && slugs.some((slug) => entry.name === slug || entry.name.startsWith(`${slug}--claude-worktrees-`) || entry.name.startsWith(`${slug}--worktrees-`)));
   for (const folder of folders) {
     for (const entry of list(join(root, folder.name))) {
       if (!entry.isFile() || !entry.name.endsWith(".jsonl")) continue;

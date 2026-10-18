@@ -188,9 +188,7 @@ function learnLine(input, map) {
     const stats = memoryStats(map, state.learned_until ?? "");
     if (stats.memories && !stats.typed) logGate({ hook: "pending-handoffs", decision: "learn-notice-format-drift", memories: stats.memories });
     const today = localDate();
-    const line = learnNotice({ feedbackNewer: stats.feedbackNewer, since: state.learned_until, source: input.source, entrypoint: process.env.CLAUDE_CODE_ENTRYPOINT, today, nudged: state.learn_nudged, held: state.learn_held });
-    if (line) writeState(map.name, "learn_nudged", today);
-    return line;
+    return learnNotice({ feedbackNewer: stats.feedbackNewer, since: state.learned_until, source: input.source, entrypoint: process.env.CLAUDE_CODE_ENTRYPOINT, today, nudged: state.learn_nudged, held: state.learn_held });
   } catch (error) {
     logGate({ hook: "pending-handoffs", decision: "learn-notice-skipped", error: error.message });
     return "";
@@ -204,6 +202,7 @@ function runPendingHandoffs() {
     const learn = resolved ? learnLine(input, resolved.map) : "";
     const notice = [configWarning(), resolved && sessionRoleCard(input), resolved && pendingNotice(listPending(reportsDir(resolved.map)), fileURLToPath(new URL("../shared/handoff.md", import.meta.url))), resolved && waitingNotice(resolved.map), learn].filter(Boolean).join("\n\n");
     if (notice) process.stdout.write(JSON.stringify({ ...(learn && { systemMessage: learn }), hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: notice } }));
+    if (learn) writeState(resolved.map.name, "learn_nudged", localDate());
   } catch (error) {
     logGate({ hook: "pending-handoffs", decision: "skip-on-error", error: error.message });
   }

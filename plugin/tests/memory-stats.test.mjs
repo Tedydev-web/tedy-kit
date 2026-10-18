@@ -1,7 +1,7 @@
 import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chmodSync, mkdirSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { layoutOverride, memoryStats, projectSlug } from "../lib/memory-stats.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
@@ -85,4 +85,15 @@ test("a memory folder moved by settings or the environment is reported instead o
   assert.equal(layoutOverride({}, settings), "autoMemoryDirectory");
   writeFileSync(settings, "not json");
   assert.equal(layoutOverride({}, settings), null);
+});
+
+test("a trailing slash in the map path, a symlinked memory and a .worktrees session folder are all handled", () => {
+  const { root, work, map, folder } = setup();
+  put(join(folder(work), "memory", "a.md"), memory("feedback"));
+  symlinkSync(join(folder(work), "memory", "a.md"), join(folder(work), "memory", "link.md"));
+  put(join(root, `${projectSlug(join(work, "fe"))}--worktrees-fix-2`, "s.jsonl"), "{}\n");
+  const stats = memoryStats({ ...map, paths: [`${work}/`] }, "", root);
+  assert.equal(stats.feedback, 1);
+  assert.equal(stats.skipped, 1);
+  assert.equal(stats.sessions, 1);
 });

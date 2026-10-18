@@ -133,9 +133,9 @@ test("the learn line appears on an interactive startup once enough feedback wait
   assert.match(learnNotice({ ...base, since: "" }), /\(never\)/);
 });
 
-test("the session-start hook shows the learn line to the user, records the day, and stays quiet for a resume", async () => {
+async function learnHookFixture({ memories = 5, type = "feedback" } = {}) {
   const { spawnSync } = await import("node:child_process");
-  const { chmodSync, mkdirSync, readFileSync } = await import("node:fs");
+  const { chmodSync, mkdirSync, readFileSync, existsSync } = await import("node:fs");
   const { projectSlug } = await import("../lib/memory-stats.mjs");
   const scratch = tempDir("tedy-learn-hook-");
   const home = join(scratch, "home");
@@ -147,19 +147,65 @@ test("the session-start hook shows the learn line to the user, records the day, 
   for (const dir of [join(profile, "projects"), work, bin, memory]) mkdirSync(dir, { recursive: true });
   writeFileSync(join(profile, "config.json"), "{}");
   writeFileSync(join(profile, "projects", "shop.md"), `# map\n\n\`\`\`json\n${JSON.stringify({ name: "shop", paths: [work] })}\n\`\`\`\n`);
-  for (let index = 0; index < 5; index += 1) writeFileSync(join(memory, `f${index}.md`), "---\nname: f\nmetadata:\n  type: feedback\n---\n\nx\n");
+  for (let index = 0; index < memories; index += 1) writeFileSync(join(memory, `f${index}.md`), type ? `---\nname: f\nmetadata:\n  type: ${type}\n---\n\nx\n` : "no frontmatter\n");
   writeFileSync(join(bin, "claude"), "#!/bin/sh\necho '[]'\n");
   chmodSync(join(bin, "claude"), 0o755);
-  const hook = (source) => spawnSync("node", [new URL("../scripts/session-hooks.mjs", import.meta.url).pathname, "pending-handoffs"], {
+  const hook = (source, env = {}) => spawnSync("node", [new URL("../scripts/session-hooks.mjs", import.meta.url).pathname, "pending-handoffs"], {
     input: JSON.stringify({ cwd: work, source, session_id: "s-1" }),
     encoding: "utf8",
-    env: { ...process.env, HOME: home, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: state, PATH: `${bin}:${process.env.PATH}`, CLAUDE_CODE_ENTRYPOINT: "cli", CLAUDE_CODE_PROJECT_DIR_NAME: "" },
+    env: { ...process.env, HOME: home, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: state, PATH: `${bin}:${process.env.PATH}`, CLAUDE_CODE_ENTRYPOINT: "cli", CLAUDE_CODE_PROJECT_DIR_NAME: "", ...env },
   });
-  const resumed = hook("resume");
-  assert.doesNotMatch(resumed.stdout, /feedback memories/);
-  const started = JSON.parse(hook("startup").stdout);
+  const stateFile = join(state, "projects", "shop.json");
+  return {
+    work,
+    stateFile,
+    hook,
+    nudged: () => (existsSync(stateFile) ? JSON.parse(readFileSync(stateFile, "utf8")).learn_nudged : undefined),
+    log: () => (existsSync(join(state, "gate-log.jsonl")) ? readFileSync(join(state, "gate-log.jsonl"), "utf8") : ""),
+  };
+}
+
+test("the session-start hook shows the learn line to the user, records the day, and stays quiet for a resume", async () => {
+  const fixture = await learnHookFixture();
+  assert.doesNotMatch(fixture.hook("resume").stdout, /feedback memories/);
+  const started = JSON.parse(fixture.hook("startup").stdout);
   assert.match(started.systemMessage, /5 feedback memories since the last \/tedy:learn \(never\)/);
   assert.match(started.hookSpecificOutput.additionalContext, /Tell the user in this reply: run \/tedy:learn/);
-  assert.match(JSON.parse(readFileSync(join(state, "projects", "shop.json"), "utf8")).learn_nudged, /^\d{4}-\d{2}-\d{2}$/);
-  assert.doesNotMatch(hook("startup").stdout, /feedback memories/);
+  assert.match(fixture.nudged(), /^\d{4}-\d{2}-\d{2}$/);
+  assert.doesNotMatch(fixture.hook("startup").stdout, /feedback memories/);
+});
+
+test("the day is recorded only after the notice was written, so a failing hook does not use up the nudge", async () => {
+  const { mkdirSync } = await import("node:fs");
+  const fixture = await learnHookFixture();
+  mkdirSync(join(fixture.work, "plans"), { recursive: true });
+  writeFileSync(join(fixture.work, "plans", "reports"), "not a folder");
+  assert.equal(fixture.hook("startup").stdout, "");
+  assert.equal(fixture.nudged(), undefined);
+  assert.match(fixture.log(), /"decision":"skip-on-error"/);
+});
+
+test("a broken learn state is logged and the other notices still print", async () => {
+  const { mkdirSync } = await import("node:fs");
+  const fixture = await learnHookFixture();
+  mkdirSync(join(fixture.stateFile, ".."), { recursive: true });
+  writeFileSync(fixture.stateFile, "{ not json");
+  mkdirSync(join(fixture.work, "plans", "drafts"), { recursive: true });
+  writeFileSync(join(fixture.work, "plans", "drafts", "reply.md"), "draft\n");
+  const output = JSON.parse(fixture.hook("startup").stdout);
+  assert.match(output.hookSpecificOutput.additionalContext, /Waiting on the user in this project/);
+  assert.equal(output.systemMessage, undefined);
+  assert.match(fixture.log(), /"decision":"learn-notice-skipped"/);
+});
+
+test("memories with no recognised type are logged as format drift, project-only memories are not, and a moved memory folder is reported", async () => {
+  const drift = await learnHookFixture({ type: null });
+  drift.hook("startup");
+  assert.match(drift.log(), /"decision":"learn-notice-format-drift"/);
+  const projectOnly = await learnHookFixture({ type: "project" });
+  projectOnly.hook("startup");
+  assert.doesNotMatch(projectOnly.log(), /format-drift/);
+  const moved = await learnHookFixture();
+  assert.doesNotMatch(moved.hook("startup", { CLAUDE_CODE_PROJECT_DIR_NAME: "elsewhere" }).stdout, /feedback memories/);
+  assert.match(moved.log(), /"decision":"learn-notice-unsupported-layout"/);
 });

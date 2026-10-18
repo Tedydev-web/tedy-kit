@@ -48,7 +48,7 @@ For every exported symbol, route, event, file path or config key a change rename
    - the repository being changed: `git -C <repo> grep -n -w -F '<name>'` (working tree, uncommitted edits included; dev runs it after its commit step so new files are tracked);
    - sibling and `readonly` repos: `git -C <repo> grep -n -w -F '<name>' origin/<branch>`.
 
-   `git grep` reads every tracked file whatever the ignore rules say, hidden folders such as `.github/` included, and never an ignored `.env`. Do not add `--untracked`: it drops tracked test, workflow and ignored-folder hits. Plain `rg` misses those even with `--no-ignore-global`. The user's own tests stay local and untracked; dev's verify step runs them, and `rg -n -F --no-ignore-global '<name>' <their folders>` searches them.
+   `git grep` reads every tracked file whatever the ignore rules say, hidden folders such as `.github/` included, and never an ignored `.env`. Do not add `--untracked`: it drops tracked test, workflow and ignored-folder hits. Plain `rg` misses them: the global ignore hides test files and `.github/`, and repo-ignored folders stay hidden even with `--no-ignore-global`. The user's own tests stay local and untracked; dev's verify step runs them, and `rg -n -F --no-ignore-global '<name>' <their folders>` searches them.
 2. Check the string contracts a type check misses: message routing keys and queue names, path literals and `jest.mock`/`vi.mock` paths, DI tokens, environment variable names, URL paths between services, and docs that name the symbol.
 3. In TypeScript, run the repository's own typecheck before reading search results; it is the cheapest reference check.
 4. Mark each hit touched (changed in this diff), safe (checked, unaffected) or broken (a finding).

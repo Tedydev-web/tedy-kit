@@ -138,12 +138,13 @@ function main(argv) {
     process.stderr.write(`${USAGE}\n`);
     return 2;
   }
-  const denylist = flag === -1 ? [] : loadDenylist(argv[flag + 1]);
   let hits;
+  let denylist;
   try {
+    denylist = flag === -1 ? [] : loadDenylist(argv[flag + 1]);
     hits = mode === "file" ? scanFile(dir, denylist) : mode === "tree" ? scanTree(dir, denylist) : scanHistory(dir, denylist);
   } catch (error) {
-    process.stderr.write(`${error.message}\n${USAGE}\n`);
+    process.stderr.write(`public-scan: ${error.message}\n`);
     return 2;
   }
   const lines = [...new Set(hits.map((hit) => `${hit.label}:${hit.line} ${hit.rule}`))];

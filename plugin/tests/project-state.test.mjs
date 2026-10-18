@@ -26,6 +26,7 @@ test("an unknown field or a malformed value is refused", () => {
   assert.throws(() => writeState("alpha", "last_reply_check", "yesterday", dir), /last_reply_check must be an ISO timestamp/);
   assert.throws(() => writeState("alpha", "learned_until", "2026-10-07 10:00", dir), /learned_until must be a date \(YYYY-MM-DD\) or an ISO timestamp/);
   assert.throws(() => writeState("alpha", "learn_held", "2026-10-08T00:00:00Z", dir), /learn_held must be a date/);
+  assert.throws(() => writeState("alpha", "learn_held", "2026-02-31", dir), /learn_held must be a date/);
   assert.throws(() => writeState("../escape", "learned_until", "2026-10-08", dir), /map name/);
 });
 

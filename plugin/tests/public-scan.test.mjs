@@ -130,4 +130,7 @@ test("file mode scans exactly the named file even inside a gitignored folder, wh
   assert.equal(scanned.status, 1);
   assert.equal(scanned.stdout, `${join(repo, "reports", "learn.leaving.md")}:1 denylist#1\n`);
   assert.equal(spawnSync("node", [SCRIPT, "file", join(repo, "missing.md")], { encoding: "utf8" }).status, 2);
+  const noDenylist = spawnSync("node", [SCRIPT, "file", join(repo, "reports", "learn.leaving.md"), "--denylist", join(repo, "absent.txt")], { encoding: "utf8" });
+  assert.equal(noDenylist.status, 2);
+  assert.match(noDenylist.stderr, /^public-scan: /);
 });
