@@ -11,3 +11,12 @@ test("learn reads every mapped repo's memory, ranks each lesson by the strongest
   for (const phrase of ["memory-stats.mjs", "public-scan.mjs file", "pending.mjs stub", "repeat-of", "learn_held", "## Metrics", "gate-log.jsonl", "baseline", "ISO timestamp"]) assert.ok(learn.includes(phrase), phrase);
   for (const name of ["memory-stats", "public-scan", "pending", "project-state", "edit-rate"]) assert.ok(script(name), name);
 });
+
+test("one blast-radius procedure sees every tracked file, reads siblings from the remote ref, and every role that traces callers points to it", () => {
+  const access = read("shared/source-access.md");
+  const section = access.slice(access.indexOf("## Blast radius"), access.indexOf("## PM demo"));
+  for (const phrase of ["git -C <repo> grep -n -w -F", "origin/<branch>", "--untracked", "string contracts", "touched", "broken"]) assert.ok(section.includes(phrase), phrase);
+  assert.match(read("agents/reviewer.md"), /\*\*bugs\*\*:[^\n]*Blast radius[^\n]*source-access\.md/);
+  assert.match(read("skills/dev/SKILL.md"), /Blast radius steps in `\$\{CLAUDE_PLUGIN_ROOT\}\/shared\/source-access\.md`/);
+  assert.match(read("skills/review-pr/SKILL.md"), /Blast radius in source-access\.md/);
+});

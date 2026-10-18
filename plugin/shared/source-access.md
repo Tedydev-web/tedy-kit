@@ -40,6 +40,19 @@ git -C <repo> grep -n "<pattern>" origin/<branch> -- <path>
 - Check the writer, not the schema: a field on a DTO or model is real only when code that saves it sets it. Name the writer `path:line@branch`.
 - Cite a backend fact as `path:line@branch`.
 
+## Blast radius
+
+For every exported symbol, route, event, file path or config key a change renames, removes or changes in meaning:
+
+1. Search tracked files by exact text, word-bounded for identifiers (`-w`); drop `-w` for routes, dotted keys and other strings with punctuation, and widen only when nothing matches:
+   - the repository being changed: `git -C <repo> grep -n -w -F '<name>'` (working tree, uncommitted edits included; dev runs it after its commit step so new files are tracked);
+   - sibling and `readonly` repos: `git -C <repo> grep -n -w -F '<name>' origin/<branch>`.
+
+   `git grep` reads every tracked file whatever the ignore rules say, hidden folders such as `.github/` included, and never an ignored `.env`. Do not add `--untracked`: it drops tracked test, workflow and ignored-folder hits. Plain `rg` misses those even with `--no-ignore-global`. The user's own tests stay local and untracked; dev's verify step runs them, and `rg -n -F --no-ignore-global '<name>' <their folders>` searches them.
+2. Check the string contracts a type check misses: message routing keys and queue names, path literals and `jest.mock`/`vi.mock` paths, DI tokens, environment variable names, URL paths between services, and docs that name the symbol.
+3. In TypeScript, run the repository's own typecheck before reading search results; it is the cheapest reference check.
+4. Mark each hit touched (changed in this diff), safe (checked, unaffected) or broken (a finding).
+
 ## PM demo (HTML)
 
 When the map lists a demo URL: `curl -s <url> -o /tmp/<project>-demo.html`, then `rg -n --no-ignore-global` the function or copy. The demo is a third reference: Figma for visuals, PRD for logic; a demo that disagrees with either is a mismatch to raise.

@@ -23,7 +23,7 @@ Run `node <plugin>/scripts/project-map.mjs resolve` in the repository. When `rev
 ## Lenses
 
 - **spec**: does the change do what the PRD, Figma and the backend contract say? Find the UC for each touched screen or flow with `prd-section.mjs find`, check copy, states, gates, error paths and toasts against it, check visuals against the Figma node, and check every request and response field against the backend writer on the integration branch. A PRD rule the change ignores is a finding even when the code compiles. Run the need check: a behaviour no PRD rule, task or bug asks for is a finding.
-- **bugs**: logic errors, unhandled states, races, wrong units or decimals, stale data after a write, swallowed errors, and anything on a money, signing, key or auth path. Trace callers and callees outside the diff; a bug often sits where the diff meets unchanged code.
+- **bugs**: logic errors, unhandled states, races, wrong units or decimals, stale data after a write, swallowed errors, and anything on a money, signing, key or auth path. Trace callers and callees outside the diff with the "Blast radius" steps in `<plugin>/shared/source-access.md`; a bug often sits where the diff meets unchanged code.
 - **standards**: the repository's own rules (AGENTS.md, CLAUDE.md, lint config, existing patterns a few files away), type safety, shared components changed for one caller, i18n keys missing from any locale, and comments added to source. Run the prior-work check: existing code, a merged PR or an open PR that already does what the change adds is a finding.
 
 ## Evidence rules
