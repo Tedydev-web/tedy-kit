@@ -54,6 +54,21 @@
    "repo": "CherryHQ/cherry-studio",
    "decision": "exclude: below-threshold (forced)",
    "why": "README sells an Enterprise Edition (buyout or subscription, lines 197-226): Objectivity 0.5. Sum 4.0."
+  },
+  "1001": {
+   "repo": "duyanta123/dsh-test-insight",
+   "decision": "exclude: below-threshold",
+   "why": "Snowball row. The 'DRAFT ONLY; a passing syntax check is not a passing test' line (SKILL.md L25) codes as not-run-is-not-pass. Neither session showed tests that exercise the skill, so Methodology is 0.5. Sum 4.0."
+  },
+  "1002": {
+   "repo": "netresearch/typo3-testing-skill",
+   "decision": "eligible",
+   "why": "Snowball row. SKILL.md L19, L42 and L52 require mutation testing (Infection, MSI) and 70% coverage in CI, both new mechanisms, so Novelty is 1. With session B's Position 0 the sum is still 4.5."
+  },
+  "1004": {
+   "repo": "Azure/azure-api-management-policy-toolkit",
+   "decision": "exclude: below-threshold",
+   "why": "Snowball row. The documented [Ignore] skip is annotated-skip-escape, a counter-example to P2. API Management is a paid hosted product, so Objectivity is capped at 0.5. Sum 4.0."
   }
  },
  "eligible_final": [
@@ -74,7 +89,9 @@
   96,
   317,
   533,
-  952
+  952,
+  1002,
+  1006
  ],
  "reader_c_misattributions": {
   "426 A": "instruction-never-edit-test-to-pass not in file",
@@ -91,5 +108,6 @@
   "89 A and B": "missed separate-test-writer and coverage-no-decrease",
   "94": "the sessions read different files"
  },
- "reader_c_rows_81_101": "re-read 2026-10-18: 0 new mechanisms; capture-recapture union stays 63 against Chapman 62.8"
+ "reader_c_rows_81_101": "re-read 2026-10-18: 0 new mechanisms; capture-recapture union stays 63 against Chapman 62.8",
+ "snowball": "Aggregator snowball: 517 new candidates, of which 386 are live (not archived or forks). 8 rank above the row-101 stop and were screened by both sessions. 1 new mechanism (posttooluse-edited-test-run, K3 form). 1002 and 1006 are eligible. The second-order snowball (61 repositories found under 22 newly found aggregators) is not followed."
 }

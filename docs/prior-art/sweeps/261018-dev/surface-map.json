@@ -26,7 +26,8 @@
    "product:session-verified-flag",
    "product:partial-pass-output-flag",
    "product:command-grammar-evidence",
-   "config:test-summary-skip-report"
+   "config:test-summary-skip-report",
+   "config:posttooluse-edited-test-run"
   ],
   "Stop": [
    "product:stop-block-on-red",

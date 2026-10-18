@@ -64,7 +64,7 @@ for stratum in ("config", "product"):
             coded.add(key)
             for rank in e["rows"]:
                 extras.setdefault(rank, set()).add(key)
-    ranks = sorted(r for r in set(sides["A"]) & set(sides["B"]) if r <= STOP_AT[stratum] or r in FORCED[stratum])
+    ranks = sorted(r for r in set(sides["A"]) & set(sides["B"]) if r <= STOP_AT[stratum] or r in FORCED[stratum] or r > 1000)
     beyond[stratum] = sorted(set(sides["A"]) | set(sides["B"]) - set(ranks))
     same = cells = 0
     rows = []

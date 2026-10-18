@@ -72,7 +72,8 @@
   "config:red-green-ledger": "K6",
   "config:planned-red-gate-signature": "K6",
   "product:recorded-red-required": "K6",
-  "product:gated-vs-prose-bench": "evidence"
+  "product:gated-vs-prose-bench": "evidence",
+  "config:posttooluse-edited-test-run": "K3"
  },
  "default": "new"
 }

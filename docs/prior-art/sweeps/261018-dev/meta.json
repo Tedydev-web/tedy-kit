@@ -4,10 +4,24 @@
  "date": "2026-10-18",
  "criteria": "docs/prior-art/quality-criteria-v2.md",
  "inventory_digest": "2e7feb769e350232",
- "problems": ["P1", "P2"],
- "terms_matched": ["tdd", "test", "tests", "testing", "test-first", "test-driven", "red-green", "failing", "assertion", "assertions"],
+ "problems": [
+  "P1",
+  "P2"
+ ],
+ "terms_matched": [
+  "tdd",
+  "test",
+  "tests",
+  "testing",
+  "test-first",
+  "test-driven",
+  "red-green",
+  "failing",
+  "assertion",
+  "assertions"
+ ],
  "stop": {
-  "config": "stop: effort bound at row 101 (rows 92-101 added no new mechanism in either session; N = 60 reached at row 61, extended four times). Longest no-new run: A 16 (rows 86-101), B 14 (rows 88-101).",
+  "config": "stop: effort bound at row 101 (rows 92-101 added no new mechanism in either session; N = 60 reached at row 61, extended four times). Longest no-new run: A 16 (rows 86-101), B 14 (rows 88-101). Snowball rows 1001-1008 rank above the stop and were screened by both sessions.",
   "product": "stop: effort bound at row 70 (rows 61-70 added no new mechanism in either session). Rows 71-120 (A) and 71-140 (B) were screened beyond the stop and are kept as data, not as decisions. Longest no-new run: A 29 (rows 61-89), B 38 (rows 52-89)."
  },
  "query_log": {
@@ -29,13 +43,37 @@
   ]
  },
  "prisma": {
-  "config": {"identified": 5040, "resolved": 4916, "alive": 4813, "deduplicated": 4763, "aggregators snowballed": 245, "screenable": 4518, "screened": 110, "eligible": 18},
-  "product": {"identified npm": 323, "identified code search": 6347, "identified reverse": 5, "identified social": 150, "identified repository and topic search": 1526, "union": 8181, "not resolvable": 60, "aggregators removed": 238, "screenable": 7883, "screened to the stop": 70, "eligible": 44}
+  "config": {
+   "identified": 5040,
+   "resolved": 4916,
+   "alive": 4813,
+   "deduplicated": 4763,
+   "aggregators snowballed": 245,
+   "screenable": 4518,
+   "screened": 110,
+   "eligible": 20,
+   "snowball identified": 517,
+   "snowball live": 386,
+   "snowball above the stop, screened": 8
+  },
+  "product": {
+   "identified npm": 323,
+   "identified code search": 6347,
+   "identified reverse": 5,
+   "identified social": 150,
+   "identified repository and topic search": 1526,
+   "union": 8181,
+   "not resolvable": 60,
+   "aggregators removed": 238,
+   "screenable": 7883,
+   "screened to the stop": 70,
+   "eligible": 44
+  }
  },
  "recall": "Quasi-gold standard: 129 curated lists, 217 candidates, two blind judges (agreement 0.982, Cohen kappa 0.782), 4 disagreements settled by reading source. 8 repositories, 7 distinct mechanisms. Quasi-sensitivity after 3 rounds: 0.875 by repository, 1.0 by mechanism, an upper estimate (see product-stratum-qgs-log.md).",
  "gaps": [
-  "Snowball repositories are not yet ranked or screened. They are 354 repositories held under aggregator paths and the problem-term links in 129 curated list READMEs. The criteria say they join the pool.",
   "Product-stratum agreement on the judged cells is 0.886, below the 0.90 target. The 16 disputed decisions were all mechanism-recall differences, and reader C settled them by reading source, under the user's decision to adjudicate row by row.",
-  "Reader C scanned 10 product rows (24, 47, 54, 55, 61, 62, 63, 65, 68, 69) by keyword, not line by line."
+  "Reader C scanned 10 product rows (24, 47, 54, 55, 61, 62, 63, 65, 68, 69) by keyword, not line by line.",
+  "The second-order snowball (61 repositories found under 22 aggregators that the first snowball surfaced) is not followed."
  ]
 }
