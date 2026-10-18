@@ -68,6 +68,15 @@ test("evidence the script cannot check is listed as unchecked, and a link withou
   assert.deepEqual(labels(text), ["1 unchecked", "2 unchecked", "3 unchecked", "4 unchecked", "5 no-excerpt"]);
 });
 
+test("a line holding a GitHub link the script cannot parse is reported as unparsed, never skipped", () => {
+  const text = [
+    '- https://github.com/o/r/issues/1 "making the red run mandatory": what broke, how it was fixed.',
+    `see ${blob("#L3")} for the rule`,
+  ].join("\n");
+  const rows = verifyText("a.md", text, ghApi);
+  assert.deepEqual(rows.map((row) => `${row.line} ${row.labels.join(" ")} ${row.broken}`), ["1 unparsed true", "2 unparsed true"]);
+});
+
 test("the command exits 1 when a link is broken, 0 when every checked link holds, and 2 on a missing file", () => {
   const dir = tempDir("tedy-verify-");
   const file = join(dir, "card.md");

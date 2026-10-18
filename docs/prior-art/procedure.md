@@ -48,13 +48,14 @@ channel: github
 - <pinned blob link> "<excerpt>"
 
 ## Issues and changelog
-- <issue or PR link> "<excerpt>": what broke, how it was fixed.
+- <issue or PR link> "<excerpt>"
+  - Broke: <what>. Fixed: <how>.
 
 ## Lessons
 - <lesson>: touches <kit file:line>; gap | overlap; cost.
 ```
 
-Find the ADRs that cite a card with `git grep -n 'card: <slug>'`.
+Every evidence line holds only the link and its quoted excerpt; notes go on the next sub-bullet. `prior-art-verify.mjs` reports any other line holding a GitHub blob, issue or PR link as `unparsed`. Find the ADRs that cite a card with `git grep -n 'card: <slug>'`.
 
 ## Commit trailers
 

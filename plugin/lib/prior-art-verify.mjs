@@ -7,7 +7,8 @@ const EVIDENCE = /^\s*- (\S+)(?: "(.+)")?\s*$/;
 const COMMAND = /^\s*- `[^`]+` \(/;
 const LOCAL_PATH = /^(?:~\/|[\w.-]+\/)\S*:\d+(?:-\d+)?$/;
 const QUERY_LINE = /^no (social )?prior art: /;
-const BROKEN = new Set(["missing", "wrong-lines", "excerpt-absent", "no-excerpt"]);
+const GITHUB_EVIDENCE = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/(?:blob|issues|pull)\/\S+/;
+const BROKEN = new Set(["missing", "wrong-lines", "excerpt-absent", "no-excerpt", "unparsed"]);
 
 const squash = (text) => text.replace(/\s+/g, " ").trim();
 
@@ -46,10 +47,12 @@ function issueLabels(match, excerpt, ghApi) {
 function lineLabels(line, ghApi) {
   if (QUERY_LINE.test(line) || COMMAND.test(line)) return { ref: line.trim(), labels: ["unchecked"] };
   const evidence = line.match(EVIDENCE);
-  if (!evidence) return null;
+  const github = line.match(GITHUB_EVIDENCE);
+  if (!evidence) return github ? { ref: github[0], labels: ["unparsed"] } : null;
   const [, ref, excerpt] = evidence;
   const pinned = ref.match(PINNED_BLOB);
   const issue = ref.match(ISSUE_OR_PR);
+  if (github && !pinned && !issue) return { ref, labels: ["unparsed"] };
   if (pinned || issue) {
     if (excerpt === undefined) return { ref, labels: ["no-excerpt"] };
     return { ref, labels: pinned ? blobLabel(pinned, excerpt, ghApi) : issueLabels(issue, excerpt, ghApi) };
