@@ -83,6 +83,13 @@
   "48 B": "stub-out-red-check is a thought experiment",
   "6 A": "red-run-quoted-in-report refers to tests for existing code",
   "50 B": "incomplete-run-not-pass weak",
-  "33 A note": "SKIP_TDD_LEDGER cannot bypass the gate at the pinned sha"
- }
+  "33 A note": "SKIP_TDD_LEDGER cannot bypass the gate at the pinned sha",
+  "81 A": "red-validity-check reversed: the file counts a compile failure as a valid red; eligibility unchanged (no-test-edit-to-pass and the want-literal diff check remain)",
+  "90 B": "ticketed-quarantine-not-skip not supported: no ticket, owner or time limit",
+  "82 A and B": "test-first-instruction weak: only 'reproduce with a regression test first' for bugs",
+  "84, 88, 94 A": "test-first-instruction rests on a rule title only",
+  "89 A and B": "missed separate-test-writer and coverage-no-decrease",
+  "94": "the sessions read different files"
+ },
+ "reader_c_rows_81_101": "re-read 2026-10-18: 0 new mechanisms; capture-recapture union stays 63 against Chapman 62.8"
 }
