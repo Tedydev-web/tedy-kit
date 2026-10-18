@@ -14,11 +14,13 @@ Every run starts with `node <plugin>/scripts/profile.mjs doctor`. When its first
 
 1. One `AskUserQuestion`, header `profile.header`, with `setup.found` naming the directory doctor printed:
    - `profile.create`: create the profile in that directory.
-   - `profile.elsewhere`: the user types a folder in "Other"; back up `~/.claude/settings.json`, then set `TEDY_PROFILE_DIR` to that folder in its `env` block so hooks and commands find it.
+   - `profile.elsewhere`: the user types a folder in "Other"; the option description says that `~/.claude/settings.json` is backed up and gets `TEDY_PROFILE_DIR` in its `env` block. On this answer, do that so hooks and commands find it in new sessions, and put `TEDY_PROFILE_DIR=<folder>` in front of every `node <plugin>/scripts/...` command for the rest of this run.
    - `profile.stop`: stop setup; nothing is written.
 2. `node <plugin>/scripts/profile.mjs init`, with `TEDY_PROFILE_DIR=<folder>` in front for another folder. It creates `config.json` (every personal gate off), `rules.md` from the template and `projects/`, and never overwrites a file.
 3. When no line of `~/.claude/CLAUDE.md` imports the profile's `rules.md` (any `@` path that resolves to it, `~` included), ask one `AskUserQuestion` before touching it; on approval back it up and append `@<profile>/rules.md`, so the rules load in every new session.
 4. Quote the `profile.mjs doctor` output and say which gates the user can turn on in `config.json`: `noComments`, `draftPrOnly`, `roleGate`, `ghWrites` and `publishQuote` (`<plugin>/shared/profile-layout.md`). Then continue with the bare run or the update.
+
+Any other `fail` line in the `profile.mjs doctor` output (`release-worktree`, `rules-size`, `claude-md-imports`, `claude-version`, `config`): quote it, then one `AskUserQuestion` whether to fix it now or continue with it open.
 
 ## Bare run: `/tedy:setup`
 
@@ -29,7 +31,7 @@ Every run starts with `node <plugin>/scripts/profile.mjs doctor`. When its first
    - `instructions[]`: `AGENTS.md` and `CLAUDE.md` at the root and in each repository.
    - `prdFiles[]`: PRD markdown under `docs/`.
    - `links`: Google Doc ids with tabs and Figma files with nodes, each with the files it came from (instruction files, READMEs, `docs/`, the project's auto memory).
-   Then, for each Doc tab found, `prd-section.mjs index <doc> <tab>` to learn its epic and use case prefix. Old session transcripts are read for links only after the user says yes in this flow.
+   Then, for each Doc tab found, `prd-section.mjs index <doc> <tab>` to learn its epic and use case prefix. When `links` lacks a Doc or Figma the map needs, one `AskUserQuestion` asks whether to read old session transcripts for links, with `setup.skip`; read them only on yes.
 4. Ask the tier-3 gaps, one topic per call, grouped: repositories (role, readonly), languages, PRD and Figma per epic, tracker, then optional team, gotchas and truth overrides. Offer `setup.skip` for optional groups.
 5. Write `<profile>/projects/<name>.md` with Write (`node <plugin>/scripts/profile.mjs doctor` prints the profile directory): a two-line note for people, then the ```json block. Run `doctor` again until `READY`.
 6. When the profile is a git repository, commit the map there (`git -C <profile> add projects/<name>.md`, then commit with `feat: add <name> project map` or `feat: update <name> project map`); otherwise the written file is enough. Push only after the user approves it through the push prompt.

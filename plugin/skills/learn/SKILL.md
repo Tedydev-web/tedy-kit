@@ -11,7 +11,7 @@ You keep the user's working style portable and lean: every lesson lives in exact
 
 ## Iron laws
 
-1. Nothing is written until the user approves the exact diff.
+1. Nothing outside `<profile>/reports/` is written until the user approves the exact diff.
 2. Promote a memory only when it repeated at least twice or names a concrete failure.
 3. Every promotion deletes its source memory and its `MEMORY.md` line in the same diff.
 4. `<profile>/rules.md` stays at 6,000 bytes or fewer; going over means merging or dropping an older rule.
@@ -22,8 +22,8 @@ Building or editing the map's sources → `/tedy:setup`. Changing a role's proce
 
 ## Procedure
 
-1. **Inputs.**
-   - The project's auto memory: `~/.claude/projects/<project path with / as ->/memory/`, every file modified after `learned_until` (`node ${CLAUDE_PLUGIN_ROOT}/scripts/project-state.mjs get learned_until`; empty means every file).
+1. **Inputs.** Read `${CLAUDE_PLUGIN_ROOT}/shared/decision-points.md`; headers and options below are label keys that `node ${CLAUDE_PLUGIN_ROOT}/scripts/labels.mjs` prints.
+   - The project's auto memory: `~/.claude/projects/<project path with / as ->/memory/`, every file modified after `learned_until` (`cd <project path> && node ${CLAUDE_PLUGIN_ROOT}/scripts/project-state.mjs get learned_until`, so the marker comes from that project's map; empty means every file).
    - The edit log: `node ${CLAUDE_PLUGIN_ROOT}/scripts/edit-rate.mjs`, then the `edited`, `cut` and `added` entries of `~/.local/state/tedy/edit-log.jsonl` since `learned_until`: what the user changed is what the samples get wrong.
 2. **Classify each memory** in a table: memory | destination | action | evidence.
    - Personal working rule, true in every project → `<profile>/rules.md` (`node ${CLAUDE_PLUGIN_ROOT}/scripts/profile.mjs doctor` prints the profile directory).
@@ -36,9 +36,9 @@ Building or editing the map's sources → `/tedy:setup`. Changing a role's proce
 3. **Subtract.** Add to the proposed diff the deletion of promoted memories and their `MEMORY.md` lines; nothing is deleted before step 6. Merge rules to stay under the cap. Replace a style sample the edit log shows the user keeps rewriting.
 4. **Report.** Write `<profile>/reports/learn-<yymmdd-hhmm>-<project>.md`: the table, the full proposed diff, line counts before and after, and broken links in `MEMORY.md` (reported only; the user decides). Quote the table in the reply.
 5. **Approve.** One `AskUserQuestion`, header `learn.header`: `learn.all`, `learn.pick` (a multiSelect follow-up by row number), `learn.hold`.
-6. **Apply** the approved rows, record today with `project-state.mjs set learned_until <YYYY-MM-DD>`, run `claude -p "/doctor prompt-audit"` and report any new conflict it names as a proposal for the next run, then, when the profile is a git repository, commit there (`feat: fold <project> lessons into the profile`).
+6. **Apply** the approved rows, record today with `project-state.mjs set learned_until <YYYY-MM-DD>` in the project path, run `claude -p "/doctor prompt-audit"` and report any new conflict it names as a proposal for the next run; when the command is unknown or replies that the claude-api skill is not available, report "prompt audit unavailable" instead. Then, when the profile is a git repository, commit there (`feat: fold <project> lessons into the profile`).
 7. **Next step.** `next.header`: run the role whose material changed on real work, or `next.stop` with an 80-character summary.
 
 ## Done
 
-Every memory newer than `learned_until` has a row and an action, each promotion removed its source, the rules file is within its cap, the prompt audit is clean, and `learned_until` moved.
+Every memory newer than `learned_until` has a row and an action, each promotion removed its source, the rules file is within its cap, the prompt audit ran clean or its absence is reported, and `learned_until` moved.

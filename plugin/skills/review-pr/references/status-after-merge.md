@@ -1,6 +1,6 @@
 # Status after merge
 
-Run from the project root: `node <plugin>/scripts/merged-sweep.mjs --handoff --from "<this session's name>"`.
+Run from any directory the project map covers; the hand-off lands under the map's `paths[0]/plans/reports/`: `node <plugin>/scripts/merged-sweep.mjs --handoff --from "<this session's name>"`.
 
 It finds the user's PRs opened, merged or reverted since the last sweep whose body links a work package (`OP#<id>`) assigned to the user, and writes one hand-off asking the PM session to move each to the map's `tracker.open_status` (still not started), `merge_status` or `revert_status`.
 

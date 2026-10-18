@@ -10,6 +10,7 @@ The engine (this plugin) holds no personal or project data. Everything that belo
   projects/<name>.md     project maps (fields in plugin/shared/project-map-schema.md)
   projects/<name>/       notes too long for a map, such as review-calibration.md
   public-denylist.txt    terms public-scan.mjs must never find in a public repository
+  release-tag            the tag a linked-worktree plugin install must sit on; profile.mjs doctor checks it
   reports/               /tedy:learn reports
   docs/                  your own guides, such as a user guide naming your projects and sessions
 ```

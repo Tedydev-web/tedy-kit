@@ -4,7 +4,7 @@ The user runs one session per role and project (PM, Dev, Review PR), named `<Rol
 
 ## This session's role
 
-`ListAgents` prints "This session is <name>". Match that name against the map's `sessions`. A session whose name is not in the map, or that builds or tests this plugin, has no role: it hands every role task over and publishes nothing.
+`ListAgents` prints "This session is <name>". Match that name against the map's `sessions`. A map without `sessions` has no roles: the skill works here, and publishing still waits for its `AskUserQuestion`. When the map lists sessions and this name is not among them, or the session builds or tests this plugin, it has no role: it hands every role task over and publishes nothing. The role gate does not catch this case, since it asks only when a listed session writes for another role and only with `gates.roleGate` on, so each skill checks it before publishing.
 
 ## Sending: the request belongs to another role
 
