@@ -58,6 +58,21 @@ test("the token file is denied however a path reaches it: cd, relative paths, gl
   for (const command of [`ls ${root}`, `rg x ${join(op, "sync")}`, `du -sh ${root}`, `find ${root} -name x`, `cp a.txt ${root}`]) assert.equal(check({ command }), null, command);
 });
 
+test("listing tools that run a reader on what they find count as readers of the token folder", () => {
+  const { root, op, configFile } = opHome();
+  const check = (toolInput, cwd = "/") => trackerToken(toolInput, null, { configFile, cwd });
+  for (const command of [
+    `fd . ${op} -x cat`,
+    `fd config ${root} -X bat`,
+    `fdfind . ${op} --exec cat`,
+    `find ${op} -type f -exec cat {} +`,
+    `find ${root} -execdir cat {} ;`,
+    `find ${op} -type f | xargs cat`,
+    `fd . ${op} | while read f; do cat "$f"; done`,
+  ]) assert.ok(check({ command }), command);
+  for (const command of [`fd x ${root}`, `fd map ${join(op, "sync")} -x cat`, `find ${root} -name x | wc -l`]) assert.equal(check({ command }), null, command);
+});
+
 test("the shared sidecar and ordinary paths stay readable", () => {
   const { op, configFile } = opHome();
   const check = (toolInput) => trackerToken(toolInput, null, { configFile, cwd: "/" });

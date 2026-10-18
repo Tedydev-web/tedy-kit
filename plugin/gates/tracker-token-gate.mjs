@@ -10,6 +10,9 @@ const CONFIG_FILE = join(homedir(), ".config", "op", "config.json");
 const PATH_FIELDS = ["file_path", "path", "notebook_path"];
 const GLOB = /[*?[]/;
 const RECURSIVE_READERS = new Set(["rg", "grep", "egrep", "fgrep", "ag", "ack", "tar", "zip"]);
+const LISTERS = new Set(["find", "fd", "fdfind"]);
+const EXEC_FLAG = /^(-exec|-execdir|-ok|-okdir|-x|--exec|-X|--exec-batch)$/;
+const PIPED_TO_RUNNER = /\|\s*(xargs|parallel|while|for|sh|bash|zsh|env)\b/;
 const WRITE_VERB = /\b(POST|PATCH|PUT|DELETE)\b|(^|\s)(-X|--request)\b|method\s*[:=]|requests\.(post|patch|put|delete)\b|\.(post|patch|put|delete)\s*\(/i;
 
 export const REASON =
@@ -41,8 +44,10 @@ function real(path) {
 function bashPaths(command, cwd) {
   const paths = new Set();
   const searched = new Set();
+  const piped = PIPED_TO_RUNNER.test(command);
   for (const { dir, tokens } of walkSegments(command, cwd)) {
-    const reader = RECURSIVE_READERS.has(basename(tokens[0] ?? ""));
+    const name = basename(tokens[0] ?? "");
+    const reader = RECURSIVE_READERS.has(name) || (LISTERS.has(name) && (piped || tokens.some((token) => EXEC_FLAG.test(token))));
     for (const token of tokens) {
       paths.add(resolve(dir, expandHome(token)));
       if (reader && !token.startsWith("-")) searched.add(resolve(dir, expandHome(token)));
