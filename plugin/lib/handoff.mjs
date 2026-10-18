@@ -8,13 +8,13 @@ const HEADER = /^(to|from|status|created|title|updated): (.*)$/;
 const SECTIONS = ["## User decisions", "## First safe step", "## Sources"];
 
 const outsideFences = (body) => {
-  let fenced = false;
+  let fence = null;
   return body.split("\n").filter((line) => {
-    if (/^\s*(```|~~~)/.test(line)) {
-      fenced = !fenced;
-      return false;
-    }
-    return !fenced;
+    const marker = line.match(/^\s*(```|~~~)/)?.[1];
+    if (!marker) return !fence;
+    if (!fence) fence = marker;
+    else if (marker === fence) fence = null;
+    return false;
   });
 };
 

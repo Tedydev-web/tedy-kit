@@ -68,6 +68,7 @@ export function writeSince(name, at, dir = STATE_DIR) {
 
 function listedPrs(map, since, withOpen) {
   const prs = [];
+  const skipped = [];
   for (const repo of map.repos ?? []) {
     const dir = isAbsolute(repo.path) ? repo.path : resolve(map.paths[0], repo.path);
     const list = (args) => JSON.parse(execFileSync("gh", ["pr", "list", ...args, "--limit", "100", "--json", "number,title,body,mergedAt,createdAt,url"], { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }));
@@ -75,10 +76,11 @@ function listedPrs(map, since, withOpen) {
       prs.push(...list(["--state", "merged", "--search", `merged:>=${searchSince(since)}`]).filter((pr) => notBefore(pr.mergedAt, since)).map((pr) => ({ ...pr, repo: repo.path })));
       if (withOpen) prs.push(...list(["--state", "open", "--author", "@me"]).filter((pr) => notBefore(pr.createdAt, since)).map((pr) => ({ ...pr, mergedAt: null, repo: repo.path })));
     } catch (error) {
+      skipped.push(repo.path);
       console.log(`skip ${repo.path}: ${String(error.stderr || error.message).split("\n")[0]}`);
     }
   }
-  return prs;
+  return { prs, skipped };
 }
 
 async function main(argv) {
@@ -99,7 +101,8 @@ async function main(argv) {
   }
   const startedAt = new Date().toISOString();
   const since = flag("--since") ?? readSince(map.name) ?? new Date(Date.now() - FIRST_RUN_DAYS * 86_400_000).toISOString();
-  const prs = listedPrs(map, since, Boolean(targets.open));
+  sinceTime(since);
+  const { prs, skipped } = listedPrs(map, since, Boolean(targets.open));
   const ids = [...new Set(prs.flatMap((pr) => linkedIds(pr.body)))];
   console.log(`since ${since}: ${prs.filter((pr) => pr.mergedAt).length} merged and ${prs.filter((pr) => !pr.mergedAt).length} newly opened PR(s), ${ids.length} linked work package(s)`);
   let updates = [];
@@ -133,7 +136,8 @@ async function main(argv) {
     console.log(path);
     console.log(`message: ${fill(autoMessage, { from, title, path })}`);
   }
-  writeSince(map.name, startedAt);
+  if (skipped.length) console.log(`mark kept at ${since}: ${skipped.length} repo(s) could not be listed`);
+  else writeSince(map.name, startedAt);
   return 0;
 }
 

@@ -96,3 +96,40 @@ test("the sweep's GitHub search mark is the same instant as the stored mark, wha
   assert.equal(searchSince("2026-10-17T03:00:00.000Z"), "2026-10-17T03:00:00Z");
   assert.doesNotThrow(() => handoffBody([{ id: 2, type: "Task", from: "a", to: "b", pr: pr(11, "OP#2") }]));
 });
+
+const sweepRun = async (args, ghExit) => {
+  const { spawnSync } = await import("node:child_process");
+  const { chmodSync, mkdirSync, writeFileSync } = await import("node:fs");
+  const root = tempDir("tedy-sweep-");
+  const repo = join(root, "repo");
+  const profile = join(root, "profile");
+  const state = join(root, "state");
+  const bin = join(root, "bin");
+  for (const dir of [repo, join(profile, "projects"), bin]) mkdirSync(dir, { recursive: true });
+  writeFileSync(join(profile, "projects", "shop.md"), `# map\n\n\`\`\`json\n${JSON.stringify({ name: "shop", paths: [repo], repos: [{ path: ".", role: "FE" }], tracker: { merge_status: { Task: "Merged" } } })}\n\`\`\`\n`);
+  writeFileSync(join(bin, "gh"), `#!/bin/sh\n${ghExit ? 'echo "gh: not logged in" >&2; exit 1' : "echo '[]'"}\n`);
+  chmodSync(join(bin, "gh"), 0o755);
+  const out = spawnSync("node", [new URL("../scripts/merged-sweep.mjs", import.meta.url).pathname, ...args], { cwd: repo, encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: state } });
+  return { out, mark: readSince("shop", state) };
+};
+
+test("a --since that is not a date stops the sweep before any repo is listed and keeps the stored mark", async () => {
+  const { out, mark } = await sweepRun(["--since", "last monday", "--handoff", "--from", "Review - Shop"], false);
+  assert.equal(out.status, 1);
+  assert.match(out.stderr, /--since is not a date: last monday/);
+  assert.doesNotMatch(out.stdout, /skip /);
+  assert.equal(mark, null);
+});
+
+test("a repo that cannot be listed keeps the stored mark so its merged PRs are swept next time", async () => {
+  const { out, mark } = await sweepRun(["--since", "2026-10-01T00:00:00Z", "--handoff", "--from", "Review - Shop"], true);
+  assert.match(out.stdout, /skip \.: gh: not logged in/);
+  assert.match(out.stdout, /mark kept at 2026-10-01T00:00:00Z/);
+  assert.equal(mark, null);
+});
+
+test("a clean sweep moves the stored mark", async () => {
+  const { out, mark } = await sweepRun(["--since", "2026-10-01T00:00:00Z", "--handoff", "--from", "Review - Shop"], false);
+  assert.equal(out.status, 0, out.stderr);
+  assert.notEqual(mark, null);
+});

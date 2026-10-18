@@ -95,3 +95,7 @@ test("a section heading inside a code fence does not count, and a folder named l
   writeFileSync(join(dir, "handoff-1.md"), render({ to: "a", from: "b", title: "t", body: "x", created: "c" }));
   assert.equal(listPending(dir).length, 1);
 });
+
+test("a fence closes only on the marker that opened it", () => {
+  assert.deepEqual(missingSections("```\n~~~\n## User decisions\n## First safe step\n## Sources\n```\n"), ["## User decisions", "## First safe step", "## Sources"]);
+});
