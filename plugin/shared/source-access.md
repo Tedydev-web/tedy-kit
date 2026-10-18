@@ -17,7 +17,7 @@ node <plugin>/scripts/prd-section.mjs find <doc> <tab> "UC_SW_08 BR3"
 - Quote the PRD from `find` output character for character. `github-write.mjs` re-fetches the full tab at post time and refuses a quote that is not in it after whitespace normalisation, so a paraphrase or a straightened apostrophe fails.
 - The Doc's comment threads appear at the end of the export; `prd-section.mjs` drops them because they are discussion, not PRD. Read them only when the task is about those threads.
 - A private doc makes the script stop with "not readable without login". Tell the user; do not guess the content.
-- A map with `prd.files` keeps the PRD as markdown in a repository: `grep -n` the feature or rule there and quote the line with `path:line`.
+- A map with `prd.files` keeps the PRD as markdown in a repository: `rg -n --no-ignore-global` the feature or rule there and quote the line with `path:line`.
 
 ## Figma
 
@@ -42,7 +42,7 @@ git -C <repo> grep -n "<pattern>" origin/<branch> -- <path>
 
 ## PM demo (HTML)
 
-When the map lists a demo URL: `curl -s <url> -o /tmp/<project>-demo.html`, then `grep -n` the function or copy. The demo is a third reference: Figma for visuals, PRD for logic; a demo that disagrees with either is a mismatch to raise.
+When the map lists a demo URL: `curl -s <url> -o /tmp/<project>-demo.html`, then `rg -n --no-ignore-global` the function or copy. The demo is a third reference: Figma for visuals, PRD for logic; a demo that disagrees with either is a mismatch to raise.
 
 ## GitHub (read)
 
