@@ -7,6 +7,7 @@ import { SECRET_SHAPE } from "./api-request.mjs";
 const HOME_PATH = /\/(?:home|Users)\/[A-Za-z0-9._-]+\//;
 const EMAIL = /[A-Za-z0-9._%+-]+@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})/g;
 const LONG_HEX = /\b[A-Fa-f0-9]{32,}\b/g;
+const PINNED_GITHUB_SHA = /(github\.com\/[\w.-]+\/[\w.-]+\/(?:blob|tree|commit)\/)[0-9a-f]{40}(?![0-9A-Fa-f])/g;
 const TOKEN_SHAPE = new RegExp(SECRET_SHAPE.source);
 const QUOTED_SECRET = /(?:api[_-]?key|access[_-]?token|refresh[_-]?token|token|secret|password)["']?\s*[:=]\s*["'][^"'\s$<>{}]{8,}["']/i;
 const KEY_MATERIAL = /-----BEGIN [A-Z ]*PRIVATE KEY-----|\bAKIA[0-9A-Z]{16}\b|\bsk-(?:ant-)?[A-Za-z0-9_-]{20,}/;
@@ -37,9 +38,10 @@ function lineRules(line, denylist) {
   const rules = [];
   if (HOME_PATH.test(line)) rules.push("home-path");
   if (emailHit(line)) rules.push("email");
-  const withoutHex = line.replace(LONG_HEX, "");
+  const unpinned = line.replace(PINNED_GITHUB_SHA, "$1");
+  const withoutHex = unpinned.replace(LONG_HEX, "");
   if (TOKEN_SHAPE.test(withoutHex) || QUOTED_SECRET.test(line) || KEY_MATERIAL.test(line)) rules.push("secret");
-  if (withoutHex !== line) rules.push("long-hex");
+  if (withoutHex !== unpinned) rules.push("long-hex");
   for (const entry of denylist) if (entry.pattern.test(line)) rules.push(entry.rule);
   return rules;
 }

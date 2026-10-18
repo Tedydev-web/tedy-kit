@@ -116,6 +116,8 @@ node plugin/scripts/public-scan.mjs tree . --denylist <your-profile>/public-deny
 
 `--plugin-dir` replaces the installed `tedy` for that session only. `public-scan.mjs history <repo>` checks every object a push would publish for home paths, email addresses, secrets and the terms in your denylist. `public-scan.mjs file <path>` checks one file even inside an ignored folder, which `/tedy:learn` uses for the lessons that leave a project. `memory-stats.mjs`, run from a mapped project, counts the auto-memory files and sessions since the last `/tedy:learn`; the session-start notice uses the same counts to suggest a learn pass. After a Claude Code update, `bash plugin/evals/probes/run-probes.sh` re-checks the platform behaviour the hooks rely on, and `plugin/evals/pressure/run-pressure.sh` replays scenarios where the agent is pushed to skip an approval (`ARMS`, `PLUGIN_DIR` and `LABEL` select what runs).
 
+Every ADR from 0009 on has a `## Prior art` section with pinned evidence, and every `feat`/`fix` commit since the latest tag carries an `ADR:` or `Prior-art:` trailer; `npm test` checks both, and [docs/prior-art/procedure.md](docs/prior-art/procedure.md) gives the study steps, the formats and the card template. `prior-art-verify.mjs <file>` checks the pinned lines and issue states against GitHub (network, outside `npm test`).
+
 Authoring rules for skills:
 - Each SKILL.md opens with a persona, the iron laws and a "not for this skill" section naming the sibling that owns that work.
 - A skill is model-invocable only when the agent must reach it on its own; otherwise it sets `disable-model-invocation: true`.

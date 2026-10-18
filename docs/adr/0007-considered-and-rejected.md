@@ -14,7 +14,7 @@ These options came up while building the kit. Each was tried or measured, and th
 | New MCP servers for GitHub, Figma, Google Docs, OpenProject | Existing CLIs and REST cover them; the Figma MCP cannot read or write comments |
 | Router skill | `/tedy:` autocomplete already lists every command |
 | Self-update gate, version parity, CHANGELOG | The plugin loads in place from a checkout; git history and release tags are enough for a personal kit |
-| Blind LLM-judge acceptance | Circular (the judge reads the same style docs), underpowered at 6 pairs, self-preference bias; the edit rate on real approvals replaces it |
+| Blind LLM-judge acceptance | Circular (the judge reads the same style docs), underpowered at 6 pairs, self-preference bias; the edit rate on real approvals replaces it. Fact graders with a no-plugin arm are a different thing, allowed by 0009 |
 | Recall ≥ 90% routing target | The skill listing is over budget and is not re-injected after compaction; manual invocation plus routing lines is the path |
 | `CLAUDE_CODE_THRIFTY_SONIC=0` | Undocumented internal flag; the report after each push covers Bash-side writes |
 | `skillOverrides` for `mattpocock-skills:code-review` | Plugin skills ignore `skillOverrides`; the plugin stays enabled by the user's choice |

@@ -54,6 +54,18 @@ test("secret shapes and long hex strings are caught under their own rule names",
   assert.deepEqual(rulesOf(scanText("a.env", text, deny)), ["a.env:1 secret", "a.env:2 secret", "a.env:3 long-hex"]);
 });
 
+test("a commit pinned inside a GitHub blob, tree or commit link is not long hex; bare or longer hex and tokens on the line still are", () => {
+  const sha = "0123456789abcdef".repeat(2) + "01234567";
+  const pinned = [
+    `see https://github.com/o/r/blob/${sha}/skills/x/SKILL.md?plain=1#L10-L12`,
+    `pinned: https://github.com/o/r.js/tree/${sha}`,
+    `two github.com/o/r/commit/${sha} and github.com/a/b/blob/${sha}/c.md#L1`,
+  ].join("\n");
+  assert.deepEqual(scanText("card.md", pinned, deny), []);
+  const leaks = [`bare ${sha}`, `github.com/o/r/blob/${sha}${"ab".repeat(12)}/x.md`, `github.com/o/r/blob/${sha}/x.md ${TOKEN}`, `gitlab.com/o/r/blob/${sha}/x.md`].join("\n");
+  assert.deepEqual(rulesOf(scanText("card.md", leaks, deny)), ["card.md:1 long-hex", "card.md:2 long-hex", "card.md:3 secret", "card.md:4 long-hex"]);
+});
+
 test("code that reads or forwards a token is not a secret; a quoted literal, a key header or a cloud key is", () => {
   const code = 'const token = readFileSync(join(homedir(), ".config", "figma", "token"), "utf8").trim();\nheaders: { Authorization: `Bearer ${bearer}` }\nclient_secret=<secret>\n';
   assert.deepEqual(scanText("a.mjs", code, deny), []);
