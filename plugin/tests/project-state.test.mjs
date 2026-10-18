@@ -24,8 +24,18 @@ test("an unknown field or a malformed value is refused", () => {
   const dir = tempDir("tedy-state-");
   assert.throws(() => writeState("alpha", "sessions", "x", dir), /unknown state field "sessions"/);
   assert.throws(() => writeState("alpha", "last_reply_check", "yesterday", dir), /last_reply_check must be an ISO timestamp/);
-  assert.throws(() => writeState("alpha", "learned_until", "2026-10-08T00:00:00Z", dir), /learned_until must be a date/);
+  assert.throws(() => writeState("alpha", "learned_until", "2026-10-07 10:00", dir), /learned_until must be a date \(YYYY-MM-DD\) or an ISO timestamp/);
+  assert.throws(() => writeState("alpha", "learn_held", "2026-10-08T00:00:00Z", dir), /learn_held must be a date/);
   assert.throws(() => writeState("../escape", "learned_until", "2026-10-08", dir), /map name/);
+});
+
+test("the learn marker takes a date or an ISO timestamp, and the nudge marks take a date", () => {
+  const dir = tempDir("tedy-state-");
+  writeState("alpha", "learned_until", "2026-10-07", dir);
+  writeState("alpha", "learned_until", "2026-10-18T13:10:00+07:00", dir);
+  writeState("alpha", "learn_nudged", "2026-10-18", dir);
+  writeState("alpha", "learn_held", "2026-10-18", dir);
+  assert.deepEqual(readState("alpha", dir), { learned_until: "2026-10-18T13:10:00+07:00", learn_nudged: "2026-10-18", learn_held: "2026-10-18" });
 });
 
 test("migrate copies the timestamps a map still carries, skips nulls and never overwrites a newer state", () => {

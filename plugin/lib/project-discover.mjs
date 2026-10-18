@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, relative } from "node:path";
+import { PROJECTS_ROOT, projectSlug } from "./memory-stats.mjs";
 
 const STACK_MARKERS = [
   ["package.json", "node"],
@@ -107,7 +108,7 @@ function markdownFiles(dir, depth = 3, found = []) {
   return found;
 }
 
-export function discover(root, { mergedBases = githubMergedBases, memoryDir = join(homedir(), ".claude", "projects", root.replace(/\//g, "-"), "memory") } = {}) {
+export function discover(root, { mergedBases = githubMergedBases, memoryDir = join(PROJECTS_ROOT, projectSlug(root), "memory") } = {}) {
   const children = readdirSync(root).filter((name) => !SKIP_DIRS.has(name) && !name.startsWith(".")).map((name) => join(root, name));
   const repoDirs = children.filter((dir) => statSync(dir).isDirectory() && isRepository(dir));
   const repos = (repoDirs.length ? repoDirs : isRepository(root) ? [root] : []).map((dir) => describeRepo(root, dir, mergedBases));

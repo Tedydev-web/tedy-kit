@@ -118,3 +118,48 @@ test("a broken profile config is announced at session start, a valid or missing 
   assert.match(configWarning(empty), /config\.json.*every personal gate is on/s);
   assert.match(configWarning(profileWith({ gates: { noComments: "on" } })), /config\.json.*gates\.noComments must be a boolean.*every personal gate stays on/s);
 });
+
+test("the learn line appears on an interactive startup once enough feedback waits, at most once a day and not on a held day", async () => {
+  const { learnNotice, LEARN_THRESHOLD } = await import("../lib/session-hooks.mjs");
+  const base = { feedbackNewer: LEARN_THRESHOLD, since: "2026-10-07", source: "startup", entrypoint: "cli", today: "2026-10-18", nudged: undefined, held: undefined };
+  assert.match(learnNotice(base), /^5 feedback memories since the last \/tedy:learn \(2026-10-07\)\. Tell the user in this reply: run \/tedy:learn/);
+  assert.equal(learnNotice({ ...base, feedbackNewer: LEARN_THRESHOLD - 1 }), "");
+  assert.equal(learnNotice({ ...base, source: "resume" }), "");
+  assert.equal(learnNotice({ ...base, entrypoint: "sdk-cli" }), "");
+  assert.notEqual(learnNotice({ ...base, entrypoint: undefined }), "");
+  assert.equal(learnNotice({ ...base, nudged: "2026-10-18" }), "");
+  assert.equal(learnNotice({ ...base, held: "2026-10-18" }), "");
+  assert.notEqual(learnNotice({ ...base, nudged: "2026-10-17", held: "2026-10-17" }), "");
+  assert.match(learnNotice({ ...base, since: "" }), /\(never\)/);
+});
+
+test("the session-start hook shows the learn line to the user, records the day, and stays quiet for a resume", async () => {
+  const { spawnSync } = await import("node:child_process");
+  const { chmodSync, mkdirSync, readFileSync } = await import("node:fs");
+  const { projectSlug } = await import("../lib/memory-stats.mjs");
+  const scratch = tempDir("tedy-learn-hook-");
+  const home = join(scratch, "home");
+  const profile = join(scratch, "profile");
+  const state = join(scratch, "state");
+  const work = join(scratch, "work");
+  const bin = join(scratch, "bin");
+  const memory = join(home, ".claude", "projects", projectSlug(work), "memory");
+  for (const dir of [join(profile, "projects"), work, bin, memory]) mkdirSync(dir, { recursive: true });
+  writeFileSync(join(profile, "config.json"), "{}");
+  writeFileSync(join(profile, "projects", "shop.md"), `# map\n\n\`\`\`json\n${JSON.stringify({ name: "shop", paths: [work] })}\n\`\`\`\n`);
+  for (let index = 0; index < 5; index += 1) writeFileSync(join(memory, `f${index}.md`), "---\nname: f\nmetadata:\n  type: feedback\n---\n\nx\n");
+  writeFileSync(join(bin, "claude"), "#!/bin/sh\necho '[]'\n");
+  chmodSync(join(bin, "claude"), 0o755);
+  const hook = (source) => spawnSync("node", [new URL("../scripts/session-hooks.mjs", import.meta.url).pathname, "pending-handoffs"], {
+    input: JSON.stringify({ cwd: work, source, session_id: "s-1" }),
+    encoding: "utf8",
+    env: { ...process.env, HOME: home, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: state, PATH: `${bin}:${process.env.PATH}`, CLAUDE_CODE_ENTRYPOINT: "cli", CLAUDE_CODE_PROJECT_DIR_NAME: "" },
+  });
+  const resumed = hook("resume");
+  assert.doesNotMatch(resumed.stdout, /feedback memories/);
+  const started = JSON.parse(hook("startup").stdout);
+  assert.match(started.systemMessage, /5 feedback memories since the last \/tedy:learn \(never\)/);
+  assert.match(started.hookSpecificOutput.additionalContext, /Tell the user in this reply: run \/tedy:learn/);
+  assert.match(JSON.parse(readFileSync(join(state, "projects", "shop.json"), "utf8")).learn_nudged, /^\d{4}-\d{2}-\d{2}$/);
+  assert.doesNotMatch(hook("startup").stdout, /feedback memories/);
+});

@@ -2,10 +2,12 @@ import { closeSync, existsSync, fstatSync, openSync, readSync, statSync } from "
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { listPending, reportsDir } from "./handoff.mjs";
+import { layoutOverride, memoryStats } from "./memory-stats.mjs";
 import { waitingText } from "./pending.mjs";
 import { currentTurn, gateSwitches, logGate, readHookInput, readTranscriptTail, toolUses } from "./hook-io.mjs";
 import { loadConfig, profileDir } from "./profile.mjs";
 import { resolveMap } from "./project-map.mjs";
+import { readState, writeState } from "./project-state.mjs";
 import { listSessions, roleCard, sessionName } from "../gates/role-gate.mjs";
 
 export const PROSE_QUESTION = /(\?\s*$)|(anh (muốn|chọn|có muốn|thấy sao|quyết)|em (làm|tiếp tục|tiến hành)[^.]{0,40}(không|ko)\b|được không|nhé\?)/i;
@@ -164,12 +166,44 @@ export function waitingNotice(map) {
   return text && `Waiting on the user in this project (\`pending.mjs list\` adds draft PRs; \`pending.mjs done <file>\` archives a draft once the publishing tool confirms it):\n${text}`;
 }
 
+export const LEARN_THRESHOLD = 5;
+
+export function learnNotice({ feedbackNewer, since, source, entrypoint, today, nudged, held }) {
+  if (source !== "startup" || (entrypoint && entrypoint !== "cli")) return "";
+  if (nudged === today || held === today || feedbackNewer < LEARN_THRESHOLD) return "";
+  return `${feedbackNewer} feedback memories since the last /tedy:learn (${since || "never"}). Tell the user in this reply: run /tedy:learn when this work allows.`;
+}
+
+const localDate = (date = new Date()) => [date.getFullYear(), date.getMonth() + 1, date.getDate()].map((part) => String(part).padStart(2, "0")).join("-");
+
+function learnLine(input, map) {
+  try {
+    if (input.source !== "startup") return "";
+    const override = layoutOverride();
+    if (override) {
+      logGate({ hook: "pending-handoffs", decision: "learn-notice-unsupported-layout", why: override });
+      return "";
+    }
+    const state = readState(map.name);
+    const stats = memoryStats(map, state.learned_until ?? "");
+    if (stats.memories && !stats.typed) logGate({ hook: "pending-handoffs", decision: "learn-notice-format-drift", memories: stats.memories });
+    const today = localDate();
+    const line = learnNotice({ feedbackNewer: stats.feedbackNewer, since: state.learned_until, source: input.source, entrypoint: process.env.CLAUDE_CODE_ENTRYPOINT, today, nudged: state.learn_nudged, held: state.learn_held });
+    if (line) writeState(map.name, "learn_nudged", today);
+    return line;
+  } catch (error) {
+    logGate({ hook: "pending-handoffs", decision: "learn-notice-skipped", error: error.message });
+    return "";
+  }
+}
+
 function runPendingHandoffs() {
   const input = readHookInput();
   try {
     const resolved = resolveMap(input.cwd ?? process.cwd());
-    const notice = [configWarning(), resolved && sessionRoleCard(input), resolved && pendingNotice(listPending(reportsDir(resolved.map)), fileURLToPath(new URL("../shared/handoff.md", import.meta.url))), resolved && waitingNotice(resolved.map)].filter(Boolean).join("\n\n");
-    if (notice) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: notice } }));
+    const learn = resolved ? learnLine(input, resolved.map) : "";
+    const notice = [configWarning(), resolved && sessionRoleCard(input), resolved && pendingNotice(listPending(reportsDir(resolved.map)), fileURLToPath(new URL("../shared/handoff.md", import.meta.url))), resolved && waitingNotice(resolved.map), learn].filter(Boolean).join("\n\n");
+    if (notice) process.stdout.write(JSON.stringify({ ...(learn && { systemMessage: learn }), hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: notice } }));
   } catch (error) {
     logGate({ hook: "pending-handoffs", decision: "skip-on-error", error: error.message });
   }

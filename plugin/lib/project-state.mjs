@@ -4,9 +4,14 @@ import { pathToFileURL } from "node:url";
 import { STATE_DIR } from "./hook-io.mjs";
 import { loadMaps, PROJECTS_DIR, resolveMap } from "./project-map.mjs";
 
+const isTimestamp = (value) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.test(value) && !Number.isNaN(Date.parse(value));
+const isDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value));
+
 const FIELDS = {
-  last_reply_check: { check: (value) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.test(value) && !Number.isNaN(Date.parse(value)), shape: "an ISO timestamp" },
-  learned_until: { check: (value) => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)), shape: "a date (YYYY-MM-DD)" },
+  last_reply_check: { check: isTimestamp, shape: "an ISO timestamp" },
+  learned_until: { check: (value) => isDate(value) || isTimestamp(value), shape: "a date (YYYY-MM-DD) or an ISO timestamp" },
+  learn_nudged: { check: isDate, shape: "a date (YYYY-MM-DD)" },
+  learn_held: { check: isDate, shape: "a date (YYYY-MM-DD)" },
 };
 
 function stateFile(name, dir) {
