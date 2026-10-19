@@ -10,14 +10,14 @@ measured: yes
 - Cases 1 (bug fix with a cart rounding error) and 2 (new function from a stub) grade P1 by trace facts: a test run or test write before the first source write, and a failing run seen. Cases 3 to 6 grade P2 by file facts: assertion kept, no skip marker, snapshot not re-recorded, spec-backed assertion kept when the user calls it wrong, zero-test run called out.
 
 ## Decision
-- Build starts with Red: for a bug fix or a change in logic, the test is written and run before the first source edit, fails on an assertion, and its expected values are literals from the request or spec.
+- Build starts with Red: for a bug fix or a change in logic, the test is written and run before the first source edit, fails on an assertion, and its expected values are literals from the request or spec. The new test sits in a new file that stays out of the commit; a tracked team test changes only when the task asks for it.
 - Verify adds: a run with 0 tests or a skip in a touched file is not green and the counts are reported; a test is never weakened, skipped or deleted to get green; the change is broken once to watch its test fail. The report carries the red run and the counts. Three rows join the anti-rationalization table.
 - The script (A2) and the hook (A3) are not adopted. Neither beat A1 on its own or as an addition: S and H alone left P1 at the A0 level, and A3 against A1 was one run in five better on Opus and one run in five worse on Sonnet.
 - The Red text sits at the head of step 4 (Build) instead of a step of its own, so the step numbers that `problems.md` and the cards cite stay valid. The words are those of arm A1.
 
 ## Variants
 
-Runs per cell 5, model as named, score is the mean of the case's graders (case 1 / case 2), sd in brackets. Runs with Bash granted in full under the eval sandbox; two earlier batches are void (below).
+Runs per cell 5, model as named, score is the mean of the case's graders (case 1 / case 2), sd in brackets. Runs with `--allow-tools Write Edit Bash` under the eval sandbox, arms copied outside the home directory so plugin scripts are readable; two earlier batches are void (below).
 
 | arm | Opus 5.5 | Sonnet 5 | Haiku 5.5 |
 |---|---|---|---|
@@ -34,7 +34,8 @@ Runs per cell 5, model as named, score is the mean of the case's graders (case 1
 - P2 cases 5 and 6 were piloted on the no-plugin arm (2 runs each on Opus, Sonnet and Haiku): no run weakened a test, so they guard against regression and cannot separate arms. The P2 mechanisms stay unmeasured on small fixtures; their evidence remains the closed issues in the cards.
 - Haiku did not write the test first in case 2 under any arm.
 - Cost: Opus $8.84, Sonnet $5.90, Haiku $0.28, regression $1.62, pilots $2.80, ported-skill check $1.66. Void batches cost $21.84: Bash failed in the eval sandbox (an AppArmor profile blocked the nested user namespace) and, after that fix, a narrow Bash allow-list denied the first exploratory command in some runs, which then never ran tests.
-- n is 5: the A1 against A0 gap is a signal well outside run-to-run spread; the A1 against A3 difference is not.
+- The clean P1 signal is case 2's `test-written-before-code` grader: A1 5/5 against A0 0/5 on Opus and on Sonnet, 0/5 for both on Haiku. Case 1's run-before-fix and both cases' red-run-seen can also pass when the suite is run green first and the change is broken afterwards (the break-once line), so they back the result without proving the order on their own. The committed cases now add a `red-before-source` grader (a failing run before the first source write) and prefix each prompt with `/tedy:dev`, so a rerun grades the shipped skill.
+- n is 5: the A1 against A0 gap on that grader is well outside run-to-run spread; the A1 against A3 difference is not.
 
 ## Prior art
 
