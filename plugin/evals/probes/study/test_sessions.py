@@ -229,6 +229,9 @@ class PilotAndFreezeRunTest(SessionBase):
         self.assertEqual((pilot_rows(canon), session_a(canon)["cli"], primary["model"], fallback["model"], [o["model"] for o in also]),
                          (20, "claude", "gemini-3.8-flash-high", "claude-sonnet-4-6", ["gpt-oss-120b-medium"]))
         self.assertEqual({s: r["stop_row"] for s, r in canon["strata"].items()}, {"config": None, "product": None, "local": None})
+        from datetime import date
+        from study_session_prompt import sweep_date
+        self.assertEqual(sweep_date(canon), date(2026, 10, 19))
 
     def test_a_session_option_without_a_cli_is_refused(self):
         from study_topic import session_a
