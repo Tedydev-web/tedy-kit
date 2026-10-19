@@ -36,15 +36,16 @@ class Fetch:
         return out, status, round(time.time() - started, 1)
 
     def run(self, cmd, timeout=180, cwd=None):
-        for _ in range(self.retries):
+        for attempt in range(1, self.retries + 1):
             out, status, seconds = self._once(cmd, timeout, cwd)
             asked = TRY_AGAIN.search(status)
-            if cmd[0] == "gh" and (asked or "(HTTP 429)" in status):
-                self.sleep(min(MAX_WAIT, math.ceil(float(asked.group(1))) + 1) if asked else 60)
-                continue
-            if cmd[0] != "gh" or not any(word in status.lower() for word in RATE_LIMITED):
+            limited = cmd[0] == "gh" and (asked or "(HTTP 429)" in status or any(word in status.lower() for word in RATE_LIMITED))
+            if not limited or attempt == self.retries:
                 return out, status, seconds
-            self.sleep(self._reset_pause())
+            if asked or "(HTTP 429)" in status:
+                self.sleep(min(MAX_WAIT, math.ceil(float(asked.group(1))) + 1) if asked else 60)
+            else:
+                self.sleep(self._reset_pause())
         return out, status, seconds
 
     def _reset_pause(self):
