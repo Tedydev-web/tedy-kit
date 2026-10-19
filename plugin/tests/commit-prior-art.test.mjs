@@ -43,6 +43,14 @@ test("a repository without a tag fails loudly", () => {
   assert.match(checkCommits(repo)[0].error, /no tag/);
 });
 
+test("a non-version tag after the release tag does not shrink the checked range", () => {
+  const repo = repoWithTag();
+  commit(repo, "feat: add x");
+  git(repo, "tag", "pre-split");
+  commit(repo, "build: y");
+  assert.match(checkCommits(repo).map((problem) => problem.error).join("\n"), /feat: add x: no ADR: or Prior-art: trailer/);
+});
+
 test("feat and fix commits need an ADR or Prior-art trailer; other types do not", () => {
   assert.match(errorsFor("feat: add x").join("\n"), /no ADR: or Prior-art: trailer/);
   assert.match(errorsFor("fix(gate)!: block y").join("\n"), /no ADR: or Prior-art: trailer/);

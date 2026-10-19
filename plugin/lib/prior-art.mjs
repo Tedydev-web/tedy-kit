@@ -153,7 +153,7 @@ export function checkCommits(repo) {
   const git = (...args) => execFileSync("git", ["-C", repo, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   let tag;
   try {
-    tag = git("describe", "--tags", "--abbrev=0").trim();
+    tag = git("describe", "--tags", "--abbrev=0", "--match", "v[0-9]*").trim();
   } catch {
     return [{ commit: "HEAD", error: "no tag reachable from HEAD; the trailer check needs the latest release tag" }];
   }
