@@ -30,6 +30,12 @@ class SweepRecordTest(unittest.TestCase):
         repo = self.repo(strata={"config": {"stop_row": 3, "forced_repos": []}})
         self.assertEqual(self.rows(render(repo, load_topic(repo, "demo"))[0], "config"), ["1", "2", "3", "5"])
 
+    def test_rows_beyond_the_stop_are_the_union_of_both_sessions_minus_the_screened_rows(self):
+        repo = self.repo()
+        text, _ = render(repo, load_topic(repo, "demo"))
+        config = text.split("## Stratum: config\n", 1)[1].split("\n## ", 1)[0]
+        self.assertIn("Screened beyond the stop or outside both sessions: 1 rows", config)
+
     def test_every_topic_stratum_gets_a_section_with_its_capture_recapture_line(self):
         repo = self.repo()
         text, _ = render(repo, load_topic(repo, "demo"))

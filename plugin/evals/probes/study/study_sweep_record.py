@@ -36,7 +36,7 @@ def screen(repo, topic):
                 for rank in e["rows"]:
                     extras.setdefault(rank, set()).add(key)
         ranks = screened_ranks(topic, D, stratum, sides)
-        beyond[stratum] = sorted(set(sides["A"]) | set(sides["B"]) - set(ranks))
+        beyond[stratum] = sorted((set(sides["A"]) | set(sides["B"])) - set(ranks))
         same = cells = 0
         rows = []
         for rank in ranks:

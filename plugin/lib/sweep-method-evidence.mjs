@@ -6,9 +6,9 @@ export const GRANDFATHERED = new Map([
   [
     "261018-dev",
     {
-      sha256: "483dde203f92ed120898e29bec196db5f1a888c46ac46b467f9c990e4d2484b3",
+      sha256: "78017595bbf005285b23eb2302c3f647f0b87c46940c86549a4c6a71538d1b47",
       reason:
-        "screened on 2026-10-18 under quality-criteria-v2, before the 2026-10-19 method fixes: it has no frozen protocol, no per-session model record, no recall at the cut, kappa or calibration sample, and no stop row written by the toolchain; its record stays byte-identical because ADR 0010 and problems-canon.md cite its rows",
+        "screened on 2026-10-18 under quality-criteria-v2, before the 2026-10-19 method fixes: it has no frozen protocol, no per-session model record, no recall at the cut, kappa or calibration sample, and no stop row written by the toolchain; its rows stay unchanged because ADR 0010 and problems-canon.md cite them, and on 2026-10-19 only its two 'screened beyond the stop' counts were corrected (config 118 to 0, product 140 to 70) after an operator-precedence bug in the renderer",
     },
   ],
 ]);

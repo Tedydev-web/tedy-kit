@@ -125,6 +125,7 @@ test("the dev sweep is grandfathered by name and record hash with its reason; an
   const dev = readFileSync(join(REPO, "docs", "prior-art", "sweeps", "261018-dev.md"), "utf8");
   const exemption = evidence.GRANDFATHERED.get("261018-dev");
   assert.match(exemption.reason, /before the 2026-10-19 method fixes: it has no frozen protocol/);
+  assert.match(exemption.reason, /on 2026-10-19 only its two .screened beyond the stop. counts were corrected/);
   assert.match(exemption.sha256, /^[0-9a-f]{64}$/);
   assert.deepEqual(evidence.sweepMethodErrors(REPO, "261018-dev.md", dev), []);
   assert.match(evidence.sweepMethodErrors(REPO, "261018-dev.md", dev.replace("target 0.90", "target 0.85")).join("\n"), /no ## Protocol section/);
