@@ -65,15 +65,13 @@ def screened_ranks(topic, folder, stratum, sides):
     return sorted(r for r in set(sides["A"]) & set(sides["B"]) if r <= stop or r in forced or r > SNOWBALL_RANK_BASE)
 
 
-def render(repo, topic):
-    repo = Path(repo)
+def screen(repo, topic):
     D = sweep_folder(repo, topic)
-    name = topic["sweep"]
-    meta, study, surface = read_json(D, "meta.json"), read_json(D, "study.json"), read_json(D, "surface-map.json")
+    study = read_json(D, "study.json")
     table = MechanismTable(read_json(D, "mechanism-table.json"))
     strata = list(topic["strata"])
     studied = {k.lower(): v for k, v in study["study"].items()}
-    out_rows, differing, agreement, coded, beyond, capture = {}, [], {}, set(), {}, {}
+    out_rows, differing, agreement, coded, beyond, capture, decided = {}, [], {}, set(), {}, {}, {}
     for stratum in strata:
         mapping = read_json(D, f"{stratum}-mechanism-map.json")
         adjudication = read_json(D, f"{stratum}-adjudication.json")
@@ -120,9 +118,21 @@ def render(repo, topic):
             commit = sides["A"][rank].get("commit") or sides["B"][rank].get("commit") or "-"
             names = ", ".join(sorted(m.split(":", 1)[1] for m in mechs)) or "-"
             rows.append(f"| {rank} | {repo_name} | {commit} | {score} | {decision} | {names} | {reason.replace('|', '/')} |")
+            issues = set(sides["A"][rank].get("issues") or []) | set(sides["B"][rank].get("issues") or [])
+            decided.setdefault(stratum, []).append({"rank": rank, "repo": repo_name, "decision": decision, "mechs": mechs, "session_mechs": a["mechs"] | b["mechs"], "issues": issues})
         out_rows[stratum] = rows
         agreement[stratum] = (same, cells)
+    return {"folder": D, "study": study, "table": table, "strata": strata, "rows": out_rows, "differing": differing, "agreement": agreement,
+            "coded": coded, "beyond": beyond, "capture": capture, "decided": decided}
 
+
+def render(repo, topic):
+    repo = Path(repo)
+    s = screen(repo, topic)
+    D, study, table, strata, coded, differing = s["folder"], s["study"], s["table"], s["strata"], s["coded"], s["differing"]
+    out_rows, agreement, beyond, capture = s["rows"], s["agreement"], s["beyond"], s["capture"]
+    name = topic["sweep"]
+    meta, surface = read_json(D, "meta.json"), read_json(D, "surface-map.json")
     surfaced = list(surface["considered"].values()) + list(surface["outside the inventory"].values())
     missing_surface = sorted(m for m in coded if table.kind(m) != "evidence" and not any(m in v for v in surfaced))
     criteria_hash = hashlib.sha256((repo / meta["criteria"]).read_bytes()).hexdigest()[:16]
