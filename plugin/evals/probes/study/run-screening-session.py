@@ -7,6 +7,7 @@ from pathlib import Path
 from study_fetch import Fetch, NetworkRefused
 from study_protocol import FREEZE_FILE
 from study_session import model_family, run_block
+from study_session_prompt import required_sweep_date
 from study_topic import TopicError, load_topic, require_screened, saigon_today, session_a, session_b, topic_arguments
 
 
@@ -80,7 +81,8 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
             criteria, frozen, option, name, reason = screen_job(args.work, args.stratum, args.side, which)
             key = f"{args.stratum}-{args.side}"
         job = {"work": args.work, "repo": args.repo, "stratum": args.stratum, "name": name, "key": key, "option": option, "criteria": criteria, "frozen": frozen,
-               "pilot": args.pilot, "fallback_reason": reason, "bare": bool(environ.get("ANTHROPIC_API_KEY")), "first": int(first), "last": int(last), "today": args.today}
+               "pilot": args.pilot, "fallback_reason": reason, "bare": bool(environ.get("ANTHROPIC_API_KEY")), "first": int(first), "last": int(last), "today": args.today,
+               "sweep_date": required_sweep_date(topic)}
         rows = run_block(job, fetch or Fetch())
         print(f"{name}: {rows} rows from {option['cli']} {option['model']} (family {model_family(option['model'])})")
     except (TopicError, NetworkRefused) as error:

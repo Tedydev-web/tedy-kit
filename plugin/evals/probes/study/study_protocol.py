@@ -4,6 +4,7 @@ from pathlib import Path
 
 from study_agreement import KAPPA_CRITERIA, session_kappas
 from study_screening_core import MechanismTable, derive, read_jsonl
+from study_session_prompt import TEMPLATE_SHA256
 from study_topic import TopicError, pilot_rows, screened_strata, session_a, session_b
 
 FREEZE_FILE = "protocol-freeze.json"
@@ -81,7 +82,7 @@ def freeze(topic, repo, work, criteria, today, amendment=None):
             raise TopicError(f"no {stratum}-pilot-A.jsonl in {work}; session A screens the pilot block first")
         ranks[stratum] = pilot_ranks(order, size)
         strata[stratum] = {"frozen_after_rank": ranks[stratum][-1], "pilot_rows": len(ranks[stratum]), "packet": packet.name,
-                           "criteria_sha256": sha256_file(repo / criteria), "packet_sha256": sha256_file(packet), "date": today}
+                           "criteria_sha256": sha256_file(repo / criteria), "packet_sha256": sha256_file(packet), "template_sha256": TEMPLATE_SHA256, "date": today}
     primary, fallback, also = session_b(topic)
     ran = [o for o in [primary, fallback, *also] if o and all((work / f"{s}-pilot-B-{o['model']}.jsonl").is_file() for s in strata)]
     if primary in ran:

@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from study_fixtures import HERE, screen_row, script, topic_repo, write_json, write_jsonl
+from study_session_prompt import REPLY_FORMAT, ROWS_NOTE, TEMPLATE_SHA256
 from study_topic import load_topic, sweep_folder
 
 CRITERIA = "docs/prior-art/quality-criteria-v2.md"
@@ -55,8 +56,12 @@ class FreezeTest(unittest.TestCase):
         result = self.run_freeze()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.frozen()["strata"]["config"], {"frozen_after_rank": 3, "pilot_rows": 2, "packet": "screening-packet-config.md",
-                                                             "criteria_sha256": sha((self.repo / CRITERIA).read_bytes()), "packet_sha256": sha(b"packet\n"), "date": "2026-10-20"})
+                                                             "criteria_sha256": sha((self.repo / CRITERIA).read_bytes()), "packet_sha256": sha(b"packet\n"),
+                                                             "template_sha256": TEMPLATE_SHA256, "date": "2026-10-20"})
         self.assertEqual(list(self.frozen()["strata"]), ["config"])
+
+    def test_the_template_digest_covers_the_row_note_and_the_reply_format(self):
+        self.assertEqual(TEMPLATE_SHA256, sha((ROWS_NOTE + "\n\n" + REPLY_FORMAT).encode()))
 
     def test_session_b_is_the_configured_model_even_when_another_agrees_more_with_a(self):
         self.assertEqual(self.run_freeze().returncode, 0)

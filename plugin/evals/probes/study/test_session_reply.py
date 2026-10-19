@@ -35,8 +35,11 @@ class ReplyTextTest(unittest.TestCase):
         self.refused(CLAUDE, json.dumps({"num_turns": 1, "permission_denials": [], "modelUsage": {"claude-opus-4-8": {}}}), "ok", r"served \['claude-opus-4-8'\], not the requested")
         self.refused(AGY, agy_stream(None, "agent_response"), "ok", "holds no result event")
         self.refused(AGY, agy_stream({"status": "ERROR", "num_turns": 1, "response": ""}), "ok", "status ERROR")
-        self.refused(AGY, agy_stream({"status": "SUCCESS", "num_turns": 1, "response": "x"}, "tool", "agent_response"), "ok", "1 tool steps, denied actions None; a screening session has no tools")
-        self.refused(AGY, agy_stream({"status": "SUCCESS", "num_turns": 1, "response": "", "denied_actions": [{"permission": "mcp"}]}), "ok", "0 tool steps, denied actions")
+        self.refused(AGY, agy_stream({"status": "SUCCESS", "num_turns": 1, "response": "x"}, "tool", "agent_response"), "ok",
+                     r"step types \['tool'\] beyond user_input and agent_response, denied actions None; a screening session has no tools")
+        for unknown in ("planner_response", "browser_action", "None"):
+            self.refused(AGY, agy_stream({"status": "SUCCESS", "num_turns": 1, "response": "x"}, unknown, "agent_response"), "ok", f"step types \\['{unknown}'\\]")
+        self.refused(AGY, agy_stream({"status": "SUCCESS", "num_turns": 1, "response": "", "denied_actions": [{"permission": "mcp"}]}), "ok", r"step types \[\] beyond .*denied actions \[")
         self.refused(AGY, agy_stream({"status": "SUCCESS", "num_turns": 2, "response": "x"}, "agent_response"), "ok", "2 turns; a screening session answers in one turn")
 
     def test_a_clean_reply_returns_the_text_and_what_served_it(self):
@@ -53,6 +56,15 @@ class ParseReplyTest(unittest.TestCase):
         self.assertEqual([r["sha"] for r in rows], ["c" * 40, "d" * 40])
         _, _, problems = parse_reply("{\"x\": 1}\n" + row(2, "o/two"), EXPECTED)
         self.assertEqual(problems, ["row None was not asked for", "rank 1 missing from the reply"])
+
+    def test_json_booleans_are_neither_ranks_nor_scores(self):
+        from study_session_reply import parse_reply
+        expected = {1: EXPECTED[1]}
+        _, _, problems = parse_reply(json.dumps({"order_rank": True, "repo": "o/one", "scores": CELLS, "mechanisms": [], "decision": "eligible"}), expected)
+        self.assertEqual(problems, ["row True was not asked for", "rank 1 missing from the reply"])
+        true_cells = {**CELLS, "Position": {"v": True, "why": "w"}}
+        _, _, problems = parse_reply(json.dumps({"order_rank": 1, "repo": "o/one", "scores": true_cells, "mechanisms": [], "decision": "eligible"}), expected)
+        self.assertEqual(problems, ["rank 1 lacks a 1 / 0.5 / 0 score for every cell"])
 
 
 if __name__ == "__main__":

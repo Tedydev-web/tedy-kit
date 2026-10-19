@@ -4,6 +4,7 @@ import re
 from study_topic import TopicError
 
 CELLS = ("Authority", "Methodology", "Objectivity", "Date", "Position", "Novelty", "Relevance")
+AGY_STEPS = {"user_input", "agent_response"}
 MECHANISM = re.compile(r"^mechanism: ([a-z0-9]+(?:-[a-z0-9]+)*): (\S.*)$")
 
 
@@ -43,25 +44,26 @@ def agy_reply(where, out):
     if not results:
         raise TopicError(f"{where}: the stream-json reply holds no result event")
     result = results[-1]
-    tools = {e["step_update"].get("step_index") for e in events if e.get("event") == "step_update" and isinstance(e.get("step_update"), dict)
-             and e["step_update"].get("step_type") == "tool"}
+    steps = [e.get("step_update") for e in events if e.get("event") == "step_update"]
+    other = sorted({str(s.get("step_type")) if isinstance(s, dict) else repr(s) for s in steps} - AGY_STEPS)
     if result.get("status") != "SUCCESS":
         raise TopicError(f"{where}: status {result.get('status')}")
-    if tools or result.get("denied_actions"):
-        raise TopicError(f"{where}: {len(tools)} tool steps, denied actions {str(result.get('denied_actions'))[:200]}; a screening session has no tools")
+    if other or result.get("denied_actions"):
+        raise TopicError(f"{where}: step types {other} beyond user_input and agent_response, denied actions {str(result.get('denied_actions'))[:200]}; "
+                         "a screening session has no tools")
     if result.get("num_turns") != 1:
         raise TopicError(f"{where}: {result.get('num_turns')} turns; a screening session answers in one turn")
     return result.get("response") or ""
 
 
 def row_problems(row, expected):
-    if not isinstance(row.get("order_rank"), int) or row["order_rank"] not in expected:
+    if type(row.get("order_rank")) is not int or row["order_rank"] not in expected:
         return [f"row {row.get('order_rank')!r} was not asked for"]
     rank, problems = row["order_rank"], []
     if str(row.get("repo", "")).lower() != expected[rank]["repo"].lower():
         problems.append(f"rank {rank} names {row.get('repo')!r}, not {expected[rank]['repo']}")
     scores = row.get("scores")
-    if not isinstance(scores, dict) or any(not isinstance(scores.get(c), dict) or scores[c].get("v") not in (0, 0.5, 1) for c in CELLS):
+    if not isinstance(scores, dict) or any(not isinstance(scores.get(c), dict) or type(scores[c].get("v")) is bool or scores[c].get("v") not in (0, 0.5, 1) for c in CELLS):
         problems.append(f"rank {rank} lacks a 1 / 0.5 / 0 score for every cell")
     if not isinstance(row.get("mechanisms"), list) or not all(isinstance(m, str) for m in row["mechanisms"]):
         problems.append(f"rank {rank} has no mechanisms list")

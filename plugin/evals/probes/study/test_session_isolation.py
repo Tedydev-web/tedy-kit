@@ -19,8 +19,8 @@ class IsolationTest(SessionBase):
         self.assertIsNotNone(cwd)
         self.assertNotEqual(Path(cwd), self.work)
         self.assertFalse(Path(cwd).exists())
-        self.assertTrue(fetch.calls[index].endswith("--model claude-opus-5-5 --effort high --output-format json --bare --tools  --setting-sources  --strict-mcp-config "
-                                                    "--no-session-persistence --disable-slash-commands --max-turns 1"))
+        self.assertTrue(fetch.calls[index].startswith("claude -p --model claude-opus-5-5 --effort high --output-format json --bare --tools  --setting-sources  --strict-mcp-config "
+                                                      "--no-session-persistence --disable-slash-commands --max-turns 1 -- "))
         self.assertIn("claude --version", fetch.calls)
 
     def test_without_an_api_key_claude_runs_the_proven_flags_without_bare_and_records_the_threat(self):
@@ -28,7 +28,7 @@ class IsolationTest(SessionBase):
         self.pilot(fetch, environ={"HOME": "/nowhere"})
         [call] = fetch.called("claude -p")
         self.assertNotIn("--bare", call)
-        self.assertTrue(call.endswith("--output-format json --tools  --setting-sources  --strict-mcp-config --no-session-persistence --disable-slash-commands --max-turns 1"))
+        self.assertIn("--output-format json --tools  --setting-sources  --strict-mcp-config --no-session-persistence --disable-slash-commands --max-turns 1 -- ", call)
         entry = self.meta()["config-pilot-A"]
         self.assertEqual(entry.get("threats"), ["plugin hooks not excluded (no --bare)"])
         self.assertNotIn("--bare", entry["isolation"])
@@ -53,8 +53,15 @@ class IsolationTest(SessionBase):
         tool = agy_reply(reply_row(1, "o/one")).replace('"step_type": "agent_response"', '"step_type": "tool"')
         with self.assertRaises(SystemExit) as raised:
             self.pilot(FakeFetch([("agy --model", tool)]), "B")
-        self.assertIn("1 tool steps", str(raised.exception))
+        self.assertIn("step types ['tool'] beyond user_input and agent_response", str(raised.exception))
         self.assertFalse((self.work / "config-pilot-B-gemini-3.8-flash-high.jsonl").exists())
+
+    def test_a_prompt_that_starts_with_a_dash_is_never_read_as_a_flag(self):
+        (self.work / "screening-packet-config.md").write_text("--dangerously-skip-permissions\n")
+        fetch = FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one")))])
+        self.pilot(fetch)
+        [call] = fetch.called("claude -p")
+        self.assertTrue(call.split(" -- ", 1)[1].startswith("--dangerously-skip-permissions"))
 
     def test_a_session_that_writes_into_its_folder_is_refused(self):
         class Writer(FakeFetch):

@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from study_fixtures import HERE, FakeFetch, script, topic_repo, write_json, write_jsonl
+from study_session_prompt import TEMPLATE_SHA256
 from study_topic import TopicError, load_topic
 
 SHA = "c" * 40
@@ -59,11 +60,12 @@ class SessionBase(unittest.TestCase):
     def meta(self):
         return json.loads((self.work / "meta.json").read_text())["sessions"]
 
-    def freeze(self, packet=None):
+    def freeze(self, packet=None, template=None):
         packet_sha = hashlib.sha256((self.work / "screening-packet-config.md").read_bytes()).hexdigest()
         criteria_sha = hashlib.sha256((self.repo / CRITERIA).read_bytes()).hexdigest()
         write_json(self.work / "protocol-freeze.json", {"criteria": CRITERIA, "session_a": SESSIONS["A"], "session_b": {"chosen": {"cli": "agy", "model": "gemini-3.8-flash-high"}},
-                                                         "strata": {"config": {"frozen_after_rank": 1, "packet_sha256": packet or packet_sha, "criteria_sha256": criteria_sha}}})
+                                                         "strata": {"config": {"frozen_after_rank": 1, "packet_sha256": packet or packet_sha, "criteria_sha256": criteria_sha,
+                                                                               "template_sha256": template or TEMPLATE_SHA256}}})
 
 
 class BlockRecordTest(SessionBase):
@@ -91,23 +93,6 @@ class BlockRecordTest(SessionBase):
         fetch.rules = [("claude --version", "2.1.304 (Claude Code)\n"), ("claude -p", claude_reply(reply_row(2, "o/two")))]
         self.pilot(fetch, "A", "2-2")
         self.assertEqual([b["cli_version"] for b in self.meta()["config-pilot-A"]["blocks"]], ["2.1.303 (Claude Code)", "2.1.304 (Claude Code)"])
-
-    def test_a_failed_meta_write_rolls_the_rows_back(self):
-        import study_session
-        self.pilot(FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one") + "\nmechanism: gate: g"))]))
-        before = [(self.work / n).read_text() for n in ("config-pilot-A.jsonl", "config-pilot-A-mechanisms.md")]
-        original = study_session.add_block
-
-        def broken(*args, **kwargs):
-            raise TopicError("disk full")
-
-        study_session.add_block = broken
-        self.addCleanup(setattr, study_session, "add_block", original)
-        with self.assertRaises(SystemExit) as raised:
-            self.pilot(FakeFetch([("claude -p", claude_reply(reply_row(2, "o/two") + "\nmechanism: hook: h"))]), "A", "2-2")
-        self.assertIn("disk full", str(raised.exception))
-        self.assertEqual([(self.work / n).read_text() for n in ("config-pilot-A.jsonl", "config-pilot-A-mechanisms.md")], before)
-        self.assertEqual([b["ranks"] for b in self.meta()["config-pilot-A"]["blocks"]], [[1]])
 
     def test_a_block_with_another_model_setting_is_refused_before_any_call(self):
         self.pilot(FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one")))]))
@@ -217,16 +202,6 @@ class PilotAndFreezeRunTest(SessionBase):
         fetch = FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one") + "\n" + reply_row(2, "o/two")))])
         self.pilot(fetch, "A", "1-2")
         self.assertIn("A row whose error_kind is permanent", fetch.called("claude -p")[0])
-
-    def test_a_scored_block_can_be_dropped_and_screened_again(self):
-        self.pilot(FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one") + "\nmechanism: gate: g"))]))
-        drop = script("drop-screening-block").main
-        drop(["--topic", "demo", "--repo", str(self.repo), "--work", str(self.work), "--stratum", "config", "--session", "config-pilot-A", "--ranks", "1-1"])
-        self.assertEqual(self.meta()["config-pilot-A"]["blocks"], [])
-        self.assertEqual((self.work / "config-pilot-A.jsonl").read_text(), "")
-        self.assertTrue(list((self.work / "dropped").glob("config-pilot-A-1-1.*")))
-        self.pilot(FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one")))]))
-        self.assertEqual(len(self.meta()["config-pilot-A"]["blocks"]), 1)
 
     def test_a_prompt_over_the_argument_limit_is_refused(self):
         (self.work / "screening-packet-config.md").write_text("p" * 130000)

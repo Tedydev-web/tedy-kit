@@ -9,6 +9,7 @@ from pathlib import Path
 
 from study_screening_core import read_jsonl
 from study_screening_input import inputs_file
+from study_session_prompt import TEMPLATE_SHA256, build_prompt, with_computed_date
 from study_session_reply import parse_reply, reply_text
 from study_topic import TopicError
 
@@ -19,16 +20,6 @@ AGY_THREAT = "agy MCP servers, hooks and user settings not excluded"
 CLAUDE_ISOLATION = ("--tools", "", "--setting-sources", "", "--strict-mcp-config", "--no-session-persistence", "--disable-slash-commands", "--max-turns", "1")
 AGY_ISOLATION = ("--disable-slash-commands",)
 SESSION_FIELDS = ("cli", "model", "effort", "isolation", "served")
-ROWS_NOTE = ("Each row below is one JSON object: the pinned commit, the repository facts from discovery, the top-level listing, the README excerpt, up to two asset files "
-             "read at that commit, and the evidence the anchors score on (releases, tags, published packages, the owner's public repositories, workflows, test paths, "
-             "the CHANGELOG head). Score only from these inputs; you have no tools. A row whose error_kind is permanent could not be read because the repository or "
-             "commit is gone: code it dead.")
-REPLY_FORMAT = ("## Reply format\n\nReply with nothing but these lines. One JSON object per row, on one line, in order_rank order, with the fields order_rank, repo, file, "
-                "scores (an object of the seven cells Authority, Methodology, Objectivity, Date, Position, Novelty, Relevance, each {\"v\": 1 | 0.5 | 0, \"why\": \"...\"}), "
-                "mechanisms (names), new (true when a mechanism is new to you), decision (eligible, or exclude: <code>) and note. Then one line per mechanism you name "
-                "for the first time: mechanism: <kebab-case-name>: <one-line definition>.")
-
-
 def model_family(model):
     return re.split(r"[-.]", model.lower(), maxsplit=1)[0]
 
@@ -53,7 +44,7 @@ def isolation(cli, bare):
 def session_command(option, prompt, bare):
     if option["cli"] == "claude":
         effort = ["--effort", option["effort"]] if option.get("effort") else []
-        return ["claude", "-p", prompt, "--model", option["model"], *effort, "--output-format", "json", *claude_flags(bare)]
+        return ["claude", "-p", "--model", option["model"], *effort, "--output-format", "json", *claude_flags(bare), "--", prompt]
     return ["agy", "--model", option["model"], "--output-format", "stream-json", "--print-timeout", AGY_TIMEOUT, *AGY_ISOLATION, "--print", prompt]
 
 
@@ -64,23 +55,42 @@ def session_header(option, bare):
     return {"cli": option["cli"], "model": option["model"], "effort": effort, "isolation": isolation(option["cli"], bare), "served": served, "threats": threats}
 
 
-def build_prompt(packet, criteria_path, criteria_text, mechanisms_text, rows):
-    blocks = ["```json\n" + json.dumps(r, ensure_ascii=False) + "\n```" for r in rows]
-    parts = [packet.rstrip(), f"## Criteria ({criteria_path})", criteria_text.rstrip(), "## Your mechanism names so far", mechanisms_text.strip() or "none yet",
-             "## Rows", ROWS_NOTE, *blocks, REPLY_FORMAT]
-    return "\n\n".join(parts) + "\n"
-
-
-def update_sessions(work, change):
+def update_sessions(work, change, undo=None):
     meta_file = Path(work) / "meta.json"
     with open(Path(work) / "meta.json.lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        meta = json.loads(meta_file.read_text()) if meta_file.is_file() else {}
-        result = change(meta.setdefault("sessions", {}))
-        temporary = meta_file.with_name(f"meta.json.{os.getpid()}.tmp")
-        temporary.write_text(json.dumps(meta, indent=1, ensure_ascii=False) + "\n")
-        os.replace(temporary, meta_file)
+        try:
+            meta = json.loads(meta_file.read_text()) if meta_file.is_file() else {}
+            result = change(meta.setdefault("sessions", {}))
+            temporary = meta_file.with_name(f"meta.json.{os.getpid()}.tmp")
+            temporary.write_text(json.dumps(meta, indent=1, ensure_ascii=False) + "\n")
+            os.replace(temporary, meta_file)
+        except BaseException:
+            if undo:
+                undo()
+            raise
     return result
+
+
+def append_lines(files):
+    sizes = {path: path.stat().st_size if path.is_file() else None for path in files}
+
+    def undo():
+        for path, size in sizes.items():
+            if size is None:
+                path.unlink(missing_ok=True)
+            else:
+                with path.open("r+") as handle:
+                    handle.truncate(size)
+
+    try:
+        for path, text in files.items():
+            with path.open("a") as out:
+                out.write(text)
+    except BaseException:
+        undo()
+        raise
+    return undo
 
 
 def check_header(sessions, key, header, ranks):
@@ -130,8 +140,8 @@ def run_block(job, fetch):
         raise TopicError(f"no {packet.name} in {work}")
     hashes = {"packet_sha256": sha256_bytes(packet.read_bytes()), "criteria_sha256": sha256_bytes(criteria.read_bytes())}
     frozen = job.get("frozen")
-    if frozen and any(frozen[k] != v for k, v in hashes.items()):
-        raise TopicError(f"{stratum}: the criteria or {packet.name} differ from the freeze; no session runs on a changed protocol")
+    if frozen and any(frozen.get(k) != v for k, v in {**hashes, "template_sha256": TEMPLATE_SHA256}.items()):
+        raise TopicError(f"{stratum}: the criteria, {packet.name} or the prompt template differ from the freeze; no session runs on a changed protocol")
     version, status, _ = fetch.run([option["cli"], "--version"], timeout=60)
     if status != "ok":
         raise TopicError(f"{option['cli']} --version: {status}")
@@ -144,7 +154,7 @@ def run_block(job, fetch):
             shutil.copyfile(packet, snapshot)
     mech_file = work / f"{name}-mechanisms.md"
     known = mech_file.read_text() if mech_file.is_file() else ""
-    prompt = build_prompt(packet.read_text(), job["criteria"], criteria.read_text(), known, list(expected.values()))
+    prompt = build_prompt(packet.read_text(), job["criteria"], criteria.read_text(), known, list(expected.values()), job["sweep_date"])
     if len(prompt.encode()) > MAX_PROMPT:
         raise TopicError(f"the prompt for ranks {job['first']}-{job['last']} is {len(prompt.encode())} bytes, over {MAX_PROMPT}; run a smaller block")
     prompts = work / "prompts"
@@ -153,6 +163,7 @@ def run_block(job, fetch):
     (prompts / f"{stem}.md").write_text(prompt)
     text, served = reply_text(option, *call_isolated(fetch, session_command(option, prompt, job["bare"])))
     rows, mechanisms, problems = parse_reply(text, expected)
+    rows = [with_computed_date(r, expected[r["order_rank"]], job["sweep_date"]) for r in rows]
     if problems:
         (prompts / f"{stem}.response.txt").write_text(text)
         raise TopicError(f"{name} ranks {job['first']}-{job['last']}: {'; '.join(problems)}; reply kept in prompts/{stem}.response.txt, nothing written")
@@ -163,21 +174,13 @@ def run_block(job, fetch):
             fresh.append(f"{n}: {d}\n")
     block = {"ranks": list(expected), **hashes, "prompt_sha256": sha256_bytes(prompt.encode()), "inputs_sha256": canonical_sha256(list(expected.values())),
              "row_sha256": {str(r): canonical_sha256(row) for r, row in expected.items()}, "cli_version": cli_version, "date": job["today"],
+             "mechanisms_added": [line.split(":", 1)[0] for line in fresh],
              **({"served_models": served} if served else {}), **({"fallback_reason": job["fallback_reason"]} if job.get("fallback_reason") else {})}
-    rows_file = work / f"{name}.jsonl"
-    sizes = {f: f.stat().st_size if f.is_file() else None for f in (rows_file, mech_file)}
-    try:
-        with rows_file.open("a") as out:
-            out.write("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
-        with mech_file.open("a") as out:
-            out.write("".join(fresh))
-        update_sessions(work, lambda sessions: add_block(sessions, job["key"], header, block))
-    except BaseException:
-        for path, size in sizes.items():
-            if size is None:
-                path.unlink(missing_ok=True)
-            else:
-                with path.open("r+") as handle:
-                    handle.truncate(size)
-        raise
+    undo = []
+
+    def commit(sessions):
+        add_block(sessions, job["key"], header, block)
+        undo.append(append_lines({work / f"{name}.jsonl": "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), mech_file: "".join(fresh)}))
+
+    update_sessions(work, commit, lambda: undo and undo[0]())
     return len(rows)
