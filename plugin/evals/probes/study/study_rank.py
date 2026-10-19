@@ -98,7 +98,10 @@ class Ranker:
 
 
 def contract_path(evidence, prefixes):
-    return next((evidence[len(p):] for p in prefixes if evidence.startswith(p)), evidence)
+    known = next((evidence[len(p):] for p in prefixes if evidence.startswith(p)), None)
+    if known is not None:
+        return known
+    return evidence.split(": ", 1)[1] if evidence.startswith("code ") and ": " in evidence else evidence
 
 
 def rank_product(pool_rows, terms, code_queries=()):

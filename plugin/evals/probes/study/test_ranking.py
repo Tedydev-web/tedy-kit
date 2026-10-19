@@ -66,11 +66,11 @@ class RankerTest(unittest.TestCase):
 
     def test_product_contract_files_are_the_distinct_paths_the_code_search_hit(self):
         pool = [{"repo": "o/lint", "evidence": {"code": ["code SKILL.md lint extension:ts: src/a.ts", "code SKILL.md validate extension:ts: src/a.ts",
-                                                         "code plugin.json schema extension:js: lib/b.js", "code SKILL.md lint extension:ts: docs/a: b.md"]},
+                                                         "code plugin.json schema extension:js: lib/b.js", "code SKILL.md lint extension:ts: docs/a: b.md", "code retired query extension:py: src/c.py"]},
                  "description": "", "stars": 1, "created": "2026-01-01T0", "pushed": "2026-02-01T0", "archived": False, "fork": False}]
         queries = ["SKILL.md lint extension:ts", "SKILL.md validate extension:ts", "plugin.json schema extension:js"]
         row = rank_product(pool, ["tdd"], queries)["rows"][0]
-        self.assertEqual((row["contract_files"], row["order"]), (["src/a.ts", "lib/b.js", "docs/a: b.md"], 3.0))
+        self.assertEqual((row["contract_files"], row["order"]), (["src/a.ts", "lib/b.js", "docs/a: b.md", "src/c.py"], 3.322))
 
 
 class OrderAndSnowballTest(unittest.TestCase):
