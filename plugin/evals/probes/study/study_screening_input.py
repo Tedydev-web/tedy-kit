@@ -48,11 +48,15 @@ def row_inputs(fetch, work, row):
     sha, paths, status = pinned_tree(fetch, work, row["repo"])
     base = {"order_rank": row["order_rank"], "repo": row["repo"], "facts": {k: row[k] for k in FACTS if k in row}}
     if sha is None:
-        return {**base, "error": status}
-    readme = next((p for p in paths if p.lower() == "readme.md"), None)
-    return {**base, "sha": sha, "listing": sorted({p.split("/", 1)[0] for p in paths})[:LISTING],
-            "readme": read_file(fetch, row["repo"], sha, readme, README_CHARS)["text"] if readme else "",
-            "files": [read_file(fetch, row["repo"], sha, p, FILE_CHARS) for p in pick_files(row, paths)]}
+        return {**base, "error": f"commit: {status}"}
+    if status != "ok":
+        return {**base, "sha": sha, "error": f"tree: {status}"}
+    readme_path = next((p for p in paths if p.lower() == "readme.md"), None)
+    readme = read_file(fetch, row["repo"], sha, readme_path, README_CHARS) if readme_path else {"text": ""}
+    files = [read_file(fetch, row["repo"], sha, p, FILE_CHARS) for p in pick_files(row, paths)]
+    errors = ([f"README: {readme['error']}"] if "error" in readme else []) + [f"{f['path']}: {f['error']}" for f in files if "error" in f]
+    out = {**base, "sha": sha, "listing": sorted({p.split("/", 1)[0] for p in paths})[:LISTING], "readme": readme["text"], "files": files}
+    return {**out, "error": "; ".join(errors)} if errors else out
 
 
 def fetch_inputs(topic, work, stratum, through, fetch):
@@ -60,14 +64,15 @@ def fetch_inputs(topic, work, stratum, through, fetch):
     if not order:
         raise TopicError(f"no {stratum}-screening-order.jsonl in {work}")
     target = inputs_file(work, stratum)
-    done = {r["order_rank"] for r in read_jsonl(Path(work), target.name)}
-    added = 0
-    with target.open("a") as out:
-        for row in order:
-            rank = row["order_rank"]
-            if rank in done or not (rank <= through or row.get("forced") or rank > SNOWBALL_RANK_BASE):
-                continue
-            out.write(json.dumps(row_inputs(fetch, work, row), ensure_ascii=False) + "\n")
-            out.flush()
-            added += 1
-    return added, len(done)
+    held = {r["order_rank"]: r for r in read_jsonl(Path(work), target.name)}
+    fetched = 0
+    for row in order:
+        rank = row["order_rank"]
+        if (rank in held and "error" not in held[rank]) or not (rank <= through or row.get("forced") or rank > SNOWBALL_RANK_BASE):
+            continue
+        held[rank] = row_inputs(fetch, work, row)
+        fetched += 1
+    temporary = target.with_name(target.name + ".tmp")
+    temporary.write_text("".join(json.dumps(held[r], ensure_ascii=False) + "\n" for r in sorted(held)))
+    temporary.replace(target)
+    return fetched, len(held) - fetched, sum("error" in r for r in held.values())

@@ -14,10 +14,10 @@ def main(argv=None, fetch=None):
     try:
         topic = load_topic(args.repo, args.topic)
         require_screened(topic, args.stratum)
-        added, kept = fetch_inputs(topic, args.work, args.stratum, args.through, fetch or Fetch())
+        added, kept, failed = fetch_inputs(topic, args.work, args.stratum, args.through, fetch or Fetch())
     except TopicError as error:
         sys.exit(f"fetch-screening-inputs: {error}")
-    print(f"{args.stratum}: inputs fetched {added}; already held {kept}")
+    print(f"{args.stratum}: inputs fetched {added}; already held {kept}; rows still failing {failed}, fetched again on the next run")
 
 
 if __name__ == "__main__":
