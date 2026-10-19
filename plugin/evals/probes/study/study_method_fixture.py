@@ -14,7 +14,13 @@ MODELS = {"A": {"cli": "claude", "model": "claude-opus-5-5", "effort": "high"}, 
 FALLBACK = {"cli": "claude", "model": "claude-sonnet-4-6", "effort": "high"}
 CELLS = ("Authority", "Methodology", "Objectivity", "Date", "Position", "Novelty", "Relevance")
 RANKS = {"config": (1, 2, 3, 4, 5, 6, 8), "product": (1, 2, 3, 4, 5, 6)}
-EVIDENCE = [("/releases", "[]"), ("/tags", "[]"), ("users/", json.dumps({"public_repos": 3}))]
+EVIDENCE = [("/releases", "[]"), ("/tags", "[]"), ("/repos?per_page", json.dumps([{"name": "r", "stargazers_count": 5, "description": "AI coding hooks"}])),
+            ("users/", json.dumps({"public_repos": 3})), ("repos/p/r3/contents/src/hook.ts", ("", "exit 1: HTTP 404")), ("repos/p/r4/contents/package.json", json.dumps({"name": "p-r4"})),
+            ("repos/o/r5/commits/HEAD", "f" * 40 + "\n"), ("repos/o/r5/git/trees/" + "f" * 40 + "?recursive=1", json.dumps({"tree": [{"path": "README.md"}], "truncated": True})),
+            ("repos/o/r5/git/trees/", json.dumps({"tree": [{"path": "README.md"}, {"path": "skills"}]}))]
+DNS_DOWN = ("registry.npmjs.org/p-r4", ("", "exit 6: curl: (6) Could not resolve host: registry.npmjs.org"))
+PUBLISHED = ("registry.npmjs.org/p-r4", json.dumps({"dist-tags": {"latest": "1.0.0"}}))
+TREES = {("product", 3): ["README.md", "src/hook.ts"], ("product", 4): ["README.md", "package.json"]}
 
 
 def repo_name(stratum, rank):
@@ -47,7 +53,7 @@ class ScriptedSessions(FakeFetch):
         super().run(cmd, timeout, cwd)
         if cmd[1:] == ["--version"]:
             return "9.9.9 (fixture)\n", "ok", 0
-        prompt = cmd[2] if cmd[0] == "claude" else cmd[-1]
+        prompt = cmd[-1]
         model = cmd[cmd.index("--model") + 1]
         rows = [json.loads(block) for block in re.findall(r"```json\n(.+?)\n```", prompt)]
         stratum = "config" if rows[0]["repo"].startswith("o/") else "product"
@@ -60,6 +66,16 @@ class ScriptedSessions(FakeFetch):
                   {"event": "step_update", "step_update": {"step_index": 1, "step_type": "agent_response", "state": "DONE"}},
                   {"event": "result", "result": {"status": "SUCCESS", "num_turns": 1, "response": text}}]
         return "".join(json.dumps(e) + "\n" for e in events), "ok", 0
+
+
+def input_states(work):
+    states = {}
+    for stratum in RANKS:
+        for row in map(json.loads, (work / f"{stratum}-screening-inputs.jsonl").read_text().splitlines()):
+            state = row.get("error_kind") or row.get("tree") or ("missing " + ", ".join(row["missing"]) if row.get("missing") else None)
+            if state:
+                states[f"{stratum} {row['order_rank']}"] = state
+    return states
 
 
 def session(repo, work, fetch, which, environ, *args):
@@ -77,11 +93,12 @@ def work_folder(repo):
     for side in "AB":
         (work / f"config-screen-{side}.jsonl").unlink()
     for stratum, ranks in RANKS.items():
-        write_jsonl(work / f"{stratum}-screening-order.jsonl", [{"order_rank": r, "repo": repo_name(stratum, r), "forced": r == 8} for r in ranks])
+        write_jsonl(work / f"{stratum}-screening-order.jsonl", [{"order_rank": r, "repo": repo_name(stratum, r), "forced": r == 8, "pushed": "2026-09-01",
+                                                                 **({"contract_files": ["src/hook.ts"]} if (stratum, r) == ("product", 3) else {})} for r in ranks])
         (work / f"screening-packet-{stratum}.md").write_text(f"packet {stratum}, pilot draft\n")
         for r in ranks:
-            if (stratum, r) != ("product", 2):
-                write_json(work / "cache/trees" / (repo_name(stratum, r).replace("/", "__") + ".json"), {"oid": "e" * 40, "paths": ["README.md"]})
+            if (stratum, r) not in (("product", 2), ("config", 5)):
+                write_json(work / "cache/trees" / (repo_name(stratum, r).replace("/", "__") + ".json"), {"oid": "e" * 40, "paths": TREES.get((stratum, r), ["README.md"])})
     write_json(work / "study.json", {**json.loads((work / "study.json").read_text()), "study": {"o/r1": "picked for the ledger"}})
     write_json(work / "product-adjudication.json", {"rows": {"2": {"decision": "eligible", "why": "the hook source runs the tests"}}, "capture_recapture": {"union": 1}})
     write_json(work / "meta.json", {**json.loads((work / "meta.json").read_text()), "criteria": CRITERIA})
@@ -101,9 +118,10 @@ def method_repo(same_family=False, rated=None, bare=True, events=None):
     which = (lambda cli: cli != "agy") if same_family else (lambda cli: True)
     environ = {"ANTHROPIC_API_KEY": "fixture"} if bare else {}
     fetch = ScriptedSessions(MODELS["A"]["model"])
-    broken = FakeFetch([("repos/p/r2/commits/HEAD", "d" * 40 + "\n"), ("repos/p/r2/git/trees/", ("", "exit 1: HTTP 502")), *EVIDENCE])
+    broken = FakeFetch([("repos/p/r2/commits/HEAD", "d" * 40 + "\n"), ("repos/p/r2/git/trees/", ("", "exit 1: HTTP 502")), DNS_DOWN, *EVIDENCE])
     for stratum in RANKS:
         fetch_inputs(loaded, work, stratum, 200, broken if stratum == "product" else FakeFetch(EVIDENCE))
+    events.append(f"first fetch: {input_states(work)}")
     try:
         session(repo, work, fetch, which, environ, "--stratum", "product", "--side", "A", "--ranks", "1-2", "--pilot", "--criteria", CRITERIA)
     except SystemExit as refused:
@@ -112,9 +130,10 @@ def method_repo(same_family=False, rated=None, bare=True, events=None):
         for side in "AB":
             session(repo, work, fetch, which, environ, "--stratum", stratum, "--side", side, "--ranks", "1-1", "--pilot", "--criteria", CRITERIA)
         (work / f"screening-packet-{stratum}.md").write_text(f"packet {stratum}\n")
-    healed = FakeFetch([("repos/p/r2/commits/HEAD", "d" * 40 + "\n"), ("repos/p/r2/git/trees/", json.dumps({"tree": [{"path": "README.md"}]})), *EVIDENCE])
+    healed = FakeFetch([("repos/p/r2/commits/HEAD", "d" * 40 + "\n"), ("repos/p/r2/git/trees/", json.dumps({"tree": [{"path": "README.md"}]})), PUBLISHED, *EVIDENCE])
     fetched, kept, failed = fetch_inputs(loaded, work, "product", 200, healed)
     events.append(f"refetch after a scored block: fetched {fetched}, kept {kept}, still transient {failed}, calls to the scored rank {len(healed.called('p/r1'))}")
+    events.append(f"after the refetch: {input_states(work)}")
     script("freeze-protocol").main(["--topic", "demo", "--repo", str(repo), "--work", str(work), "--criteria", CRITERIA, "--today", "2026-10-20",
                                     "--amendment", "the pilot draft became the frozen packet"])
     for stratum in RANKS:

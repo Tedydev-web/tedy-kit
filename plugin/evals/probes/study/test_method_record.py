@@ -91,11 +91,29 @@ class MethodRecordTest(unittest.TestCase):
     def test_the_fixture_ran_a_transient_error_row_and_a_refetch_after_a_scored_block(self):
         events = []
         self.build(events=events)
-        self.assertEqual(events, ["refused: run-screening-session: rank 2 has a transient fetch error (tree: exit 1: HTTP 502); run fetch-screening-inputs.py again, "
+        self.assertEqual(events, ["first fetch: {'config 5': 'partial', 'product 2': 'transient', 'product 3': 'missing src/hook.ts: exit 1: HTTP 404', 'product 4': 'transient'}",
+                                  "refused: run-screening-session: rank 2 has a transient fetch error (tree: exit 1: HTTP 502); run fetch-screening-inputs.py again, "
                                   "or mark it permanent with --mark-permanent after checking it by hand",
-                                  "refetch after a scored block: fetched 1, kept 5, still transient 0, calls to the scored rank 0"])
+                                  "refetch after a scored block: fetched 2, kept 4, still transient 0, calls to the scored rank 0",
+                                  "after the refetch: {'config 5': 'partial', 'product 3': 'missing src/hook.ts: exit 1: HTTP 404'}"])
+        decisions = {r["order_rank"]: r["decision"] for r in map(json.loads, (self.folder / "product-screen-A.jsonl").read_text().splitlines())}
+        self.assertEqual((decisions[3], decisions[4], {r["order_rank"]: r["decision"] for r in map(json.loads, (self.folder / "config-screen-A.jsonl").read_text().splitlines())}[5]),
+                         ("exclude: irrelevant", "eligible", "eligible"))
         rows = [json.loads(line) for line in (self.folder / "product-screen-A.jsonl").read_text().splitlines()]
         self.assertEqual([r["commit"] for r in rows if r["order_rank"] == 2], ["https://github.com/p/r2/commit/" + "d" * 40])
+
+    def test_the_protocol_states_the_template_digest_the_computed_date_and_the_snowball_cut(self):
+        repo = self.build()
+        protocol = self.section(render(repo, load_topic(repo, "demo"))[0], "Protocol")
+        self.assertRegex(protocol, r"- prompt template sha256 `[0-9a-f]{64}` \(row note and reply format\), pinned at the freeze for every screened stratum")
+        self.assertIn("- Date: computed by the toolchain from facts.pushed and the sweep date 2026-10-01 (within 90 days 1, within 365 days 0.5, older 0); "
+                      "both sessions' Date values are replaced and kept as session_date", protocol)
+        self.assertNotIn("snowball", protocol)
+        (self.folder / "snowball-cut.json").write_text(json.dumps({"stratum": "config", "cut_row": 60, "source": "the effort bound 60"}))
+        with self.assertRaisesRegex(TopicError, "the snowball ranked above row 60 \\(the effort bound 60\\), but the stop is row 6; rerun snowball-above-cut.py"):
+            render(repo, load_topic(repo, "demo"))
+        (self.folder / "snowball-cut.json").write_text(json.dumps({"stratum": "config", "cut_row": 6, "source": "the written stop row"}))
+        self.assertIn("- config snowball: 0 rows from 1001 on rank above the cut at row 6 (the written stop row)", self.section(render(repo, load_topic(repo, "demo"))[0], "Protocol"))
 
     def test_a_block_without_a_row_hash_for_each_rank_is_refused(self):
         repo = self.build()

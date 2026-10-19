@@ -61,6 +61,8 @@ class RankerTest(unittest.TestCase):
         ranked = rank_product(pool, ["tdd"])
         self.assertEqual([(r["repo"], r["order"], r["order_rank"]) for r in ranked["rows"]], [("o/tdd-guard", 5.0, 1)])
         self.assertEqual(ranked["aggregators"], [{"repo": "o/awesome-hooks", "description": ""}])
+        pool[0].update(closed_issues=2, merged_prs=7, license="MIT")
+        self.assertEqual({k: rank_product(pool, ["tdd"])["rows"][0][k] for k in ("closed_issues", "merged_prs", "license")}, {"closed_issues": 2, "merged_prs": 7, "license": "MIT"})
 
 
 class OrderAndSnowballTest(unittest.TestCase):
@@ -87,10 +89,25 @@ class OrderAndSnowballTest(unittest.TestCase):
         before = self.ranked(3)
         after = {"rows": [{"repo": "s/high", "order": 9, "pushed": "2026-01-01", "channels": ["snowball"], "units": [], "stars": 0, "via": []},
                           {"repo": "s/low", "order": 1, "pushed": "2026-01-01", "channels": ["snowball"], "units": [], "stars": 0, "via": []}]}
+        after["rows"][0].update(closed_issues=3, merged_prs=5, license="MIT")
         cut, snowballed, rows = script("snowball-above-cut").above_cut(before, after, 2)
         self.assertEqual((cut["repo"], snowballed, [(r["order_rank"], r["repo"]) for r in rows]), ("o/r2", 2, [(1001, "s/high")]))
+        self.assertEqual({k: rows[0][k] for k in ("closed_issues", "merged_prs", "license")}, {"closed_issues": 3, "merged_prs": 5, "license": "MIT"})
         with self.assertRaisesRegex(TopicError, "no row 9"):
             script("snowball-above-cut").above_cut(before, after, 9)
+
+    def test_snowballed_rows_merge_into_the_order_without_renumbering(self):
+        write_jsonl(self.work / "config-screening-order.jsonl", [{"order_rank": 1, "repo": "o/r1"}, {"order_rank": 1001, "repo": "s/old"}])
+        write_jsonl(self.work / "snowball-screening-order.jsonl", [{"order_rank": 1001, "repo": "s/new"}, {"order_rank": 1002, "repo": "S/Old"}])
+        write_json(self.work / "snowball-cut.json", {"stratum": "config", "cut_row": 60, "source": "the written stop row"})
+        added = script("merge-snowball-order").merge(self.work)
+        self.assertEqual([(r["order_rank"], r["repo"]) for r in added], [(1002, "s/new")])
+        self.assertEqual([(r["order_rank"], r["repo"]) for r in map(json.loads, (self.work / "config-screening-order.jsonl").read_text().splitlines())],
+                         [(1, "o/r1"), (1001, "s/old"), (1002, "s/new")])
+        self.assertEqual(script("merge-snowball-order").merge(self.work), [])
+        (self.work / "snowball-cut.json").unlink()
+        with self.assertRaisesRegex(TopicError, "no snowball-cut.json"):
+            script("merge-snowball-order").merge(self.work)
 
     def test_aggregator_readmes_snowball_linked_repositories_with_a_topic_term(self):
         write_json(self.work / "config-ranked.json", {"rows": [{"repo": "o/known"}], "aggregators": [{"repo": "l/awesome", "description": "awesome"}, {"repo": "l/dead", "description": ""}],
@@ -139,7 +156,8 @@ class OrderAndSnowballTest(unittest.TestCase):
         out = json.loads(result.stdout)
         self.assertEqual(out["at_cut"], {"stratum": "config", "cut": 3, "size": 4, "at_cut": 2, "recall": 0.5, "target": 0.8, "below_target": True,
                                          "missed": [{"repo": "a/three", "rank": 9}, {"repo": "a/four", "rank": None}],
-                                         "fix": "below the target: change the screening-order formula or the cut, not the terms"})
+                                         "fix": "below the target: change the screening-order formula or the cut, not the terms",
+                                         "counted": "no session files yet: rows the cut would screen"})
         self.assertEqual(out["judged_by_both"], 3)
         write_jsonl(self.work / "config-screen-A.jsonl", [{"order_rank": 1}, {"order_rank": 2}])
         write_jsonl(self.work / "config-screen-B.jsonl", [{"order_rank": 1}])
@@ -147,6 +165,11 @@ class OrderAndSnowballTest(unittest.TestCase):
                                  "--states", "config", "--stratum", "config", "--cut", "3"], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((json.loads(result.stdout)["at_cut"]["at_cut"], json.loads(result.stdout)["at_cut"]["missed"][0]), (1, {"repo": "a/two", "rank": 2}))
+        write_jsonl(self.work / "config-screen-B.jsonl", [])
+        result = subprocess.run([sys.executable, "-B", str(HERE / "qgs-recall.py"), "--topic", "demo", "--repo", str(self.repo), "--work", str(self.work),
+                                 "--states", "config", "--stratum", "config", "--cut", "3"], capture_output=True, text=True)
+        at_cut = json.loads(result.stdout)["at_cut"]
+        self.assertEqual((at_cut["at_cut"], at_cut["counted"]), (0, "rows both sessions screened: 0"))
 
     def test_recall_before_screening_works_without_a_cut(self):
         topic = json.loads((self.repo / "docs/prior-art/topics/demo.json").read_text())

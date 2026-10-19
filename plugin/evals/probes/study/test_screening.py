@@ -102,10 +102,12 @@ class CompareTest(Base):
         write_stop_row(load_topic(self.repo, "demo"), "config", 4)
         self.assertEqual(json.loads(path.read_text())["strata"]["config"], {"stop_row": 4, "forced_repos": []})
 
-    def test_the_snowball_cut_before_screening_is_the_effort_bound(self):
+    def test_the_snowball_cut_before_screening_is_the_effort_bound_and_says_to_rerun(self):
         snowball = script("snowball-above-cut")
-        self.assertEqual(snowball.planned_cut({**self.topic, "strata": {"config": {"stop_row": None}}}), 60)
-        self.assertEqual(snowball.planned_cut({**self.topic, "strata": {"config": {"stop_row": 101}}}), 101)
+        cut, source = snowball.planned_cut({**self.topic, "strata": {"config": {"stop_row": None}}})
+        self.assertEqual(cut, 60)
+        self.assertIn("rerun the snowball after compare-screening-sessions.py --write-stop", source)
+        self.assertEqual(snowball.planned_cut({**self.topic, "strata": {"config": {"stop_row": 101}}}), (101, "the written stop row"))
 
     def test_no_shared_rows_is_refused(self):
         write_jsonl(self.folder / "config-screen-B.jsonl", [])

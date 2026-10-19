@@ -3,6 +3,7 @@ import json
 
 from study_agreement import CHAPMAN_NOTE, KAPPA_CRITERIA, RECALL_FIX, RECALL_TARGET, chapman, effort_stop, kappa_text, recall_at_cut, session_kappas
 from study_calibration import CALIBRATED_STRATA, SAMPLE_FILE, calibration_agreement
+from study_method_notes import method_notes
 from study_method_sessions import session_keys, session_lines
 from study_protocol import FREEZE_FILE
 from study_screening_core import JUDGED, MechanismTable, derive, read_json, read_jsonl
@@ -154,7 +155,7 @@ def method_parts(repo, topic, s, meta, captures):
                  for line in agreement_lines(stratum, captures[stratum]["pairs"], freeze["strata"][stratum]["frozen_after_rank"], captures[stratum], s["capture"][stratum])]
     calibration, threats = calibration_lines(folder)
     threats = threat_lines(topic, strata, sessions, freeze, threats, folder)
-    sections = ["## Protocol", ""] + protocol + session_summary_lines(sessions) + ["", "## Screening sessions", ""] + sessions_out + ["", "## Calibration", ""] + calibration
+    sections = ["## Protocol", ""] + protocol + method_notes(topic, folder, freeze, strata) + session_summary_lines(sessions) + ["", "## Screening sessions", ""] + sessions_out + ["", "## Calibration", ""] + calibration
     sections += ["", "## Threats", ""] + threats + [""]
     tag_only = [t for t in topic["strata"] if t not in strata]
     if tag_only:
