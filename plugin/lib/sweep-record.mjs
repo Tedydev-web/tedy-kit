@@ -80,13 +80,22 @@ export function checkCoverageMatrix(text, { topic, idPrefix, frame: { label, ste
   const areas = (frame.match(/^- SWEBOK Guide V4 knowledge areas \([^)]*\)[^:]*: (.+)$/m)?.[1] ?? "").replace(/\.$/, "").split("; ").filter(Boolean);
   const named = (frame.match(new RegExp(`^- ${escapeRegExp(label)} \\([^)]*\\): (.+)$`, "m"))?.[1] ?? "").replace(/\.$/, "").split(/; (?=\d+ )/).map((step) => step.match(/^(\d+) (.+)$/)).filter(Boolean);
   const steps = named.map((m) => m[1]);
-  const problems = new Set([...text.matchAll(new RegExp(`^\\| (${escapeRegExp(idPrefix)}\\d+) \\|`, "gm"))].map((m) => m[1]));
   if (!areas.length || !steps.length) return [`coverage matrix: Frame lists no knowledge areas or no ${label}`];
   const listed = named.map((m) => m[2]).join("; ");
   if (listed !== topicSteps.join("; ")) return [`coverage matrix: ${label} in the Frame are "${listed}", the topic config says "${topicSteps.join("; ")}"`];
+  const splitRow = (line) => line.slice(1, -1).split(" | ").map((cell) => cell.trim());
+  const header = splitRow(text.match(/^\| # \|.*$/m)?.[0] ?? "");
+  const kaCol = header.indexOf("KA");
+  const stepCol = header.findIndex((cell) => cell.endsWith("steps"));
+  if (kaCol < 0 || stepCol < 0) return ['coverage matrix: problems table has no KA column or no column ending in "steps"'];
+  const problems = new Map([...text.matchAll(new RegExp(`^\\| ${escapeRegExp(idPrefix)}\\d+ \\|.*$`, "gm"))].map(([line]) => {
+    const row = splitRow(line);
+    return [row[0], (row[kaCol] ?? "").split("; ").flatMap((area) => (row[stepCol] ?? "").split(", ").map((step) => `${area} step ${step}`))];
+  }));
   const none = new RegExp(`^none for ${escapeRegExp(topic)}: \\S`);
   const matrix = sections(text, "## Coverage matrix")[0]?.body ?? "";
-  return areas.flatMap((area) => {
+  const placed = new Set();
+  const errors = areas.flatMap((area) => {
     const line = matrix.split("\n").find((l) => l.startsWith(`- ${area}: `));
     if (!line) return [`coverage matrix: ${area} has no row`];
     const cells = new Map(line.slice(area.length + 4).split(/; (?=\d+ )|; (?=\d+$)/).map((cell) => [cell.split(" ", 1)[0], cell.slice(cell.indexOf(" ") + 1).trim()]));
@@ -94,9 +103,15 @@ export function checkCoverageMatrix(text, { topic, idPrefix, frame: { label, ste
       const cell = cells.get(step);
       if (cell === undefined || cell === step || !cell) return [`coverage matrix: ${area} step ${step} is empty`];
       if (none.test(cell)) return [];
-      return cell.split(", ").filter((p) => !problems.has(p)).map((p) => `coverage matrix: ${area} step ${step} names unknown ${p}`);
+      return cell.split(", ").flatMap((p) => {
+        if (!problems.has(p)) return [`coverage matrix: ${area} step ${step} names unknown ${p}`];
+        placed.add(`${p} lists ${area} step ${step}`);
+        return problems.get(p).includes(`${area} step ${step}`) ? [] : [`coverage matrix: ${area} step ${step} names ${p}, whose row does not list ${area} step ${step}`];
+      });
     });
   });
+  for (const [p, pairs] of problems) for (const pair of pairs) if (!placed.has(`${p} lists ${pair}`)) errors.push(`coverage matrix: ${p} lists ${pair}, the matrix cell does not name it`);
+  return errors;
 }
 
 function topicConfigErrors(config) {

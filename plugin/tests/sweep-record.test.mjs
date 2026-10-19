@@ -90,14 +90,28 @@ test("an ADR with measured: yes needs a Variants table with two numeric arms", (
 
 const DEV = { topic: "dev", idPrefix: "P", frame: { label: "Dev steps", steps: ["One", "Two"] } };
 const COORDINATION = { topic: "coordination", idPrefix: "C", frame: { label: "Session lifecycle steps", steps: ["Open or start", "Pick up work (hand-off, pending list)"] } };
-const registry = ({ label = "Dev steps", steps = "1 One; 2 Two", id = "P1", topic = "dev", cell = id } = {}) => ["## Frame", "", "- SWEBOK Guide V4 knowledge areas (x): Alpha; Beta.", `- ${label} (y): ${steps}.`, "", "## Problems", "", "| problem |", "|---|", `| ${id} | a |`, "", "## Coverage matrix (z)", "", `- Alpha: 1 ${id}; 2 ${cell}`, `- Beta: 1 none for ${topic}: r; 2 ${id}`, ""].join("\n");
+const registry = ({ label = "Dev steps", steps = "1 One; 2 Two", id = "P1", topic = "dev", cell = id, ka = "Alpha", rowSteps = "1, 2", header = "| # | problem | KA | dev steps |" } = {}) => ["## Frame", "", "- SWEBOK Guide V4 knowledge areas (x): Alpha; Beta.", `- ${label} (y): ${steps}.`, "", "## Problems", "", header, "|---|---|---|---|", `| ${id} | a | ${ka} | ${rowSteps} |`, "", "## Coverage matrix (z)", "", `- Alpha: 1 ${id}; 2 ${cell}`, `- Beta: 1 none for ${topic}: r; 2 none for ${topic}: s`, ""].join("\n");
 
 test("the coverage matrix needs every knowledge area and step, naming only known problems", () => {
   const text = (cell) => registry({ cell });
   assert.deepEqual(checkCoverageMatrix(text("P1"), DEV), []);
   assert.match(checkCoverageMatrix(text("P9"), DEV).join("\n"), /Alpha step 2 names unknown P9/);
   assert.match(checkCoverageMatrix(text(""), DEV).join("\n"), /Alpha step 2 is empty/);
-  assert.match(checkCoverageMatrix(text("P1").replace("- Beta: 1 none for dev: r; 2 P1\n", ""), DEV).join("\n"), /Beta has no row/);
+  assert.match(checkCoverageMatrix(text("P1").replace("- Beta: 1 none for dev: r; 2 none for dev: s\n", ""), DEV).join("\n"), /Beta has no row/);
+});
+
+test("every problem row's knowledge areas and steps match the coverage matrix cells that name it", () => {
+  assert.deepEqual(checkCoverageMatrix(registry({ ka: "Alpha; Beta" }), DEV), [
+    "coverage matrix: P1 lists Beta step 1, the matrix cell does not name it",
+    "coverage matrix: P1 lists Beta step 2, the matrix cell does not name it",
+  ]);
+  assert.deepEqual(checkCoverageMatrix(registry({ rowSteps: "1" }), DEV), ["coverage matrix: Alpha step 2 names P1, whose row does not list Alpha step 2"]);
+  assert.deepEqual(checkCoverageMatrix(registry().replace("1 none for dev: r", "1 none for dev: covered at Alpha (P1)"), DEV), []);
+  assert.match(checkCoverageMatrix(registry({ header: "| # | problem | area | dev steps |" }), DEV).join("\n"), /problems table has no KA column or no column ending in "steps"/);
+});
+
+test("the kit's own topic registries are consistent with their coverage matrices", () => {
+  assert.deepEqual(checkTopicRegistries(REPO), []);
 });
 
 test("the coverage matrix reads its id prefix, steps label and none phrase from the topic", () => {
@@ -123,7 +137,7 @@ test("every topic config names a registry that passes its coverage matrix", () =
   writeFileSync(join(topics, "coordination.json"), JSON.stringify({ registry: "docs/prior-art/problems-coordination.md", id_prefix: "C", frame: COORDINATION.frame }));
   assert.deepEqual(checkTopicRegistries(repo), []);
   writeFileSync(join(repo, "docs", "prior-art", "problems-coordination.md"), coordination.replace("2 C1\n", "2 C7\n"));
-  assert.deepEqual(checkTopicRegistries(repo), ["topics/coordination.json: coverage matrix: Alpha step 2 names unknown C7"]);
+  assert.deepEqual(checkTopicRegistries(repo), ["topics/coordination.json: coverage matrix: Alpha step 2 names unknown C7", "topics/coordination.json: coverage matrix: C1 lists Alpha step 2, the matrix cell does not name it"]);
   writeFileSync(join(topics, "coordination.json"), JSON.stringify({ registry: "docs/prior-art/problems-coordination.md", frame: COORDINATION.frame }));
   assert.deepEqual(checkTopicRegistries(repo), ["topics/coordination.json: id_prefix must be capital letters"]);
   writeFileSync(join(topics, "coordination.json"), JSON.stringify({ registry: "docs/prior-art/problems-none.md", id_prefix: "C", frame: COORDINATION.frame }));
