@@ -4,11 +4,12 @@ import sys
 import urllib.parse
 from pathlib import Path
 
+from study_academic import run_academic
 from study_fetch import Fetch
 from study_pool import CONFIG_DIR_MARKER, GH_LINK, Pool, cache_name, code_search, parse_json, read_json, run_social
 from study_topic import TopicError, load_topic, term_regex, topic_arguments
 
-CHANNELS = ("npm", "social", "reverse", "code", "repo")
+CHANNELS = ("npm", "social", "reverse", "code", "repo", "academic")
 COMMAND = re.compile(r"\b(npx|bunx|uvx|pipx run|pnpm dlx|yarn dlx)\s+(?:-y\s+|--yes\s+|--from\s+\S+\s+)?(@?[a-z0-9][\w.-]*(?:/[\w.-]+)?)", re.I)
 HOOK_CONFIG = re.compile(r"(^|/)(hooks/hooks\.json|\.claude/settings(\.local)?\.json|\.claude-plugin/plugin\.json|\.mcp\.json)$")
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
@@ -54,6 +55,9 @@ class Product:
 
     def social(self):
         run_social(self.fetch, self.pool, self.channels.get("social", {}), "social")
+
+    def academic(self):
+        run_academic(self.fetch, self.pool, self.channels.get("academic", {}))
 
     def code(self):
         for field in self.channels.get("code_fields", []):
@@ -123,7 +127,7 @@ class Product:
 
 
 def main(argv=None, fetch=None):
-    args = topic_arguments("Discover the product stratum pool: npm, code search, reverse references, social and repository search.",
+    args = topic_arguments("Discover the product stratum pool: npm, code search, reverse references, social, repository search and the academic channel.",
                            (["--work"], {"required": True, "help": "study working folder for state and cache"}),
                            (["--channels"], {"default": ",".join(CHANNELS), "help": "comma-separated subset of " + ", ".join(CHANNELS)})).parse_args(argv)
     only = [c for c in args.channels.split(",") if c]
@@ -138,7 +142,7 @@ def main(argv=None, fetch=None):
                 print(f"{name} done; repos so far {len(product.pool.state['hits'])}", flush=True)
     except TopicError as error:
         sys.exit(f"discover-product-pool: {error}")
-    counts = {c: sum(1 for h in product.pool.state["hits"].values() if c in h["channels"]) for c in ("npm", "code", "reverse", "social", "repo")}
+    counts = {c: sum(1 for h in product.pool.state["hits"].values() if c in h["channels"]) for c in ("npm", "code", "reverse", "social", "repo", "arxiv", "semantic-scholar")}
     print(f"product repos {len(product.pool.state['hits'])}; per channel {counts}; failed steps {sum(1 for entry in product.pool.state['log'] if entry['status'] != 'ok')}")
 
 

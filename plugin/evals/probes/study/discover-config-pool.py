@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 
+from study_academic import run_academic
 from study_fetch import Fetch
 from study_pool import Pool, code_search, parse_json, run_social
 from study_topic import TopicError, load_topic, topic_arguments
@@ -61,11 +62,12 @@ def discover(topic, work, home, fetch):
     if channels.get("marketplaces"):
         marketplaces(pool, home)
     run_social(fetch, pool, channels.get("social", {}))
+    run_academic(fetch, pool, channels.get("academic", {}))
     return pool
 
 
 def main(argv=None, fetch=None):
-    args = topic_arguments("Discover the config stratum pool on every channel the topic lists.",
+    args = topic_arguments("Discover the config stratum pool on every channel the topic lists, the academic channel included.",
                            (["--work"], {"required": True, "help": "study working folder for state and cache"}),
                            (["--home"], {"default": str(Path.home()), "help": "home folder holding .claude/plugins"})).parse_args(argv)
     try:
@@ -73,7 +75,7 @@ def main(argv=None, fetch=None):
     except TopicError as error:
         sys.exit(f"discover-config-pool: {error}")
     failed = sum(1 for entry in pool.state["log"] if entry["status"] != "ok")
-    print(f"config identified {len(pool.state['hits'])}; per channel {pool.per_channel()}; failed steps {failed}")
+    print(f"config identified {len(pool.state['hits'])}; per channel {pool.per_channel()}; papers {len(pool.state.get('papers', {}))}; failed steps {failed}")
 
 
 if __name__ == "__main__":

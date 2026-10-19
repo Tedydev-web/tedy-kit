@@ -5,7 +5,7 @@ from pathlib import Path
 from study_rank import rank_product
 from study_topic import TopicError, load_topic, topic_arguments
 
-PRODUCT_CHANNELS = ("npm", "code", "reverse", "social", "repo")
+PRODUCT_CHANNELS = ("npm", "code", "reverse", "social", "repo", "arxiv", "semantic-scholar")
 
 
 def main(argv=None):
