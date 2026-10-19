@@ -23,7 +23,9 @@ class CompareTest(Base):
         out = script("compare-screening-sessions").compare(self.folder, "config", None)
         self.assertEqual((out["rows"], out["judged_cells"], out["identical"], out["agreement"]), (4, 20, 19, 0.95))
         self.assertEqual(out["differing_by_criterion"], {"Authority": 1})
-        self.assertEqual(out["mechanisms"]["chapman"], 1.0)
+        self.assertEqual(out["mechanisms"].get("chapman_lower_bound"), 1.0)
+        self.assertNotIn("chapman", out["mechanisms"])
+        self.assertIn("not independent", out["mechanisms"].get("chapman_note", ""))
         self.assertFalse(out["mechanisms"]["third_reader_needed"])
         self.assertEqual(script("compare-screening-sessions").compare(self.folder, "config", 2)["rows"], 2)
 
@@ -43,7 +45,7 @@ class CompareTest(Base):
         write_jsonl(self.folder / "config-screen-B.jsonl", [screen_row(r, f"o/{r}", 1, [f"b{r}"]) for r in (1, 2, 3, 5)])
         write_jsonl(self.folder / "config-screen-A.jsonl", [screen_row(r, f"o/{r}", 1, [f"a{r}"]) for r in (1, 2, 3, 5)])
         out = script("compare-screening-sessions").compare(self.folder, "config", None)
-        self.assertEqual((out["mechanisms"]["union"], out["mechanisms"]["chapman"], out["mechanisms"]["third_reader_needed"]), (8, 24.0, True))
+        self.assertEqual((out["mechanisms"]["union"], out["mechanisms"]["chapman_lower_bound"], out["mechanisms"]["third_reader_needed"]), (8, 24.0, True))
 
     def test_the_effort_bound_stop_skips_forced_rows_and_needs_a_dry_block(self):
         compare = script("compare-screening-sessions")

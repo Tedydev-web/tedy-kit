@@ -1,6 +1,8 @@
 from study_sweep_record import JUDGED
 
 KAPPA_CRITERIA = tuple(c for c in JUDGED if c != "Date")
+CHAPMAN_NOTE = ("a lower bound, not an estimate: the two sessions are not independent captures (same packet, same rows, often the same model), "
+                "and positive dependence biases the Chapman figure low")
 
 
 def cohen_kappa(pairs):

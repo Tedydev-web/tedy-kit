@@ -2,7 +2,7 @@ import json
 import sys
 from pathlib import Path
 
-from study_agreement import session_kappas
+from study_agreement import CHAPMAN_NOTE, session_kappas
 from study_pool import read_json
 from study_sweep_record import JUDGED, MechanismTable, derive, read_jsonl
 from study_topic import TopicError, load_topic, sweep_folder, topic_arguments
@@ -59,7 +59,7 @@ def compare(folder, stratum, max_rank):
     out = {"stratum": stratum, "rows": len(common), "judged_cells": cells, "identical": same, "agreement": round(same / cells, 3), "target": 0.9,
            "differing_by_criterion": by_criterion, "kappa": kappa, "eligibility_kappa": eligibility_kappa, "eligibility_differ": eligibility_differ,
            "decision_agreement": sum(rows[r]["A"]["decision"] == rows[r]["B"]["decision"] for r in common),
-           "mechanisms": {"A": len(mech["A"]), "B": len(mech["B"]), "shared": shared, "union": union, "chapman": round(chapman, 1),
+           "mechanisms": {"A": len(mech["A"]), "B": len(mech["B"]), "shared": shared, "union": union, "chapman_lower_bound": round(chapman, 1), "chapman_note": CHAPMAN_NOTE,
                           "third_reader_needed": chapman > union + 2, "only_A": sorted(mech["A"] - mech["B"]), "only_B": sorted(mech["B"] - mech["A"])},
            "block_yields": yields, "effort_bound_stop": stop_row(yields), "mechanism_table": table_json is not None,
            "disputed": [{"rank": r, "repo": sides["A"][r]["repo"], "A": rows[r]["A"]["decision"], "B": rows[r]["B"]["decision"]}
@@ -68,7 +68,7 @@ def compare(folder, stratum, max_rank):
 
 
 def main(argv=None):
-    args = topic_arguments("Compare the two blind screening sessions of a stratum: agreement, Chapman estimate, decisions and new mechanisms per block.",
+    args = topic_arguments("Compare the two blind screening sessions of a stratum: agreement, kappa, the Chapman lower bound, decisions and new mechanisms per block.",
                            (["--stratum"], {"required": True, "help": "stratum to compare"}),
                            (["--folder"], {"help": "folder holding the session files, default the topic's sweep folder"}),
                            (["--max-rank"], {"type": int, "help": "compare only rows up to this rank"})).parse_args(argv)
