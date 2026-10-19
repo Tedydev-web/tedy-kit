@@ -157,9 +157,31 @@ class ExportTest(Base):
         self.assertEqual(clean(value), {"sessions": {"config-A": {"packet_sha256": "a" * 64, "blocks": [{"row_sha256": {"1": "b" * 64}}]}}, "note": "blob " + "c" * 12, "digest": "d" * 64})
 
     def test_a_home_path_left_in_text_is_refused(self):
-        (self.work / "screening-packet-config.md").write_text("read " + "/".join(["", "home", "someone", "notes.md"]) + "\n")
+        (self.work / "config-qgs-log.md").write_text("read " + "/".join(["", "home", "someone", "notes.md"]) + "\n")
         with self.assertRaisesRegex(TopicError, "still holds a home path"):
             script("export-sweep-data").export(self.topic, self.repo, self.work)
+
+    def test_a_packet_is_copied_byte_for_byte_and_one_holding_a_local_path_is_refused(self):
+        data = "packet\r\nno trailing newline — ".encode() + bytes([0xFF])
+        (self.work / "screening-packet-config.md").write_bytes(data)
+        out, counts = script("export-sweep-data").export(self.topic, self.repo, self.work)
+        self.assertEqual(((out / "screening-packet-config.md").read_bytes(), counts["screening-packet-config.md"]), (data, "copied byte for byte"))
+        for local in (f"{self.work}/config-screening-inputs.jsonl", f"{self.repo}/docs/x.md", "/".join(["", "home", "someone", "notes.md"])):
+            (self.work / "screening-packet-config.md").write_text(f"read {local}\n")
+            with self.assertRaisesRegex(TopicError, "screening-packet-config.md holds a local path"):
+                script("export-sweep-data").export(self.topic, self.repo, self.work)
+
+    def test_logged_papers_are_exported_with_the_repositories_they_named(self):
+        topic = {**self.topic, "strata": {**self.topic["strata"], "config": {**self.topic["strata"]["config"], "channels": {"academic": {"arxiv": ["abs:tdd"]}}}}}
+        write_json(self.work / "config-state.json", {"papers": {"arxiv:1": {"title": "T", "url": "https://arxiv.org/abs/1", "queries": ["arxiv abs:tdd"], "channels": ["arxiv"]}},
+                                                     "hits": {"lab/bench": {"repo": "lab/bench", "channels": {"arxiv": ["arxiv:1"]}},
+                                                              "o/other": {"repo": "o/other", "channels": {"repo": ["q"]}}}})
+        write_json(self.work / "product-state.json", {"papers": {"arxiv:1": {"title": "T", "url": "https://arxiv.org/abs/1", "queries": ["s2 tdd"]}},
+                                                      "hits": {"lab/tool": {"repo": "lab/tool", "channels": {"semantic-scholar": ["arxiv:1"]}}}})
+        out, counts = script("export-sweep-data").export(topic, self.repo, self.work)
+        self.assertEqual([json.loads(line) for line in (out / "papers.jsonl").read_text().splitlines()],
+                         [{"key": "arxiv:1", "title": "T", "url": "https://arxiv.org/abs/1", "queries": ["arxiv abs:tdd", "s2 tdd"], "linked_repos": ["lab/bench", "lab/tool"]}])
+        self.assertEqual(counts["papers.jsonl"], 1)
 
 
 class PickTest(unittest.TestCase):

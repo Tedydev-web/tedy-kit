@@ -33,6 +33,18 @@ def clean(value):
     return value
 
 
+def paper_rows(work):
+    papers, hits = {}, {}
+    for state_file in sorted(Path(work).glob("*-state.json")):
+        state = json.loads(state_file.read_text())
+        for key, paper in (state.get("papers") or {}).items():
+            entry = papers.setdefault(key, {"key": key, "title": paper.get("title", ""), "url": paper.get("url", ""), "queries": []})
+            entry["queries"] += [q for q in paper.get("queries", []) if q not in entry["queries"]]
+        for hit in state.get("hits", {}).values():
+            hits.setdefault(hit["repo"], set()).update(e for bucket in hit["channels"].values() for e in bucket)
+    return [{**paper, "linked_repos": sorted(repo for repo, evidence in hits.items() if paper["key"] in evidence)} for paper in papers.values()]
+
+
 def export(topic, repo, work):
     repo, work = Path(repo).resolve(), Path(work).resolve()
     out = sweep_folder(repo, topic)
@@ -51,6 +63,15 @@ def export(topic, repo, work):
             raise TopicError(f"{work / name} still holds a home path ({left.group(0)}...); rewrite it before export")
         (out / name).write_text(body)
         counts[name] = "copied"
+
+    def packet(name):
+        data = (work / name).read_bytes()
+        body = data.decode("utf-8", errors="replace")
+        left = next((p for p in (str(repo), str(work)) if p in body), None) or (HOME_PATH.search(body) and HOME_PATH.search(body).group(0))
+        if left:
+            raise TopicError(f"{work / name} holds a local path ({left}...); its sha256 pins the bytes the sessions read, so remove the path, then pilot and freeze again")
+        (out / name).write_bytes(data)
+        counts[name] = "copied byte for byte"
 
     for stratum in topic["strata"]:
         for side in "AB":
@@ -80,8 +101,14 @@ def export(topic, repo, work):
         if (work / name).exists():
             (out / name).write_text(json.dumps(clean(json.loads((work / name).read_text())), indent=1, ensure_ascii=False) + "\n")
             counts[name] = "copied"
-    for path in sorted(work.glob("*packet*.md")) + sorted(work.glob("*-qgs-log.md")):
+    for path in sorted(work.glob("*packet*.md")):
+        packet(path.name)
+    for path in sorted(work.glob("*-qgs-log.md")):
         text(path.name)
+    if any(s.get("channels", {}).get("academic") for s in topic["strata"].values()):
+        rows = paper_rows(work)
+        (out / "papers.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
+        counts["papers.jsonl"] = len(rows)
     return out, counts
 
 
