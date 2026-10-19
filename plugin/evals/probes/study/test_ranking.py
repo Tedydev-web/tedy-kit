@@ -153,12 +153,31 @@ class OrderAndSnowballTest(unittest.TestCase):
         with self.assertRaisesRegex(TopicError, "qgs_list_topic"):
             script("extract-qgs-candidates").candidates(self.topic, self.work, fetch, "config-ranked.json")
 
+    def resolved(self, *names):
+        write_json(self.work / "cache/canonical.json", {n: n for n in names})
+
+    def test_recall_resolves_renamed_repositories_before_counting_a_miss(self):
+        for side in "AB":
+            write_jsonl(self.work / f"qgs-judge-{side}.jsonl", [{"id": 1, "repo": "Old/Name", "verdict": "yes"}, {"id": 2, "repo": "new/x", "verdict": "yes"}])
+        write_json(self.work / "qgs-adjudicated.json", {"final": ["Old/Name", "new/x", "gone/repo"]})
+        write_json(self.work / "product-state.json", {"hits": {"new/name": {"channels": {"npm": []}}, "older/x": {"channels": {"code": []}}}})
+        write_json(self.work / "cache/meta.json", {"older/x": {"nameWithOwner": "New/X"}, "new/name": None})
+        fetch = FakeFetch([("graphql", json.dumps({"data": {"r0": None, "r1": {"nameWithOwner": "New/X"}, "r2": {"nameWithOwner": "New/Name"}}}))])
+        out, final = script("qgs-recall").recall(self.work, self.work, ["product"], fetch=fetch)
+        self.assertEqual(out["standards"]["adjudicated (source read)"], {"size": 3, "found": 2, "quasi_sensitivity": 0.667, "per_channel": {"code": 1, "npm": 1},
+                                                                         "missed": ["gone/repo"], "gone": ["gone/repo"]})
+        self.assertEqual(final, ["New/Name", "New/X", "gone/repo"])
+        again = FakeFetch()
+        script("qgs-recall").recall(self.work, self.work, ["product"], fetch=again)
+        self.assertEqual(again.calls, [])
+
     def test_qgs_recall_reports_kappa_and_quasi_sensitivity(self):
         verdicts = [("a/one", "yes", "yes"), ("a/two", "yes", "no"), ("a/three", "no", "no"), ("a/four", "yes", "yes")]
         for side, index in (("A", 1), ("B", 2)):
             write_jsonl(self.work / f"qgs-judge-{side}.jsonl", [{"id": i, "repo": v[0], "verdict": v[index]} for i, v in enumerate(verdicts)])
         write_json(self.work / "qgs-adjudicated.json", {"final": ["a/one", "a/two", "a/four"]})
         write_json(self.work / "product-state.json", {"hits": {"a/one": {"channels": {"npm": [], "code": []}}, "a/two": {"channels": {"npm": []}}}})
+        self.resolved("a/one", "a/two", "a/four")
         out, _ = script("qgs-recall").recall(self.work, self.work, ["product"])
         self.assertEqual((out["agreement"], out["kappa"]), (0.75, 0.5))
         self.assertEqual(out["standards"]["strict (yes by both)"], {"size": 2, "found": 1, "quasi_sensitivity": 0.5, "per_channel": {"code": 1, "npm": 1}, "missed": ["a/four"]})
@@ -171,6 +190,7 @@ class OrderAndSnowballTest(unittest.TestCase):
         write_json(self.work / "config-state.json", {"hits": {k: {"channels": {"github-code-search": []}} for k in ("a/one", "a/two", "a/three")}})
         write_jsonl(self.work / "config-screening-order.jsonl", [{"order_rank": 1, "repo": "a/one", "forced": False}, {"order_rank": 2, "repo": "a/two", "forced": True},
                                                                  {"order_rank": 9, "repo": "a/three", "forced": False}])
+        self.resolved("a/one", "a/two", "a/three", "a/four")
         result = subprocess.run([sys.executable, "-B", str(HERE / "qgs-recall.py"), "--topic", "demo", "--repo", str(self.repo), "--work", str(self.work),
                                  "--states", "config", "--stratum", "config", "--cut", "3"], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -200,6 +220,7 @@ class OrderAndSnowballTest(unittest.TestCase):
             write_jsonl(self.work / f"config-qgs-judge-{side}.jsonl", [{"id": 1, "repo": "a/one", "verdict": "yes"}])
         write_json(self.work / "config-qgs-adjudicated.json", {"final": ["a/one"]})
         write_json(self.work / "config-state.json", {"hits": {"a/one": {"channels": {"github-code-search": []}}}})
+        self.resolved("a/one")
         result = subprocess.run([sys.executable, "-B", str(HERE / "qgs-recall.py"), "--topic", "demo", "--repo", str(self.repo), "--work", str(self.work),
                                  "--states", "config", "--stratum", "config"], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
