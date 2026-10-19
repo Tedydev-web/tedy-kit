@@ -1,6 +1,6 @@
 {
   "name": "tedy",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Pull request review, development and project management with drafts the user approves, a reconcile across PRD, design and code, and gates on publishing and pushing.",
   "author": {
     "name": "tedydev"
