@@ -15,7 +15,7 @@ def pilot_job(topic, stratum, side, model, which):
         option = session_a(topic)
         if model and model != option["model"]:
             raise TopicError(f"session A is {option['model']} in the topic config, not {model}")
-        return option, f"{stratum}-pilot-A"
+        return option, f"{stratum}-pilot-A", None
     primary, fallback, also = session_b(topic)
     options = [o for o in (primary, fallback, *also) if o]
     if model:
@@ -26,9 +26,12 @@ def pilot_job(topic, stratum, side, model, which):
         option = primary if which(primary["cli"]) else fallback
         if option is None:
             raise TopicError(f"session B runs on {primary['cli']}, which is not on PATH, and the topic config names no fallback")
+    if option is fallback and which(primary["cli"]):
+        raise TopicError(f"{primary['cli']} is on PATH, so session B is {primary['model']}; the fallback runs only without it")
     if not which(option["cli"]):
         raise TopicError(f"{option['model']} runs on {option['cli']}, which is not on PATH")
-    return option, f"{stratum}-pilot-B-{option['model']}"
+    reason = f"{primary['cli']} was not on PATH when this pilot ran" if option is fallback else None
+    return option, f"{stratum}-pilot-B-{option['model']}", reason
 
 
 def screen_job(work, stratum, side, which):
@@ -39,9 +42,15 @@ def screen_job(work, stratum, side, which):
     if stratum not in freeze["strata"]:
         raise TopicError(f"{path} does not freeze the {stratum} stratum")
     option = freeze["session_a"] if side == "A" else freeze["session_b"]["chosen"]
+    primary = freeze["session_b"].get("primary", option)
+    reason = None
+    if side == "B" and option != primary:
+        if which(primary["cli"]):
+            raise TopicError(f"the freeze ran session B on the fallback {option['model']}, but {primary['cli']} is now on PATH; the frozen session B stays the fallback, so run its blocks with {primary['cli']} off PATH")
+        reason = f"{primary['cli']} was not on PATH when this block ran"
     if not which(option["cli"]):
         raise TopicError(f"session {side} runs on {option['cli']}, which is not on PATH")
-    return freeze["criteria"], freeze["strata"][stratum], option, f"{stratum}-screen-{side}"
+    return freeze["criteria"], freeze["strata"][stratum], option, f"{stratum}-screen-{side}", reason
 
 
 def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
@@ -63,15 +72,15 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
         if args.pilot:
             if not args.criteria:
                 raise TopicError("--pilot needs --criteria")
-            option, name = pilot_job(topic, args.stratum, args.side, args.model, which)
+            option, name, reason = pilot_job(topic, args.stratum, args.side, args.model, which)
             criteria, frozen, key = args.criteria, None, name
         else:
             if args.model:
                 raise TopicError("--model is for the pilot; after the freeze the freeze names both sessions")
-            criteria, frozen, option, name = screen_job(args.work, args.stratum, args.side, which)
+            criteria, frozen, option, name, reason = screen_job(args.work, args.stratum, args.side, which)
             key = f"{args.stratum}-{args.side}"
         job = {"work": args.work, "repo": args.repo, "stratum": args.stratum, "name": name, "key": key, "option": option, "criteria": criteria, "frozen": frozen,
-               "pilot": args.pilot, "bare": bool(environ.get("ANTHROPIC_API_KEY")), "first": int(first), "last": int(last), "today": args.today}
+               "pilot": args.pilot, "fallback_reason": reason, "bare": bool(environ.get("ANTHROPIC_API_KEY")), "first": int(first), "last": int(last), "today": args.today}
         rows = run_block(job, fetch or Fetch())
         print(f"{name}: {rows} rows from {option['cli']} {option['model']} (family {model_family(option['model'])})")
     except (TopicError, NetworkRefused) as error:

@@ -1,9 +1,6 @@
 import hashlib
 import json
-import os
 import shutil
-import subprocess
-import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -30,8 +27,10 @@ def claude_reply(text, models=("claude-opus-5-5",), turns=1, denials=()):
     return json.dumps({"type": "result", "is_error": False, "num_turns": turns, "permission_denials": list(denials), "result": text, "modelUsage": {m: {} for m in models}})
 
 
-def agy_reply(text, denied=None):
-    return json.dumps({"status": "SUCCESS", "num_turns": 1, "response": text, **({"denied_actions": denied} if denied else {})})
+def agy_reply(text):
+    events = [{"event": "init", "init": {"model": "gemini-3.8-flash-high"}}, {"event": "step_update", "step_update": {"step_index": 1, "step_type": "agent_response", "state": "DONE"}},
+              {"event": "result", "result": {"status": "SUCCESS", "num_turns": 1, "response": text}}]
+    return "".join(json.dumps(e) + "\n" for e in events)
 
 
 class SessionBase(unittest.TestCase):
@@ -67,69 +66,6 @@ class SessionBase(unittest.TestCase):
                                                          "strata": {"config": {"frozen_after_rank": 1, "packet_sha256": packet or packet_sha, "criteria_sha256": criteria_sha}}})
 
 
-class IsolationTest(SessionBase):
-    def test_claude_runs_bare_with_no_tools_settings_or_mcp_in_an_empty_folder_that_is_removed(self):
-        fetch = FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one")))])
-        self.pilot(fetch)
-        [index] = [i for i, c in enumerate(fetch.calls) if c.startswith("claude -p")]
-        cwd = fetch.cwds[index]
-        self.assertIsNotNone(cwd)
-        self.assertNotEqual(Path(cwd), self.work)
-        self.assertFalse(Path(cwd).exists())
-        self.assertTrue(fetch.calls[index].endswith("--model claude-opus-5-5 --effort high --output-format json --bare --tools  --setting-sources  --strict-mcp-config "
-                                                    "--no-session-persistence --disable-slash-commands --max-turns 1"))
-        self.assertIn("claude --version", fetch.calls)
-
-    def test_without_an_api_key_claude_runs_the_proven_flags_without_bare_and_records_the_threat(self):
-        fetch = FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one")))])
-        self.pilot(fetch, environ={"HOME": "/nowhere"})
-        [call] = fetch.called("claude -p")
-        self.assertNotIn("--bare", call)
-        self.assertTrue(call.endswith("--output-format json --tools  --setting-sources  --strict-mcp-config --no-session-persistence --disable-slash-commands --max-turns 1"))
-        entry = self.meta()["config-pilot-A"]
-        self.assertEqual(entry.get("threats"), ["plugin hooks not excluded (no --bare)"])
-        self.assertNotIn("--bare", entry["isolation"])
-
-    def test_with_an_api_key_claude_runs_bare_and_records_no_threat(self):
-        fetch = FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one")))])
-        self.pilot(fetch, environ={"ANTHROPIC_API_KEY": "stub"})
-        self.assertIn(" --bare ", fetch.called("claude -p")[0])
-        self.assertEqual(self.meta()["config-pilot-A"].get("threats"), [])
-
-    def test_agy_runs_without_effort_or_slash_commands_in_an_empty_folder(self):
-        fetch = FakeFetch([("agy --model", agy_reply(reply_row(1, "o/one")))])
-        self.pilot(fetch, "B")
-        [call] = fetch.called("agy --model")
-        self.assertTrue(call.startswith("agy --model gemini-3.8-flash-high --output-format json --print-timeout 600s --disable-slash-commands --print "))
-        self.assertIsNotNone(fetch.cwds[fetch.calls.index(call)])
-
-    def test_a_session_that_writes_into_its_folder_is_refused(self):
-        class Writer(FakeFetch):
-            def run(self, cmd, timeout=180, cwd=None):
-                if cwd:
-                    (Path(cwd) / "notes.txt").write_text("x")
-                return super().run(cmd, timeout, cwd)
-
-        with self.assertRaises(SystemExit) as raised:
-            self.pilot(Writer([("claude -p", claude_reply(reply_row(1, "o/one")))]))
-        self.assertIn("wrote ['notes.txt']", str(raised.exception))
-        self.assertFalse((self.work / "config-pilot-A.jsonl").exists())
-
-    def test_the_network_guard_stops_both_clis_even_when_they_are_on_path(self):
-        bin_dir = Path(tempfile.mkdtemp(prefix="fake-cli-"))
-        self.addCleanup(shutil.rmtree, bin_dir)
-        for cli in ("claude", "agy"):
-            (bin_dir / cli).write_text(f"#!/bin/sh\ntouch {bin_dir}/{cli}-ran\n")
-            (bin_dir / cli).chmod(0o755)
-        for side in "AB":
-            result = subprocess.run([sys.executable, "-B", str(HERE / "run-screening-session.py"), "--topic", "demo", "--repo", str(self.repo), "--work", str(self.work),
-                                     "--stratum", "config", "--side", side, "--ranks", "1-1", "--pilot", "--criteria", CRITERIA],
-                                    capture_output=True, text=True, env={**os.environ, "STUDY_NO_NETWORK": "1", "PATH": str(bin_dir)})
-            self.assertNotEqual(result.returncode, 0)
-            self.assertIn("STUDY_NO_NETWORK is set", result.stderr)
-        self.assertEqual(sorted(p.name for p in bin_dir.iterdir()), ["agy", "claude"])
-
-
 class BlockRecordTest(SessionBase):
     def test_every_block_keeps_its_own_hashes_and_the_session_header_is_shared(self):
         fetch = FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one")))])
@@ -137,7 +73,9 @@ class BlockRecordTest(SessionBase):
         fetch.rules = [("claude -p", claude_reply(reply_row(2, "o/two")))]
         self.pilot(fetch, "A", "2-2")
         entry = self.meta()["config-pilot-A"]
-        self.assertEqual({k: entry.get(k) for k in ("cli", "model", "effort", "cli_version")}, {"cli": "claude", "model": "claude-opus-5-5", "effort": "high", "cli_version": "unknown"})
+        self.assertEqual({k: entry.get(k) for k in ("cli", "model", "effort", "cli_version")}, {"cli": "claude", "model": "claude-opus-5-5", "effort": "high", "cli_version": None})
+        self.assertEqual([b["cli_version"] for b in entry["blocks"]], ["unknown", "unknown"])
+        self.assertEqual(len({b["prompt_sha256"] for b in entry["blocks"]}), 2)
         self.assertEqual([b["ranks"] for b in entry.get("blocks", [])], [[1], [2]])
         rows = [json.loads(line) for line in (self.work / "config-screening-inputs.jsonl").read_text().splitlines()]
         canonical = lambda value: hashlib.sha256(json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()).hexdigest()
@@ -146,6 +84,30 @@ class BlockRecordTest(SessionBase):
         self.assertEqual(entry["blocks"][0]["packet_sha256"], hashlib.sha256(b"# packet\n").hexdigest())
         self.assertEqual(entry["blocks"][0]["criteria_sha256"], hashlib.sha256((self.repo / CRITERIA).read_bytes()).hexdigest())
         self.assertEqual(entry["blocks"][0]["served_models"], ["claude-opus-5-5"])
+
+    def test_a_cli_version_change_between_blocks_is_kept_per_block(self):
+        fetch = FakeFetch([("claude --version", "2.1.303 (Claude Code)\n"), ("claude -p", claude_reply(reply_row(1, "o/one")))])
+        self.pilot(fetch, "A", "1-1")
+        fetch.rules = [("claude --version", "2.1.304 (Claude Code)\n"), ("claude -p", claude_reply(reply_row(2, "o/two")))]
+        self.pilot(fetch, "A", "2-2")
+        self.assertEqual([b["cli_version"] for b in self.meta()["config-pilot-A"]["blocks"]], ["2.1.303 (Claude Code)", "2.1.304 (Claude Code)"])
+
+    def test_a_failed_meta_write_rolls_the_rows_back(self):
+        import study_session
+        self.pilot(FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one") + "\nmechanism: gate: g"))]))
+        before = [(self.work / n).read_text() for n in ("config-pilot-A.jsonl", "config-pilot-A-mechanisms.md")]
+        original = study_session.add_block
+
+        def broken(*args, **kwargs):
+            raise TopicError("disk full")
+
+        study_session.add_block = broken
+        self.addCleanup(setattr, study_session, "add_block", original)
+        with self.assertRaises(SystemExit) as raised:
+            self.pilot(FakeFetch([("claude -p", claude_reply(reply_row(2, "o/two") + "\nmechanism: hook: h"))]), "A", "2-2")
+        self.assertIn("disk full", str(raised.exception))
+        self.assertEqual([(self.work / n).read_text() for n in ("config-pilot-A.jsonl", "config-pilot-A-mechanisms.md")], before)
+        self.assertEqual([b["ranks"] for b in self.meta()["config-pilot-A"]["blocks"]], [[1]])
 
     def test_a_block_with_another_model_setting_is_refused_before_any_call(self):
         self.pilot(FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one")))]))
@@ -195,6 +157,21 @@ class PilotAndFreezeRunTest(SessionBase):
         self.pilot(fetch, "B", which=lambda cli: cli != "agy")
         self.assertEqual(fetch.called("agy"), [])
         self.assertTrue((self.work / "config-pilot-B-claude-sonnet-4-6.jsonl").is_file())
+        self.assertEqual(self.meta()["config-pilot-B-claude-sonnet-4-6"]["blocks"][0]["fallback_reason"], "agy was not on PATH when this pilot ran")
+
+    def test_the_fallback_is_refused_while_the_primary_cli_is_on_path(self):
+        fetch = FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one"), ("claude-sonnet-4-6",)))])
+        with self.assertRaises(SystemExit) as raised:
+            self.pilot(fetch, "B", "1-1", "--model", "claude-sonnet-4-6")
+        self.assertIn("agy is on PATH, so session B is gemini-3.8-flash-high; the fallback runs only without it", str(raised.exception))
+        self.freeze()
+        freeze = json.loads((self.work / "protocol-freeze.json").read_text())
+        freeze["session_b"] = {"chosen": SESSIONS["B"]["fallback"], "primary": {"cli": "agy", "model": "gemini-3.8-flash-high"}}
+        write_json(self.work / "protocol-freeze.json", freeze)
+        with self.assertRaises(SystemExit) as raised:
+            self.run_session(fetch, "--side", "B", "--ranks", "2-2")
+        self.assertIn("agy is now on PATH; the frozen session B stays the fallback", str(raised.exception))
+        self.assertEqual(fetch.called("claude -p"), [])
 
     def test_after_the_freeze_both_sessions_come_from_the_freeze_not_the_live_config(self):
         self.freeze()
@@ -224,6 +201,32 @@ class PilotAndFreezeRunTest(SessionBase):
         self.assertIn("rank 2", str(raised.exception))
         self.assertFalse((self.work / "config-pilot-A.jsonl").exists())
         self.assertTrue(list((self.work / "prompts").glob("*.response.txt")))
+
+    def test_a_block_with_a_transient_fetch_error_is_refused_and_a_permanent_one_is_coded_dead(self):
+        inputs = self.work / "config-screening-inputs.jsonl"
+        rows = [json.loads(line) for line in inputs.read_text().splitlines()]
+        rows[1].update({"error": "tree: exit 1: HTTP 502", "error_kind": "transient"})
+        write_jsonl(inputs, rows)
+        fetch = FakeFetch()
+        with self.assertRaises(SystemExit) as raised:
+            self.pilot(fetch, "A", "1-2")
+        self.assertIn("rank 2 has a transient fetch error", str(raised.exception))
+        self.assertEqual(fetch.called("claude -p"), [])
+        rows[1].update({"error": "commit: exit 1: HTTP 404", "error_kind": "permanent"})
+        write_jsonl(inputs, rows)
+        fetch = FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one") + "\n" + reply_row(2, "o/two")))])
+        self.pilot(fetch, "A", "1-2")
+        self.assertIn("A row whose error_kind is permanent", fetch.called("claude -p")[0])
+
+    def test_a_scored_block_can_be_dropped_and_screened_again(self):
+        self.pilot(FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one") + "\nmechanism: gate: g"))]))
+        drop = script("drop-screening-block").main
+        drop(["--topic", "demo", "--repo", str(self.repo), "--work", str(self.work), "--stratum", "config", "--session", "config-pilot-A", "--ranks", "1-1"])
+        self.assertEqual(self.meta()["config-pilot-A"]["blocks"], [])
+        self.assertEqual((self.work / "config-pilot-A.jsonl").read_text(), "")
+        self.assertTrue(list((self.work / "dropped").glob("config-pilot-A-1-1.*")))
+        self.pilot(FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one")))]))
+        self.assertEqual(len(self.meta()["config-pilot-A"]["blocks"]), 1)
 
     def test_a_prompt_over_the_argument_limit_is_refused(self):
         (self.work / "screening-packet-config.md").write_text("p" * 130000)

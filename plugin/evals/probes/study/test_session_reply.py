@@ -9,6 +9,12 @@ EXPECTED = {1: {"repo": "o/one", "sha": "c" * 40}, 2: {"repo": "o/two", "sha": "
 CELLS = {c: {"v": 1, "why": "w"} for c in ("Authority", "Methodology", "Objectivity", "Date", "Position", "Novelty", "Relevance")}
 
 
+def agy_stream(result, *steps):
+    events = [{"event": "init", "init": {"model": "gemini-3.8-flash-high"}}, {"event": "step_update", "step_update": {"step_index": 0, "step_type": "user_input", "state": "DONE"}}]
+    events += [{"event": "step_update", "step_update": {"step_index": i + 1, "step_type": t, "state": "DONE"}} for i, t in enumerate(steps)]
+    return "".join(json.dumps(e) + "\n" for e in events + ([{"event": "result", "result": result}] if result else []))
+
+
 def row(rank, repo):
     return json.dumps({"order_rank": rank, "repo": repo, "scores": CELLS, "mechanisms": ["gate"], "decision": "eligible"})
 
@@ -27,13 +33,16 @@ class ReplyTextTest(unittest.TestCase):
         self.refused(CLAUDE, json.dumps({"num_turns": 3, "permission_denials": [], "modelUsage": {"claude-opus-5-5": {}}}), "ok", "3 turns")
         self.refused(CLAUDE, json.dumps({"num_turns": 1, "permission_denials": [{"tool": "Bash"}], "modelUsage": {"claude-opus-5-5": {}}}), "ok", "permission denials")
         self.refused(CLAUDE, json.dumps({"num_turns": 1, "permission_denials": [], "modelUsage": {"claude-opus-4-8": {}}}), "ok", r"served \['claude-opus-4-8'\], not the requested")
-        self.refused(AGY, json.dumps({"status": "ERROR", "response": ""}), "ok", "status ERROR")
-        self.refused(AGY, json.dumps({"status": "SUCCESS", "response": "", "denied_actions": [{"permission": "command"}]}), "ok", "tried tools in print mode")
+        self.refused(AGY, agy_stream(None, "agent_response"), "ok", "holds no result event")
+        self.refused(AGY, agy_stream({"status": "ERROR", "num_turns": 1, "response": ""}), "ok", "status ERROR")
+        self.refused(AGY, agy_stream({"status": "SUCCESS", "num_turns": 1, "response": "x"}, "tool", "agent_response"), "ok", "1 tool steps, denied actions None; a screening session has no tools")
+        self.refused(AGY, agy_stream({"status": "SUCCESS", "num_turns": 1, "response": "", "denied_actions": [{"permission": "mcp"}]}), "ok", "0 tool steps, denied actions")
+        self.refused(AGY, agy_stream({"status": "SUCCESS", "num_turns": 2, "response": "x"}, "agent_response"), "ok", "2 turns; a screening session answers in one turn")
 
     def test_a_clean_reply_returns_the_text_and_what_served_it(self):
         from study_session_reply import reply_text
         self.assertEqual(reply_text(CLAUDE, json.dumps({"num_turns": 1, "permission_denials": [], "result": "x", "modelUsage": {"claude-opus-5-5": {}}}), "ok"), ("x", ["claude-opus-5-5"]))
-        self.assertEqual(reply_text(AGY, json.dumps({"status": "SUCCESS", "response": "y"}), "ok"), ("y", None))
+        self.assertEqual(reply_text(AGY, "agy: a banner line that is not JSON\n" + agy_stream({"status": "SUCCESS", "num_turns": 1, "response": "y"}, "agent_response"), "ok"), ("y", None))
 
 
 class ParseReplyTest(unittest.TestCase):

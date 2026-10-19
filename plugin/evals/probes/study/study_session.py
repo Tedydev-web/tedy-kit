@@ -15,11 +15,14 @@ from study_topic import TopicError
 MAX_PROMPT = 120_000
 AGY_TIMEOUT = "600s"
 NO_BARE_THREAT = "plugin hooks not excluded (no --bare)"
+AGY_THREAT = "agy MCP servers, hooks and user settings not excluded"
 CLAUDE_ISOLATION = ("--tools", "", "--setting-sources", "", "--strict-mcp-config", "--no-session-persistence", "--disable-slash-commands", "--max-turns", "1")
 AGY_ISOLATION = ("--disable-slash-commands",)
-SESSION_FIELDS = ("cli", "model", "effort", "cli_version", "isolation", "served")
-ROWS_NOTE = ("Each row below is one JSON object: the pinned commit, the repository facts from discovery, the top-level listing, the README excerpt and up to two asset files "
-             "read at that commit. Score only from these inputs; you have no tools. A row with an error field could not be read: code it dead.")
+SESSION_FIELDS = ("cli", "model", "effort", "isolation", "served")
+ROWS_NOTE = ("Each row below is one JSON object: the pinned commit, the repository facts from discovery, the top-level listing, the README excerpt, up to two asset files "
+             "read at that commit, and the evidence the anchors score on (releases, tags, published packages, the owner's public repositories, workflows, test paths, "
+             "the CHANGELOG head). Score only from these inputs; you have no tools. A row whose error_kind is permanent could not be read because the repository or "
+             "commit is gone: code it dead.")
 REPLY_FORMAT = ("## Reply format\n\nReply with nothing but these lines. One JSON object per row, on one line, in order_rank order, with the fields order_rank, repo, file, "
                 "scores (an object of the seven cells Authority, Methodology, Objectivity, Date, Position, Novelty, Relevance, each {\"v\": 1 | 0.5 | 0, \"why\": \"...\"}), "
                 "mechanisms (names), new (true when a mechanism is new to you), decision (eligible, or exclude: <code>) and note. Then one line per mechanism you name "
@@ -51,15 +54,14 @@ def session_command(option, prompt, bare):
     if option["cli"] == "claude":
         effort = ["--effort", option["effort"]] if option.get("effort") else []
         return ["claude", "-p", prompt, "--model", option["model"], *effort, "--output-format", "json", *claude_flags(bare)]
-    return ["agy", "--model", option["model"], "--output-format", "json", "--print-timeout", AGY_TIMEOUT, *AGY_ISOLATION, "--print", prompt]
+    return ["agy", "--model", option["model"], "--output-format", "stream-json", "--print-timeout", AGY_TIMEOUT, *AGY_ISOLATION, "--print", prompt]
 
 
-def session_header(option, cli_version, bare):
+def session_header(option, bare):
     effort = option.get("effort") or ("default" if option["cli"] == "claude" else "set by the model id")
     served = "modelUsage must name only the requested model" if option["cli"] == "claude" else "requested only: agy reports no served model"
-    threats = [NO_BARE_THREAT] if option["cli"] == "claude" and not bare else []
-    return {"cli": option["cli"], "model": option["model"], "effort": effort, "cli_version": cli_version, "isolation": isolation(option["cli"], bare), "served": served,
-            "threats": threats}
+    threats = ([NO_BARE_THREAT] if not bare else []) if option["cli"] == "claude" else [AGY_THREAT]
+    return {"cli": option["cli"], "model": option["model"], "effort": effort, "isolation": isolation(option["cli"], bare), "served": served, "threats": threats}
 
 
 def build_prompt(packet, criteria_path, criteria_text, mechanisms_text, rows):
@@ -116,6 +118,10 @@ def run_block(job, fetch):
     expected = {r: inputs[r] for r in sorted(inputs) if job["first"] <= r <= job["last"]}
     if not expected:
         raise TopicError(f"no fetched {stratum} inputs between ranks {job['first']} and {job['last']}; run fetch-screening-inputs.py first")
+    transient = [r for r, row in expected.items() if "error" in row and row.get("error_kind") != "permanent"]
+    if transient:
+        raise TopicError(f"rank {transient[0]} has a transient fetch error ({expected[transient[0]]['error']}); run fetch-screening-inputs.py again, "
+                         "or mark it permanent with --mark-permanent after checking it by hand")
     done = {r["order_rank"] for r in read_jsonl(work, f"{name}.jsonl")} & set(expected)
     if done:
         raise TopicError(f"{name}.jsonl already holds ranks {sorted(done)}")
@@ -129,7 +135,8 @@ def run_block(job, fetch):
     version, status, _ = fetch.run([option["cli"], "--version"], timeout=60)
     if status != "ok":
         raise TopicError(f"{option['cli']} --version: {status}")
-    header = session_header(option, version.strip().splitlines()[0] if version.strip() else "unknown", job["bare"])
+    cli_version = version.strip().splitlines()[0] if version.strip() else "unknown"
+    header = session_header(option, job["bare"])
     update_sessions(work, lambda sessions: check_header(sessions, job["key"], header, list(expected)))
     if job.get("pilot"):
         snapshot = work / f"screening-packet-{stratum}-pilot-{hashes['packet_sha256'][:12]}.md"
@@ -149,16 +156,28 @@ def run_block(job, fetch):
     if problems:
         (prompts / f"{stem}.response.txt").write_text(text)
         raise TopicError(f"{name} ranks {job['first']}-{job['last']}: {'; '.join(problems)}; reply kept in prompts/{stem}.response.txt, nothing written")
-    with (work / f"{name}.jsonl").open("a") as out:
-        out.write("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
     names, fresh = {line.split(":", 1)[0] for line in known.splitlines()}, []
     for n, d in mechanisms:
         if n not in names:
             names.add(n)
             fresh.append(f"{n}: {d}\n")
-    with mech_file.open("a") as out:
-        out.write("".join(fresh))
-    block = {"ranks": list(expected), **hashes, "inputs_sha256": canonical_sha256(list(expected.values())),
-             "row_sha256": {str(r): canonical_sha256(row) for r, row in expected.items()}, "date": job["today"], **({"served_models": served} if served else {})}
-    update_sessions(work, lambda sessions: add_block(sessions, job["key"], header, block))
+    block = {"ranks": list(expected), **hashes, "prompt_sha256": sha256_bytes(prompt.encode()), "inputs_sha256": canonical_sha256(list(expected.values())),
+             "row_sha256": {str(r): canonical_sha256(row) for r, row in expected.items()}, "cli_version": cli_version, "date": job["today"],
+             **({"served_models": served} if served else {}), **({"fallback_reason": job["fallback_reason"]} if job.get("fallback_reason") else {})}
+    rows_file = work / f"{name}.jsonl"
+    sizes = {f: f.stat().st_size if f.is_file() else None for f in (rows_file, mech_file)}
+    try:
+        with rows_file.open("a") as out:
+            out.write("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
+        with mech_file.open("a") as out:
+            out.write("".join(fresh))
+        update_sessions(work, lambda sessions: add_block(sessions, job["key"], header, block))
+    except BaseException:
+        for path, size in sizes.items():
+            if size is None:
+                path.unlink(missing_ok=True)
+            else:
+                with path.open("r+") as handle:
+                    handle.truncate(size)
+        raise
     return len(rows)
