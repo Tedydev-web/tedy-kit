@@ -14,8 +14,10 @@ def screening_order(topic, stratum, ranked, limit):
     if not isinstance(forced_repos, list):
         raise TopicError(f"{topic['path']}: strata.{stratum}.forced_repos must be a list")
     forced = {name.lower() for name in forced_repos}
+    last = max([0] + [r["order_rank"] for r in ranked["rows"]])
+    aggregators = [{**a, "order_rank": last + i} for i, a in enumerate((a for a in ranked.get("aggregators", []) if a["repo"].lower() in forced), 1)]
     pool = ranked["rows"] + ranked.get("aggregators", [])
-    keep = ranked["rows"][:limit] + [r for r in pool if r["repo"].lower() in forced and r.get("order_rank", limit + 1) > limit]
+    keep = ranked["rows"][:limit] + [r for r in ranked["rows"] if r["repo"].lower() in forced and r["order_rank"] > limit] + aggregators
     missing = sorted(forced - {r["repo"].lower() for r in pool})
     return [{**{k: r[k] for k in FIELDS if k in r}, "forced": r["repo"].lower() in forced} for r in keep], missing
 

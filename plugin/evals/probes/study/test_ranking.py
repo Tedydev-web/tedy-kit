@@ -82,8 +82,22 @@ class OrderAndSnowballTest(unittest.TestCase):
         ranked["rows"][3]["repo"] = "O/Forced-Late"
         topic = {**self.topic, "strata": {"config": {"forced_repos": ["o/forced-late", "o/forced", "o/absent"]}}}
         rows, missing = script("export-screening-order").screening_order(topic, "config", ranked, 2)
-        self.assertEqual([(r.get("order_rank"), r["repo"], r["forced"]) for r in rows], [(1, "o/r1", False), (2, "o/r2", False), (4, "O/Forced-Late", True), (None, "o/forced", True)])
+        self.assertEqual([(r.get("order_rank"), r["repo"], r["forced"]) for r in rows], [(1, "o/r1", False), (2, "o/r2", False), (4, "O/Forced-Late", True), (6, "o/forced", True)])
         self.assertEqual(missing, ["o/absent"])
+
+    def test_a_forced_aggregator_gets_a_rank_after_every_ranked_row(self):
+        topic = {**self.topic, "strata": {"config": {"forced_repos": ["o/forced", "o/other"]}}}
+        ranked = {**self.ranked(3), "aggregators": [{"repo": "o/other", "description": "curated"}, {"repo": "o/forced", "description": "awesome"}]}
+        rows, _ = script("export-screening-order").screening_order(topic, "config", ranked, 2)
+        self.assertEqual([(r["order_rank"], r["repo"]) for r in rows], [(1, "o/r1"), (2, "o/r2"), (4, "o/other"), (5, "o/forced")])
+
+    def test_a_forced_row_ranked_past_1000_does_not_move_the_snowball_numbering(self):
+        write_jsonl(self.work / "config-screening-order.jsonl", [{"order_rank": 1, "repo": "o/r1"}, {"order_rank": 1001, "repo": "s/old"},
+                                                                 {"order_rank": 1002, "repo": "o/forced", "forced": True}, {"order_rank": 7071, "repo": "o/agg", "forced": True}])
+        write_jsonl(self.work / "snowball-screening-order.jsonl", [{"order_rank": 1001, "repo": "s/new"}, {"order_rank": 1002, "repo": "s/next"}])
+        write_json(self.work / "snowball-cut.json", {"stratum": "config", "cut_row": 60, "source": "the written stop row"})
+        added = script("merge-snowball-order").merge(self.work)
+        self.assertEqual([(r["order_rank"], r["repo"]) for r in added], [(1003, "s/new"), (1004, "s/next")])
 
     def test_snowballed_rows_above_the_stop_row_are_numbered_from_1001(self):
         before = self.ranked(3)
