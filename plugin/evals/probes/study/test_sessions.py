@@ -35,7 +35,7 @@ def agy_reply(text):
 
 class SessionBase(unittest.TestCase):
     def setUp(self):
-        self.repo = topic_repo(strata={"config": {"stop_row": None, "forced_repos": []}})
+        self.repo = topic_repo(strata={"config": {"stop_row": None, "forced_repos": [], "channels": {}}, "local": {"stop_row": None, "forced_repos": []}})
         self.work = Path(tempfile.mkdtemp(prefix="study-sessions-"))
         for path in (self.repo, self.work):
             self.addCleanup(shutil.rmtree, path)
@@ -147,6 +147,15 @@ class RunSessionTest(SessionBase):
                                 capture_output=True, text=True, env={**os.environ, "STUDY_NO_NETWORK": "1"})
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("STUDY_NO_NETWORK is set", result.stderr)
+
+    def test_a_tag_only_stratum_gets_no_inputs_and_no_sessions(self):
+        with self.assertRaises(SystemExit) as raised:
+            script("fetch-screening-inputs").main(["--topic", "demo", "--repo", str(self.repo), "--work", str(self.work), "--stratum", "local"], fetch=FakeFetch())
+        self.assertIn("local is tag-only", str(raised.exception))
+        with self.assertRaises(SystemExit) as raised:
+            script("run-screening-session").main(["--topic", "demo", "--repo", str(self.repo), "--work", str(self.work), "--stratum", "local", "--side", "A", "--ranks", "1-1",
+                                                  "--pilot", "--criteria", "docs/prior-art/quality-criteria-v2.md"], fetch=FakeFetch())
+        self.assertIn("local is tag-only", str(raised.exception))
 
     def test_model_families_come_from_the_model_id(self):
         family = script("run-screening-session").model_family

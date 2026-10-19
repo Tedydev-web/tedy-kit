@@ -134,6 +134,7 @@ Terms added to reach the target are word classes from the `terms` column, never 
 ## Screening rules
 
 - **Facet and order.** A facet is one (problem, context) pair. Rows are taken in screening order, per stratum.
+- **Tag-only strata.** A stratum with no discovery channels, such as the local inventory of installed assets, carries tags and never copied text. It gets no inputs, sessions, freeze or stop row, and the record states that two sessions did not screen it.
 - **Inputs.** For each row the toolchain pins the commit and fetches the README excerpt, the top-level listing and at most two asset files: for the config stratum the unit's files, `SKILL.md`, `AGENTS.md`, `CLAUDE.md` and `hooks/hooks.json` first; for the product stratum the contract files. Both sessions score these same inputs and have no tools, so neither chooses what to read. The fetched text stays out of the repository; the record pins its sha256.
 - **Pilot block and freeze.**
   - Both sessions screen the first `pilot_rows` unforced rows of each stratum (20 by default). The packet may be revised on what they show.

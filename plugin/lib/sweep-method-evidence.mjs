@@ -56,6 +56,12 @@ export function checkMethodEvidence(text, { files, read, criteriaText, topic }) 
   const sessions = JSON.parse(read("meta.json") ?? "{}").sessions ?? {};
   const errors = [...protocolErrors(text, strata, { read, criteriaText }), ...sessionErrors(files, sessions, read)];
   if (!topic) errors.push("no topic config names this sweep, so its stop rows cannot be checked");
+  const tagOnly = part(text, "Tag-only strata");
+  for (const [stratum, rule] of Object.entries(topic?.strata ?? {})) {
+    const screened = typeof rule?.channels === "object" && rule.channels !== null;
+    if (!screened && !new RegExp(`^- ${escape(stratum)}: tag-only `, "m").test(tagOnly)) errors.push(`${stratum}: a stratum without channels is not stated as tag-only`);
+    if (screened && !strata.includes(stratum)) errors.push(`${stratum}: the topic screens this stratum but the record has no ## Stratum: ${stratum}`);
+  }
   for (const stratum of strata) {
     const s = escape(stratum);
     if (!new RegExp(`^- ${s}: post-freeze rows \\d+ `, "m").test(agreement)) errors.push(`${stratum}: agreement is not measured on post-freeze rows`);

@@ -88,6 +88,13 @@ test("the topic config's stop row must be the one the data give", () => {
   assert.match(sweep.errors().join("\n"), /config: the topic config's stop_row is 60, the record stops at row 3/);
 });
 
+test("a tag-only stratum must be stated as not screened, and a screened one needs its section", () => {
+  const sweep = methodSweep();
+  assert.match(sweep.text, /^- local: tag-only inventory, not screened by two sessions/m);
+  assert.match(sweep.errors(sweep.text.replace(/^- local: tag-only .*\n/m, "")).join("\n"), /local: a stratum without channels is not stated as tag-only/);
+  assert.match(sweep.errors(sweep.text.replace("## Stratum: product\n", "## Stratum: gone\n")).join("\n"), /product: the topic screens this stratum but the record has no ## Stratum: product/);
+});
+
 test("an unrated calibration sample needs the LLM-only screening threat", () => {
   const sweep = methodSweep();
   assert.match(sweep.text, /^- LLM-only screening: /m);

@@ -6,7 +6,7 @@ from pathlib import Path
 from study_fetch import Fetch, NetworkRefused
 from study_protocol import FREEZE_FILE
 from study_session import model_family, run_block
-from study_topic import TopicError, load_topic, saigon_today, session_a, session_b_options, topic_arguments
+from study_topic import TopicError, load_topic, require_screened, saigon_today, session_a, session_b_options, topic_arguments
 
 
 def pilot_jobs(topic, stratum, side, which):
@@ -42,6 +42,7 @@ def main(argv=None, fetch=None, which=shutil.which):
                            (["--today"], {"default": saigon_today(), "help": "session date, default today in Asia/Saigon"})).parse_args(argv)
     try:
         topic = load_topic(args.repo, args.topic)
+        require_screened(topic, args.stratum)
         first, _, last = args.ranks.partition("-")
         if not (first.isdigit() and last.isdigit()):
             raise TopicError(f"--ranks {args.ranks!r} must read first-last")

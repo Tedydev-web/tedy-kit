@@ -9,7 +9,9 @@ from study_session import model_family
 from study_topic import TopicError
 
 SESSION_FIELDS = ("model", "effort", "packet_sha256", "date")
-CAPTURE_KEYS = {"A", "B", "shared", "union", "chapman", "chapman_lower_bound", "chapman_note"}
+TAG_ONLY = ("tag-only inventory, not screened by two sessions: its rows carry tags, never copied text, so it has no protocol freeze, sessions, kappa, "
+            "recall at the cut or stop row")
+CAPTURE_KEYS ={"A", "B", "shared", "union", "chapman", "chapman_lower_bound", "chapman_note"}
 
 
 def is_method_sweep(folder):
@@ -130,4 +132,7 @@ def method_parts(repo, topic, s, meta):
                            "shows consistency more than correctness")
     sections = ["## Protocol", ""] + protocol + ["", "## Screening sessions", ""] + sessions_out + ["", "## Calibration", ""] + calibration
     sections += ["", "## Threats", ""] + (threats or ["- none beyond the gaps below"]) + [""]
+    tag_only = [t for t in topic["strata"] if t not in strata]
+    if tag_only:
+        sections += ["## Tag-only strata", ""] + [f"- {t}: {TAG_ONLY}" for t in tag_only] + [""]
     return {"recall": recall_lines(folder, topic, strata) + [""], "agreement": agreement + [""], "sections": sections}

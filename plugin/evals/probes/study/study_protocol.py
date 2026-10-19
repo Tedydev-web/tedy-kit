@@ -4,7 +4,7 @@ from pathlib import Path
 
 from study_agreement import KAPPA_CRITERIA, session_kappas
 from study_screening_core import MechanismTable, derive, read_jsonl
-from study_topic import TopicError, pilot_rows, session_b_options
+from study_topic import TopicError, pilot_rows, screened_strata, session_b_options
 
 FREEZE_FILE = "protocol-freeze.json"
 EMPTY_TABLE = {"aliases": {}, "class": {}, "default": "new"}
@@ -52,7 +52,9 @@ def freeze(topic, repo, work, criteria, today):
     table_file = work / "mechanism-table.json"
     table = MechanismTable(json.loads(table_file.read_text()) if table_file.is_file() else EMPTY_TABLE)
     size, strata = pilot_rows(topic), {}
-    for stratum in topic["strata"]:
+    if not screened_strata(topic):
+        raise TopicError(f"{topic['path']}: no stratum has channels, so none is screened")
+    for stratum in screened_strata(topic):
         order = read_jsonl(work, f"{stratum}-screening-order.jsonl")
         if not order:
             raise TopicError(f"no {stratum}-screening-order.jsonl in {work}")

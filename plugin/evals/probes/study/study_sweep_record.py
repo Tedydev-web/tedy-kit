@@ -3,7 +3,7 @@ from pathlib import Path
 
 from study_method_record import is_method_sweep, method_parts, method_stops
 from study_screening_core import JUDGED, SHORT, MechanismTable, derive, normal, read_json, read_jsonl
-from study_topic import SNOWBALL_RANK_BASE, stratum_rule, sweep_folder
+from study_topic import SNOWBALL_RANK_BASE, screened_strata, stratum_rule, sweep_folder
 
 
 def screened_ranks(topic, folder, stratum, sides):
@@ -76,8 +76,10 @@ def screen(repo, topic):
 
 def render(repo, topic):
     repo = Path(repo)
-    stops = method_stops(topic, sweep_folder(repo, topic)) if is_method_sweep(sweep_folder(repo, topic)) else None
-    s = screen(repo, topic)
+    method_sweep = is_method_sweep(sweep_folder(repo, topic))
+    screened = {**topic, "strata": {k: topic["strata"][k] for k in screened_strata(topic)}} if method_sweep else topic
+    stops = method_stops(screened, sweep_folder(repo, topic)) if method_sweep else None
+    s = screen(repo, screened)
     D, study, table, strata, coded, differing = s["folder"], s["study"], s["table"], s["strata"], s["coded"], s["differing"]
     out_rows, agreement, beyond, capture = s["rows"], s["agreement"], s["beyond"], s["capture"]
     name = topic["sweep"]

@@ -74,6 +74,17 @@ def stratum_rule(topic, stratum, key, kind):
     return value
 
 
+def screened_strata(topic):
+    return [s for s, rule in topic["strata"].items() if isinstance(rule.get("channels"), dict)]
+
+
+def require_screened(topic, stratum):
+    if stratum not in topic["strata"]:
+        raise TopicError(f"topic {topic['name']} has no {stratum} stratum")
+    if stratum not in screened_strata(topic):
+        raise TopicError(f"{stratum} is tag-only (no channels in {topic['path']}): it gets no inputs, sessions, freeze or stop row")
+
+
 def write_stop_row(topic, stratum, row):
     path = topic["path"]
     text = path.read_text()

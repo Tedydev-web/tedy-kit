@@ -16,10 +16,12 @@ def sha(text):
 
 
 def method_repo(same_family=False, rated=None):
-    repo = topic_repo(strata={"config": {"stop_row": 3, "forced_repos": ["o/forced"]}, "product": {"stop_row": 3, "forced_repos": []}})
+    repo = topic_repo(strata={"config": {"stop_row": 3, "forced_repos": ["o/forced"], "channels": {}}, "product": {"stop_row": 3, "forced_repos": [], "channels": {}}})
     topic_file = repo / "docs/prior-art/topics/demo.json"
     b = SAME_FAMILY_B if same_family else MODELS["B"]
-    write_json(topic_file, {**json.loads(topic_file.read_text()), "pilot_rows": 1, "sessions": {"A": MODELS["A"], "B": {"candidates": [MODELS["B"]], "fallback": SAME_FAMILY_B}}})
+    topic = json.loads(topic_file.read_text())
+    topic["strata"]["local"] = {"stop_row": None, "forced_repos": []}
+    write_json(topic_file, {**topic, "pilot_rows": 1, "sessions": {"A": MODELS["A"], "B": {"candidates": [MODELS["B"]], "fallback": SAME_FAMILY_B}}})
     D = repo / "docs/prior-art/sweeps/261001-demo"
     write_jsonl(D / "product-screening-order.jsonl", [{"order_rank": r, "repo": f"p/{r}", "forced": False} for r in (1, 2, 3)])
     for side in "AB":

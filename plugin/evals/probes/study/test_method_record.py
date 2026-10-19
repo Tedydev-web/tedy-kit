@@ -83,6 +83,15 @@ class MethodRecordTest(unittest.TestCase):
         with self.assertRaisesRegex(TopicError, "strata.product.stop_row is 60, the screening data stop at row 3"):
             render(repo, load_topic(repo, "demo"))
 
+    def test_a_tag_only_stratum_is_stated_and_not_screened(self):
+        repo = self.build()
+        try:
+            text = render(repo, load_topic(repo, "demo"))[0]
+        except TopicError as error:
+            self.fail(f"a tag-only stratum blocked the record: {error}")
+        self.assertIn("## Tag-only strata\n\n- local: tag-only inventory, not screened by two sessions", text)
+        self.assertNotIn("## Stratum: local", text)
+
     def test_a_missing_stratum_standard_is_refused(self):
         repo = self.build()
         (self.folder / "config-qgs-adjudicated.json").unlink()

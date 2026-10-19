@@ -13,12 +13,13 @@ from study_topic import load_topic, sweep_folder
 
 class FreezeTest(unittest.TestCase):
     def setUp(self):
-        self.repo = topic_repo(strata={"config": {"stop_row": 3, "forced_repos": ["o/forced"]}})
+        self.repo = topic_repo(strata={"config": {"stop_row": 3, "forced_repos": ["o/forced"], "channels": {}}})
         self.work = Path(tempfile.mkdtemp(prefix="study-freeze-"))
         for path in (self.repo, self.work):
             self.addCleanup(shutil.rmtree, path)
         topic = json.loads((self.repo / "docs/prior-art/topics/demo.json").read_text())
         topic["pilot_rows"] = 2
+        topic["strata"]["local"] = {"stop_row": None, "forced_repos": []}
         topic["sessions"] = {"A": {"cli": "claude", "model": "claude-opus-5-5", "effort": "high"},
                              "B": {"candidates": [{"cli": "agy", "model": "gemini-3.8-flash-high"}, {"cli": "agy", "model": "gpt-oss-120b-medium"}],
                                    "fallback": {"cli": "claude", "model": "claude-sonnet-4-6", "effort": "high"}}}
@@ -40,6 +41,7 @@ class FreezeTest(unittest.TestCase):
         protocol = hashlib.sha256(b"criteria\n" + b"packet\n").hexdigest()[:16]
         self.assertEqual(freeze["strata"]["config"], {"frozen_after_rank": 3, "packet": "screening-packet-config.md", "protocol_sha256": protocol, "date": "2026-10-20"})
         self.assertEqual((freeze["pilot_rows"], freeze["criteria"]), (2, "docs/prior-art/quality-criteria-v2.md"))
+        self.assertEqual(list(freeze["strata"]), ["config"])
         self.assertEqual(freeze["session_b"]["chosen"], {"cli": "agy", "model": "gpt-oss-120b-medium"})
         self.assertEqual({m: p["agreement"] for m, p in freeze["session_b"]["pilot"].items()}, {"gemini-3.8-flash-high": 0.5, "gpt-oss-120b-medium": 1.0})
 
