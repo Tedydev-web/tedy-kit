@@ -136,6 +136,16 @@ class InputsTest(unittest.TestCase):
         self.assertEqual(fetch.called("repos/o/one/commits/HEAD"), [])
         self.assertEqual(json.loads((self.work / "cache/trees/o__one.json").read_text())["paths"], ["README.md", "a/b.md", "skills", "skills/tdd/SKILL.md"])
 
+    def test_a_failed_unit_listing_in_a_partial_tree_is_a_transient_error_and_is_not_cached(self):
+        write_json(self.work / "cache/trees/o__one.json", {"oid": SHA, "paths": ["README.md"], "truncated": True})
+        trees = ((f"git/trees/{SHA}?recursive=1", json.dumps({"tree": [{"path": "a/b.md"}], "truncated": True})),
+                 (f"git/trees/{SHA}", json.dumps({"tree": [{"path": "README.md"}, {"path": "skills"}]})))
+        self.fetch_inputs(self.fetch(*trees, (f"contents/skills/tdd?ref={SHA}", ("", "exit 1: HTTP 502"))))
+        self.assertEqual((self.rows()[1]["error"], self.rows()[1]["error_kind"]), ("unit skills/tdd: exit 1: HTTP 502", "transient"))
+        self.assertFalse(json.loads((self.work / "cache/trees/o__one.json").read_text()).get("partial"))
+        self.fetch_inputs(self.fetch(*trees, (f"contents/skills/tdd?ref={SHA}", json.dumps([{"path": "skills/tdd/SKILL.md"}]))))
+        self.assertEqual((self.rows()[1].get("error"), self.rows()[1]["tree"]), (None, "partial"))
+
     def test_a_scored_rank_is_never_fetched_again(self):
         self.fetch_inputs(self.fetch(("repos/o/two/git/trees/", ("", "exit 1: HTTP 502"))))
         write_json(self.work / "meta.json", {"sessions": {"config-pilot-A": {"blocks": [{"ranks": [2]}]}}})
@@ -152,6 +162,12 @@ class InputsTest(unittest.TestCase):
         write_json(self.work / "meta.json", {"sessions": {"config-A": {"blocks": [{"ranks": [1]}]}}})
         with self.assertRaisesRegex(TopicError, "config rank 1 is already scored"):
             self.fetch_inputs(FakeFetch(), mark_permanent=[1])
+
+    def test_only_a_commit_or_tree_error_can_be_marked_permanent(self):
+        self.fetch_inputs(self.fetch(("registry.npmjs.org", ("", "exit 6: curl: (6) Could not resolve host: registry.npmjs.org"))))
+        with self.assertRaisesRegex(TopicError, r"config rank 1 failed on npm: exit 6: .*, not on its commit or tree; only a commit: or tree: error can be marked permanent"):
+            self.fetch_inputs(FakeFetch(), mark_permanent=[1])
+        self.assertEqual(self.rows()[1]["error_kind"], "transient")
 
     def test_binary_files_are_skipped_and_each_row_is_written_as_fetched(self):
         class Breaks(FakeFetch):

@@ -13,6 +13,7 @@ README = re.compile(r"^readme(\.[a-z]+)?$", re.I)
 FILES_PER_ROW, FILE_CHARS, README_CHARS, LISTING = 2, 8000, 8000, 60
 FACTS = ("stars", "pushed", "created", "description", "channels", "archived", "closed_issues", "merged_prs", "license")
 FIRST = re.compile(r"(^|/)(SKILL|AGENTS|CLAUDE)\.md$|(^|/)hooks/hooks\.json$")
+REPO_LEVEL = ("commit:", "tree:")
 
 
 def inputs_file(work, stratum):
@@ -32,16 +33,23 @@ def tree_paths(fetch, repo, sha, recursive):
     return [e["path"] for e in body["tree"] if isinstance(e, dict) and isinstance(e.get("path"), str)], bool(body.get("truncated")), "ok"
 
 
+def repo_level(error):
+    return error.startswith(REPO_LEVEL)
+
+
 def unit_paths(fetch, repo, sha, units):
-    found = []
+    found, errors = [], []
     for unit in units:
         out, status, _ = fetch.run(["gh", "api", f"repos/{repo}/contents/{urllib.parse.quote(unit.rstrip('/'))}?ref={sha}"], timeout=120)
         try:
-            body = json.loads(out) if status == "ok" else []
+            body = json.loads(out) if status == "ok" else None
         except ValueError:
-            body = []
-        found += [e["path"] for e in body if isinstance(e, dict) and isinstance(e.get("path"), str)] if isinstance(body, list) else []
-    return found
+            body = None
+        if not isinstance(body, list):
+            errors.append(f"unit {unit}: {status if status != 'ok' else 'unparsable listing'}")
+            continue
+        found += [e["path"] for e in body if isinstance(e, dict) and isinstance(e.get("path"), str)]
+    return found, errors
 
 
 def pinned_tree(fetch, work, repo, units=()):
@@ -62,7 +70,10 @@ def pinned_tree(fetch, work, repo, units=()):
         root, _, status = tree_paths(fetch, repo, sha, False)
         if status != "ok":
             return sha, [], status, False
-        paths = sorted(set(paths) | set(root) | set(unit_paths(fetch, repo, sha, units)))
+        listed, errors = unit_paths(fetch, repo, sha, units)
+        if errors:
+            return sha, [], "; ".join(errors), False
+        paths = sorted(set(paths) | set(root) | set(listed))
     if not paths:
         return sha, [], "tree: empty", False
     cache.parent.mkdir(parents=True, exist_ok=True)
@@ -91,7 +102,7 @@ def row_inputs(fetch, work, row):
     sha, paths, status, partial = pinned_tree(fetch, work, row["repo"], row.get("units") or [])
     base = {"order_rank": row["order_rank"], "repo": row["repo"], "facts": {k: row[k] for k in FACTS if k in row}}
     if status != "ok":
-        return {**base, **({"sha": sha} if sha else {}), "error": status, "error_kind": tree_error_kind(status)}
+        return {**base, **({"sha": sha} if sha else {}), "error": status, "error_kind": tree_error_kind(status) if repo_level(status) else "transient"}
     problems = {"missing": [], "errors": []}
 
     def checked(entry, label):
@@ -136,6 +147,9 @@ def mark_gone(held, scored, stratum, ranks):
             raise TopicError(f"{stratum} rank {rank} holds no fetch error to mark permanent")
         if held[rank].get("error_kind") == "permanent":
             raise TopicError(f"{stratum} rank {rank} is already permanent")
+        if not repo_level(held[rank]["error"]):
+            raise TopicError(f"{stratum} rank {rank} failed on {held[rank]['error']}, not on its commit or tree; only a commit: or tree: error can be marked permanent, "
+                             "when a check by hand finds the repository or commit gone; fetch it again instead")
         held[rank] = {**held[rank], "error_kind": "permanent", "error": held[rank]["error"] + "; marked permanent by the operator: repository or commit gone"}
 
 

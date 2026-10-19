@@ -8,7 +8,7 @@ import tempfile
 from pathlib import Path
 
 from study_screening_core import read_jsonl
-from study_screening_input import inputs_file
+from study_screening_input import inputs_file, repo_level
 from study_session_prompt import TEMPLATE_SHA256, build_prompt, with_computed_date
 from study_session_reply import parse_reply, reply_text
 from study_topic import TopicError
@@ -130,8 +130,9 @@ def run_block(job, fetch):
         raise TopicError(f"no fetched {stratum} inputs between ranks {job['first']} and {job['last']}; run fetch-screening-inputs.py first")
     transient = [r for r, row in expected.items() if "error" in row and row.get("error_kind") != "permanent"]
     if transient:
-        raise TopicError(f"rank {transient[0]} has a transient fetch error ({expected[transient[0]]['error']}); run fetch-screening-inputs.py again, "
-                         "or mark it permanent with --mark-permanent after checking it by hand")
+        error = expected[transient[0]]["error"]
+        hint = ", or mark it permanent with --mark-permanent only if a check by hand finds the repository or commit gone" if repo_level(error) else ""
+        raise TopicError(f"rank {transient[0]} has a transient fetch error ({error}); run fetch-screening-inputs.py again{hint}")
     done = {r["order_rank"] for r in read_jsonl(work, f"{name}.jsonl")} & set(expected)
     if done:
         raise TopicError(f"{name}.jsonl already holds ranks {sorted(done)}")

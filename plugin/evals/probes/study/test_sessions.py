@@ -195,8 +195,15 @@ class PilotAndFreezeRunTest(SessionBase):
         fetch = FakeFetch()
         with self.assertRaises(SystemExit) as raised:
             self.pilot(fetch, "A", "1-2")
-        self.assertIn("rank 2 has a transient fetch error", str(raised.exception))
+        self.assertIn("rank 2 has a transient fetch error (tree: exit 1: HTTP 502); run fetch-screening-inputs.py again, or mark it permanent with --mark-permanent "
+                      "only if a check by hand finds the repository or commit gone", str(raised.exception))
         self.assertEqual(fetch.called("claude -p"), [])
+        rows[1].update({"error": "npm: exit 6: Could not resolve host", "error_kind": "transient"})
+        write_jsonl(inputs, rows)
+        with self.assertRaises(SystemExit) as raised:
+            self.pilot(fetch, "A", "1-2")
+        self.assertIn("rank 2 has a transient fetch error (npm: exit 6: Could not resolve host); run fetch-screening-inputs.py again", str(raised.exception))
+        self.assertNotIn("--mark-permanent", str(raised.exception))
         rows[1].update({"error": "commit: exit 1: HTTP 404", "error_kind": "permanent"})
         write_jsonl(inputs, rows)
         fetch = FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one") + "\n" + reply_row(2, "o/two")))])

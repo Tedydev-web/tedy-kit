@@ -12,7 +12,7 @@ def main(argv=None, fetch=None):
                            (["--stratum"], {"required": True, "help": "stratum to fetch"}),
                            (["--through"], {"type": int, "default": HARD_CAP, "help": f"fetch rows up to this rank, plus forced and snowballed rows; default {HARD_CAP}"}),
                            (["--mark-permanent"], {"type": int, "action": "append", "default": [], "metavar": "RANK",
-                                                   "help": "mark a rank's fetch error permanent after checking it by hand, so a block holding it can run"})).parse_args(argv)
+                                                   "help": "mark a rank's commit: or tree: error permanent when a check by hand finds the repository or commit gone, so a block holding it can run"})).parse_args(argv)
     try:
         topic = load_topic(args.repo, args.topic)
         require_screened(topic, args.stratum)
