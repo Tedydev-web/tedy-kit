@@ -5,7 +5,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { checkCardsStudied, checkCoverageMatrix, checkMeasuredAdrs, checkMechanismTable, checkSweepFolder, checkSweepRecord } from "../lib/sweep-record.mjs";
+import { checkCardsStudied, checkCoverageMatrix, checkMeasuredAdrs, checkMechanismTable, checkSweepFolder, checkSweepRecord, checkTopicRegistries } from "../lib/sweep-record.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
@@ -88,12 +88,49 @@ test("an ADR with measured: yes needs a Variants table with two numeric arms", (
   assert.deepEqual(checkMeasuredAdrs(dir), ["0011-b.md: measured: yes needs ## Variants with at least 2 arms holding numbers"]);
 });
 
+const DEV = { topic: "dev", idPrefix: "P", frame: { label: "Dev steps", steps: ["One", "Two"] } };
+const COORDINATION = { topic: "coordination", idPrefix: "C", frame: { label: "Session lifecycle steps", steps: ["Open or start", "Pick up work (hand-off, pending list)"] } };
+const registry = ({ label = "Dev steps", steps = "1 One; 2 Two", id = "P1", topic = "dev", cell = id } = {}) => ["## Frame", "", "- SWEBOK Guide V4 knowledge areas (x): Alpha; Beta.", `- ${label} (y): ${steps}.`, "", "## Problems", "", "| problem |", "|---|", `| ${id} | a |`, "", "## Coverage matrix (z)", "", `- Alpha: 1 ${id}; 2 ${cell}`, `- Beta: 1 none for ${topic}: r; 2 ${id}`, ""].join("\n");
+
 test("the coverage matrix needs every knowledge area and step, naming only known problems", () => {
-  const text = (cell) => ["## Frame", "", "- SWEBOK Guide V4 knowledge areas (x): Alpha; Beta.", "- Dev steps (y): 1 One; 2 Two.", "", "## Problems", "", "| problem |", "|---|", "| P1 | a |", "", "## Coverage matrix (z)", "", `- Alpha: 1 P1; 2 ${cell}`, "- Beta: 1 none for dev: r; 2 P1", ""].join("\n");
-  assert.deepEqual(checkCoverageMatrix(text("P1")), []);
-  assert.match(checkCoverageMatrix(text("P9")).join("\n"), /Alpha step 2 names unknown P9/);
-  assert.match(checkCoverageMatrix(text("")).join("\n"), /Alpha step 2 is empty/);
-  assert.match(checkCoverageMatrix(text("P1").replace("- Beta: 1 none for dev: r; 2 P1\n", "")).join("\n"), /Beta has no row/);
+  const text = (cell) => registry({ cell });
+  assert.deepEqual(checkCoverageMatrix(text("P1"), DEV), []);
+  assert.match(checkCoverageMatrix(text("P9"), DEV).join("\n"), /Alpha step 2 names unknown P9/);
+  assert.match(checkCoverageMatrix(text(""), DEV).join("\n"), /Alpha step 2 is empty/);
+  assert.match(checkCoverageMatrix(text("P1").replace("- Beta: 1 none for dev: r; 2 P1\n", ""), DEV).join("\n"), /Beta has no row/);
+});
+
+test("the coverage matrix reads its id prefix, steps label and none phrase from the topic", () => {
+  const coordination = registry({ label: "Session lifecycle steps", steps: "1 Open or start; 2 Pick up work (hand-off, pending list)", id: "C1", topic: "coordination" });
+  assert.deepEqual(checkCoverageMatrix(coordination, COORDINATION), []);
+  assert.match(checkCoverageMatrix(coordination, DEV).join("\n"), /no knowledge areas or no Dev steps/);
+  assert.match(checkCoverageMatrix(registry({ topic: "dev", id: "C1" }), COORDINATION).join("\n"), /no knowledge areas or no Session lifecycle steps/);
+  const devPhrase = registry({ label: "Session lifecycle steps", steps: "1 Open or start; 2 Pick up work (hand-off, pending list)", id: "C1", topic: "dev" });
+  assert.match(checkCoverageMatrix(devPhrase, COORDINATION).join("\n"), /Beta step 1 names unknown none for dev: r/);
+  assert.match(checkCoverageMatrix(registry({ id: "P1" }), { ...DEV, idPrefix: "C" }).join("\n"), /Alpha step 1 names unknown P1/);
+});
+
+test("the registry's frame steps must match the topic config", () => {
+  assert.match(checkCoverageMatrix(registry({ steps: "1 One; 2 Deux" }), DEV).join("\n"), /Dev steps in the Frame are "One; Deux", the topic config says "One; Two"/);
+});
+
+test("every topic config names a registry that passes its coverage matrix", () => {
+  const repo = tempDir("topics");
+  const topics = join(repo, "docs", "prior-art", "topics");
+  mkdirSync(topics, { recursive: true });
+  const coordination = registry({ label: "Session lifecycle steps", steps: "1 Open or start; 2 Pick up work (hand-off, pending list)", id: "C1", topic: "coordination" });
+  writeFileSync(join(repo, "docs", "prior-art", "problems-coordination.md"), coordination);
+  writeFileSync(join(topics, "coordination.json"), JSON.stringify({ registry: "docs/prior-art/problems-coordination.md", id_prefix: "C", frame: COORDINATION.frame }));
+  assert.deepEqual(checkTopicRegistries(repo), []);
+  writeFileSync(join(repo, "docs", "prior-art", "problems-coordination.md"), coordination.replace("2 C1\n", "2 C7\n"));
+  assert.deepEqual(checkTopicRegistries(repo), ["topics/coordination.json: coverage matrix: Alpha step 2 names unknown C7"]);
+  writeFileSync(join(topics, "coordination.json"), JSON.stringify({ registry: "docs/prior-art/problems-coordination.md", frame: COORDINATION.frame }));
+  assert.deepEqual(checkTopicRegistries(repo), ["topics/coordination.json: id_prefix must be capital letters"]);
+  writeFileSync(join(topics, "coordination.json"), JSON.stringify({ registry: "docs/prior-art/problems-none.md", id_prefix: "C", frame: COORDINATION.frame }));
+  assert.deepEqual(checkTopicRegistries(repo), ["topics/coordination.json: registry docs/prior-art/problems-none.md does not exist"]);
+  writeFileSync(join(topics, "coordination.json"), "{");
+  assert.match(checkTopicRegistries(repo).join("\n"), /topics\/coordination\.json: not JSON/);
+  assert.deepEqual(checkTopicRegistries(tempDir("no-topics")), ["docs/prior-art/topics: no topic config"]);
 });
 
 test("mechanism table aliases point at classified or reconciled names", () => {

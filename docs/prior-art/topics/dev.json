@@ -1,0 +1,8 @@
+{
+  "registry": "docs/prior-art/problems.md",
+  "id_prefix": "P",
+  "frame": {
+    "label": "Dev steps",
+    "steps": ["Context", "Reconcile", "Branch", "Build", "Commit", "Verify on the commit", "Independent review", "Draft PR, report and next step"]
+  }
+}

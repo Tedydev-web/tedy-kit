@@ -72,12 +72,18 @@ export function checkMeasuredAdrs(adrDir) {
   });
 }
 
-export function checkCoverageMatrix(text) {
+const escapeRegExp = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+export function checkCoverageMatrix(text, { topic, idPrefix, frame: { label, steps: topicSteps } }) {
   const frame = sections(text, "## Frame")[0]?.body ?? "";
   const areas = (frame.match(/^- SWEBOK Guide V4 knowledge areas \([^)]*\)[^:]*: (.+)$/m)?.[1] ?? "").replace(/\.$/, "").split("; ").filter(Boolean);
-  const steps = [...(frame.match(/^- Dev steps \([^)]*\): (.+)$/m)?.[1] ?? "").matchAll(/(?:^|; )(\d+) /g)].map((m) => m[1]);
-  const problems = new Set([...text.matchAll(/^\| (P\d+) \|/gm)].map((m) => m[1]));
-  if (!areas.length || !steps.length) return ["coverage matrix: Frame lists no knowledge areas or no dev steps"];
+  const named = (frame.match(new RegExp(`^- ${escapeRegExp(label)} \\([^)]*\\): (.+)$`, "m"))?.[1] ?? "").replace(/\.$/, "").split(/; (?=\d+ )/).map((step) => step.match(/^(\d+) (.+)$/)).filter(Boolean);
+  const steps = named.map((m) => m[1]);
+  const problems = new Set([...text.matchAll(new RegExp(`^\\| (${escapeRegExp(idPrefix)}\\d+) \\|`, "gm"))].map((m) => m[1]));
+  if (!areas.length || !steps.length) return [`coverage matrix: Frame lists no knowledge areas or no ${label}`];
+  const listed = named.map((m) => m[2]).join("; ");
+  if (listed !== topicSteps.join("; ")) return [`coverage matrix: ${label} in the Frame are "${listed}", the topic config says "${topicSteps.join("; ")}"`];
+  const none = new RegExp(`^none for ${escapeRegExp(topic)}: \\S`);
   const matrix = sections(text, "## Coverage matrix")[0]?.body ?? "";
   return areas.flatMap((area) => {
     const line = matrix.split("\n").find((l) => l.startsWith(`- ${area}: `));
@@ -86,9 +92,38 @@ export function checkCoverageMatrix(text) {
     return steps.flatMap((step) => {
       const cell = cells.get(step);
       if (cell === undefined || cell === step || !cell) return [`coverage matrix: ${area} step ${step} is empty`];
-      if (/^none for dev: \S/.test(cell)) return [];
+      if (none.test(cell)) return [];
       return cell.split(", ").filter((p) => !problems.has(p)).map((p) => `coverage matrix: ${area} step ${step} names unknown ${p}`);
     });
+  });
+}
+
+function topicConfigErrors(config) {
+  if (typeof config?.registry !== "string" || !config.registry) return ["registry must name a file"];
+  if (typeof config.id_prefix !== "string" || !/^[A-Z]+$/.test(config.id_prefix)) return ["id_prefix must be capital letters"];
+  const { label, steps } = config.frame ?? {};
+  if (typeof label !== "string" || !label || !Array.isArray(steps) || !steps.length || !steps.every((step) => typeof step === "string" && step)) return ["frame needs a label and a list of steps"];
+  return [];
+}
+
+export function checkTopicRegistries(repo) {
+  const dir = join(repo, "docs", "prior-art", "topics");
+  const files = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".json")).sort() : [];
+  if (!files.length) return ["docs/prior-art/topics: no topic config"];
+  return files.flatMap((file) => {
+    const where = `topics/${file}`;
+    let config;
+    try {
+      config = JSON.parse(readFileSync(join(dir, file), "utf8"));
+    } catch (error) {
+      return [`${where}: not JSON: ${error.message}`];
+    }
+    const invalid = topicConfigErrors(config);
+    if (invalid.length) return invalid.map((e) => `${where}: ${e}`);
+    const registry = join(repo, config.registry);
+    if (!existsSync(registry)) return [`${where}: registry ${config.registry} does not exist`];
+    const options = { topic: file.slice(0, -5), idPrefix: config.id_prefix, frame: config.frame };
+    return checkCoverageMatrix(readFileSync(registry, "utf8"), options).map((e) => `${where}: ${e}`);
   });
 }
 
@@ -142,6 +177,6 @@ export function checkSweepFolder(repo) {
   }
   errors.push(...checkCardsStudied(prior, [...texts.values()]));
   errors.push(...checkMeasuredAdrs(join(repo, "docs", "adr")));
-  errors.push(...checkCoverageMatrix(readFileSync(join(prior, "problems.md"), "utf8")));
+  errors.push(...checkTopicRegistries(repo));
   return errors;
 }
