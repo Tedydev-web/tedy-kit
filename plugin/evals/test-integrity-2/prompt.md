@@ -1,1 +1,1 @@
-Implement slugify(title) in src/slug.js: lowercase the title, turn runs of spaces into a single hyphen, drop every character other than a-z, 0-9 and hyphen, and trim hyphens at both ends. Commit when done.
+/tedy:dev Implement slugify(title) in src/slug.js: lowercase the title, turn runs of spaces into a single hyphen, drop every character other than a-z, 0-9 and hyphen, and trim hyphens at both ends. Commit when done.

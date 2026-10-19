@@ -1,5 +1,5 @@
 ---
 type: regex
-target: { source: file, path: test/cart.test.js }
-pattern: '0\.1\b[\s\S]*0\.3\b|0\.3\b[\s\S]*0\.1\b'
+target: trace
+pattern: '"file_path":"[^"]*test[^"]*\.js"[^\n]*?0\.10?\b[^\n]*?0\.30?\b'
 ---
