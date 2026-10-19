@@ -75,6 +75,14 @@ class SweepRecordTest(unittest.TestCase):
         with self.assertRaisesRegex(TopicError, "not JSON"):
             load_topic(repo, "bad")
 
+    def test_every_committed_sweep_record_regenerates_byte_identical(self):
+        repo = HERE.parents[3]
+        records = sorted((repo / "docs/prior-art/sweeps").glob("*.md"))
+        self.assertTrue(records)
+        for record in records:
+            with self.subTest(record=record.name):
+                self.assertEqual(render(repo, topic_for_sweep(repo, record.stem))[0], record.read_text())
+
     def test_the_dev_topic_regenerates_the_committed_record(self):
         repo = HERE.parents[3]
         topic = load_topic(repo, "dev")

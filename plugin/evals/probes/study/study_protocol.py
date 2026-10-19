@@ -4,21 +4,21 @@ from pathlib import Path
 
 from study_agreement import KAPPA_CRITERIA, session_kappas
 from study_screening_core import MechanismTable, derive, read_jsonl
-from study_topic import TopicError, pilot_rows, screened_strata, session_b_options
+from study_topic import TopicError, pilot_rows, screened_strata, session_a, session_b
 
 FREEZE_FILE = "protocol-freeze.json"
 EMPTY_TABLE = {"aliases": {}, "class": {}, "default": "new"}
 
 
-def protocol_hash(criteria_bytes, packet_bytes):
-    return hashlib.sha256(criteria_bytes + packet_bytes).hexdigest()[:16]
+def sha256_file(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def frozen_after(order_rows, size):
+def pilot_ranks(order_rows, size):
     unforced = sorted(r["order_rank"] for r in order_rows if not r.get("forced"))
     if not unforced:
         raise TopicError("the screening order holds no unforced row to pilot")
-    return unforced[min(size, len(unforced)) - 1]
+    return unforced[:size]
 
 
 def read_freeze(folder, stratum):
@@ -31,10 +31,13 @@ def read_freeze(folder, stratum):
     return freeze["strata"][stratum]
 
 
-def pilot_pairs(work, stratum, b_file, after, table):
+def pilot_pairs(work, stratum, b_file, ranks, table):
     sides = {"A": {r["order_rank"]: r for r in read_jsonl(work, f"{stratum}-pilot-A.jsonl")}, "B": {r["order_rank"]: r for r in read_jsonl(work, b_file)}}
+    missing = {s: sorted(set(ranks) - set(sides[s])) for s in "AB"}
+    if missing["A"] or missing["B"]:
+        raise TopicError(f"{stratum}: the pilot files {stratum}-pilot-A.jsonl and {b_file} must both cover pilot ranks {ranks}; missing A {missing['A']}, B {missing['B']}")
     mapping = {"A": {}, "B": {}}
-    return [{s: derive(table, stratum, mapping, s, sides[s][rank]) for s in "AB"} for rank in sorted(set(sides["A"]) & set(sides["B"])) if rank <= after]
+    return [{s: derive(table, stratum, mapping, s, sides[s][rank]) for s in "AB"} for rank in ranks]
 
 
 def pilot_comparison(rows):
@@ -44,17 +47,22 @@ def pilot_comparison(rows):
     return {"rows": len(rows), "agreement": round(same / cells, 3), "kappa": kappa, "eligibility_kappa": eligibility_kappa}
 
 
-def freeze(topic, repo, work, criteria, today):
+def pilot_sessions(work):
+    meta = Path(work) / "meta.json"
+    return {k: v for k, v in (json.loads(meta.read_text()).get("sessions", {}) if meta.is_file() else {}).items() if "-pilot-" in k}
+
+
+def freeze(topic, repo, work, criteria, today, amendment=None):
     repo, work = Path(repo), Path(work)
-    criteria_file = repo / criteria
-    if not criteria_file.is_file():
-        raise TopicError(f"no criteria file at {criteria_file}")
+    if not (repo / criteria).is_file():
+        raise TopicError(f"no criteria file at {repo / criteria}")
+    strata_names = screened_strata(topic)
+    if not strata_names:
+        raise TopicError(f"{topic['path']}: no stratum has channels, so none is screened")
     table_file = work / "mechanism-table.json"
     table = MechanismTable(json.loads(table_file.read_text()) if table_file.is_file() else EMPTY_TABLE)
-    size, strata = pilot_rows(topic), {}
-    if not screened_strata(topic):
-        raise TopicError(f"{topic['path']}: no stratum has channels, so none is screened")
-    for stratum in screened_strata(topic):
+    size, strata, ranks = pilot_rows(topic), {}, {}
+    for stratum in strata_names:
         order = read_jsonl(work, f"{stratum}-screening-order.jsonl")
         if not order:
             raise TopicError(f"no {stratum}-screening-order.jsonl in {work}")
@@ -63,17 +71,25 @@ def freeze(topic, repo, work, criteria, today):
             raise TopicError(f"no {packet.name} in {work}; the protocol hash covers the criteria and the packet")
         if not (work / f"{stratum}-pilot-A.jsonl").is_file():
             raise TopicError(f"no {stratum}-pilot-A.jsonl in {work}; session A screens the pilot block first")
-        strata[stratum] = {"frozen_after_rank": frozen_after(order, size), "packet": packet.name,
-                           "protocol_sha256": protocol_hash(criteria_file.read_bytes(), packet.read_bytes()), "date": today}
-    pilot, options = {}, session_b_options(topic)
-    for option in options:
-        files = {s: f"{s}-pilot-B-{option['model']}.jsonl" for s in strata}
-        if all((work / f).is_file() for f in files.values()):
-            rows = [row for s, f in files.items() for row in pilot_pairs(work, s, f, strata[s]["frozen_after_rank"], table)]
-            if rows:
-                pilot[option["model"]] = pilot_comparison(rows)
-    if not pilot:
-        raise TopicError(f"no session B option screened the pilot block of every stratum; expected <stratum>-pilot-B-<model>.jsonl for one of {[o['model'] for o in options]}")
-    best = max(pilot, key=lambda m: (pilot[m]["agreement"], -[o["model"] for o in options].index(m)))
-    chosen = next(o for o in options if o["model"] == best)
-    return {"pilot_rows": size, "criteria": criteria, "strata": strata, "session_b": {"chosen": chosen, "pilot": pilot}}
+        ranks[stratum] = pilot_ranks(order, size)
+        strata[stratum] = {"frozen_after_rank": ranks[stratum][-1], "pilot_rows": len(ranks[stratum]), "packet": packet.name,
+                           "criteria_sha256": sha256_file(repo / criteria), "packet_sha256": sha256_file(packet), "date": today}
+    primary, fallback, also = session_b(topic)
+    ran = [o for o in [primary, fallback, *also] if o and all((work / f"{s}-pilot-B-{o['model']}.jsonl").is_file() for s in strata)]
+    if primary in ran:
+        chosen, rule = primary, "the topic config's session B"
+    elif fallback in ran:
+        chosen, rule = fallback, f"the topic config's fallback: the pilot of {primary['model']} was not run, so its CLI was not on PATH"
+    else:
+        raise TopicError(f"neither the configured session B {primary['model']} nor its fallback screened the pilot block of every stratum")
+    pilot = {o["model"]: pilot_comparison([row for s in strata for row in pilot_pairs(work, s, f"{s}-pilot-B-{o['model']}.jsonl", ranks[s], table)]) for o in ran}
+    sessions = pilot_sessions(work)
+    pilot_packets = sorted({b["packet_sha256"] for entry in sessions.values() for b in entry.get("blocks", [])})
+    changed = any(p != strata[s]["packet_sha256"] for s in strata for k, e in sessions.items() if k.startswith(f"{s}-") for p in {b["packet_sha256"] for b in e["blocks"]})
+    if changed and not amendment:
+        raise TopicError("the packet changed after the pilot; pass --amendment with what changed")
+    versions = {e["cli"]: e["cli_version"] for e in sessions.values()}
+    return {"pilot_rows_configured": size, "criteria": criteria, "strata": strata, "session_a": session_a(topic),
+            "session_b": {"chosen": chosen, "rule": rule, "pilot": pilot, "note": "the pilot comparison is information only; agreement with A never picks B"},
+            "cli_versions": versions, "isolation": {e["cli"]: e["isolation"] for e in sessions.values()},
+            "amendment": {"pilot_packet_sha256": pilot_packets, "changed": changed, "what": amendment if changed else "none: the pilot ran under the frozen packet"}}

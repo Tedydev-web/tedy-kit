@@ -2,7 +2,7 @@ import json
 import sys
 from pathlib import Path
 
-from study_agreement import cohen_kappa, recall_at_cut
+from study_agreement import cohen_kappa, recall_at_cut, rounded
 from study_pool import read_json
 from study_screening_core import read_jsonl
 from study_topic import TopicError, load_topic, topic_arguments
@@ -42,7 +42,7 @@ def recall(folder, work, states, stratum=None):
     standards = {"strict (yes by both)": [j["repo"] for j in both if j["A"] == j["B"] == "yes"],
                  "lenient (yes by either)": [j["repo"] for j in both if "yes" in (j["A"], j["B"])],
                  "adjudicated (source read)": final}
-    out = {"judged_by_both": len(both), "agreement": round(observed, 3), "kappa": round(k, 3),
+    out = {"judged_by_both": len(both), "agreement": round(observed, 3), "kappa": rounded(k),
            "disagreements": [(j["repo"], j["A"], j["B"]) for j in both if j["A"] != j["B"]], "standards": {}}
     for label, members in standards.items():
         keys = [m.lower() for m in members]
@@ -65,9 +65,10 @@ def main(argv=None):
         out, final = recall(folder, args.work, [s for s in args.states.split(",") if s], args.stratum)
         if args.stratum:
             cut = args.cut if args.cut is not None else topic["strata"].get(args.stratum, {}).get("stop_row")
-            if not isinstance(cut, int) or isinstance(cut, bool):
-                raise TopicError(f"no cut for {args.stratum}: pass --cut or write the stop row with compare-screening-sessions.py --write-stop")
-            out["at_cut"] = recall_at_cut(args.stratum, final, read_jsonl(Path(args.work), f"{args.stratum}-screening-order.jsonl"), cut)
+            if isinstance(cut, int) and not isinstance(cut, bool):
+                out["at_cut"] = recall_at_cut(args.stratum, final, read_jsonl(Path(args.work), f"{args.stratum}-screening-order.jsonl"), cut)
+            else:
+                out["at_cut"] = {"stratum": args.stratum, "cut": None, "note": "no stop row yet: recall at the cut is measured once screening wrote it, or pass --cut"}
     except TopicError as error:
         sys.exit(f"qgs-recall: {error}")
     print(json.dumps(out, indent=1))

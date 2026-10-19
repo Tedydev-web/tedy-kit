@@ -1,17 +1,17 @@
 import hashlib
 import json
 
-from study_agreement import CHAPMAN_NOTE, KAPPA_CRITERIA, RECALL_FIX, RECALL_TARGET, effort_stop, recall_at_cut, session_kappas
+from study_agreement import CHAPMAN_NOTE, KAPPA_CRITERIA, RECALL_FIX, RECALL_TARGET, chapman, effort_stop, kappa_text, recall_at_cut, session_kappas
 from study_calibration import CALIBRATED_STRATA, SAMPLE_FILE, calibration_agreement
+from study_method_sessions import session_keys, session_lines
 from study_protocol import FREEZE_FILE
 from study_screening_core import JUDGED, MechanismTable, derive, read_json, read_jsonl
 from study_session import model_family
 from study_topic import TopicError
 
-SESSION_FIELDS = ("model", "effort", "packet_sha256", "date")
 TAG_ONLY = ("tag-only inventory, not screened by two sessions: its rows carry tags, never copied text, so it has no protocol freeze, sessions, kappa, "
             "recall at the cut or stop row")
-CAPTURE_KEYS ={"A", "B", "shared", "union", "chapman", "chapman_lower_bound", "chapman_note"}
+CAPTURE_KEYS = {"A", "B", "shared", "union", "chapman", "chapman_lower_bound", "chapman_note"}
 
 
 def is_method_sweep(folder):
@@ -19,14 +19,15 @@ def is_method_sweep(folder):
 
 
 def method_stops(topic, folder):
-    table, stops = MechanismTable(read_json(folder, "mechanism-table.json")), {}
+    table, stops, captures = MechanismTable(read_json(folder, "mechanism-table.json")), {}, {}
+    session_keys(folder, topic["strata"])
     for stratum in topic["strata"]:
         mapping = read_json(folder, f"{stratum}-mechanism-map.json")
         sides = {s: {r["order_rank"]: r for r in read_jsonl(folder, f"{stratum}-screen-{s}.jsonl")} for s in "AB"}
         order = read_jsonl(folder, f"{stratum}-screening-order.jsonl")
         common = sorted(set(sides["A"]) & set(sides["B"]))
-        firsts = {r: derive(table, stratum, mapping, "A", sides["A"][r])["mechs"] | derive(table, stratum, mapping, "B", sides["B"][r])["mechs"] for r in common}
-        row, rule = effort_stop(common, firsts, {r["order_rank"] for r in order if r.get("forced")}, [r["order_rank"] for r in order])
+        mechs = {r: {s: derive(table, stratum, mapping, s, sides[s][r])["mechs"] for s in "AB"} for r in common}
+        row, rule = effort_stop(common, {r: m["A"] | m["B"] for r, m in mechs.items()}, {r["order_rank"] for r in order if r.get("forced")}, [r["order_rank"] for r in order])
         if row is None:
             raise TopicError(f"{stratum}: the screening data reach no stop ({rule}); screen on before writing the record")
         written = topic["strata"][stratum].get("stop_row")
@@ -34,7 +35,8 @@ def method_stops(topic, folder):
             raise TopicError(f"{topic['path']}: strata.{stratum}.stop_row is {written}, the screening data stop at row {row} ({rule}); "
                              f"a hand-typed stop row is refused: run compare-screening-sessions.py --stratum {stratum} --write-stop")
         stops[stratum] = f"stop: {rule} at row {row}"
-    return stops
+        captures[stratum] = chapman(set().union(*(m["A"] for m in mechs.values())), set().union(*(m["B"] for m in mechs.values())))
+    return stops, captures
 
 
 def sha256(data):
@@ -43,58 +45,41 @@ def sha256(data):
 
 def protocol_lines(repo, folder, strata, meta):
     freeze = read_json(folder, FREEZE_FILE)
-    criteria = (repo / meta["criteria"]).read_bytes()
     lines = []
     for stratum in strata:
         frozen = freeze["strata"].get(stratum)
         if frozen is None:
             raise TopicError(f"{folder / FREEZE_FILE} does not freeze the {stratum} stratum")
-        if sha256(criteria + (folder / frozen["packet"]).read_bytes())[:16] != frozen["protocol_sha256"]:
-            raise TopicError(f"{stratum}: the criteria or {frozen['packet']} changed after the freeze (protocol sha256[:16] {frozen['protocol_sha256']})")
-        word = "row" if freeze["pilot_rows"] == 1 else "rows"
-        lines.append(f"- {stratum}: frozen after row {frozen['frozen_after_rank']} (pilot block of {freeze['pilot_rows']} unforced {word}), protocol sha256[:16] "
-                     f"`{frozen['protocol_sha256']}` over the criteria and {frozen['packet']}, {frozen['date']}")
-    pilot = freeze["session_b"]["pilot"]
-    lines.append("- session B pilot: " + "; ".join(f"{m} agreement {p['agreement']:.3f} on {p['rows']} rows" for m, p in pilot.items())
-                 + f"; chosen {freeze['session_b']['chosen']['model']}")
+        if (sha256((repo / meta["criteria"]).read_bytes()), sha256((folder / frozen["packet"]).read_bytes())) != (frozen["criteria_sha256"], frozen["packet_sha256"]):
+            raise TopicError(f"{stratum}: the criteria or {frozen['packet']} changed after the freeze")
+        word = "row" if frozen["pilot_rows"] == 1 else "rows"
+        lines.append(f"- {stratum}: frozen after row {frozen['frozen_after_rank']} (pilot block of {frozen['pilot_rows']} unforced {word}), criteria sha256 "
+                     f"`{frozen['criteria_sha256']}`, packet sha256 `{frozen['packet_sha256']}` ({frozen['packet']}), {frozen['date']}")
+    a, b = freeze["session_a"], freeze["session_b"]
+    lines.append(f"- session A: {a['cli']} {a['model']}; session B: {b['chosen']['cli']} {b['chosen']['model']}, {b['rule']}")
+    lines.append("- session B pilot, information only: " + "; ".join(f"{m} agreement {p['agreement']:.3f} on {p['rows']} rows" for m, p in b["pilot"].items()))
+    amendment = freeze["amendment"]
+    lines.append(f"- packet amendment at the freeze: {amendment['what']}" + ("; pilot packets sha256[:16] " + ", ".join(f"`{p[:16]}`" for p in amendment["pilot_packet_sha256"]) if amendment["changed"] else ""))
+    lines.append("- isolation: " + "; ".join(f"{cli} {flags}" for cli, flags in sorted(freeze["isolation"].items())))
+    lines.append("- CLI versions: " + ", ".join(f"{cli} {v}" for cli, v in sorted(freeze["cli_versions"].items())))
     return lines, freeze
 
 
-def session_lines(folder, meta):
-    sessions = meta.get("sessions") or {}
-    keys = [p.stem.replace("-screen-", "-") for p in sorted(folder.glob("*-screen-[AB].jsonl"))] + [p.stem for p in sorted(folder.glob("*-pilot-*.jsonl"))]
-    lines = []
-    for key in keys:
-        entry = sessions.get(key)
-        if not isinstance(entry, dict):
-            raise TopicError(f"meta.json sessions.{key} is missing; run-screening-session.py records every session")
-        for field in SESSION_FIELDS:
-            if not entry.get(field):
-                raise TopicError(f"meta.json sessions.{key} lacks {field}")
-        packet = folder / f"screening-packet-{key.split('-', 1)[0]}.md"
-        if "-pilot-" not in key and (not packet.is_file() or sha256(packet.read_bytes()) != entry["packet_sha256"]):
-            raise TopicError(f"meta.json sessions.{key}: packet sha256 does not match {packet.name}")
-        served = f"; served {', '.join(entry['served_models'])}" if entry.get("served_models") else ""
-        inputs = f", inputs sha256[:16] `{entry['inputs_sha256'][:16]}`" if entry.get("inputs_sha256") else ""
-        lines.append(f"- {key}: {entry.get('cli', '-')} {entry['model']}, effort {entry['effort']}, packet sha256[:16] `{entry['packet_sha256'][:16]}`, {entry['date']}{inputs}{served}")
-    return lines, sessions
-
-
-def agreement_lines(stratum, pairs, after, capture):
+def agreement_lines(stratum, pairs, after, capture, adjudicated):
     measured = [pairs[r] for r in sorted(pairs) if r > after]
     if not measured:
-        raise TopicError(f"{stratum}: no screened row lies after the freeze at row {after}")
-    cells = len(measured) * len(JUDGED)
-    same = sum(a["scores"][c] == b["scores"][c] for a, b in measured for c in JUDGED)
+        raise TopicError(f"{stratum}: no screened row is ranked after the pilot block, which ends at row {after}")
+    cells, cells_dated = len(measured) * len(KAPPA_CRITERIA), len(measured) * len(JUDGED)
+    same = sum(a["scores"][c] == b["scores"][c] for a, b in measured for c in KAPPA_CRITERIA)
+    same_dated = sum(a["scores"][c] == b["scores"][c] for a, b in measured for c in JUDGED)
     kappa, eligibility, differ = session_kappas([{"A": a, "B": b} for a, b in measured])
-    mech = {s: set().union(*(pair[i]["mechs"] for pair in pairs.values())) for i, s in enumerate("AB")}
-    shared, union = len(mech["A"] & mech["B"]), len(mech["A"] | mech["B"])
-    chapman = (len(mech["A"]) + 1) * (len(mech["B"]) + 1) / (shared + 1) - 1
-    extra = "".join(f"; {k} {v}" for k, v in capture.items() if k not in CAPTURE_KEYS)
-    return [f"- {stratum}: post-freeze rows {len(measured)} (rows up to {after} left out as the pilot): {same}/{cells} judged cells identical ({same / cells:.3f}); target 0.90",
-            f"- {stratum} kappa: " + ", ".join(f"{c} {k:.3f}" for c, k in kappa.items()) + f"; eligibility kappa {eligibility:.3f} ({differ} of {len(measured)} decisions differ); "
-            "Date is computed, not judged, and left out",
-            f"- {stratum} capture-recapture: A {len(mech['A'])}, B {len(mech['B'])}, shared {shared}, union {union}; Chapman {chapman:.1f} is {CHAPMAN_NOTE}{extra}"]
+    extra = "".join(f"; {k} {v}" for k, v in adjudicated.items() if k not in CAPTURE_KEYS)
+    return [f"- {stratum}: post-freeze rows {len(measured)} (ranked after the pilot block, which ends at row {after}): {same}/{cells} judged cells identical without the "
+            f"computed Date ({same / cells:.3f}); with Date {same_dated}/{cells_dated} ({same_dated / cells_dated:.3f}); target 0.90 without Date",
+            f"- {stratum} kappa: " + ", ".join(f"{c} {kappa_text(k)}" for c, k in kappa.items()) + f"; eligibility kappa {kappa_text(eligibility)} ({differ} of {len(measured)} "
+            "decisions differ); Date is computed, not judged, and left out",
+            f"- {stratum} capture-recapture over every row both sessions screened: A {capture['A']}, B {capture['B']}, shared {capture['shared']}, union {capture['union']}; "
+            f"Chapman {capture['chapman_lower_bound']:.1f} is {CHAPMAN_NOTE}{extra}"]
 
 
 def recall_lines(folder, topic, strata):
@@ -119,19 +104,31 @@ def calibration_lines(folder):
     return ["- " + "; ".join(f"user vs session {s}: decisions {out[s]['decisions']}/{out['rows']}, judged cells {out[s]['cells']}/{cells}" for s in "AB")], []
 
 
-def method_parts(repo, topic, s, meta):
-    folder, strata = s["folder"], s["strata"]
-    protocol, freeze = protocol_lines(repo, folder, strata, meta)
-    sessions_out, sessions = session_lines(folder, meta)
-    agreement = [line for stratum in strata for line in agreement_lines(stratum, s["pairs"][stratum], freeze["strata"][stratum]["frozen_after_rank"], s["capture"][stratum])]
-    calibration, threats = calibration_lines(folder)
+def threat_lines(topic, strata, sessions, freeze, threats):
     for stratum in strata:
-        a, b = sessions.get(f"{stratum}-A", {}).get("model"), sessions.get(f"{stratum}-B", {}).get("model")
-        if a and b and model_family(a) == model_family(b):
+        a, b = sessions[f"{stratum}-A"]["model"], sessions[f"{stratum}-B"]["model"]
+        if model_family(a) == model_family(b):
             threats.append(f"- same model family: {stratum} sessions A ({a}) and B ({b}) are both {model_family(a)} models, so their errors correlate and their agreement "
                            "shows consistency more than correctness")
+    chosen = freeze["session_b"]
+    if "fallback" in chosen["rule"]:
+        threats.append(f"- session B fallback: {chosen['rule']}; B ran on {chosen['chosen']['model']}")
+    threats.append(f"- session B fixed by the topic config ({chosen['chosen']['model']}), not chosen by agreement with A; the pilot comparison is information only")
+    if any(topic["strata"][s].get("channels", {}).get("academic") for s in strata):
+        threats.append("- academic papers logged, not screened: the academic channel adds only the repositories the papers name; the papers themselves are not scored")
+    return threats
+
+
+def method_parts(repo, topic, s, meta, captures):
+    folder, strata = s["folder"], s["strata"]
+    protocol, freeze = protocol_lines(repo, folder, strata, meta)
+    sessions_out, sessions = session_lines(folder, meta, strata, freeze)
+    agreement = [line for stratum in strata
+                 for line in agreement_lines(stratum, s["pairs"][stratum], freeze["strata"][stratum]["frozen_after_rank"], captures[stratum], s["capture"][stratum])]
+    calibration, threats = calibration_lines(folder)
+    threats = threat_lines(topic, strata, sessions, freeze, threats)
     sections = ["## Protocol", ""] + protocol + ["", "## Screening sessions", ""] + sessions_out + ["", "## Calibration", ""] + calibration
-    sections += ["", "## Threats", ""] + (threats or ["- none beyond the gaps below"]) + [""]
+    sections += ["", "## Threats", ""] + threats + [""]
     tag_only = [t for t in topic["strata"] if t not in strata]
     if tag_only:
         sections += ["## Tag-only strata", ""] + [f"- {t}: {TAG_ONLY}" for t in tag_only] + [""]

@@ -10,6 +10,15 @@ from pathlib import Path
 from study_fixtures import HERE, screen_row, script, topic_repo, write_json, write_jsonl
 from study_topic import load_topic, sweep_folder
 
+CRITERIA = "docs/prior-art/quality-criteria-v2.md"
+B = {"cli": "agy", "model": "gemini-3.8-flash-high"}
+ALSO = {"cli": "agy", "model": "gpt-oss-120b-medium"}
+FALLBACK = {"cli": "claude", "model": "claude-sonnet-4-6", "effort": "high"}
+
+
+def sha(data):
+    return hashlib.sha256(data).hexdigest()
+
 
 class FreezeTest(unittest.TestCase):
     def setUp(self):
@@ -20,49 +29,76 @@ class FreezeTest(unittest.TestCase):
         topic = json.loads((self.repo / "docs/prior-art/topics/demo.json").read_text())
         topic["pilot_rows"] = 2
         topic["strata"]["local"] = {"stop_row": None, "forced_repos": []}
-        topic["sessions"] = {"A": {"cli": "claude", "model": "claude-opus-5-5", "effort": "high"},
-                             "B": {"candidates": [{"cli": "agy", "model": "gemini-3.8-flash-high"}, {"cli": "agy", "model": "gpt-oss-120b-medium"}],
-                                   "fallback": {"cli": "claude", "model": "claude-sonnet-4-6", "effort": "high"}}}
+        topic["sessions"] = {"A": {"cli": "claude", "model": "claude-opus-5-5", "effort": "high"}, "B": {**B, "fallback": FALLBACK, "pilot_also": [ALSO]}}
         write_json(self.repo / "docs/prior-art/topics/demo.json", topic)
         write_jsonl(self.work / "config-screening-order.jsonl", [{"order_rank": r, "repo": f"o/{r}", "forced": r == 2} for r in (1, 2, 3, 4, 5)])
         (self.work / "screening-packet-config.md").write_text("packet\n")
         write_jsonl(self.work / "config-pilot-A.jsonl", [screen_row(r, f"o/{r}", 1, ["gate"]) for r in (1, 3)])
         write_jsonl(self.work / "config-pilot-B-gemini-3.8-flash-high.jsonl", [screen_row(1, "o/1", 1, ["gate"]), screen_row(3, "o/3", 0, [])])
         write_jsonl(self.work / "config-pilot-B-gpt-oss-120b-medium.jsonl", [screen_row(r, f"o/{r}", 1, ["gate"]) for r in (1, 3)])
+        self.pilot_meta(sha(b"packet\n"))
 
-    def run_freeze(self):
+    def pilot_meta(self, packet):
+        entry = lambda cli: {"cli": cli, "model": "m", "effort": "e", "cli_version": f"{cli} 1.0", "isolation": f"{cli} flags", "blocks": [{"ranks": [1, 3], "packet_sha256": packet}]}
+        write_json(self.work / "meta.json", {"sessions": {"config-pilot-A": entry("claude"), "config-pilot-B-gemini-3.8-flash-high": entry("agy")}})
+
+    def run_freeze(self, *extra):
         return subprocess.run([sys.executable, "-B", str(HERE / "freeze-protocol.py"), "--topic", "demo", "--repo", str(self.repo), "--work", str(self.work),
-                               "--criteria", "docs/prior-art/quality-criteria-v2.md", "--today", "2026-10-20"], capture_output=True, text=True)
+                               "--criteria", CRITERIA, "--today", "2026-10-20", *extra], capture_output=True, text=True)
 
-    def test_the_freeze_pins_the_protocol_after_the_pilot_block_and_picks_session_b_by_pilot_agreement(self):
+    def frozen(self):
+        return json.loads((self.work / "protocol-freeze.json").read_text())
+
+    def test_the_freeze_pins_full_criteria_and_packet_digests_and_the_real_pilot_size(self):
         result = self.run_freeze()
         self.assertEqual(result.returncode, 0, result.stderr)
-        freeze = json.loads((self.work / "protocol-freeze.json").read_text())
-        protocol = hashlib.sha256(b"criteria\n" + b"packet\n").hexdigest()[:16]
-        self.assertEqual(freeze["strata"]["config"], {"frozen_after_rank": 3, "packet": "screening-packet-config.md", "protocol_sha256": protocol, "date": "2026-10-20"})
-        self.assertEqual((freeze["pilot_rows"], freeze["criteria"]), (2, "docs/prior-art/quality-criteria-v2.md"))
-        self.assertEqual(list(freeze["strata"]), ["config"])
-        self.assertEqual(freeze["session_b"]["chosen"], {"cli": "agy", "model": "gpt-oss-120b-medium"})
-        self.assertEqual({m: p["agreement"] for m, p in freeze["session_b"]["pilot"].items()}, {"gemini-3.8-flash-high": 0.5, "gpt-oss-120b-medium": 1.0})
+        self.assertEqual(self.frozen()["strata"]["config"], {"frozen_after_rank": 3, "pilot_rows": 2, "packet": "screening-packet-config.md",
+                                                             "criteria_sha256": sha((self.repo / CRITERIA).read_bytes()), "packet_sha256": sha(b"packet\n"), "date": "2026-10-20"})
+        self.assertEqual(list(self.frozen()["strata"]), ["config"])
+
+    def test_session_b_is_the_configured_model_even_when_another_agrees_more_with_a(self):
+        self.assertEqual(self.run_freeze().returncode, 0)
+        session_b = self.frozen()["session_b"]
+        self.assertEqual((session_b["chosen"], session_b["rule"]), (B, "the topic config's session B"))
+        self.assertEqual({m: p["agreement"] for m, p in session_b["pilot"].items()}, {"gemini-3.8-flash-high": 0.5, "gpt-oss-120b-medium": 1.0})
+        self.assertEqual(self.frozen()["session_a"], {"cli": "claude", "model": "claude-opus-5-5", "effort": "high"})
+
+    def test_without_the_configured_b_pilot_the_fallback_is_frozen_with_its_reason(self):
+        (self.work / "config-pilot-B-gemini-3.8-flash-high.jsonl").rename(self.work / "config-pilot-B-claude-sonnet-4-6.jsonl")
+        self.assertEqual(self.run_freeze().returncode, 0)
+        self.assertEqual(self.frozen()["session_b"]["chosen"], FALLBACK)
+        self.assertIn("fallback", self.frozen()["session_b"]["rule"])
+
+    def test_pilot_files_must_cover_every_pilot_rank(self):
+        write_jsonl(self.work / "config-pilot-A.jsonl", [screen_row(1, "o/1", 1, ["gate"])])
+        result = self.run_freeze()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must both cover pilot ranks [1, 3]", result.stderr)
+
+    def test_a_packet_revised_after_the_pilot_needs_the_amendment_recorded(self):
+        self.pilot_meta(sha(b"packet, pilot draft\n"))
+        result = self.run_freeze()
+        self.assertIn("pass --amendment", result.stderr)
+        self.assertEqual(self.run_freeze("--amendment", "tightened the Position anchor").returncode, 0)
+        self.assertEqual(self.frozen()["amendment"], {"pilot_packet_sha256": [sha(b"packet, pilot draft\n")], "changed": True, "what": "tightened the Position anchor"})
+        self.assertEqual((self.frozen()["cli_versions"], self.frozen()["isolation"]), ({"claude": "claude 1.0", "agy": "agy 1.0"}, {"claude": "claude flags", "agy": "agy flags"}))
 
     def test_a_pilot_block_without_session_files_is_refused(self):
         (self.work / "config-pilot-A.jsonl").unlink()
-        result = self.run_freeze()
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("config-pilot-A.jsonl", result.stderr)
+        self.assertIn("config-pilot-A.jsonl", self.run_freeze().stderr)
 
     def test_a_missing_packet_is_refused(self):
         (self.work / "screening-packet-config.md").unlink()
-        result = self.run_freeze()
-        self.assertIn("screening-packet-config.md", result.stderr)
+        self.assertIn("screening-packet-config.md", self.run_freeze().stderr)
 
     def test_the_comparison_measures_agreement_on_post_freeze_rows_only(self):
         folder = sweep_folder(self.repo, load_topic(self.repo, "demo"))
-        write_json(folder / "protocol-freeze.json", {"pilot_rows": 2, "strata": {"config": {"frozen_after_rank": 2, "protocol_sha256": "f" * 16}}})
+        write_json(folder / "protocol-freeze.json", {"strata": {"config": {"frozen_after_rank": 2, "criteria_sha256": "c" * 64, "packet_sha256": "f" * 64}}})
         out = script("compare-screening-sessions").compare(folder, "config", None)
-        self.assertEqual(out.get("freeze"), {"after_rank": 2, "protocol_sha256": "f" * 16, "pilot_rows_left_out": 2})
-        self.assertEqual((out["rows"], out["judged_cells"], out["identical"], out["agreement"]), (2, 10, 9, 0.9))
-        self.assertEqual(out["kappa"]["Authority"], 0.0)
+        self.assertEqual(out.get("freeze"), {"after_rank": 2, "criteria_sha256": "c" * 64, "packet_sha256": "f" * 64, "pilot_rows_left_out": 2})
+        self.assertEqual((out["rows"], out["judged_cells"], out["identical"], out["agreement"]), (2, 8, 7, 0.875))
+        self.assertEqual(out["with_date"]["agreement"], 0.9)
+        self.assertEqual((out["decision_agreement"], out["kappa"]["Authority"]), (2, 0.0))
 
 
 if __name__ == "__main__":

@@ -18,7 +18,9 @@ function methodSweep(...flags) {
   assert.equal(run.status, 0, run.stderr);
   const folder = join(repo, "docs", "prior-art", "sweeps", "261001-demo");
   const record = join(repo, "docs", "prior-art", "sweeps", "261001-demo.md");
-  return { repo, folder, text: readFileSync(record, "utf8"), errors: (text = readFileSync(record, "utf8")) => evidence.sweepMethodErrors(repo, "261001-demo.md", text) };
+  const meta = () => JSON.parse(readFileSync(join(folder, "meta.json"), "utf8"));
+  const writeMeta = (value) => writeFileSync(join(folder, "meta.json"), JSON.stringify(value));
+  return { repo, folder, meta, writeMeta, text: readFileSync(record, "utf8"), errors: (text = readFileSync(record, "utf8")) => evidence.sweepMethodErrors(repo, "261001-demo.md", text) };
 }
 
 test("the sweep-record gate checks the method evidence of every sweep after the dev sweep", () => {
@@ -26,14 +28,13 @@ test("the sweep-record gate checks the method evidence of every sweep after the 
   const sweep = methodSweep();
   copyFileSync(join(REPO, "docs", "prior-art", "claude-code-surfaces.md"), join(sweep.repo, "docs", "prior-art", "claude-code-surfaces.md"));
   mkdirSync(join(sweep.repo, "docs", "adr"));
-  const metaFile = join(sweep.folder, "meta.json");
-  const meta = JSON.parse(readFileSync(metaFile, "utf8"));
+  const meta = sweep.meta();
   delete meta.sessions["product-B"].effort;
-  writeFileSync(metaFile, JSON.stringify(meta));
+  sweep.writeMeta(meta);
   assert.ok(checkSweepFolder(sweep.repo).includes("sweeps/261001-demo.md: product-B: meta.json session lacks effort"));
 });
 
-test("a record rendered by the toolchain carries all of its method evidence", () => {
+test("a sweep run through the toolchain, exported and rendered passes the gate", () => {
   assert.deepEqual(methodSweep().errors(), []);
   assert.deepEqual(methodSweep("--same-family", "--rated").errors(), []);
 });
@@ -52,31 +53,45 @@ test("recall at the cut and kappa are required per stratum", () => {
   assert.match(sweep.errors(sweep.text.replace(/^- config kappa: .*\n/m, "")).join("\n"), /config: no kappa per judged criterion/);
 });
 
-test("every screening session needs its model, effort, packet sha256 and date", () => {
+test("every screening session needs its header, and every block its packet, criteria and input hashes and date", () => {
   const sweep = methodSweep();
-  const metaFile = join(sweep.folder, "meta.json");
-  const meta = JSON.parse(readFileSync(metaFile, "utf8"));
+  const meta = sweep.meta();
   delete meta.sessions["product-B"].effort;
-  meta.sessions["config-A"].packet_sha256 = "0".repeat(64);
-  delete meta.sessions["config-B"];
-  delete meta.sessions["config-pilot-A"].model;
-  writeFileSync(metaFile, JSON.stringify(meta));
+  delete meta.sessions["config-A"].blocks[0].inputs_sha256;
+  meta.sessions["config-A"].blocks[0].packet_sha256 = "0".repeat(64);
+  delete meta.sessions["config-pilot-A"].cli_version;
+  sweep.writeMeta(meta);
   const errors = sweep.errors().join("\n");
-  assert.match(errors, /config-pilot-A: meta\.json session lacks model/);
-  assert.doesNotMatch(errors, /config-pilot-A: packet_sha256/);
   assert.match(errors, /product-B: meta\.json session lacks effort/);
-  assert.match(errors, /config-A: packet_sha256 does not match screening-packet-config\.md/);
-  assert.match(errors, /config-B: meta\.json records no session/);
+  assert.match(errors, /config-A: a session block lacks inputs_sha256/);
+  assert.match(errors, /config-A: a block ran under a packet or criteria other than the frozen ones/);
+  assert.match(errors, /config-pilot-A: meta\.json session lacks cli_version/);
 });
 
-test("a Chapman figure must be labelled a lower bound", () => {
+test("both session files and both entries are required for every screened stratum, and A and B must score the same inputs", () => {
   const sweep = methodSweep();
-  assert.match(sweep.errors(sweep.text.replace("is a lower bound, not an estimate", "estimates the total")).join("\n"), /Chapman figure is not labelled a lower bound/);
+  const meta = sweep.meta();
+  meta.sessions["config-B"].blocks[0].row_sha256["3"] = "0".repeat(64);
+  delete meta.sessions["product-B"];
+  sweep.writeMeta(meta);
+  const errors = sweep.errors().join("\n");
+  assert.match(errors, /config: sessions A and B scored different inputs for ranks 3/);
+  assert.match(errors, /product-B: meta\.json records no session blocks/);
+});
+
+test("the capture-recapture line must state Chapman as a lower bound", () => {
+  const sweep = methodSweep();
+  assert.match(sweep.errors(sweep.text.replace(/is a lower bound, not an estimate/g, "estimates the total")).join("\n"), /config: no capture-recapture line with Chapman as a lower bound/);
 });
 
 test("sessions of one model family need the same model family threat", () => {
   const sweep = methodSweep("--same-family");
   assert.match(sweep.errors(sweep.text.replace(/^- same model family: .*\n/gm, "")).join("\n"), /config: sessions A and B are both claude models/);
+});
+
+test("the academic channel needs the papers-not-screened threat", () => {
+  const sweep = methodSweep();
+  assert.match(sweep.errors(sweep.text.replace(/^- academic papers logged, not screened: .*\n/m, "")).join("\n"), /academic papers logged, not screened/);
 });
 
 test("the topic config's stop row must be the one the data give", () => {
@@ -88,11 +103,16 @@ test("the topic config's stop row must be the one the data give", () => {
   assert.match(sweep.errors().join("\n"), /config: the topic config's stop_row is 60, the record stops at row 3/);
 });
 
-test("a tag-only stratum must be stated as not screened, and a screened one needs its section", () => {
+test("a tag-only stratum must be stated as not screened, an array of channels is not channels, and a screened one needs its section", () => {
   const sweep = methodSweep();
   assert.match(sweep.text, /^- local: tag-only inventory, not screened by two sessions/m);
   assert.match(sweep.errors(sweep.text.replace(/^- local: tag-only .*\n/m, "")).join("\n"), /local: a stratum without channels is not stated as tag-only/);
   assert.match(sweep.errors(sweep.text.replace("## Stratum: product\n", "## Stratum: gone\n")).join("\n"), /product: the topic screens this stratum but the record has no ## Stratum: product/);
+  const topicFile = join(sweep.repo, "docs", "prior-art", "topics", "demo.json");
+  const topic = JSON.parse(readFileSync(topicFile, "utf8"));
+  topic.strata.product.channels = [];
+  writeFileSync(topicFile, JSON.stringify(topic));
+  assert.match(sweep.errors().join("\n"), /product: a stratum without channels is not stated as tag-only/);
 });
 
 test("an unrated calibration sample needs the LLM-only screening threat", () => {
@@ -101,12 +121,15 @@ test("an unrated calibration sample needs the LLM-only screening threat", () => 
   assert.match(sweep.errors(sweep.text.replace(/^- LLM-only screening: .*\n/m, "")).join("\n"), /no user calibration agreement and no LLM-only screening threat/);
 });
 
-test("the dev sweep is grandfathered by name with its reason, and its text fails under any other name", () => {
+test("the dev sweep is grandfathered by name and record hash with its reason; an edited text or another name loses the exemption", () => {
   const dev = readFileSync(join(REPO, "docs", "prior-art", "sweeps", "261018-dev.md"), "utf8");
-  assert.match(evidence.GRANDFATHERED.get("261018-dev"), /before the 2026-10-19 method fixes: it has no frozen protocol/);
+  const exemption = evidence.GRANDFATHERED.get("261018-dev");
+  assert.match(exemption.reason, /before the 2026-10-19 method fixes: it has no frozen protocol/);
+  assert.match(exemption.sha256, /^[0-9a-f]{64}$/);
   assert.deepEqual(evidence.sweepMethodErrors(REPO, "261018-dev.md", dev), []);
+  assert.match(evidence.sweepMethodErrors(REPO, "261018-dev.md", dev.replace("target 0.90", "target 0.85")).join("\n"), /no ## Protocol section/);
   const errors = evidence.sweepMethodErrors(REPO, "261020-dev.md", dev).join("\n");
   assert.match(errors, /no ## Protocol section/);
-  assert.match(errors, /Chapman figure is not labelled a lower bound/);
+  assert.match(errors, /no capture-recapture line with Chapman as a lower bound/);
   assert.match(errors, /no user calibration agreement/);
 });

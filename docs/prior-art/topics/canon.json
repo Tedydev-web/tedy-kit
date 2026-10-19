@@ -12,7 +12,7 @@
   "pilot_rows": 20,
   "sessions": {
     "A": {"cli": "claude", "model": "claude-opus-5-5", "effort": "high"},
-    "B": {"candidates": [{"cli": "agy", "model": "gemini-3.8-flash-high"}, {"cli": "agy", "model": "gpt-oss-120b-medium"}], "fallback": {"cli": "claude", "model": "claude-sonnet-4-6", "effort": "high"}}
+    "B": {"cli": "agy", "model": "gemini-3.8-flash-high", "fallback": {"cli": "claude", "model": "claude-sonnet-4-6", "effort": "high"}, "pilot_also": [{"cli": "agy", "model": "gpt-oss-120b-medium"}]}
   },
   "strata": {
     "config": {

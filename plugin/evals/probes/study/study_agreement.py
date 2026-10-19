@@ -28,12 +28,30 @@ def stop_row(yields):
 
 
 def effort_stop(common, firsts, forced, order_ranks):
-    row = stop_row(block_yields(common, firsts, forced))
-    if row is not None:
-        return row, "effort bound"
     screened = {r for r in common if r <= HARD_CAP and r not in forced}
-    left = [r for r in order_ranks if r <= HARD_CAP and r not in forced and r not in screened]
-    return (max(screened), "pool exhausted") if screened and not left else (None, "not reached")
+    unforced = sorted(r for r in order_ranks if r <= HARD_CAP and r not in forced)
+    row = stop_row(block_yields(common, firsts, forced))
+    rule = "effort bound"
+    if row is None:
+        if not screened or any(r not in screened for r in unforced):
+            return None, "not reached"
+        row, rule = max(screened), "pool exhausted"
+    gaps = [r for r in unforced if r <= row and r not in screened]
+    return (None, f"ranks {gaps} up to row {row} were not screened by both sessions") if gaps else (row, rule)
+
+
+def chapman(mech_a, mech_b):
+    shared = len(mech_a & mech_b)
+    value = (len(mech_a) + 1) * (len(mech_b) + 1) / (shared + 1) - 1
+    return {"A": len(mech_a), "B": len(mech_b), "shared": shared, "union": len(mech_a | mech_b), "chapman_lower_bound": round(value, 1)}
+
+
+def rounded(value):
+    return None if value is None else round(value, 3)
+
+
+def kappa_text(value):
+    return "undefined (one category)" if value is None else f"{value:.3f}"
 
 
 def recall_at_cut(stratum, qgs, order_rows, cut):
@@ -52,13 +70,15 @@ def recall_at_cut(stratum, qgs, order_rows, cut):
 
 def cohen_kappa(pairs):
     pairs = list(pairs)
+    if not pairs:
+        raise TopicError("kappa needs at least one rated pair")
     observed = sum(a == b for a, b in pairs) / len(pairs)
     labels = {value for pair in pairs for value in pair}
     expected = sum((sum(a == label for a, _ in pairs) / len(pairs)) * (sum(b == label for _, b in pairs) / len(pairs)) for label in labels)
-    return observed, (observed - expected) / (1 - expected) if expected < 1 else 1.0
+    return observed, (observed - expected) / (1 - expected) if expected < 1 else None
 
 
 def session_kappas(rows):
-    judged = {c: round(cohen_kappa((r["A"]["scores"][c], r["B"]["scores"][c]) for r in rows)[1], 3) for c in KAPPA_CRITERIA}
+    judged = {c: rounded(cohen_kappa((r["A"]["scores"][c], r["B"]["scores"][c]) for r in rows)[1]) for c in KAPPA_CRITERIA}
     eligible = [(r["A"]["decision"] == "eligible", r["B"]["decision"] == "eligible") for r in rows]
-    return judged, round(cohen_kappa(eligible)[1], 3), sum(a != b for a, b in eligible)
+    return judged, rounded(cohen_kappa(eligible)[1]), sum(a != b for a, b in eligible)

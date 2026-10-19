@@ -23,7 +23,8 @@ class Base(unittest.TestCase):
 class CompareTest(Base):
     def test_agreement_and_chapman_over_the_rows_both_sessions_screened(self):
         out = script("compare-screening-sessions").compare(self.folder, "config", None)
-        self.assertEqual((out["rows"], out["judged_cells"], out["identical"], out["agreement"]), (4, 20, 19, 0.95))
+        self.assertEqual((out["rows"], out["judged_cells"], out["identical"], out["agreement"]), (4, 16, 15, 0.938))
+        self.assertEqual((out["with_date"]["judged_cells"], out["with_date"]["identical"], out["with_date"]["agreement"]), (20, 19, 0.95))
         self.assertEqual(out["differing_by_criterion"], {"Authority": 1})
         self.assertEqual(out["mechanisms"].get("chapman_lower_bound"), 1.0)
         self.assertNotIn("chapman", out["mechanisms"])
@@ -63,6 +64,24 @@ class CompareTest(Base):
         self.assertEqual(compare.effort_stop([1, 2, 3], {}, set(), [1, 2, 3, 4]), (None, "not reached"))
         ranks = list(range(1, 82))
         self.assertEqual(compare.effort_stop(ranks, {5: {"a"}, 55: {"c"}, 63: {"b"}}, set(), ranks + [82]), (80, "effort bound"))
+
+    def test_a_stop_needs_every_unforced_rank_up_to_it_in_both_sessions(self):
+        compare = script("compare-screening-sessions")
+        ranks = [r for r in range(1, 82) if r != 40]
+        self.assertEqual(compare.effort_stop(ranks, {5: {"a"}, 55: {"c"}, 63: {"b"}}, set(), list(range(1, 83))), (None, "ranks [40] up to row 81 were not screened by both sessions"))
+        self.assertEqual(compare.effort_stop([1, 3], {}, set(), [1, 2, 3]), (None, "not reached"))
+
+    def test_kappa_is_undefined_for_one_category_and_refused_for_no_pairs(self):
+        from study_agreement import cohen_kappa, kappa_text
+        self.assertEqual(cohen_kappa([(1, 1), (1, 1)]), (1.0, None))
+        self.assertEqual(kappa_text(None), "undefined (one category)")
+        with self.assertRaisesRegex(TopicError, "at least one rated pair"):
+            cohen_kappa([])
+
+    def test_writing_a_stop_row_is_refused_for_a_tag_only_stratum(self):
+        result = subprocess.run([sys.executable, "-B", str(HERE / "compare-screening-sessions.py"), "--topic", "demo", "--repo", str(self.repo), "--stratum", "local", "--write-stop"],
+                                capture_output=True, text=True)
+        self.assertIn("local is tag-only", result.stderr)
 
     def test_the_toolchain_writes_the_stop_row_into_the_topic_config(self):
         path = self.repo / "docs/prior-art/topics/demo.json"

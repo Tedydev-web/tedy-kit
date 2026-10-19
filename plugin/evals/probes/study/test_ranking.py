@@ -142,6 +142,20 @@ class OrderAndSnowballTest(unittest.TestCase):
                                          "fix": "below the target: change the screening-order formula or the cut, not the terms"})
         self.assertEqual(out["judged_by_both"], 3)
 
+    def test_recall_before_screening_works_without_a_cut(self):
+        topic = json.loads((self.repo / "docs/prior-art/topics/demo.json").read_text())
+        topic["strata"]["config"]["stop_row"] = None
+        write_json(self.repo / "docs/prior-art/topics/demo.json", topic)
+        for side in "AB":
+            write_jsonl(self.work / f"config-qgs-judge-{side}.jsonl", [{"id": 1, "repo": "a/one", "verdict": "yes"}])
+        write_json(self.work / "config-qgs-adjudicated.json", {"final": ["a/one"]})
+        write_json(self.work / "config-state.json", {"hits": {"a/one": {"channels": {"github-code-search": []}}}})
+        result = subprocess.run([sys.executable, "-B", str(HERE / "qgs-recall.py"), "--topic", "demo", "--repo", str(self.repo), "--work", str(self.work),
+                                 "--states", "config", "--stratum", "config"], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["at_cut"]["cut"], None)
+        self.assertEqual(json.loads(result.stdout)["standards"]["adjudicated (source read)"]["quasi_sensitivity"], 1.0)
+
 
 if __name__ == "__main__":
     unittest.main()

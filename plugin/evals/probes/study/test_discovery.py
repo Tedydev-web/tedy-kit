@@ -55,7 +55,7 @@ class FetchTest(unittest.TestCase):
         class Scripted(Fetch):
             replies = [("", "exit 1: API rate limit exceeded", 0), ("9", "ok", 0), ("[]", "ok", 0)]
 
-            def _once(self, cmd, timeout):
+            def _once(self, cmd, timeout, cwd=None):
                 return self.replies.pop(0)
 
         out, status, _ = Scripted(sleep=pauses.append).run(["gh", "search", "repos", "x"])

@@ -2,11 +2,11 @@ import json
 import sys
 from pathlib import Path
 
-from study_agreement import CHAPMAN_NOTE, block_yields, effort_stop, session_kappas, stop_row
+from study_agreement import CHAPMAN_NOTE, KAPPA_CRITERIA, block_yields, chapman, effort_stop, session_kappas, stop_row
 from study_pool import read_json
 from study_protocol import read_freeze
-from study_sweep_record import JUDGED, MechanismTable, derive, read_jsonl
-from study_topic import TopicError, load_topic, sweep_folder, topic_arguments, write_stop_row
+from study_screening_core import JUDGED, MechanismTable, derive, read_jsonl
+from study_topic import TopicError, load_topic, require_screened, sweep_folder, topic_arguments, write_stop_row
 
 
 def compare(folder, stratum, max_rank):
@@ -24,31 +24,31 @@ def compare(folder, stratum, max_rank):
     measured = [r for r in common if frozen is None or r > frozen["frozen_after_rank"]]
     if not measured:
         raise TopicError(f"no {stratum} row both sessions screened lies after the freeze at row {frozen['frozen_after_rank']}")
-    cells = same = 0
     by_criterion = {}
     for r in measured:
         for c in JUDGED:
-            cells += 1
-            if rows[r]["A"]["scores"][c] == rows[r]["B"]["scores"][c]:
-                same += 1
-            else:
+            if rows[r]["A"]["scores"][c] != rows[r]["B"]["scores"][c]:
                 by_criterion[c] = by_criterion.get(c, 0) + 1
+    cells, cells_with_date = len(measured) * len(KAPPA_CRITERIA), len(measured) * len(JUDGED)
+    same = cells - sum(n for c, n in by_criterion.items() if c != "Date")
+    same_with_date = cells_with_date - sum(by_criterion.values())
     kappa, eligibility_kappa, eligibility_differ = session_kappas([rows[r] for r in measured])
     mech = {s: set().union(*(rows[r][s]["mechs"] for r in common)) for s in "AB"}
-    shared = len(mech["A"] & mech["B"])
-    chapman = (len(mech["A"]) + 1) * (len(mech["B"]) + 1) / (shared + 1) - 1
-    union = len(mech["A"] | mech["B"])
+    capture = chapman(mech["A"], mech["B"])
     firsts = {r: rows[r]["A"]["mechs"] | rows[r]["B"]["mechs"] for r in common}
     order = read_jsonl(Path(folder), f"{stratum}-screening-order.jsonl")
     forced = {r["order_rank"] for r in order if r.get("forced")}
     yields = block_yields(common, firsts, forced)
     stop, rule = effort_stop(common, firsts, forced, [r["order_rank"] for r in order])
-    freeze = frozen and {"after_rank": frozen["frozen_after_rank"], "protocol_sha256": frozen["protocol_sha256"], "pilot_rows_left_out": len(common) - len(measured)}
+    freeze = frozen and {"after_rank": frozen["frozen_after_rank"], "criteria_sha256": frozen["criteria_sha256"], "packet_sha256": frozen["packet_sha256"],
+                         "pilot_rows_left_out": len(common) - len(measured)}
     out = {"stratum": stratum, "rows": len(measured), "freeze": freeze, "judged_cells": cells, "identical": same, "agreement": round(same / cells, 3), "target": 0.9,
+           "with_date": {"judged_cells": cells_with_date, "identical": same_with_date, "agreement": round(same_with_date / cells_with_date, 3),
+                         "note": "Date is computed, not judged; the target applies to the figure without it"},
            "differing_by_criterion": by_criterion, "kappa": kappa, "eligibility_kappa": eligibility_kappa, "eligibility_differ": eligibility_differ,
-           "decision_agreement": sum(rows[r]["A"]["decision"] == rows[r]["B"]["decision"] for r in common),
-           "mechanisms": {"A": len(mech["A"]), "B": len(mech["B"]), "shared": shared, "union": union, "chapman_lower_bound": round(chapman, 1), "chapman_note": CHAPMAN_NOTE,
-                          "third_reader_needed": chapman > union + 2, "only_A": sorted(mech["A"] - mech["B"]), "only_B": sorted(mech["B"] - mech["A"])},
+           "decision_agreement": sum(rows[r]["A"]["decision"] == rows[r]["B"]["decision"] for r in measured),
+           "mechanisms": {**capture, "chapman_note": CHAPMAN_NOTE, "third_reader_needed": capture["chapman_lower_bound"] > capture["union"] + 2,
+                          "only_A": sorted(mech["A"] - mech["B"]), "only_B": sorted(mech["B"] - mech["A"])},
            "block_yields": yields, "effort_bound_stop": stop_row(yields), "stop": {"row": stop, "rule": rule}, "mechanism_table": table_json is not None,
            "disputed": [{"rank": r, "repo": sides["A"][r]["repo"], "A": rows[r]["A"]["decision"], "B": rows[r]["B"]["decision"]}
                         for r in common if rows[r]["A"]["decision"] != rows[r]["B"]["decision"]]}
@@ -63,8 +63,7 @@ def main(argv=None):
                            (["--write-stop"], {"action": "store_true", "help": "write the derived stop row into the topic config's strata.<stratum>.stop_row"})).parse_args(argv)
     try:
         topic = load_topic(args.repo, args.topic)
-        if args.stratum not in topic["strata"]:
-            raise TopicError(f"topic {topic['name']} has no {args.stratum} stratum")
+        require_screened(topic, args.stratum)
         out = compare(args.folder or sweep_folder(args.repo, topic), args.stratum, args.max_rank)
         if args.write_stop:
             if args.max_rank is not None or out["stop"]["row"] is None:

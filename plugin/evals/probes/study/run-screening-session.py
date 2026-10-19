@@ -6,38 +6,51 @@ from pathlib import Path
 from study_fetch import Fetch, NetworkRefused
 from study_protocol import FREEZE_FILE
 from study_session import model_family, run_block
-from study_topic import TopicError, load_topic, require_screened, saigon_today, session_a, session_b_options, topic_arguments
+from study_topic import TopicError, load_topic, require_screened, saigon_today, session_a, session_b, topic_arguments
 
 
-def pilot_jobs(topic, stratum, side, which):
+def pilot_job(topic, stratum, side, model, which):
     if side == "A":
-        return [(session_a(topic), f"{stratum}-pilot-A")]
-    options = session_b_options(topic)
-    candidates = options[:len(topic["sessions"]["B"]["candidates"])]
-    reachable = [o for o in candidates if which(o["cli"])] or [o for o in options[len(candidates):] if which(o["cli"])]
-    if not reachable:
-        raise TopicError("no session B candidate or fallback has its CLI on PATH")
-    return [(o, f"{stratum}-pilot-B-{o['model']}") for o in reachable]
+        option = session_a(topic)
+        if model and model != option["model"]:
+            raise TopicError(f"session A is {option['model']} in the topic config, not {model}")
+        return option, f"{stratum}-pilot-A"
+    primary, fallback, also = session_b(topic)
+    options = [o for o in (primary, fallback, *also) if o]
+    if model:
+        option = next((o for o in options if o["model"] == model), None)
+        if option is None:
+            raise TopicError(f"{model} is not session B, its fallback or a pilot_also option in the topic config")
+    else:
+        option = primary if which(primary["cli"]) else fallback
+        if option is None:
+            raise TopicError(f"session B runs on {primary['cli']}, which is not on PATH, and the topic config names no fallback")
+    if not which(option["cli"]):
+        raise TopicError(f"{option['model']} runs on {option['cli']}, which is not on PATH")
+    return option, f"{stratum}-pilot-B-{option['model']}"
 
 
-def screen_job(topic, work, stratum, side, which):
+def screen_job(work, stratum, side, which):
     path = Path(work) / FREEZE_FILE
     if not path.is_file():
         raise TopicError(f"no {FREEZE_FILE} in {work}; screen the pilot block with --pilot, then freeze the protocol with freeze-protocol.py")
     freeze = json.loads(path.read_text())
-    option = session_a(topic) if side == "A" else freeze["session_b"]["chosen"]
+    if stratum not in freeze["strata"]:
+        raise TopicError(f"{path} does not freeze the {stratum} stratum")
+    option = freeze["session_a"] if side == "A" else freeze["session_b"]["chosen"]
     if not which(option["cli"]):
         raise TopicError(f"session {side} runs on {option['cli']}, which is not on PATH")
-    return freeze["criteria"], (option, f"{stratum}-screen-{side}")
+    return freeze["criteria"], freeze["strata"][stratum], option, f"{stratum}-screen-{side}"
 
 
 def main(argv=None, fetch=None, which=shutil.which):
-    args = topic_arguments("Run one screening session block on the topic's claude or agy model, from the fetched inputs, and record the session in meta.json.",
+    args = topic_arguments("Run one screening session block, isolated, on the claude or agy model the topic config or the freeze names, and record the block in meta.json.",
                            (["--work"], {"required": True, "help": "study working folder"}),
                            (["--stratum"], {"required": True, "help": "stratum to screen"}),
                            (["--side"], {"required": True, "choices": ["A", "B"], "help": "session A or B"}),
                            (["--ranks"], {"required": True, "help": "first-last order ranks of the block, e.g. 1-5"}),
-                           (["--pilot"], {"action": "store_true", "help": "screen the pilot block; for B, every reachable candidate"}),
+                           (["--pilot"], {"action": "store_true", "help": "screen the pilot block before the freeze"}),
+                           (["--model"], {"help": "pilot only: which configured option runs, one per invocation; default session B, else its fallback"}),
                            (["--criteria"], {"help": "criteria file for the pilot; after the freeze it comes from the freeze"}),
                            (["--today"], {"default": saigon_today(), "help": "session date, default today in Asia/Saigon"})).parse_args(argv)
     try:
@@ -49,16 +62,17 @@ def main(argv=None, fetch=None, which=shutil.which):
         if args.pilot:
             if not args.criteria:
                 raise TopicError("--pilot needs --criteria")
-            criteria, jobs = args.criteria, pilot_jobs(topic, args.stratum, args.side, which)
+            option, name = pilot_job(topic, args.stratum, args.side, args.model, which)
+            criteria, frozen, key = args.criteria, None, name
         else:
-            criteria, job = screen_job(topic, args.work, args.stratum, args.side, which)
-            jobs = [job]
-        for option, name in jobs:
-            key = name if args.pilot else f"{args.stratum}-{args.side}"
-            job = {"work": args.work, "repo": args.repo, "stratum": args.stratum, "name": name, "key": key, "option": option, "criteria": criteria,
-                   "first": int(first), "last": int(last), "today": args.today}
-            rows = run_block(job, fetch or Fetch())
-            print(f"{name}: {rows} rows from {option['cli']} {option['model']} (family {model_family(option['model'])})")
+            if args.model:
+                raise TopicError("--model is for the pilot; after the freeze the freeze names both sessions")
+            criteria, frozen, option, name = screen_job(args.work, args.stratum, args.side, which)
+            key = f"{args.stratum}-{args.side}"
+        job = {"work": args.work, "repo": args.repo, "stratum": args.stratum, "name": name, "key": key, "option": option, "criteria": criteria, "frozen": frozen,
+               "pilot": args.pilot, "first": int(first), "last": int(last), "today": args.today}
+        rows = run_block(job, fetch or Fetch())
+        print(f"{name}: {rows} rows from {option['cli']} {option['model']} (family {model_family(option['model'])})")
     except (TopicError, NetworkRefused) as error:
         sys.exit(f"run-screening-session: {error}")
 

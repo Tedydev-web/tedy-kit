@@ -14,12 +14,12 @@ class Fetch:
         self.sleep = sleep
         self.retries = retries
 
-    def _once(self, cmd, timeout):
+    def _once(self, cmd, timeout, cwd=None):
         if os.environ.get("STUDY_NO_NETWORK"):
             raise NetworkRefused(f"STUDY_NO_NETWORK is set; refused: {' '.join(cmd)[:200]}")
         started = time.time()
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd, stdin=subprocess.DEVNULL)
             status = "ok" if result.returncode == 0 else f"exit {result.returncode}: {result.stderr.strip()[:200]}"
             out = result.stdout
         except subprocess.TimeoutExpired:
@@ -28,9 +28,9 @@ class Fetch:
             out, status = "", f"missing command: {cmd[0]}"
         return out, status, round(time.time() - started, 1)
 
-    def run(self, cmd, timeout=180):
+    def run(self, cmd, timeout=180, cwd=None):
         for _ in range(self.retries):
-            out, status, seconds = self._once(cmd, timeout)
+            out, status, seconds = self._once(cmd, timeout, cwd)
             if cmd[0] != "gh" or not any(word in status.lower() for word in RATE_LIMITED):
                 return out, status, seconds
             self.sleep(self._reset_pause())

@@ -121,21 +121,30 @@ def pilot_rows(topic):
 def session_option(topic, where, option):
     if not isinstance(option, dict) or option.get("cli") not in SESSION_CLIS or not isinstance(option.get("model"), str) or not option["model"]:
         raise TopicError(f"{topic['path']}: {where} needs a cli ({' or '.join(SESSION_CLIS)}) and a model id")
-    if "effort" in option and not isinstance(option["effort"], str):
-        raise TopicError(f"{topic['path']}: {where}.effort must be a string")
-    return option
+    if option["cli"] == "agy" and "effort" in option:
+        raise TopicError(f"{topic['path']}: {where}: agy takes no effort, it is part of the model id")
+    if "effort" in option and (not isinstance(option["effort"], str) or not option["effort"]):
+        raise TopicError(f"{topic['path']}: {where}.effort must be a non-empty string")
+    return {k: option[k] for k in ("cli", "model", "effort") if k in option}
 
 
 def session_a(topic):
     return session_option(topic, "sessions.A", topic.get("sessions", {}).get("A"))
 
 
-def session_b_options(topic):
+def session_b(topic):
     b = topic.get("sessions", {}).get("B")
-    if not isinstance(b, dict) or not isinstance(b.get("candidates"), list) or not b["candidates"]:
-        raise TopicError(f"{topic['path']}: sessions.B needs a non-empty candidates list")
-    options = [session_option(topic, f"sessions.B.candidates[{i}]", o) for i, o in enumerate(b["candidates"])]
-    return options + ([session_option(topic, "sessions.B.fallback", b["fallback"])] if "fallback" in b else [])
+    primary = session_option(topic, "sessions.B", b)
+    fallback = session_option(topic, "sessions.B.fallback", b["fallback"]) if "fallback" in b else None
+    also = b.get("pilot_also", [])
+    if not isinstance(also, list):
+        raise TopicError(f"{topic['path']}: sessions.B.pilot_also must be a list")
+    return primary, fallback, [session_option(topic, f"sessions.B.pilot_also[{i}]", o) for i, o in enumerate(also)]
+
+
+def session_b_options(topic):
+    primary, fallback, also = session_b(topic)
+    return [primary] + ([fallback] if fallback else []) + also
 
 
 def topic_arguments(description, *extra):

@@ -78,7 +78,7 @@ def render(repo, topic):
     repo = Path(repo)
     method_sweep = is_method_sweep(sweep_folder(repo, topic))
     screened = {**topic, "strata": {k: topic["strata"][k] for k in screened_strata(topic)}} if method_sweep else topic
-    stops = method_stops(screened, sweep_folder(repo, topic)) if method_sweep else None
+    stops, captures = method_stops(screened, sweep_folder(repo, topic)) if method_sweep else (None, None)
     s = screen(repo, screened)
     D, study, table, strata, coded, differing = s["folder"], s["study"], s["table"], s["strata"], s["coded"], s["differing"]
     out_rows, agreement, beyond, capture = s["rows"], s["agreement"], s["beyond"], s["capture"]
@@ -95,7 +95,7 @@ def render(repo, topic):
              "", "Scores read A1 M1 O1 D1 P1 N1 for Authority, Methodology, Objectivity, Date, Position and the derived Novelty; a/b shows session A's and B's values where they differ.", ""]
     lines += ["## Query log", ""] + [f"- {stratum}: {q}" for stratum, qs in meta["query_log"].items() for q in qs] + [""]
     lines += ["## PRISMA", "", "| stratum | stage | count |", "|---|---|---|"] + [f"| {s} | {k} | {v} |" for s, p in meta["prisma"].items() for k, v in p.items()] + [""]
-    method = method_parts(repo, topic, s, meta) if stops else None
+    method = method_parts(repo, topic, s, meta, captures) if stops else None
     lines += ["## Recall", "", meta["recall"], ""] + (method["recall"] if method else [])
     lines += ["## Agreement and capture-recapture", ""]
     if method:

@@ -27,7 +27,7 @@ def screen_row(rank, repo, value, mechanisms, decision="eligible", authority=Non
 
 def topic_repo(strata=None, sweep="261001-demo", topic="demo"):
     repo = Path(tempfile.mkdtemp(prefix="study-topic-"))
-    strata = strata or {"config": {"stop_row": 2, "forced_repos": ["o/forced"]}, "local": {"stop_row": 1, "forced_repos": []}}
+    strata = strata or {"config": {"stop_row": 2, "forced_repos": ["o/forced"], "channels": {}}, "local": {"stop_row": 1, "forced_repos": []}}
     write_json(repo / "docs/prior-art/topics" / f"{topic}.json", {"sweep": sweep, "terms": ["tdd", "test"], "strata": strata})
     (repo / "docs/prior-art/quality-criteria-v2.md").write_text("criteria\n")
     D = repo / "docs/prior-art/sweeps" / sweep
@@ -64,11 +64,12 @@ def script(name):
 class FakeFetch:
     def __init__(self, rules=()):
         self.rules = list(rules)
-        self.calls = []
+        self.calls, self.cwds = [], []
 
-    def run(self, cmd, timeout=180):
+    def run(self, cmd, timeout=180, cwd=None):
         line = " ".join(cmd)
         self.calls.append(line)
+        self.cwds.append(cwd)
         for needle, out in self.rules:
             if needle in line:
                 return (out, "ok", 0) if isinstance(out, str) else (*out, 0)
