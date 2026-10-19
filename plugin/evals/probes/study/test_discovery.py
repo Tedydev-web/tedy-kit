@@ -7,7 +7,7 @@ from pathlib import Path
 
 from study_fetch import Fetch, NetworkRefused
 from study_fixtures import HERE, FakeFetch, script, topic_repo, write_json
-from study_pool import Pool
+from study_pool import Pool, run_social
 from study_topic import TopicError, load_topic
 
 KIT = HERE.parents[3]
@@ -161,6 +161,15 @@ class ProductDiscoveryTest(Base):
         product = script("discover-product-pool").Product(self.topic, self.work, FakeFetch([("twitter", (error, "exit 69: "))]))
         product.social()
         self.assertEqual((product.pool.state["hits"], product.pool.failed_steps()), ({}, 1))
+
+    def test_youtube_keeps_its_descriptions_when_only_single_videos_failed(self):
+        fetch = FakeFetch([("ytsearch8:skipped", ("see github.com/o/skipped", "exit 1: ERROR: [youtube] aaaaaaaaaaa: This video is unavailable\nERROR: [youtube] bbbbbbbbbbb: Private video")),
+                           ("ytsearch8:broken", ("see github.com/o/broken", "exit 1: ERROR: [youtube:search] Unable to download API page")),
+                           ("ytsearch8:empty", ("", "exit 1: ERROR: [youtube] aaaaaaaaaaa: This video is unavailable"))])
+        pool = Pool(self.work / "yt-state.json")
+        run_social(fetch, pool, {"youtube": ["skipped", "broken", "empty"]})
+        self.assertEqual((sorted(pool.state["hits"]), pool.failed_steps()), (["o/skipped"], 2))
+        self.assertEqual(pool.state["log"][0]["status"], "ok")
 
     def test_social_hits_land_in_one_social_channel(self):
         product = script("discover-product-pool").Product(self.topic, self.work, FakeFetch([("twitter", "github.com/o/s")]))

@@ -5,6 +5,8 @@ import subprocess
 import time
 
 RATE_LIMITED = ("rate limit", "secondary rate", "abuse detection")
+MAX_WAIT = 300
+STDERR_SHOWN = 200
 TRY_AGAIN = re.compile(r"try again in (\d+(?:\.\d+)?)s\b")
 
 
@@ -23,7 +25,7 @@ class Fetch:
         started = time.time()
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=timeout, cwd=cwd, stdin=subprocess.DEVNULL)
-            status = "ok" if result.returncode == 0 else f"exit {result.returncode}: {result.stderr.strip()[:200]}"
+            status = "ok" if result.returncode == 0 else f"exit {result.returncode}: {result.stderr.strip()[:STDERR_SHOWN]}"
             out = result.stdout
         except subprocess.TimeoutExpired:
             out, status = "", "timeout"

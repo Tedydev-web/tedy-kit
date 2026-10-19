@@ -2,6 +2,8 @@ import json
 import re
 from pathlib import Path
 
+from study_fetch import STDERR_SHOWN
+
 GH_LINK = re.compile(r"github\.com[/:]([A-Za-z0-9-]{1,39})/([A-Za-z0-9._-]{1,100})")
 INSTALL_REF = re.compile(r"(?:skills add|plugin install|plugin marketplace add|marketplace add)\s+([A-Za-z0-9-]{1,39})/([A-Za-z0-9._-]{1,100})", re.I)
 NOT_OWNERS = {"orgs", "topics", "sponsors", "features", "apps", "marketplace", "settings", "login", "about", "collections", "search",
@@ -11,6 +13,7 @@ ASSET = re.compile(r"(^|/)(\.claude|\.claude-plugin|\.agents)/|(^|/)(SKILL\.md|A
 CONFIG_DIR_MARKER = re.compile(r"(^|/)(\.claude|\.claude-plugin|\.agents)/")
 AGGREGATOR_TEXT = re.compile(r"awesome|mirror|curated|marketplace|list of|directory of", re.I)
 SOCIAL = {"x", "reddit", "youtube", "facebook"}
+VIDEO_ERRORS = re.compile(r"ERROR: \[youtube\] [\w-]{11}: [^\n]*(?:\nERROR: \[youtube\] [\w-]{11}: [^\n]*)*")
 
 
 def cache_name(key):
@@ -127,14 +130,20 @@ def social_jobs(social):
     return jobs
 
 
+def video_errors_only(status):
+    stderr = status.removeprefix("exit 1: ")
+    return stderr != status and len(stderr) < STDERR_SHOWN and bool(VIDEO_ERRORS.fullmatch(stderr))
+
+
 def run_social(fetch, pool, social, channel_name=None):
     for cmd, channel, via in social_jobs(social):
         step = f"social {via}"
         if pool.done(step):
             continue
         out, status, seconds = fetch.run(cmd, timeout=240)
-        linked, new = pool.links(out, channel_name or channel, via) if status == "ok" else (0, 0)
-        pool.record(step, channel, via, status, seconds, out.count("\n"), linked, new)
+        skipped = channel == "youtube" and out.strip() and video_errors_only(status)
+        linked, new = pool.links(out, channel_name or channel, via) if status == "ok" or skipped else (0, 0)
+        pool.record(step, channel, via, "ok" if skipped else status, seconds, out.count("\n"), linked, new, {"skipped_videos": status} if skipped else None)
         fetch.pace(2 if channel == "x" else 1)
 
 
