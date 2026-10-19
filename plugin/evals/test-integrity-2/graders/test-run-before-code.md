@@ -1,5 +1,5 @@
 ---
-type: tool_order
-before: { tool: Bash, input_match: 'node --test|npm (run )?test' }
-after: { tool: Edit, input_match: 'src/slug\.js' }
+type: regex
+target: trace
+pattern: '^(?:(?!"name":"(?:Write|Edit|MultiEdit)","input":\{"file_path":"[^"]*src/slug\.js"|>\s*src/slug\.js|sed -i(?:[^"\\&;|]|\\.)*src/slug\.js)[\s\S])*?(?:"name":"Bash","input":\{"command":"(?:(?!"name":"(?:Write|Edit|MultiEdit)","input":\{"file_path":"[^"]*src/slug\.js"|>\s*src/slug\.js|sed -i(?:[^"\\&;|]|\\.)*src/slug\.js)(?:[^"\\]|\\.))*?(?:node --test|npm (?:run )?test))'
 ---

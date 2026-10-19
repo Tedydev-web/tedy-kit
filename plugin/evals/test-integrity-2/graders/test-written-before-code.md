@@ -1,5 +1,5 @@
 ---
-type: tool_order
-before: { tool: Write, input_match: 'test/[^"]*slug[^"]*\.test\.js' }
-after: { tool: Edit, input_match: 'src/slug\.js' }
+type: regex
+target: trace
+pattern: '^(?:(?!"name":"(?:Write|Edit|MultiEdit)","input":\{"file_path":"[^"]*src/slug\.js"|>\s*src/slug\.js|sed -i(?:[^"\\&;|]|\\.)*src/slug\.js)[\s\S])*?(?:"name":"(?:Write|Edit|MultiEdit)","input":\{"file_path":"[^"]*test/[^"]*\.test\.js"|>\s*test/[^\s"]*\.test\.js)'
 ---
