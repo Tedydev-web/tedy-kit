@@ -7,6 +7,7 @@ from study_topic import TopicError, load_topic, sweep_folder, topic_arguments
 
 HEX40 = re.compile(r"[0-9a-f]{40}")
 LONGHEX = re.compile(r"\b[0-9a-fA-F]{32,}\b")
+DIGEST = re.compile(r"[0-9a-f]{64}")
 HOME_PATH = re.compile(r"/(?:home|Users)/[^/\s]+/")
 ORDER_FIELDS = ("order_rank", "repo", "order", "units", "contract_files", "stars", "pushed", "created", "channels", "archived", "forced")
 SHARED_JSON = ("meta.json", "study.json", "surface-map.json", "mechanism-table.json", "qgs-adjudicated.json", "protocol-freeze.json", "calibration-sample.json")
@@ -24,11 +25,11 @@ def pin(row):
 
 def clean(value):
     if isinstance(value, str):
-        return LONGHEX.sub(lambda m: m.group(0)[:12], value)
+        return value if DIGEST.fullmatch(value) else LONGHEX.sub(lambda m: m.group(0)[:12], value)
     if isinstance(value, list):
         return [clean(v) for v in value]
     if isinstance(value, dict):
-        return {k: (v if k == "commit" else clean(v)) for k, v in value.items()}
+        return {k: (v if k == "commit" or k.endswith("_sha256") else clean(v)) for k, v in value.items()}
     return value
 
 

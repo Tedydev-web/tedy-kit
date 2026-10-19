@@ -130,6 +130,11 @@ class ExportTest(Base):
         self.assertFalse((out / "config-screening-inputs.jsonl").exists())
         self.assertFalse((out / "prompts").exists())
 
+    def test_digests_survive_the_export_and_only_loose_hashes_are_cut(self):
+        clean = script("export-sweep-data").clean
+        value = {"sessions": {"config-A": {"packet_sha256": "a" * 64, "blocks": [{"row_sha256": {"1": "b" * 64}}]}}, "note": "blob " + "c" * 40, "digest": "d" * 64}
+        self.assertEqual(clean(value), {"sessions": {"config-A": {"packet_sha256": "a" * 64, "blocks": [{"row_sha256": {"1": "b" * 64}}]}}, "note": "blob " + "c" * 12, "digest": "d" * 64})
+
     def test_a_home_path_left_in_text_is_refused(self):
         (self.work / "screening-packet-config.md").write_text("read " + "/".join(["", "home", "someone", "notes.md"]) + "\n")
         with self.assertRaisesRegex(TopicError, "still holds a home path"):
