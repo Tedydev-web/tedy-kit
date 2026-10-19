@@ -15,6 +15,8 @@ export const GRANDFATHERED = new Map([
 
 const HEADER_FIELDS = ["model", "effort"];
 const BLOCK_FIELDS = ["packet_sha256", "criteria_sha256", "prompt_sha256", "inputs_sha256", "cli_version", "date"];
+const HASH_FIELDS = ["packet_sha256", "criteria_sha256", "prompt_sha256", "inputs_sha256"];
+const HEX64 = /^[0-9a-f]{64}$/;
 const AGY_THREAT = "agy MCP servers, hooks and user settings not excluded";
 const SAMPLE_SIZE = 10;
 const CALIBRATED = new Set(["config", "product"]);
@@ -66,6 +68,9 @@ function sessionErrors(files, sessions, strata, digests) {
       if (!Array.isArray(block.ranks) || !block.ranks.length || typeof hashes !== "object" || hashes === null || block.ranks.some((r) => typeof hashes[String(r)] !== "string")) {
         errors.push(`${key}: a session block lacks ranks with a row_sha256 each`);
       }
+      const malformed = HASH_FIELDS.filter((f) => typeof block[f] === "string" && block[f] && !HEX64.test(block[f]));
+      if (Object.values(hashes ?? {}).some((h) => !HEX64.test(String(h)))) malformed.push("row_sha256");
+      if (malformed.length) errors.push(`${key}: a session block has ${malformed.join(", ")} that are not 64 lowercase hex characters`);
       const frozen = key.includes("-pilot-") ? undefined : digests[stratum];
       if (frozen && (block.packet_sha256 !== frozen.packet || block.criteria_sha256 !== frozen.criteria)) errors.push(`${key}: a block ran under a packet or criteria other than the frozen ones`);
     }

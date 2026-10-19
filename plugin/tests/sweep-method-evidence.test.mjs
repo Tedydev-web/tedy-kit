@@ -75,6 +75,18 @@ test("every screening session needs its header, and every block its packet, crit
   assert.match(errors, /config-pilot-B-gemini-3\.8-flash-high: a session block lacks ranks with a row_sha256 each/);
 });
 
+test("every block digest must be 64 lowercase hex characters", () => {
+  const sweep = methodSweep();
+  const meta = sweep.meta();
+  meta.sessions["config-A"].blocks[0].prompt_sha256 = "x";
+  meta.sessions["config-A"].blocks[0].inputs_sha256 = "A".repeat(64);
+  meta.sessions["product-B"].blocks[0].row_sha256["2"] = "short";
+  sweep.writeMeta(meta);
+  const errors = sweep.errors().join("\n");
+  assert.match(errors, /config-A: a session block has prompt_sha256, inputs_sha256 that are not 64 lowercase hex characters/);
+  assert.match(errors, /product-B: a session block has row_sha256 that are not 64 lowercase hex characters/);
+});
+
 test("recorded session models must be the frozen ones, and a CLI version change needs its threat", () => {
   const sweep = methodSweep();
   const meta = sweep.meta();
