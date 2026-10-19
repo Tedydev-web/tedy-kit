@@ -74,6 +74,16 @@ class FetchTest(unittest.TestCase):
         out, status, _ = Scripted(sleep=pauses.append).run(["gh", "api", "search/code"])
         self.assertEqual((out, status, pauses), ("[]", "ok", [5, 60]))
 
+    def test_four_429s_end_in_failure_after_four_capped_waits(self):
+        pauses = []
+
+        class Scripted(Fetch):
+            def _once(self, cmd, timeout, cwd=None):
+                return "", "exit 1: gh: try again in 999.5s (HTTP 429)", 0
+
+        out, status, _ = Scripted(sleep=pauses.append).run(["gh", "api", "search/code"])
+        self.assertEqual((status, pauses), ("exit 1: gh: try again in 999.5s (HTTP 429)", [300, 300, 300, 300]))
+
 
 class ConfigDiscoveryTest(Base):
     def fetch(self):

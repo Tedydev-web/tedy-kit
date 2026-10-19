@@ -38,7 +38,7 @@ class Fetch:
             out, status, seconds = self._once(cmd, timeout, cwd)
             asked = TRY_AGAIN.search(status)
             if cmd[0] == "gh" and (asked or "(HTTP 429)" in status):
-                self.sleep(math.ceil(float(asked.group(1))) + 1 if asked else 60)
+                self.sleep(min(MAX_WAIT, math.ceil(float(asked.group(1))) + 1) if asked else 60)
                 continue
             if cmd[0] != "gh" or not any(word in status.lower() for word in RATE_LIMITED):
                 return out, status, seconds
