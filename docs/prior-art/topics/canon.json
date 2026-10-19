@@ -50,7 +50,7 @@
         "code_terms": ["validate", "lint", "frontmatter", "schema"],
         "code_extensions": ["ts", "js", "mjs", "cjs", "py", "go", "rs", "sh"],
         "code_pages": 10,
-        "repo_queries": ["claude code skill validator", "claude code plugin validator", "agent skills linter", "skill lint", "claude skills evals", "agent eval harness", "llm eval regression", "architecture decision records", "adr tool", "fitness functions architecture", "architecture unit test", "lint baseline", "lint ratchet", "codemod migration", "versioned rules migration", "standards as code", "policy as code", "plugin manifest schema"],
+        "repo_queries": ["claude code skill validator", "claude code plugin validator", "agent skills linter", "skill lint", "claude skills evals", "agent eval harness", "llm eval regression", "architecture decision records", "adr tool", "fitness functions architecture", "architecture unit test", "lint baseline", "lint ratchet", "codemod migration", "versioned rules migration", "standards as code", "policy as code", "plugin manifest schema", "claude code permission", "pretooluse hook"],
         "harness_topics": ["claude-code", "claude-code-plugin", "agent-skills", "ai-agents", "coding-agent", "llm"],
         "subject_topics": ["linter", "validator", "evals", "evaluation", "adr", "architecture-decision-records", "fitness-functions", "codemod", "migration"],
         "social": {
