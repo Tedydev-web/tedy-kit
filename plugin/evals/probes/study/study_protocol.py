@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 from study_agreement import KAPPA_CRITERIA, session_kappas
-from study_sweep_record import MechanismTable, derive, read_jsonl
+from study_screening_core import MechanismTable, derive, read_jsonl
 from study_topic import TopicError, pilot_rows, session_b_options
 
 FREEZE_FILE = "protocol-freeze.json"

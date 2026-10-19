@@ -1,10 +1,10 @@
-from study_sweep_record import JUDGED
+from study_screening_core import JUDGED
 from study_topic import SNOWBALL_RANK_BASE, TopicError
 
 EFFORT_BOUND, BLOCK, HARD_CAP = 60, 10, 200
 RECALL_TARGET = 0.8
-RECALL_FIX = "below the target: change the screening-order formula or the cut, not the terms"
-KAPPA_CRITERIA =tuple(c for c in JUDGED if c != "Date")
+RECALL_FIX = "change the screening-order formula or the cut, not the terms"
+KAPPA_CRITERIA = tuple(c for c in JUDGED if c != "Date")
 CHAPMAN_NOTE = ("a lower bound, not an estimate: the two sessions are not independent captures (same packet, same rows, often the same model), "
                 "and positive dependence biases the Chapman figure low")
 
@@ -47,7 +47,7 @@ def recall_at_cut(stratum, qgs, order_rows, cut):
     recall = len(at) / len(qgs)
     out = {"stratum": stratum, "cut": cut, "size": len(qgs), "at_cut": len(at), "recall": round(recall, 3), "target": RECALL_TARGET, "below_target": recall < RECALL_TARGET,
            "missed": [{"repo": q.lower(), "rank": ranks.get(q.lower(), {}).get("order_rank")} for q in qgs if q.lower() not in screened]}
-    return {**out, "fix": RECALL_FIX} if out["below_target"] else out
+    return {**out, "fix": f"below the target: {RECALL_FIX}"} if out["below_target"] else out
 
 
 def cohen_kappa(pairs):

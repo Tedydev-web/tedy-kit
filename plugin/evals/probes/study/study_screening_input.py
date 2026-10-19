@@ -4,7 +4,7 @@ import urllib.parse
 from pathlib import Path
 
 from study_pool import cache_name, parse_json, read_json
-from study_sweep_record import read_jsonl
+from study_screening_core import read_jsonl
 from study_topic import SNOWBALL_RANK_BASE, TopicError
 
 HEX40 = re.compile(r"[0-9a-f]{40}")

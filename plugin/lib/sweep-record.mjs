@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { sweepMethodErrors } from "./sweep-method-evidence.mjs";
 
 const CRITERIA = /^- Criteria: (\S+) sha256\[:16\] `([0-9a-f]{16})`$/m;
 const INVENTORY = /^- Inventory: .*?`([0-9a-f]{16})`/m;
@@ -171,6 +172,7 @@ export function checkSweepFolder(repo) {
   for (const [file, text] of texts) {
     const ctx = { criteriaText: (path) => readFileSync(join(repo, path), "utf8"), inventoryDigest, surfaces, latest: latest.has(file) };
     errors.push(...checkSweepRecord(text, ctx).map((e) => `sweeps/${file}: ${e}`));
+    errors.push(...sweepMethodErrors(repo, file, text).map((e) => `sweeps/${file}: ${e}`));
     const folder = join(sweeps, file.slice(0, -3));
     const tableFile = join(folder, "mechanism-table.json");
     if (existsSync(tableFile)) errors.push(...checkMechanismTable(JSON.parse(readFileSync(tableFile, "utf8")), codedMechanisms(folder)).map((e) => `sweeps/${file}: ${e}`));

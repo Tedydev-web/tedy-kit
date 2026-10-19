@@ -9,7 +9,7 @@ HEX40 = re.compile(r"[0-9a-f]{40}")
 LONGHEX = re.compile(r"\b[0-9a-fA-F]{32,}\b")
 HOME_PATH = re.compile(r"/(?:home|Users)/[^/\s]+/")
 ORDER_FIELDS = ("order_rank", "repo", "order", "units", "contract_files", "stars", "pushed", "created", "channels", "archived", "forced")
-SHARED_JSON = ("meta.json", "study.json", "surface-map.json", "mechanism-table.json", "qgs-adjudicated.json")
+SHARED_JSON = ("meta.json", "study.json", "surface-map.json", "mechanism-table.json", "qgs-adjudicated.json", "protocol-freeze.json", "calibration-sample.json")
 SHARED_JSONL = ("qgs-candidates.jsonl", "qgs-judge-A.jsonl", "qgs-judge-B.jsonl")
 
 
@@ -57,8 +57,15 @@ def export(topic, repo, work):
                 jsonl(f"{stratum}-screen-{side}.jsonl", pin)
             if (work / f"{stratum}-screen-{side}-mechanisms.md").exists():
                 text(f"{stratum}-screen-{side}-mechanisms.md")
-        for path in sorted(work.glob(f"{stratum}-reader-C-*.jsonl")):
+        for path in sorted(work.glob(f"{stratum}-reader-C-*.jsonl")) + sorted(work.glob(f"{stratum}-qgs-*.jsonl")):
             jsonl(path.name)
+        for path in sorted(work.glob(f"{stratum}-pilot-*.jsonl")):
+            jsonl(path.name, pin)
+        for path in sorted(work.glob(f"{stratum}-pilot-*-mechanisms.md")):
+            text(path.name)
+        if (work / f"{stratum}-qgs-adjudicated.json").exists():
+            (out / f"{stratum}-qgs-adjudicated.json").write_text(json.dumps(clean(json.loads((work / f"{stratum}-qgs-adjudicated.json").read_text())), indent=1, ensure_ascii=False) + "\n")
+            counts[f"{stratum}-qgs-adjudicated.json"] = "copied"
         if (work / f"{stratum}-screening-order.jsonl").exists():
             jsonl(f"{stratum}-screening-order.jsonl", lambda r: {k: r[k] for k in ORDER_FIELDS if k in r})
         for name in (f"{stratum}-mechanism-map.json", f"{stratum}-adjudication.json"):

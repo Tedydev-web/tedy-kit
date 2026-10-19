@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 from study_screening_input import inputs_file
-from study_sweep_record import read_jsonl
+from study_screening_core import read_jsonl
 from study_topic import TopicError
 
 MAX_PROMPT = 120_000

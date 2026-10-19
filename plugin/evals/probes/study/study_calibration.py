@@ -4,7 +4,7 @@ from pathlib import Path
 
 from study_agreement import KAPPA_CRITERIA
 from study_protocol import EMPTY_TABLE, FREEZE_FILE
-from study_sweep_record import MechanismTable, derive, read_jsonl
+from study_screening_core import MechanismTable, derive, read_jsonl
 from study_topic import TopicError
 
 SAMPLE_FILE = "calibration-sample.json"

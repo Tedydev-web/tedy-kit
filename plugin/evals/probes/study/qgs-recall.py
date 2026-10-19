@@ -4,7 +4,7 @@ from pathlib import Path
 
 from study_agreement import cohen_kappa, recall_at_cut
 from study_pool import read_json
-from study_sweep_record import read_jsonl
+from study_screening_core import read_jsonl
 from study_topic import TopicError, load_topic, topic_arguments
 
 

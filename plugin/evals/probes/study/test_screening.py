@@ -113,6 +113,23 @@ class ExportTest(Base):
         self.assertEqual((out / "config-screen-A-mechanisms.md").read_text(), "gate: see docs/prior-art/x.md\n")
         self.assertEqual(counts["meta.json"], "copied")
 
+    def test_the_method_evidence_is_exported_and_fetched_source_text_is_not(self):
+        write_json(self.work / "protocol-freeze.json", {"strata": {}})
+        write_json(self.work / "calibration-sample.json", {"rows": []})
+        write_json(self.work / "config-qgs-adjudicated.json", {"final": []})
+        write_jsonl(self.work / "config-qgs-judge-A.jsonl", [{"id": 1}])
+        write_jsonl(self.work / "config-pilot-B-gemini-3.8-flash-high.jsonl", [{"order_rank": 1, "repo": "o/a", "sha": "b" * 40}])
+        (self.work / "config-pilot-A-mechanisms.md").write_text("gate: g\n")
+        write_jsonl(self.work / "config-screening-inputs.jsonl", [{"order_rank": 1, "files": [{"text": "copied source"}]}])
+        (self.work / "prompts").mkdir()
+        (self.work / "prompts/config-screen-A-1-5.md").write_text("copied source")
+        out, counts = script("export-sweep-data").export(self.topic, self.repo, self.work)
+        for name in ("protocol-freeze.json", "calibration-sample.json", "config-qgs-adjudicated.json", "config-qgs-judge-A.jsonl", "config-pilot-A-mechanisms.md"):
+            self.assertTrue((out / name).is_file(), name)
+        self.assertEqual(json.loads((out / "config-pilot-B-gemini-3.8-flash-high.jsonl").read_text())["commit"], "https://github.com/o/a/commit/" + "b" * 40)
+        self.assertFalse((out / "config-screening-inputs.jsonl").exists())
+        self.assertFalse((out / "prompts").exists())
+
     def test_a_home_path_left_in_text_is_refused(self):
         (self.work / "screening-packet-config.md").write_text("read " + "/".join(["", "home", "someone", "notes.md"]) + "\n")
         with self.assertRaisesRegex(TopicError, "still holds a home path"):
