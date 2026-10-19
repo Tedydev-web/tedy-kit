@@ -123,22 +123,26 @@ function topicConfigErrors(config) {
 }
 
 function facetErrors(config) {
+  const object = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
   if (config.facets === undefined) return [];
-  if (!config.facets || typeof config.facets !== "object" || Array.isArray(config.facets)) return ["facets must be an object"];
+  if (!object(config.facets)) return ["facets must be an object"];
   const terms = new Set((config.terms ?? []).map((t) => String(t).toLowerCase()));
   const problems = new Set(config.problems ?? []);
   const strata = new Set(Object.keys(config.strata ?? {}));
   const listed = (value) => Array.isArray(value) && value.length > 0 && value.every((v) => typeof v === "string" && v);
   const errors = Object.entries(config.facets).flatMap(([name, facet]) => {
     const where = `facets.${name}`;
-    if (!facet || typeof facet !== "object" || Array.isArray(facet)) return [`${where} must be an object`];
+    if (!object(facet)) return [`${where} must be an object`];
     const found = [];
     for (const key of ["terms", "problems"]) if (!listed(facet[key])) found.push(`${where}: ${key} must be a non-empty list`);
     const term = listed(facet.terms) ? facet.terms.filter((t) => !terms.has(t.toLowerCase())) : [];
     if (term.length) found.push(`${where}: terms ${term.join(", ")} are not topic terms`);
     const problem = listed(facet.problems) ? facet.problems.filter((p) => !problems.has(p)) : [];
     if (problem.length) found.push(`${where}: problems ${problem.join(", ")} are not topic problems`);
-    const stratum = Object.keys(facet.strata ?? {}).filter((s) => !strata.has(s));
+    if (facet.strata !== undefined && !object(facet.strata)) found.push(`${where}: strata must be an object`);
+    const own = object(facet.strata) ? Object.entries(facet.strata) : [];
+    for (const [s, rule] of own) if (!object(rule)) found.push(`${where}: strata.${s} must be an object`);
+    const stratum = own.map(([s]) => s).filter((s) => !strata.has(s));
     if (stratum.length) found.push(`${where}: strata ${stratum.join(", ")} are not topic strata`);
     if (typeof facet.sweep !== "string" || !facet.sweep) found.push(`${where}: sweep must name the facet's sweep`);
     return found;

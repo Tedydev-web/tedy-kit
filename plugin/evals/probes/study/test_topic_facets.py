@@ -53,6 +53,10 @@ class FacetTest(unittest.TestCase):
         self.write({**FACETS, "alpha": None})
         with self.assertRaisesRegex(TopicError, r"facets\.alpha must be an object"):
             load_topic(self.repo, "demo:beta")
+        self.write(FACETS)
+        write_json(self.path, {k: v for k, v in json.loads(self.path.read_text()).items() if k != "terms"})
+        with self.assertRaisesRegex(TopicError, r"terms must be a non-empty list"):
+            load_topic(self.repo, "demo:alpha")
 
     def test_a_facet_must_exist_and_stay_inside_the_topic_terms_and_problems(self):
         with self.assertRaisesRegex(TopicError, "no facet gamma"):

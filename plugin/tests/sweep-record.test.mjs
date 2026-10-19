@@ -169,6 +169,8 @@ test("a topic's facets stay inside its terms, problems and strata, split its pro
   assert.deepEqual(errors(), ["facets: problem C2 sits in facets alpha, beta"]);
   write({ alpha, beta: null });
   assert.deepEqual(errors(), ["facets.beta must be an object", "facets: problem C2 sits in no facet"]);
+  write({ alpha: { ...alpha, strata: { config: 5 } }, beta: { ...beta, strata: ["config"] } });
+  assert.deepEqual(errors(), ["facets.alpha: strata.config must be an object", "facets.beta: strata must be an object"]);
   write({ alpha, beta: { ...beta, sweep: "261001-coordination" } });
   assert.deepEqual(errors(), ["sweep 261001-coordination is named more than once (coordination, coordination:beta)"]);
   write({ alpha, beta });

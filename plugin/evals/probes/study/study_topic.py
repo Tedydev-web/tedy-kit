@@ -38,10 +38,6 @@ def load_topic(repo, name):
         raise TopicError(f"{path}: not JSON: {error}") from error
     if not isinstance(topic, dict):
         raise TopicError(f"{path}: must be a JSON object")
-    if "facets" in topic:
-        check_facets(topic, path)
-    if facet:
-        topic = with_facet(topic, path, facet)
     _require(topic, path, "sweep", str)
     terms = _require(topic, path, "terms", list)
     if not all(isinstance(t, str) and t for t in terms):
@@ -50,6 +46,10 @@ def load_topic(repo, name):
     for stratum, rule in strata.items():
         if not isinstance(rule, dict):
             raise TopicError(f"{path}: strata.{stratum} must be an object")
+    if "facets" in topic:
+        check_facets(topic, path)
+    if facet:
+        topic = with_facet(topic, path, facet)
     return {**topic, "name": name, "path": path, **({"facet": facet} if facet else {})}
 
 
