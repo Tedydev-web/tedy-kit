@@ -82,6 +82,10 @@ export function checkMethodEvidence(text, { files, read, criteriaText, topic }) 
   const { errors, digests } = protocolDigests(text, strata, { read, criteriaText });
   errors.push(...sessionErrors(files, sessions, strata, digests));
   if (!topic) errors.push("no topic config names this sweep, so its stop rows cannot be checked");
+  const hookThreat = /^- plugin hooks not excluded \(no --bare\): /m.test(threats);
+  for (const [key, entry] of Object.entries(sessions)) {
+    if (entry?.cli === "claude" && !String(entry.isolation ?? "").includes("--bare") && !hookThreat) errors.push(`${key} ran claude without --bare and the record names no plugin hooks threat`);
+  }
   const tagOnly = part(text, "Tag-only strata");
   for (const [stratum, rule] of Object.entries(topic?.strata ?? {})) {
     if (!screenedRule(rule) && !new RegExp(`^- ${escape(stratum)}: tag-only `, "m").test(tagOnly)) errors.push(`${stratum}: a stratum without channels is not stated as tag-only`);

@@ -6,7 +6,7 @@ from study_calibration import CALIBRATED_STRATA, SAMPLE_FILE, calibration_agreem
 from study_method_sessions import session_keys, session_lines
 from study_protocol import FREEZE_FILE
 from study_screening_core import JUDGED, MechanismTable, derive, read_json, read_jsonl
-from study_session import model_family
+from study_session import NO_BARE_THREAT, model_family
 from study_topic import TopicError
 
 TAG_ONLY = ("tag-only inventory, not screened by two sessions: its rows carry tags, never copied text, so it has no protocol freeze, sessions, kappa, "
@@ -110,6 +110,10 @@ def threat_lines(topic, strata, sessions, freeze, threats):
         if model_family(a) == model_family(b):
             threats.append(f"- same model family: {stratum} sessions A ({a}) and B ({b}) are both {model_family(a)} models, so their errors correlate and their agreement "
                            "shows consistency more than correctness")
+    unbare = sorted(k for k, e in sessions.items() if NO_BARE_THREAT in (e.get("threats") or []))
+    if unbare:
+        threats.append(f"- {NO_BARE_THREAT}: {', '.join(unbare)} ran without --bare because no API-key auth source was set; settings, MCP servers, CLAUDE.md, "
+                       "tools and session persistence were still excluded, but installed plugin hooks may have run")
     chosen = freeze["session_b"]
     if "fallback" in chosen["rule"]:
         threats.append(f"- session B fallback: {chosen['rule']}; B ran on {chosen['chosen']['model']}")

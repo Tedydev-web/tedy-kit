@@ -1,4 +1,5 @@
 import json
+import os
 import shutil
 import sys
 from pathlib import Path
@@ -43,7 +44,7 @@ def screen_job(work, stratum, side, which):
     return freeze["criteria"], freeze["strata"][stratum], option, f"{stratum}-screen-{side}"
 
 
-def main(argv=None, fetch=None, which=shutil.which):
+def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
     args = topic_arguments("Run one screening session block, isolated, on the claude or agy model the topic config or the freeze names, and record the block in meta.json.",
                            (["--work"], {"required": True, "help": "study working folder"}),
                            (["--stratum"], {"required": True, "help": "stratum to screen"}),
@@ -70,7 +71,7 @@ def main(argv=None, fetch=None, which=shutil.which):
             criteria, frozen, option, name = screen_job(args.work, args.stratum, args.side, which)
             key = f"{args.stratum}-{args.side}"
         job = {"work": args.work, "repo": args.repo, "stratum": args.stratum, "name": name, "key": key, "option": option, "criteria": criteria, "frozen": frozen,
-               "pilot": args.pilot, "first": int(first), "last": int(last), "today": args.today}
+               "pilot": args.pilot, "bare": bool(environ.get("ANTHROPIC_API_KEY")), "first": int(first), "last": int(last), "today": args.today}
         rows = run_block(job, fetch or Fetch())
         print(f"{name}: {rows} rows from {option['cli']} {option['model']} (family {model_family(option['model'])})")
     except (TopicError, NetworkRefused) as error:

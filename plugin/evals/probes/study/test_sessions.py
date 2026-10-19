@@ -50,12 +50,12 @@ class SessionBase(unittest.TestCase):
         topic = json.loads((self.repo / "docs/prior-art/topics/demo.json").read_text())
         write_json(self.repo / "docs/prior-art/topics/demo.json", {**topic, "pilot_rows": 1, "sessions": sessions})
 
-    def run_session(self, fetch, *args, which=lambda cli: True):
+    def run_session(self, fetch, *args, which=lambda cli: True, environ=None):
         return script("run-screening-session").main(["--topic", "demo", "--repo", str(self.repo), "--work", str(self.work), "--stratum", "config", *args, "--today", "2026-10-20"],
-                                                    fetch=fetch, which=which)
+                                                    fetch=fetch, which=which, environ=environ if environ is not None else {"ANTHROPIC_API_KEY": "stub"})
 
-    def pilot(self, fetch, side="A", ranks="1-1", *extra, which=lambda cli: True):
-        return self.run_session(fetch, "--side", side, "--ranks", ranks, "--pilot", "--criteria", CRITERIA, *extra, which=which)
+    def pilot(self, fetch, side="A", ranks="1-1", *extra, which=lambda cli: True, environ=None):
+        return self.run_session(fetch, "--side", side, "--ranks", ranks, "--pilot", "--criteria", CRITERIA, *extra, which=which, environ=environ)
 
     def meta(self):
         return json.loads((self.work / "meta.json").read_text())["sessions"]
@@ -79,6 +79,22 @@ class IsolationTest(SessionBase):
         self.assertTrue(fetch.calls[index].endswith("--model claude-opus-5-5 --effort high --output-format json --bare --tools  --setting-sources  --strict-mcp-config "
                                                     "--no-session-persistence --disable-slash-commands --max-turns 1"))
         self.assertIn("claude --version", fetch.calls)
+
+    def test_without_an_api_key_claude_runs_the_proven_flags_without_bare_and_records_the_threat(self):
+        fetch = FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one")))])
+        self.pilot(fetch, environ={"HOME": "/nowhere"})
+        [call] = fetch.called("claude -p")
+        self.assertNotIn("--bare", call)
+        self.assertTrue(call.endswith("--output-format json --tools  --setting-sources  --strict-mcp-config --no-session-persistence --disable-slash-commands --max-turns 1"))
+        entry = self.meta()["config-pilot-A"]
+        self.assertEqual(entry.get("threats"), ["plugin hooks not excluded (no --bare)"])
+        self.assertNotIn("--bare", entry["isolation"])
+
+    def test_with_an_api_key_claude_runs_bare_and_records_no_threat(self):
+        fetch = FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one")))])
+        self.pilot(fetch, environ={"ANTHROPIC_API_KEY": "stub"})
+        self.assertIn(" --bare ", fetch.called("claude -p")[0])
+        self.assertEqual(self.meta()["config-pilot-A"].get("threats"), [])
 
     def test_agy_runs_without_effort_or_slash_commands_in_an_empty_folder(self):
         fetch = FakeFetch([("agy --model", agy_reply(reply_row(1, "o/one")))])

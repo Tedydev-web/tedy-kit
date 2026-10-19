@@ -103,6 +103,11 @@ class MethodRecordTest(unittest.TestCase):
         self.assertIn("- session B fixed by the topic config (gemini-3.8-flash-high), not chosen by agreement with A", threats)
         self.assertIn("- academic papers logged, not screened: ", threats)
 
+    def test_claude_sessions_without_bare_carry_the_plugin_hook_threat(self):
+        self.assertNotIn("plugin hooks not excluded", self.text())
+        threats = self.section(self.text(bare=False), "Threats")
+        self.assertIn("- plugin hooks not excluded (no --bare): config-A, config-pilot-A, product-A, product-pilot-A ran without --bare because no API-key auth source was set", threats)
+
     def test_an_unrated_calibration_sample_is_an_llm_only_threat(self):
         self.assertIn("- LLM-only screening: no calibration sample was drawn", self.section(self.text(), "Threats"))
         self.assertIn("- LLM-only screening: the calibration sample is rated on 1 of 2 rows", self.section(self.text(rated="partial"), "Threats"))

@@ -50,11 +50,11 @@ class ScriptedSessions(FakeFetch):
         return json.dumps({"status": "SUCCESS", "num_turns": 1, "response": text}), "ok", 0
 
 
-def session(repo, work, fetch, which, *args):
-    script("run-screening-session").main(["--topic", "demo", "--repo", str(repo), "--work", str(work), *args, "--today", "2026-10-20"], fetch=fetch, which=which)
+def session(repo, work, fetch, which, environ, *args):
+    script("run-screening-session").main(["--topic", "demo", "--repo", str(repo), "--work", str(work), *args, "--today", "2026-10-20"], fetch=fetch, which=which, environ=environ)
 
 
-def method_repo(same_family=False, rated=None):
+def method_repo(same_family=False, rated=None, bare=True):
     repo = topic_repo(strata={"config": {"stop_row": None, "forced_repos": ["o/forced"], "channels": {"academic": {"arxiv": ["abs:tdd"]}}},
                               "product": {"stop_row": None, "forced_repos": [], "channels": {}}})
     topic_file = repo / "docs/prior-art/topics/demo.json"
@@ -75,17 +75,18 @@ def method_repo(same_family=False, rated=None):
             write_json(work / "cache/trees" / (row["repo"].replace("/", "__") + ".json"), {"oid": "e" * 40, "paths": ["README.md"]})
     loaded = load_topic(repo, "demo")
     which = (lambda cli: cli != "agy") if same_family else (lambda cli: True)
+    environ = {"ANTHROPIC_API_KEY": "fixture"} if bare else {}
     fetch = ScriptedSessions(MODELS["A"]["model"])
     for stratum in ("config", "product"):
         fetch_inputs(loaded, work, stratum, 200, FakeFetch())
         for side in "AB":
-            session(repo, work, fetch, which, "--stratum", stratum, "--side", side, "--ranks", "1-1", "--pilot", "--criteria", CRITERIA)
+            session(repo, work, fetch, which, environ, "--stratum", stratum, "--side", side, "--ranks", "1-1", "--pilot", "--criteria", CRITERIA)
         (work / f"screening-packet-{stratum}.md").write_text(f"packet {stratum}\n")
     script("freeze-protocol").main(["--topic", "demo", "--repo", str(repo), "--work", str(work), "--criteria", CRITERIA, "--today", "2026-10-20",
                                     "--amendment", "the pilot draft became the frozen packet"])
     for stratum in ("config", "product"):
         for side in "AB":
-            session(repo, work, fetch, which, "--stratum", stratum, "--side", side, "--ranks", "1-5")
+            session(repo, work, fetch, which, environ, "--stratum", stratum, "--side", side, "--ranks", "1-5")
         write_stop_row(load_topic(repo, "demo"), stratum, script("compare-screening-sessions").compare(work, stratum, None)["stop"]["row"])
     write_json(work / "config-qgs-adjudicated.json", {"final": ["o/one", "O/Three"]})
     write_json(work / "product-qgs-adjudicated.json", {"final": ["p/1", "p/9"]})
@@ -103,7 +104,7 @@ def method_repo(same_family=False, rated=None):
 
 if __name__ == "__main__":
     from study_sweep_record import write_record
-    built = method_repo(same_family="--same-family" in sys.argv, rated="full" if "--rated" in sys.argv else None)
+    built = method_repo(same_family="--same-family" in sys.argv, rated="full" if "--rated" in sys.argv else None, bare="--no-bare" not in sys.argv)
     write_record(built, load_topic(built, "demo"))
     shutil.copytree(built, Path(sys.argv[1]), dirs_exist_ok=True)
     shutil.rmtree(built)

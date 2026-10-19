@@ -14,7 +14,8 @@ from study_topic import TopicError
 
 MAX_PROMPT = 120_000
 AGY_TIMEOUT = "600s"
-CLAUDE_ISOLATION = ("--bare", "--tools", "", "--setting-sources", "", "--strict-mcp-config", "--no-session-persistence", "--disable-slash-commands", "--max-turns", "1")
+NO_BARE_THREAT = "plugin hooks not excluded (no --bare)"
+CLAUDE_ISOLATION = ("--tools", "", "--setting-sources", "", "--strict-mcp-config", "--no-session-persistence", "--disable-slash-commands", "--max-turns", "1")
 AGY_ISOLATION = ("--disable-slash-commands",)
 SESSION_FIELDS = ("cli", "model", "effort", "cli_version", "isolation", "served")
 ROWS_NOTE = ("Each row below is one JSON object: the pinned commit, the repository facts from discovery, the top-level listing, the README excerpt and up to two asset files "
@@ -37,22 +38,28 @@ def canonical_sha256(value):
     return sha256_bytes(json.dumps(value, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode())
 
 
-def isolation(cli):
-    flags = CLAUDE_ISOLATION if cli == "claude" else AGY_ISOLATION
+def claude_flags(bare):
+    return ("--bare", *CLAUDE_ISOLATION) if bare else CLAUDE_ISOLATION
+
+
+def isolation(cli, bare):
+    flags = claude_flags(bare) if cli == "claude" else AGY_ISOLATION
     return " ".join(f or "''" for f in flags) + "; empty temporary working folder; stdin closed"
 
 
-def session_command(option, prompt):
+def session_command(option, prompt, bare):
     if option["cli"] == "claude":
         effort = ["--effort", option["effort"]] if option.get("effort") else []
-        return ["claude", "-p", prompt, "--model", option["model"], *effort, "--output-format", "json", *CLAUDE_ISOLATION]
+        return ["claude", "-p", prompt, "--model", option["model"], *effort, "--output-format", "json", *claude_flags(bare)]
     return ["agy", "--model", option["model"], "--output-format", "json", "--print-timeout", AGY_TIMEOUT, *AGY_ISOLATION, "--print", prompt]
 
 
-def session_header(option, cli_version):
+def session_header(option, cli_version, bare):
     effort = option.get("effort") or ("default" if option["cli"] == "claude" else "set by the model id")
     served = "modelUsage must name only the requested model" if option["cli"] == "claude" else "requested only: agy reports no served model"
-    return {"cli": option["cli"], "model": option["model"], "effort": effort, "cli_version": cli_version, "isolation": isolation(option["cli"]), "served": served}
+    threats = [NO_BARE_THREAT] if option["cli"] == "claude" and not bare else []
+    return {"cli": option["cli"], "model": option["model"], "effort": effort, "cli_version": cli_version, "isolation": isolation(option["cli"], bare), "served": served,
+            "threats": threats}
 
 
 def build_prompt(packet, criteria_path, criteria_text, mechanisms_text, rows):
@@ -122,7 +129,7 @@ def run_block(job, fetch):
     version, status, _ = fetch.run([option["cli"], "--version"], timeout=60)
     if status != "ok":
         raise TopicError(f"{option['cli']} --version: {status}")
-    header = session_header(option, version.strip().splitlines()[0] if version.strip() else "unknown")
+    header = session_header(option, version.strip().splitlines()[0] if version.strip() else "unknown", job["bare"])
     update_sessions(work, lambda sessions: check_header(sessions, job["key"], header, list(expected)))
     if job.get("pilot"):
         snapshot = work / f"screening-packet-{stratum}-pilot-{hashes['packet_sha256'][:12]}.md"
@@ -137,7 +144,7 @@ def run_block(job, fetch):
     prompts.mkdir(exist_ok=True)
     stem = f"{name}-{job['first']}-{job['last']}"
     (prompts / f"{stem}.md").write_text(prompt)
-    text, served = reply_text(option, *call_isolated(fetch, session_command(option, prompt)))
+    text, served = reply_text(option, *call_isolated(fetch, session_command(option, prompt, job["bare"])))
     rows, mechanisms, problems = parse_reply(text, expected)
     if problems:
         (prompts / f"{stem}.response.txt").write_text(text)

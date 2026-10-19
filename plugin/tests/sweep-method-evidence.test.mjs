@@ -89,6 +89,12 @@ test("sessions of one model family need the same model family threat", () => {
   assert.match(sweep.errors(sweep.text.replace(/^- same model family: .*\n/gm, "")).join("\n"), /config: sessions A and B are both claude models/);
 });
 
+test("claude sessions run without --bare need the plugin hook threat", () => {
+  const sweep = methodSweep("--no-bare");
+  assert.deepEqual(sweep.errors(), []);
+  assert.match(sweep.errors(sweep.text.replace(/^- plugin hooks not excluded \(no --bare\): .*\n/m, "")).join("\n"), /config-A ran claude without --bare and the record names no plugin hooks threat/);
+});
+
 test("the academic channel needs the papers-not-screened threat", () => {
   const sweep = methodSweep();
   assert.match(sweep.errors(sweep.text.replace(/^- academic papers logged, not screened: .*\n/m, "")).join("\n"), /academic papers logged, not screened/);
