@@ -62,6 +62,18 @@ class FetchTest(unittest.TestCase):
         self.assertEqual((out, status), ("[]", "ok"))
         self.assertEqual(pauses, [30])
 
+    def test_an_http_429_waits_the_seconds_github_asks_for_then_retries(self):
+        pauses = []
+
+        class Scripted(Fetch):
+            replies = [("", "exit 1: gh: try again in 3.006863164s (HTTP 429)", 0), ("", "exit 1: gh: Too Many Requests (HTTP 429)", 0), ("[]", "ok", 0)]
+
+            def _once(self, cmd, timeout, cwd=None):
+                return self.replies.pop(0)
+
+        out, status, _ = Scripted(sleep=pauses.append).run(["gh", "api", "search/code"])
+        self.assertEqual((out, status, pauses), ("[]", "ok", [5, 60]))
+
 
 class ConfigDiscoveryTest(Base):
     def fetch(self):

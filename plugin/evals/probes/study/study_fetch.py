@@ -1,8 +1,11 @@
+import math
 import os
+import re
 import subprocess
 import time
 
 RATE_LIMITED = ("rate limit", "secondary rate", "abuse detection")
+TRY_AGAIN = re.compile(r"try again in (\d+(?:\.\d+)?)s\b")
 
 
 class NetworkRefused(RuntimeError):
@@ -31,6 +34,10 @@ class Fetch:
     def run(self, cmd, timeout=180, cwd=None):
         for _ in range(self.retries):
             out, status, seconds = self._once(cmd, timeout, cwd)
+            asked = TRY_AGAIN.search(status)
+            if cmd[0] == "gh" and (asked or "(HTTP 429)" in status):
+                self.sleep(math.ceil(float(asked.group(1))) + 1 if asked else 60)
+                continue
             if cmd[0] != "gh" or not any(word in status.lower() for word in RATE_LIMITED):
                 return out, status, seconds
             self.sleep(self._reset_pause())
