@@ -232,6 +232,16 @@ class MethodRecordTest(unittest.TestCase):
         with self.assertRaisesRegex(TopicError, "strata.product.stop_row is 60, the screening data stop at row 6"):
             render(repo, load_topic(repo, "demo"))
 
+    def test_a_forced_row_ranked_past_1000_is_not_a_snowball_row(self):
+        repo = self.build()
+        topic = {**load_topic(repo, "demo"), "strata": {"config": {"stop_row": 60}, "product": {"stop_row": 60}}}
+        (self.folder / "config-screening-order.jsonl").write_text("".join(json.dumps(r) + "\n" for r in ({"order_rank": 1, "repo": "o/r1"}, {"order_rank": 1001, "repo": "s/one"},
+                                                                                                         {"order_rank": 1402, "repo": "o/forced", "forced": True})))
+        (self.folder / "snowball-screening-order.jsonl").write_text(json.dumps({"order_rank": 1001, "repo": "s/one"}) + "\n")
+        (self.folder / "snowball-cut.json").write_text(json.dumps({"stratum": "config", "cut_row": 60, "source": "the written stop row"}))
+        (self.folder / "product-screening-order.jsonl").write_text("".join(json.dumps(r) + "\n" for r in ({"order_rank": 1, "repo": "p/r1"}, {"order_rank": 7071, "repo": "p/agg", "forced": True})))
+        self.assertEqual(snowball_lines(topic, self.folder, ["config", "product"]), ["- config snowball: 1 rows from 1001 on rank above the cut at row 60 (the written stop row)"])
+
     def test_a_tag_only_stratum_is_stated_and_not_screened(self):
         text = self.text()
         self.assertIn("## Tag-only strata\n\n- local: tag-only inventory, not screened by two sessions", text)
