@@ -1,5 +1,7 @@
+import atexit
 import importlib.util
 import json
+import shutil
 import tempfile
 from pathlib import Path
 
@@ -27,6 +29,7 @@ def screen_row(rank, repo, value, mechanisms, decision="eligible", authority=Non
 
 def topic_repo(strata=None, sweep="261001-demo", topic="demo"):
     repo = Path(tempfile.mkdtemp(prefix="study-topic-"))
+    atexit.register(shutil.rmtree, repo, ignore_errors=True)
     strata = strata or {"config": {"stop_row": 2, "forced_repos": ["o/forced"], "channels": {}}, "local": {"stop_row": 1, "forced_repos": []}}
     write_json(repo / "docs/prior-art/topics" / f"{topic}.json", {"sweep": sweep, "terms": ["tdd", "test"], "strata": strata})
     (repo / "docs/prior-art/quality-criteria-v2.md").write_text("criteria\n")
