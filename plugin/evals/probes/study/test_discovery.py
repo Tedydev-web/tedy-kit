@@ -1,6 +1,7 @@
 import json
 import os
 import shutil
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -61,6 +62,16 @@ class FetchTest(unittest.TestCase):
         out, status, _ = Scripted(sleep=pauses.append).run(["gh", "search", "repos", "x"])
         self.assertEqual((out, status), ("[]", "ok"))
         self.assertEqual(pauses, [30])
+
+    def test_the_status_shows_200_characters_of_stderr_and_the_fetch_keeps_all_of_it(self):
+        old = os.environ.pop("STUDY_NO_NETWORK", None)
+        try:
+            fetch = Fetch(sleep=lambda s: None)
+            out, status, _ = fetch.run([sys.executable, "-c", "import sys; sys.stdout.write('out'); sys.stderr.write('e' * 500); sys.exit(1)"])
+        finally:
+            if old is not None:
+                os.environ["STUDY_NO_NETWORK"] = old
+        self.assertEqual((out, status, fetch.last_stderr), ("out", "exit 1: " + "e" * 200, "e" * 500))
 
     def test_an_http_429_waits_the_seconds_github_asks_for_then_retries(self):
         pauses = []
@@ -173,9 +184,10 @@ class ProductDiscoveryTest(Base):
         self.assertEqual((product.pool.state["hits"], product.pool.failed_steps()), ({}, 1))
 
     def test_youtube_keeps_its_descriptions_when_only_single_videos_failed(self):
-        fetch = FakeFetch([("ytsearch8:skipped", ("see github.com/o/skipped", "exit 1: ERROR: [youtube] aaaaaaaaaaa: This video is unavailable\nERROR: [youtube] bbbbbbbbbbb: Private video")),
-                           ("ytsearch8:broken", ("see github.com/o/broken", "exit 1: ERROR: [youtube:search] Unable to download API page")),
-                           ("ytsearch8:empty", ("", "exit 1: ERROR: [youtube] aaaaaaaaaaa: This video is unavailable"))])
+        videos = "".join(f"ERROR: [youtube] {c * 11}: This video is unavailable\nWARNING: [youtube] {c * 11}: falling back to the web client\n" for c in "abcd")
+        fetch = FakeFetch([("ytsearch8:skipped", ("see github.com/o/skipped", "exit 1: " + videos[:200], videos)),
+                           ("ytsearch8:broken", ("see github.com/o/broken", "exit 1: " + videos[:200], videos + "ERROR: [youtube:search] Unable to download API page\n")),
+                           ("ytsearch8:empty", ("", "exit 1: ERROR: [youtube] aaaaaaaaaaa: This video is unavailable", "ERROR: [youtube] aaaaaaaaaaa: This video is unavailable\n"))])
         pool = Pool(self.work / "yt-state.json")
         run_social(fetch, pool, {"youtube": ["skipped", "broken", "empty"]})
         self.assertEqual((sorted(pool.state["hits"]), pool.failed_steps()), (["o/skipped"], 2))

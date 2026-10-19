@@ -73,9 +73,13 @@ class FakeFetch:
         line = " ".join(cmd)
         self.calls.append(line)
         self.cwds.append(cwd)
+        self.last_stderr = ""
         for needle, out in self.rules:
             if needle in line:
-                return (out, "ok", 0) if isinstance(out, str) else (*out, 0)
+                if isinstance(out, str):
+                    return out, "ok", 0
+                self.last_stderr = out[2] if len(out) > 2 else ""
+                return out[0], out[1], 0
         return "", "ok", 0
 
     def pace(self, seconds):

@@ -18,15 +18,17 @@ class Fetch:
     def __init__(self, sleep=time.sleep, retries=4):
         self.sleep = sleep
         self.retries = retries
+        self.last_stderr = ""
 
     def _once(self, cmd, timeout, cwd=None):
         if os.environ.get("STUDY_NO_NETWORK"):
             raise NetworkRefused(f"STUDY_NO_NETWORK is set; refused: {' '.join(cmd)[:200]}")
         started = time.time()
+        self.last_stderr = ""
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=timeout, cwd=cwd, stdin=subprocess.DEVNULL)
             status = "ok" if result.returncode == 0 else f"exit {result.returncode}: {result.stderr.strip()[:STDERR_SHOWN]}"
-            out = result.stdout
+            out, self.last_stderr = result.stdout, result.stderr
         except subprocess.TimeoutExpired:
             out, status = "", "timeout"
         except FileNotFoundError:
