@@ -38,9 +38,11 @@ class FreezeTest(unittest.TestCase):
         write_jsonl(self.work / "config-pilot-B-gpt-oss-120b-medium.jsonl", [screen_row(r, f"o/{r}", 1, ["gate"]) for r in (1, 3)])
         self.pilot_meta(sha(b"packet\n"))
 
-    def pilot_meta(self, packet):
-        entry = lambda cli: {"cli": cli, "model": "m", "effort": "e", "cli_version": f"{cli} 1.0", "isolation": f"{cli} flags", "blocks": [{"ranks": [1, 3], "packet_sha256": packet}]}
-        write_json(self.work / "meta.json", {"sessions": {"config-pilot-A": entry("claude"), "config-pilot-B-gemini-3.8-flash-high": entry("agy")}})
+    def pilot_meta(self, packet, criteria=None, b_model="gemini-3.8-flash-high", **block):
+        criteria = criteria or sha((self.repo / CRITERIA).read_bytes())
+        entry = lambda cli, **extra: {"cli": cli, "model": "m", "effort": "e", "isolation": f"{cli} flags",
+                                      "blocks": [{"ranks": [1, 3], "packet_sha256": packet, "criteria_sha256": criteria, "cli_version": f"{cli} 1.0", **extra}]}
+        write_json(self.work / "meta.json", {"sessions": {"config-pilot-A": entry("claude"), f"config-pilot-B-{b_model}": entry("claude" if "claude" in b_model else "agy", **block)}})
 
     def run_freeze(self, *extra):
         return subprocess.run([sys.executable, "-B", str(HERE / "freeze-protocol.py"), "--topic", "demo", "--repo", str(self.repo), "--work", str(self.work),
@@ -65,9 +67,12 @@ class FreezeTest(unittest.TestCase):
 
     def test_without_the_configured_b_pilot_the_fallback_is_frozen_with_its_reason(self):
         (self.work / "config-pilot-B-gemini-3.8-flash-high.jsonl").rename(self.work / "config-pilot-B-claude-sonnet-4-6.jsonl")
+        self.pilot_meta(sha(b"packet\n"), b_model="claude-sonnet-4-6")
+        self.assertIn("the fallback claude-sonnet-4-6 screened the pilot without a recorded reason", self.run_freeze().stderr)
+        self.pilot_meta(sha(b"packet\n"), b_model="claude-sonnet-4-6", fallback_reason="agy was not on PATH when this pilot ran")
         self.assertEqual(self.run_freeze().returncode, 0)
         self.assertEqual(self.frozen()["session_b"]["chosen"], FALLBACK)
-        self.assertIn("fallback", self.frozen()["session_b"]["rule"])
+        self.assertEqual(self.frozen()["session_b"]["rule"], "the topic config's fallback: agy was not on PATH when this pilot ran")
 
     def test_pilot_files_must_cover_every_pilot_rank(self):
         write_jsonl(self.work / "config-pilot-A.jsonl", [screen_row(1, "o/1", 1, ["gate"])])
@@ -80,8 +85,25 @@ class FreezeTest(unittest.TestCase):
         result = self.run_freeze()
         self.assertIn("pass --amendment", result.stderr)
         self.assertEqual(self.run_freeze("--amendment", "tightened the Position anchor").returncode, 0)
-        self.assertEqual(self.frozen()["amendment"], {"pilot_packet_sha256": [sha(b"packet, pilot draft\n")], "changed": True, "what": "tightened the Position anchor"})
+        self.assertEqual(self.frozen()["amendment"], {"pilot_packet_sha256": [sha(b"packet, pilot draft\n")], "pilot_criteria_sha256": [sha((self.repo / CRITERIA).read_bytes())],
+                                                      "changed": True, "what": "tightened the Position anchor"})
         self.assertEqual((self.frozen()["cli_versions"], self.frozen()["isolation"]), ({"claude": "claude 1.0", "agy": "agy 1.0"}, {"claude": "claude flags", "agy": "agy flags"}))
+
+    def test_a_pilot_run_under_other_criteria_needs_the_amendment_recorded(self):
+        self.pilot_meta(sha(b"packet\n"), criteria="0" * 64)
+        self.assertIn("the packet or the criteria changed after the pilot; pass --amendment", self.run_freeze().stderr)
+        self.assertEqual(self.run_freeze("--amendment", "criteria v3 replaced v2").returncode, 0)
+        self.assertEqual(self.frozen()["amendment"]["pilot_criteria_sha256"], ["0" * 64])
+
+    def test_the_freeze_is_never_rewritten_once_a_screen_block_ran(self):
+        self.assertEqual(self.run_freeze().returncode, 0)
+        meta = json.loads((self.work / "meta.json").read_text())
+        meta["sessions"]["config-A"] = {"blocks": [{"ranks": [4]}]}
+        write_json(self.work / "meta.json", meta)
+        self.assertIn("screen sessions already ran (config-A); the freeze is never rewritten", self.run_freeze().stderr)
+        self.pilot_meta(sha(b"packet\n"))
+        write_jsonl(self.work / "config-screen-B.jsonl", [])
+        self.assertIn("screen sessions already ran (config-screen-B.jsonl)", self.run_freeze().stderr)
 
     def test_a_pilot_block_without_session_files_is_refused(self):
         (self.work / "config-pilot-A.jsonl").unlink()
@@ -99,6 +121,11 @@ class FreezeTest(unittest.TestCase):
         self.assertEqual((out["rows"], out["judged_cells"], out["identical"], out["agreement"]), (2, 8, 7, 0.875))
         self.assertEqual(out["with_date"]["agreement"], 0.9)
         self.assertEqual((out["decision_agreement"], out["kappa"]["Authority"]), (2, 0.0))
+
+    def test_the_comparison_says_when_no_freeze_limits_its_rows(self):
+        folder = sweep_folder(self.repo, load_topic(self.repo, "demo"))
+        out = script("compare-screening-sessions").compare(folder, "config", None)
+        self.assertEqual(out["freeze"], {"none": f"no protocol-freeze.json in {folder}: agreement covers every row both sessions screened, the pilot included; pass --folder <work> once frozen"})
 
 
 if __name__ == "__main__":

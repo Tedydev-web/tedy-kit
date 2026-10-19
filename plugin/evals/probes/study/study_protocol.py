@@ -47,6 +47,11 @@ def pilot_comparison(rows):
     return {"rows": len(rows), "agreement": round(same / cells, 3), "kappa": kappa, "eligibility_kappa": eligibility_kappa}
 
 
+def screen_sessions(work):
+    meta = Path(work) / "meta.json"
+    return {k: v for k, v in (json.loads(meta.read_text()).get("sessions", {}) if meta.is_file() else {}).items() if "-pilot-" not in k and v.get("blocks")}
+
+
 def pilot_sessions(work):
     meta = Path(work) / "meta.json"
     return {k: v for k, v in (json.loads(meta.read_text()).get("sessions", {}) if meta.is_file() else {}).items() if "-pilot-" in k}
@@ -54,6 +59,9 @@ def pilot_sessions(work):
 
 def freeze(topic, repo, work, criteria, today, amendment=None):
     repo, work = Path(repo), Path(work)
+    screened = sorted(p.name for p in work.glob("*-screen-[AB].jsonl")) + sorted(k for k in screen_sessions(work))
+    if screened:
+        raise TopicError(f"screen sessions already ran ({', '.join(screened[:4])}); the freeze is never rewritten once screening started")
     if not (repo / criteria).is_file():
         raise TopicError(f"no criteria file at {repo / criteria}")
     strata_names = screened_strata(topic)
@@ -79,17 +87,22 @@ def freeze(topic, repo, work, criteria, today, amendment=None):
     if primary in ran:
         chosen, rule = primary, "the topic config's session B"
     elif fallback in ran:
-        chosen, rule = fallback, f"the topic config's fallback: the pilot of {primary['model']} was not run, so its CLI was not on PATH"
+        reasons = {b.get("fallback_reason") for k, e in pilot_sessions(work).items() if k.endswith(f"-pilot-B-{fallback['model']}") for b in e.get("blocks", [])}
+        if None in reasons or not reasons:
+            raise TopicError(f"the fallback {fallback['model']} screened the pilot without a recorded reason; run its pilot through run-screening-session.py")
+        chosen, rule = fallback, "the topic config's fallback: " + "; ".join(sorted(reasons))
     else:
         raise TopicError(f"neither the configured session B {primary['model']} nor its fallback screened the pilot block of every stratum")
     pilot = {o["model"]: pilot_comparison([row for s in strata for row in pilot_pairs(work, s, f"{s}-pilot-B-{o['model']}.jsonl", ranks[s], table)]) for o in ran}
     sessions = pilot_sessions(work)
     pilot_packets = sorted({b["packet_sha256"] for entry in sessions.values() for b in entry.get("blocks", [])})
-    changed = any(p != strata[s]["packet_sha256"] for s in strata for k, e in sessions.items() if k.startswith(f"{s}-") for p in {b["packet_sha256"] for b in e["blocks"]})
+    pilot_criteria = sorted({b["criteria_sha256"] for entry in sessions.values() for b in entry.get("blocks", [])})
+    changed = any((b["packet_sha256"], b["criteria_sha256"]) != (strata[s]["packet_sha256"], strata[s]["criteria_sha256"])
+                  for s in strata for k, e in sessions.items() if k.startswith(f"{s}-") for b in e["blocks"])
     if changed and not amendment:
-        raise TopicError("the packet changed after the pilot; pass --amendment with what changed")
-    versions = {e["cli"]: e["cli_version"] for e in sessions.values()}
+        raise TopicError("the packet or the criteria changed after the pilot; pass --amendment with what changed")
+    versions = {e["cli"]: ", ".join(sorted({b["cli_version"] for k, x in sessions.items() if x["cli"] == e["cli"] for b in x["blocks"]})) for e in sessions.values()}
     return {"pilot_rows_configured": size, "criteria": criteria, "strata": strata, "session_a": session_a(topic),
-            "session_b": {"chosen": chosen, "rule": rule, "pilot": pilot, "note": "the pilot comparison is information only; agreement with A never picks B"},
+            "session_b": {"chosen": chosen, "primary": primary, "rule": rule, "pilot": pilot, "note": "the pilot comparison is information only; agreement with A never picks B"},
             "cli_versions": versions, "isolation": {e["cli"]: e["isolation"] for e in sessions.values()},
-            "amendment": {"pilot_packet_sha256": pilot_packets, "changed": changed, "what": amendment if changed else "none: the pilot ran under the frozen packet"}}
+            "amendment": {"pilot_packet_sha256": pilot_packets, "pilot_criteria_sha256": pilot_criteria, "changed": changed, "what": amendment if changed else "none: the pilot ran under the frozen packet"}}

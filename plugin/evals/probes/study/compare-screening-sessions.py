@@ -40,8 +40,9 @@ def compare(folder, stratum, max_rank):
     forced = {r["order_rank"] for r in order if r.get("forced")}
     yields = block_yields(common, firsts, forced)
     stop, rule = effort_stop(common, firsts, forced, [r["order_rank"] for r in order])
-    freeze = frozen and {"after_rank": frozen["frozen_after_rank"], "criteria_sha256": frozen["criteria_sha256"], "packet_sha256": frozen["packet_sha256"],
-                         "pilot_rows_left_out": len(common) - len(measured)}
+    freeze = ({"after_rank": frozen["frozen_after_rank"], "criteria_sha256": frozen["criteria_sha256"], "packet_sha256": frozen["packet_sha256"],
+               "pilot_rows_left_out": len(common) - len(measured)} if frozen else
+              {"none": f"no protocol-freeze.json in {folder}: agreement covers every row both sessions screened, the pilot included; pass --folder <work> once frozen"})
     out = {"stratum": stratum, "rows": len(measured), "freeze": freeze, "judged_cells": cells, "identical": same, "agreement": round(same / cells, 3), "target": 0.9,
            "with_date": {"judged_cells": cells_with_date, "identical": same_with_date, "agreement": round(same_with_date / cells_with_date, 3),
                          "note": "Date is computed, not judged; the target applies to the figure without it"},
