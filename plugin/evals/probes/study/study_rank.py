@@ -97,8 +97,13 @@ class Ranker:
         return {"rows": ranked, "aggregators": aggregators, "snowball_from_paths": fresh}
 
 
-def rank_product(pool_rows, terms):
+def contract_path(evidence, prefixes):
+    return next((evidence[len(p):] for p in prefixes if evidence.startswith(p)), evidence)
+
+
+def rank_product(pool_rows, terms, code_queries=()):
     term = term_regex(terms)
+    prefixes = sorted((f"code {q}: " for q in code_queries), key=len, reverse=True)
     rows, aggregators = [], []
     for row in pool_rows:
         text = row["repo"] + " " + (row.get("description") or "")
@@ -106,7 +111,7 @@ def rank_product(pool_rows, terms):
             aggregators.append({"repo": row["repo"], "description": (row.get("description") or "")[:200]})
             continue
         evidence = row["evidence"]
-        contract = list(dict.fromkeys(e.split(": ", 1)[1] if e.startswith("code ") and ": " in e else e for e in evidence.get("code", [])))
+        contract = list(dict.fromkeys(contract_path(e, prefixes) for e in evidence.get("code", [])))
         name_hit = bool(term.search(row["repo"].split("/", 1)[1].replace("_", "-")) or term.search(row.get("description") or ""))
         order = len(evidence) + math.log2(1 + len(contract)) + (1 if name_hit else 0)
         rows.append({"repo": row["repo"], "order": round(order, 3), "channels": sorted(evidence), "contract_files": contract[:6],

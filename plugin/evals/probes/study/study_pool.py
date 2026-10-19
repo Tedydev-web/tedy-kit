@@ -93,6 +93,10 @@ def graphql_repositories(fetch, repos, fields, batch=40):
     return found, failed
 
 
+def product_code_queries(channels):
+    return [f"{field} {term} extension:{ext}" for field in channels.get("code_fields", []) for term in channels.get("code_terms", []) for ext in channels.get("code_extensions", [])]
+
+
 def code_search(fetch, pool, query, pages, channel, skip_path=None):
     step = f"code {query}"
     if pool.done(step):
