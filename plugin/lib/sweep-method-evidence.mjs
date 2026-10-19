@@ -42,6 +42,7 @@ function sessionErrors(files, sessions, read) {
     const entry = sessions[key];
     if (!entry) return [`${key}: meta.json records no session`];
     const missing = SESSION_FIELDS.filter((field) => typeof entry[field] !== "string" || !entry[field]).map((field) => `${key}: meta.json session lacks ${field}`);
+    if (key.includes("-pilot-")) return missing;
     const packet = read(`screening-packet-${stratum}.md`);
     if (packet === undefined) return [...missing, `${key}: screening-packet-${stratum}.md is not in the sweep folder`];
     return entry.packet_sha256 && sha256(packet) !== entry.packet_sha256 ? [...missing, `${key}: packet_sha256 does not match screening-packet-${stratum}.md`] : missing;

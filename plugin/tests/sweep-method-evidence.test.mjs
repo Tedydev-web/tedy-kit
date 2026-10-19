@@ -59,8 +59,11 @@ test("every screening session needs its model, effort, packet sha256 and date", 
   delete meta.sessions["product-B"].effort;
   meta.sessions["config-A"].packet_sha256 = "0".repeat(64);
   delete meta.sessions["config-B"];
+  delete meta.sessions["config-pilot-A"].model;
   writeFileSync(metaFile, JSON.stringify(meta));
   const errors = sweep.errors().join("\n");
+  assert.match(errors, /config-pilot-A: meta\.json session lacks model/);
+  assert.doesNotMatch(errors, /config-pilot-A: packet_sha256/);
   assert.match(errors, /product-B: meta\.json session lacks effort/);
   assert.match(errors, /config-A: packet_sha256 does not match screening-packet-config\.md/);
   assert.match(errors, /config-B: meta\.json records no session/);

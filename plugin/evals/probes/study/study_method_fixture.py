@@ -35,6 +35,8 @@ def method_repo(same_family=False, rated=None):
         for side, option in (("A", MODELS["A"]), ("B", b)):
             sessions[f"{stratum}-{side}"] = {"cli": option["cli"], "model": option["model"], "effort": option.get("effort") or "set by the model id",
                                              "packet_sha256": sha(packet), "inputs_sha256": "0" * 64, "date": "2026-10-20"}
+    write_jsonl(D / "config-pilot-A.jsonl", [screen_row(1, "o/one", 1, ["gate"])])
+    sessions["config-pilot-A"] = {**sessions["config-A"], "packet_sha256": sha("packet config, before the pilot revision\n")}
     write_json(D / "meta.json", {**meta, "criteria": CRITERIA, "sessions": sessions})
     write_json(D / "protocol-freeze.json", {"pilot_rows": 1, "criteria": CRITERIA, "strata": strata,
                                             "session_b": {"chosen": b, "pilot": {b["model"]: {"rows": 1, "agreement": 1.0, "kappa": {}, "eligibility_kappa": 1.0}}}})

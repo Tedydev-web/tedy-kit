@@ -70,7 +70,7 @@ def session_lines(folder, meta):
             if not entry.get(field):
                 raise TopicError(f"meta.json sessions.{key} lacks {field}")
         packet = folder / f"screening-packet-{key.split('-', 1)[0]}.md"
-        if not packet.is_file() or sha256(packet.read_bytes()) != entry["packet_sha256"]:
+        if "-pilot-" not in key and (not packet.is_file() or sha256(packet.read_bytes()) != entry["packet_sha256"]):
             raise TopicError(f"meta.json sessions.{key}: packet sha256 does not match {packet.name}")
         served = f"; served {', '.join(entry['served_models'])}" if entry.get("served_models") else ""
         inputs = f", inputs sha256[:16] `{entry['inputs_sha256'][:16]}`" if entry.get("inputs_sha256") else ""

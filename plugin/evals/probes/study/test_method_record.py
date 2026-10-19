@@ -51,6 +51,7 @@ class MethodRecordTest(unittest.TestCase):
         sessions = self.section(self.text(), "Screening sessions")
         self.assertIn(f"- config-A: claude claude-opus-5-5, effort high, packet sha256[:16] `{sha('packet config' + chr(10))[:16]}`, 2026-10-20", sessions)
         self.assertIn("- product-B: agy gemini-3.8-flash-high, effort set by the model id", sessions)
+        self.assertIn(f"- config-pilot-A: claude claude-opus-5-5, effort high, packet sha256[:16] `{sha('packet config, before the pilot revision' + chr(10))[:16]}`", sessions)
 
     def test_a_session_without_its_record_is_refused(self):
         repo = self.build()
