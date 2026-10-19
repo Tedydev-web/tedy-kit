@@ -1,11 +1,15 @@
 import argparse
 import json
 import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 TOPICS = Path("docs") / "prior-art" / "topics"
 SWEEPS = Path("docs") / "prior-art" / "sweeps"
 SNOWBALL_RANK_BASE = 1000
+DEFAULT_PILOT_ROWS = 20
+SESSION_CLIS = ("claude", "agy")
+SAIGON = timezone(timedelta(hours=7))
 
 
 class TopicError(ValueError):
@@ -68,6 +72,37 @@ def stratum_rule(topic, stratum, key, kind):
     if not isinstance(value, kind) or isinstance(value, bool):
         raise TopicError(f"{topic['path']}: strata.{stratum}.{key} must be a {kind.__name__}")
     return value
+
+
+def saigon_today():
+    return datetime.now(SAIGON).date().isoformat()
+
+
+def pilot_rows(topic):
+    value = topic.get("pilot_rows", DEFAULT_PILOT_ROWS)
+    if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+        raise TopicError(f"{topic['path']}: pilot_rows must be a positive int")
+    return value
+
+
+def session_option(topic, where, option):
+    if not isinstance(option, dict) or option.get("cli") not in SESSION_CLIS or not isinstance(option.get("model"), str) or not option["model"]:
+        raise TopicError(f"{topic['path']}: {where} needs a cli ({' or '.join(SESSION_CLIS)}) and a model id")
+    if "effort" in option and not isinstance(option["effort"], str):
+        raise TopicError(f"{topic['path']}: {where}.effort must be a string")
+    return option
+
+
+def session_a(topic):
+    return session_option(topic, "sessions.A", topic.get("sessions", {}).get("A"))
+
+
+def session_b_options(topic):
+    b = topic.get("sessions", {}).get("B")
+    if not isinstance(b, dict) or not isinstance(b.get("candidates"), list) or not b["candidates"]:
+        raise TopicError(f"{topic['path']}: sessions.B needs a non-empty candidates list")
+    options = [session_option(topic, f"sessions.B.candidates[{i}]", o) for i, o in enumerate(b["candidates"])]
+    return options + ([session_option(topic, "sessions.B.fallback", b["fallback"])] if "fallback" in b else [])
 
 
 def topic_arguments(description, *extra):

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from study_agreement import CHAPMAN_NOTE, session_kappas
 from study_pool import read_json
+from study_protocol import read_freeze
 from study_sweep_record import JUDGED, MechanismTable, derive, read_jsonl
 from study_topic import TopicError, load_topic, sweep_folder, topic_arguments
 
@@ -39,16 +40,20 @@ def compare(folder, stratum, max_rank):
     if not common:
         raise TopicError(f"sessions A and B share no screened {stratum} row")
     rows = {r: {s: derive(table, stratum, mapping, s, sides[s][r]) for s in "AB"} for r in common}
+    frozen = read_freeze(folder, stratum)
+    measured = [r for r in common if frozen is None or r > frozen["frozen_after_rank"]]
+    if not measured:
+        raise TopicError(f"no {stratum} row both sessions screened lies after the freeze at row {frozen['frozen_after_rank']}")
     cells = same = 0
     by_criterion = {}
-    for r in common:
+    for r in measured:
         for c in JUDGED:
             cells += 1
             if rows[r]["A"]["scores"][c] == rows[r]["B"]["scores"][c]:
                 same += 1
             else:
                 by_criterion[c] = by_criterion.get(c, 0) + 1
-    kappa, eligibility_kappa, eligibility_differ = session_kappas([rows[r] for r in common])
+    kappa, eligibility_kappa, eligibility_differ = session_kappas([rows[r] for r in measured])
     mech = {s: set().union(*(rows[r][s]["mechs"] for r in common)) for s in "AB"}
     shared = len(mech["A"] & mech["B"])
     chapman = (len(mech["A"]) + 1) * (len(mech["B"]) + 1) / (shared + 1) - 1
@@ -56,7 +61,8 @@ def compare(folder, stratum, max_rank):
     firsts = {r: rows[r]["A"]["mechs"] | rows[r]["B"]["mechs"] for r in common}
     forced = {r["order_rank"] for r in read_jsonl(Path(folder), f"{stratum}-screening-order.jsonl") if r.get("forced")}
     yields = block_yields(common, firsts, forced)
-    out = {"stratum": stratum, "rows": len(common), "judged_cells": cells, "identical": same, "agreement": round(same / cells, 3), "target": 0.9,
+    freeze = frozen and {"after_rank": frozen["frozen_after_rank"], "protocol_sha256": frozen["protocol_sha256"], "pilot_rows_left_out": len(common) - len(measured)}
+    out = {"stratum": stratum, "rows": len(measured), "freeze": freeze, "judged_cells": cells, "identical": same, "agreement": round(same / cells, 3), "target": 0.9,
            "differing_by_criterion": by_criterion, "kappa": kappa, "eligibility_kappa": eligibility_kappa, "eligibility_differ": eligibility_differ,
            "decision_agreement": sum(rows[r]["A"]["decision"] == rows[r]["B"]["decision"] for r in common),
            "mechanisms": {"A": len(mech["A"]), "B": len(mech["B"]), "shared": shared, "union": union, "chapman_lower_bound": round(chapman, 1), "chapman_note": CHAPMAN_NOTE,
