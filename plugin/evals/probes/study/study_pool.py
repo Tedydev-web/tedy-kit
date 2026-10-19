@@ -133,7 +133,7 @@ def run_social(fetch, pool, social, channel_name=None):
         if pool.done(step):
             continue
         out, status, seconds = fetch.run(cmd, timeout=240)
-        linked, new = pool.links(out, channel_name or channel, via)
+        linked, new = pool.links(out, channel_name or channel, via) if status == "ok" else (0, 0)
         pool.record(step, channel, via, status, seconds, out.count("\n"), linked, new)
         fetch.pace(2 if channel == "x" else 1)
 

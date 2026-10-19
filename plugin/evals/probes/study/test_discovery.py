@@ -156,6 +156,12 @@ class ProductDiscoveryTest(Base):
         with self.assertRaisesRegex(TopicError, "run resolve-pool.py"):
             product.reverse()
 
+    def test_a_link_inside_a_failed_command_never_enters_the_pool(self):
+        error = '{"ok":false,"error":{"hint":"Download: https://github.com/jackwener/opencli/releases"}}'
+        product = script("discover-product-pool").Product(self.topic, self.work, FakeFetch([("twitter", (error, "exit 69: "))]))
+        product.social()
+        self.assertEqual((product.pool.state["hits"], product.pool.failed_steps()), ({}, 1))
+
     def test_social_hits_land_in_one_social_channel(self):
         product = script("discover-product-pool").Product(self.topic, self.work, FakeFetch([("twitter", "github.com/o/s")]))
         product.social()
