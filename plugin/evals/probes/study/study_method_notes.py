@@ -26,6 +26,11 @@ def snowball_lines(topic, folder, strata):
             if snowballed:
                 raise TopicError(f"{stratum}: the screening order holds snowballed rows but no {SNOWBALL_CUT_FILE} states the cut the snowball used")
             continue
+        merged = {r["repo"].lower() for r in read_jsonl(folder, f"{stratum}-screening-order.jsonl")}
+        unmerged = sorted(r["repo"] for r in read_jsonl(folder, "snowball-screening-order.jsonl") if r["repo"].lower() not in merged)
+        if unmerged:
+            raise TopicError(f"{stratum}: snowball-screening-order.jsonl names {unmerged}, which the {stratum} screening order lacks; run merge-snowball-order.py, "
+                             "then fetch and screen the new rows")
         stop = topic["strata"][stratum].get("stop_row")
         if cut["cut_row"] != stop:
             raise TopicError(f"{stratum}: the snowball ranked above row {cut['cut_row']} ({cut['source']}), but the stop is row {stop}; rerun snowball-above-cut.py "

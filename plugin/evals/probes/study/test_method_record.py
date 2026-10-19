@@ -93,7 +93,7 @@ class MethodRecordTest(unittest.TestCase):
         self.build(events=events)
         self.assertEqual(events, ["first fetch: {'config 5': 'partial', 'product 2': 'transient', 'product 3': 'missing src/hook.ts: exit 1: HTTP 404', 'product 4': 'transient'}",
                                   "refused: run-screening-session: rank 2 has a transient fetch error (tree: exit 1: HTTP 502); run fetch-screening-inputs.py again, "
-                                  "or mark it permanent with --mark-permanent after checking it by hand",
+                                  "or mark it permanent with --mark-permanent only if a check by hand finds the repository or commit gone",
                                   "refetch after a scored block: fetched 2, kept 4, still transient 0, calls to the scored rank 0",
                                   "after the refetch: {'config 5': 'partial', 'product 3': 'missing src/hook.ts: exit 1: HTTP 404'}"])
         decisions = {r["order_rank"]: r["decision"] for r in map(json.loads, (self.folder / "product-screen-A.jsonl").read_text().splitlines())}
@@ -113,6 +113,10 @@ class MethodRecordTest(unittest.TestCase):
         with self.assertRaisesRegex(TopicError, "the snowball ranked above row 60 \\(the effort bound 60\\), but the stop is row 6; rerun snowball-above-cut.py"):
             render(repo, load_topic(repo, "demo"))
         (self.folder / "snowball-cut.json").write_text(json.dumps({"stratum": "config", "cut_row": 6, "source": "the written stop row"}))
+        (self.folder / "snowball-screening-order.jsonl").write_text(json.dumps({"order_rank": 1001, "repo": "s/unmerged"}) + "\n")
+        with self.assertRaisesRegex(TopicError, r"config: snowball-screening-order.jsonl names \['s/unmerged'\], which the config screening order lacks; run merge-snowball-order.py"):
+            render(repo, load_topic(repo, "demo"))
+        (self.folder / "snowball-screening-order.jsonl").write_text("")
         self.assertIn("- config snowball: 0 rows from 1001 on rank above the cut at row 6 (the written stop row)", self.section(render(repo, load_topic(repo, "demo"))[0], "Protocol"))
 
     def test_a_block_without_a_row_hash_for_each_rank_is_refused(self):

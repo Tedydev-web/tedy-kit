@@ -146,7 +146,10 @@ class ExportTest(Base):
         (self.work / "prompts/config-screen-A-1-5.md").write_text("copied source")
         (self.work / "calibration-inputs.md").write_text("copied source")
         out, counts = script("export-sweep-data").export(self.topic, self.repo, self.work)
-        for name in ("protocol-freeze.json", "calibration-sample.json", "config-qgs-adjudicated.json", "config-qgs-judge-A.jsonl", "config-pilot-A-mechanisms.md"):
+        write_jsonl(self.work / "snowball-screening-order.jsonl", [{"order_rank": 1001, "repo": "s/new"}])
+        out, counts = script("export-sweep-data").export(self.topic, self.repo, self.work)
+        for name in ("protocol-freeze.json", "calibration-sample.json", "config-qgs-adjudicated.json", "config-qgs-judge-A.jsonl", "config-pilot-A-mechanisms.md",
+                     "snowball-screening-order.jsonl"):
             self.assertTrue((out / name).is_file(), name)
         self.assertEqual(json.loads((out / "config-pilot-B-gemini-3.8-flash-high.jsonl").read_text())["commit"], "https://github.com/o/a/commit/" + "b" * 40)
         self.assertFalse((out / "config-screening-inputs.jsonl").exists())
