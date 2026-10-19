@@ -95,7 +95,11 @@ def agreement_lines(stratum, pairs, after, capture, adjudicated):
 def recall_lines(folder, topic, strata, captures):
     lines = []
     for stratum in [s for s in CALIBRATED_STRATA if s in strata]:
-        out = recall_at_cut(stratum, read_json(folder, f"{stratum}-qgs-adjudicated.json")["final"], read_jsonl(folder, f"{stratum}-screening-order.jsonl"),
+        adjudicated = read_json(folder, f"{stratum}-qgs-adjudicated.json")
+        resolved = adjudicated.get("resolved")
+        if not isinstance(resolved, dict) or resolved.get("of") != adjudicated.get("final"):
+            raise TopicError(f"{stratum}-qgs-adjudicated.json holds no resolved standard for its current final list; run qgs-recall.py --stratum {stratum} --write")
+        out = recall_at_cut(stratum, resolved["final"], read_jsonl(folder, f"{stratum}-screening-order.jsonl"),
                             topic["strata"][stratum]["stop_row"], captures[stratum]["common"])
         head = f"- {stratum}: recall at the cut {out['at_cut']}/{out['size']} ({out['recall']:.3f}) of the {stratum} standard, counting rows both sessions screened; "
         missed = ", ".join(f"{m['repo']} (rank {m['rank']})" if m["rank"] else f"{m['repo']} (not in the screening order)" for m in out["missed"])

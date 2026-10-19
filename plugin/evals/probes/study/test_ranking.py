@@ -163,13 +163,33 @@ class OrderAndSnowballTest(unittest.TestCase):
         write_json(self.work / "product-state.json", {"hits": {"new/name": {"channels": {"npm": []}}, "older/x": {"channels": {"code": []}}}})
         write_json(self.work / "cache/meta.json", {"older/x": {"nameWithOwner": "New/X"}, "new/name": None})
         fetch = FakeFetch([("graphql", json.dumps({"data": {"r0": None, "r1": {"nameWithOwner": "New/X"}, "r2": {"nameWithOwner": "New/Name"}}}))])
-        out, final = script("qgs-recall").recall(self.work, self.work, ["product"], fetch=fetch)
+        out, resolved = script("qgs-recall").recall(self.work, self.work, ["product"], fetch=fetch)
         self.assertEqual(out["standards"]["adjudicated (source read)"], {"size": 3, "found": 2, "quasi_sensitivity": 0.667, "per_channel": {"code": 1, "npm": 1},
                                                                          "missed": ["gone/repo"], "gone": ["gone/repo"]})
-        self.assertEqual(final, ["New/Name", "New/X", "gone/repo"])
+        self.assertEqual(resolved["final"], ["New/Name", "New/X", "gone/repo"])
         again = FakeFetch()
         script("qgs-recall").recall(self.work, self.work, ["product"], fetch=again)
         self.assertEqual(again.calls, [])
+
+    def test_two_members_resolving_to_one_repository_count_once(self):
+        for side in "AB":
+            write_jsonl(self.work / f"qgs-judge-{side}.jsonl", [{"id": 1, "repo": "a/old", "verdict": "yes"}, {"id": 2, "repo": "a/new", "verdict": "yes"}])
+        write_json(self.work / "qgs-adjudicated.json", {"final": ["a/old", "a/new"]})
+        write_json(self.work / "product-state.json", {"hits": {"a/new": {"channels": {"npm": []}}}})
+        write_json(self.work / "cache/canonical.json", {"a/old": "A/New", "a/new": "A/New"})
+        out, resolved = script("qgs-recall").recall(self.work, self.work, ["product"], fetch=FakeFetch())
+        self.assertEqual((out["standards"]["strict (yes by both)"]["size"], out["standards"]["adjudicated (source read)"]["found"], resolved["final"]), (1, 1, ["A/New"]))
+        self.assertEqual((out["renamed"], out["collapsed"]), ({"a/old": "A/New"}, {"A/New": ["a/old", "a/new"]}))
+
+    def test_discovery_resolutions_are_used_before_any_github_lookup(self):
+        for side in "AB":
+            write_jsonl(self.work / f"qgs-judge-{side}.jsonl", [{"id": 1, "repo": "older/x", "verdict": "yes"}, {"id": 2, "repo": "lost/y", "verdict": "yes"}])
+        write_json(self.work / "qgs-adjudicated.json", {"final": ["older/x", "lost/y"]})
+        write_json(self.work / "product-state.json", {"hits": {"older/x": {"channels": {"npm": []}}}})
+        write_json(self.work / "cache/meta.json", {"older/x": {"nameWithOwner": "New/X"}, "lost/y": None})
+        fetch = FakeFetch()
+        out, resolved = script("qgs-recall").recall(self.work, self.work, ["product"], fetch=fetch)
+        self.assertEqual((fetch.calls, resolved["final"], out["standards"]["adjudicated (source read)"]["gone"]), ([], ["New/X", "lost/y"], ["lost/y"]))
 
     def test_qgs_recall_reports_kappa_and_quasi_sensitivity(self):
         verdicts = [("a/one", "yes", "yes"), ("a/two", "yes", "no"), ("a/three", "no", "no"), ("a/four", "yes", "yes")]

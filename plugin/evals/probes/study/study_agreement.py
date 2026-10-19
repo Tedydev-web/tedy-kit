@@ -69,6 +69,16 @@ def recall_at_cut(stratum, qgs, order_rows, cut, screened_by_both=None):
     return {**out, "fix": f"below the target: {RECALL_FIX}"} if out["below_target"] else out
 
 
+def resolved_standard(members, names):
+    groups = {}
+    for member in members:
+        canonical = names.get(member.lower()) or member
+        groups.setdefault(canonical.lower(), (canonical, []))[1].append(member)
+    return {"of": list(members), "final": [canonical for canonical, _ in groups.values()],
+            "renamed": {m: names[m.lower()] for m in members if names.get(m.lower()) and names[m.lower()].lower() != m.lower()},
+            "collapsed": {canonical: group for canonical, group in groups.values() if len(group) > 1}}
+
+
 def cohen_kappa(pairs):
     pairs = list(pairs)
     if not pairs:

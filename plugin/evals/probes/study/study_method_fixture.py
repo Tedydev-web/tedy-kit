@@ -5,6 +5,7 @@ import sys
 import tempfile
 from pathlib import Path
 
+from study_agreement import resolved_standard
 from study_fixtures import FakeFetch, script, topic_repo, write_json, write_jsonl
 from study_screening_input import fetch_inputs
 from study_topic import load_topic, write_stop_row
@@ -104,8 +105,8 @@ def work_folder(repo):
     write_json(work / "meta.json", {**json.loads((work / "meta.json").read_text()), "criteria": CRITERIA})
     write_json(work / "config-state.json", {"papers": {"arxiv:2510.00001": {"title": "Agents that tamper with tests", "url": "https://arxiv.org/abs/2510.00001", "queries": ["arxiv abs:tdd"]}},
                                             "hits": {"o/r1": {"repo": "o/r1", "channels": {"arxiv": ["arxiv:2510.00001"]}}}})
-    write_json(work / "config-qgs-adjudicated.json", {"final": ["o/r1", "O/R2"]})
-    write_json(work / "product-qgs-adjudicated.json", {"final": ["p/r1", "p/r9"]})
+    write_json(work / "config-qgs-adjudicated.json", {"final": ["o/r1", "O/R2"], "resolved": resolved_standard(["o/r1", "O/R2"], {})})
+    write_json(work / "product-qgs-adjudicated.json", {"final": ["p/r1", "p/r9"], "resolved": resolved_standard(["p/r1", "p/r9"], {})})
     return work
 
 
