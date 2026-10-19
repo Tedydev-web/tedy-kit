@@ -6,6 +6,7 @@ from study_agreement import KAPPA_CRITERIA
 from study_protocol import EMPTY_TABLE, FREEZE_FILE
 from study_screening_core import MechanismTable, derive, read_jsonl
 from study_screening_input import inputs_file
+from study_method_sessions import row_hashes
 from study_session import canonical_sha256
 from study_topic import TopicError
 
@@ -72,15 +73,30 @@ def inputs_page(inputs):
     parts = ["# Calibration inputs\n\nThe same inputs both sessions scored, row by row. This file stays in the working folder.\n"]
     for row in inputs:
         parts.append(f"## {row['repo']} (rank {row['order_rank']})\n\n- commit: {row.get('sha', '-')}\n- facts: {json.dumps(row.get('facts', {}), ensure_ascii=False)}\n"
+                     f"- evidence: {json.dumps(row.get('evidence', {}), ensure_ascii=False)}\n"
                      f"- listing: {', '.join(row.get('listing', []))}\n" + (f"- could not be read: {row['error']}\n" if row.get("error") else "")
                      + f"\n### README\n\n{row.get('readme', '')}\n" + "".join(f"\n### {f['path']}\n\n{f['text']}\n" for f in row.get("files", [])))
     return "\n".join(parts)
 
 
+def checked_sample(rows, folder):
+    folder = Path(folder)
+    strata = {s for s in CALIBRATED_STRATA if (folder / f"{s}-screen-A.jsonl").is_file()}
+    if len(rows) != SAMPLE_SIZE or {r["stratum"] for r in rows} != strata:
+        raise TopicError(f"the calibration sample holds {len(rows)} rows over {sorted({r['stratum'] for r in rows})}; draw-calibration-sample.py draws {SAMPLE_SIZE} over {sorted(strata)}")
+    sessions = json.loads((folder / "meta.json").read_text()).get("sessions") or {}
+    for r in rows:
+        for side in "AB":
+            scored = row_hashes(sessions.get(f"{r['stratum']}-{side}") or {"blocks": []}).get(str(r["order_rank"]))
+            if scored != r.get("inputs_sha256"):
+                raise TopicError(f"calibration row {r['stratum']} #{r['order_rank']}: its inputs_sha256 is not the row_sha256 session {side} scored, so the user rated other inputs")
+
+
 def calibration_agreement(sample, folder):
     rows = sample["rows"]
+    checked_sample(rows, folder)
     for r in rows:
-        bad = {c: r["user"].get(c) for c in KAPPA_CRITERIA if r["user"].get(c) not in (None, 0, 0.5, 1)}
+        bad = {c: r["user"].get(c) for c in KAPPA_CRITERIA if isinstance(r["user"].get(c), bool) or r["user"].get(c) not in (None, 0, 0.5, 1)}
         decision = r["user"].get("decision")
         if decision is not None and not (isinstance(decision, str) and decision.startswith(("eligible", "excluded"))):
             bad["decision"] = decision
