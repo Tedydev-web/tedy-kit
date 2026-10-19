@@ -4,5 +4,18 @@
   "frame": {
     "label": "Dev steps",
     "steps": ["Context", "Reconcile", "Branch", "Build", "Commit", "Verify on the commit", "Independent review", "Draft PR, report and next step"]
+  },
+  "problems": ["P1", "P2"],
+  "terms": ["tdd", "test", "tests", "testing", "test-first", "test-driven", "red-green", "failing", "assertion", "assertions"],
+  "sweep": "261018-dev",
+  "strata": {
+    "config": {
+      "stop_row": 101,
+      "forced_repos": ["obra/superpowers", "nizos/tdd-guard", "mattpocock/skills", "affaan-m/ECC", "metabase/metabase", "microsoft/playwright", "langgenius/dify", "Significant-Gravitas/AutoGPT", "OpenHands/OpenHands", "CherryHQ/cherry-studio"]
+    },
+    "product": {
+      "stop_row": 70,
+      "forced_repos": []
+    }
   }
 }

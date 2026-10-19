@@ -1,0 +1,164 @@
+import hashlib
+import json
+from pathlib import Path
+
+from study_topic import SNOWBALL_RANK_BASE, TopicError, stratum_rule, sweep_folder
+
+JUDGED = ("Authority", "Methodology", "Objectivity", "Date", "Position")
+SHORT = dict(zip(JUDGED, "AMODP"))
+COPYLIKE = ("copy", "dead", "aggregator")
+ELIGIBLE_TOTAL = 4.5
+
+
+def read_json(folder, name):
+    path = folder / name
+    if not path.is_file():
+        raise TopicError(f"missing {path}")
+    return json.loads(path.read_text())
+
+
+def read_jsonl(folder, name):
+    path = folder / name
+    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()] if path.exists() else []
+
+
+class MechanismTable:
+    def __init__(self, table):
+        self.table = table
+
+    def canon(self, stratum, mapping, side, name):
+        key = f"{stratum}:{mapping[side].get(name, name)}"
+        return self.table["aliases"].get(key, key)
+
+    def kind(self, mech):
+        return self.table["class"].get(mech, self.table["default"])
+
+    def evidence(self):
+        return {m for m, kind in self.table["class"].items() if kind == "evidence"}
+
+
+def normal(decision):
+    code = decision.split(":", 1)[1].strip().split(" ")[0].split("(")[0] if ":" in decision else ""
+    return "eligible" if decision.startswith("eligible") else f"excluded: {code}"
+
+
+def derive(table, stratum, mapping, side, row):
+    scores = {k.capitalize(): v["v"] for k, v in row["scores"].items()}
+    mechs = {table.canon(stratum, mapping, side, m) for m in row["mechanisms"]} - table.evidence()
+    first = normal(row["decision"])
+    copy = first.split(": ")[-1] in COPYLIKE
+    novelty = 0 if copy or not mechs else (1 if any(table.kind(m) == "new" for m in mechs) else 0.5)
+    relevance = 1 if mechs else (0.5 if scores.get("Relevance") == 0.5 else 0)
+    total = sum(scores[k] for k in JUDGED) + novelty
+    if copy:
+        decision = first
+    elif relevance == 1 and novelty >= 0.5 and total >= ELIGIBLE_TOTAL:
+        decision = "eligible"
+    else:
+        decision = "excluded: irrelevant" if relevance == 0 else "excluded: below-threshold"
+    return {"scores": scores, "mechs": mechs, "novelty": novelty, "relevance": relevance, "total": total, "decision": decision}
+
+
+def screened_ranks(topic, folder, stratum, sides):
+    stop = stratum_rule(topic, stratum, "stop_row", int)
+    forced = {r["order_rank"] for r in read_jsonl(folder, f"{stratum}-screening-order.jsonl") if r.get("forced")}
+    return sorted(r for r in set(sides["A"]) & set(sides["B"]) if r <= stop or r in forced or r > SNOWBALL_RANK_BASE)
+
+
+def render(repo, topic):
+    repo = Path(repo)
+    D = sweep_folder(repo, topic)
+    name = topic["sweep"]
+    meta, study, surface = read_json(D, "meta.json"), read_json(D, "study.json"), read_json(D, "surface-map.json")
+    table = MechanismTable(read_json(D, "mechanism-table.json"))
+    strata = list(topic["strata"])
+    studied = {k.lower(): v for k, v in study["study"].items()}
+    out_rows, differing, agreement, coded, beyond, capture = {}, [], {}, set(), {}, {}
+    for stratum in strata:
+        mapping = read_json(D, f"{stratum}-mechanism-map.json")
+        adjudication = read_json(D, f"{stratum}-adjudication.json")
+        adj = adjudication["rows"]
+        capture[stratum] = adjudication["capture_recapture"]
+        sides = {s: {r["order_rank"]: r for r in read_jsonl(D, f"{stratum}-screen-{s}.jsonl")} for s in "AB"}
+        for s in "AB":
+            for r in sides[s].values():
+                coded |= {table.canon(stratum, mapping, s, m) for m in r["mechanisms"]}
+        extras = {}
+        for extra in sorted(p.name for p in D.glob(f"{stratum}-reader-C-extra*.jsonl")):
+            for e in read_jsonl(D, extra):
+                key = table.table["aliases"].get(f"{stratum}:{e['name']}", f"{stratum}:{e['name']}")
+                coded.add(key)
+                for rank in e["rows"]:
+                    extras.setdefault(rank, set()).add(key)
+        ranks = screened_ranks(topic, D, stratum, sides)
+        beyond[stratum] = sorted(set(sides["A"]) | set(sides["B"]) - set(ranks))
+        same = cells = 0
+        rows = []
+        for rank in ranks:
+            a, b = derive(table, stratum, mapping, "A", sides["A"][rank]), derive(table, stratum, mapping, "B", sides["B"][rank])
+            for c in JUDGED:
+                cells += 1
+                same += a["scores"][c] == b["scores"][c]
+                if a["scores"][c] != b["scores"][c]:
+                    differing.append(f"{stratum} #{rank} {sides['A'][rank]['repo']} {c}: A {a['scores'][c]}, B {b['scores'][c]}")
+            repo_name = sides["A"][rank]["repo"]
+            mechs = a["mechs"] | b["mechs"] | extras.get(rank, set())
+            if a["decision"] == b["decision"] and str(rank) not in adj:
+                decision = a["decision"]
+                reason = f"both sessions {decision}; sums A {a['total']:g}, B {b['total']:g}"
+            elif str(rank) not in adj and "eligible" not in (a["decision"], b["decision"]):
+                decision = a["decision"]
+                reason = f"both sessions exclude; codes differ (A {a['decision']}, B {b['decision']}); sums A {a['total']:g}, B {b['total']:g}"
+            else:
+                decision = normal(adj[str(rank)]["decision"])
+                reason = "adjudicated: " + adj[str(rank)]["why"]
+            if repo_name.lower() in studied:
+                decision = "study" if decision == "eligible" else f"study (below-threshold: {a['total']:g})"
+                reason = studied[repo_name.lower()]
+            score = " ".join(f"{SHORT[c]}{a['scores'][c]:g}" + ("" if a["scores"][c] == b["scores"][c] else f"/{b['scores'][c]:g}") for c in JUDGED)
+            score += f" N{a['novelty']:g}" + ("" if a["novelty"] == b["novelty"] else f"/{b['novelty']:g}")
+            commit = sides["A"][rank].get("commit") or sides["B"][rank].get("commit") or "-"
+            names = ", ".join(sorted(m.split(":", 1)[1] for m in mechs)) or "-"
+            rows.append(f"| {rank} | {repo_name} | {commit} | {score} | {decision} | {names} | {reason.replace('|', '/')} |")
+        out_rows[stratum] = rows
+        agreement[stratum] = (same, cells)
+
+    surfaced = list(surface["considered"].values()) + list(surface["outside the inventory"].values())
+    missing_surface = sorted(m for m in coded if table.kind(m) != "evidence" and not any(m in v for v in surfaced))
+    criteria_hash = hashlib.sha256((repo / meta["criteria"]).read_bytes()).hexdigest()[:16]
+    lines = [f"# {meta['title']}", "", f"- Role: {meta['role']}", f"- Date: {meta['date']}",
+             f"- Criteria: {meta['criteria']} sha256[:16] `{criteria_hash}`",
+             f"- Inventory: llms.txt sha256[:16] `{meta['inventory_digest']}` (docs/prior-art/claude-code-surfaces.md)",
+             f"- Problems: {', '.join(meta['problems'])}; terms matched: {', '.join(meta['terms_matched'])}",
+             f"- Data: `{name}/` (screening sessions A and B, reader C, maps, mechanism table, adjudications, recall standard); regenerate with `python3 plugin/evals/probes/prior-art-sweep-record.py . {name}`",
+             "", "Scores read A1 M1 O1 D1 P1 N1 for Authority, Methodology, Objectivity, Date, Position and the derived Novelty; a/b shows session A's and B's values where they differ.", ""]
+    lines += ["## Query log", ""] + [f"- {stratum}: {q}" for stratum, qs in meta["query_log"].items() for q in qs] + [""]
+    lines += ["## PRISMA", "", "| stratum | stage | count |", "|---|---|---|"] + [f"| {s} | {k} | {v} |" for s, p in meta["prisma"].items() for k, v in p.items()] + [""]
+    lines += ["## Recall", "", meta["recall"], ""]
+    lines += ["## Agreement and capture-recapture", ""]
+    for s, (same, cells) in agreement.items():
+        lines.append(f"- {s}: {same}/{cells} judged cells identical ({same / cells:.3f}); target 0.90")
+    lines += [f"- {s}: {capture[s]}" for s in strata] + [""]
+    for stratum in strata:
+        lines += [f"## Stratum: {stratum}", "", meta["stop"][stratum], "", f"Screened beyond the stop or outside both sessions: {len(beyond[stratum])} rows, kept in the data files.", "",
+                  "### Screened rows", "", "| rank | repo | commit | scores | decision | mechanisms | reason |", "|---|---|---|---|---|---|---|"] + out_rows[stratum] + [""]
+    lines += ["## Deep study", "", study["budget"] + ". " + study["method"], "", study["coverage"], ""] + [f"- {k}: {v}" for k, v in study["flags"].items()] + [""]
+    lines += ["## Mechanisms", "", "| mechanism | class |", "|---|---|"] + [f"| {m} | {table.kind(m)} |" for m in sorted(coded)] + [""]
+    lines += ["## Surfaces", ""]
+    for surface_name, mechs in surface["considered"].items():
+        lines.append(f"- considered: {surface_name}: {', '.join(m.split(':', 1)[-1] for m in mechs)}")
+    for surface_name, reason in surface["not relevant"].items():
+        lines.append(f"- not relevant: {surface_name}: {reason}")
+    for surface_name, mechs in surface["outside the inventory"].items():
+        lines.append(f"- outside the inventory: {surface_name}: {', '.join(m.split(':', 1)[-1] for m in mechs)}")
+    lines += ["", "## Gaps", ""] + [f"- {g}" for g in meta["gaps"]] + [""]
+    lines += ["## Differing cells", ""] + [f"- {d}" for d in differing] + [""]
+    counts = ", ".join(f"{s} {len(out_rows[s])}" for s in strata)
+    summary = f"rows {counts}; differing cells {len(differing)}; mechanisms {len(coded)}; mechanisms with no surface: {missing_surface}"
+    return "\n".join(lines), summary
+
+
+def write_record(repo, topic):
+    text, summary = render(repo, topic)
+    (sweep_folder(repo, topic).parent / f"{topic['sweep']}.md").write_text(text)
+    return summary
