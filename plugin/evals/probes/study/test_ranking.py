@@ -64,6 +64,13 @@ class RankerTest(unittest.TestCase):
         pool[0].update(closed_issues=2, merged_prs=7, license="MIT")
         self.assertEqual({k: rank_product(pool, ["tdd"])["rows"][0][k] for k in ("closed_issues", "merged_prs", "license")}, {"closed_issues": 2, "merged_prs": 7, "license": "MIT"})
 
+    def test_product_contract_files_are_the_distinct_paths_the_code_search_hit(self):
+        pool = [{"repo": "o/lint", "evidence": {"code": ["code SKILL.md lint extension:ts: src/a.ts", "code SKILL.md validate extension:ts: src/a.ts",
+                                                         "code plugin.json schema extension:js: lib/b.js"]},
+                 "description": "", "stars": 1, "created": "2026-01-01T0", "pushed": "2026-02-01T0", "archived": False, "fork": False}]
+        row = rank_product(pool, ["tdd"])["rows"][0]
+        self.assertEqual((row["contract_files"], row["order"]), (["src/a.ts", "lib/b.js"], 1 + 1.585))
+
 
 class OrderAndSnowballTest(unittest.TestCase):
     def setUp(self):

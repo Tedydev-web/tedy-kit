@@ -106,10 +106,10 @@ def rank_product(pool_rows, terms):
             aggregators.append({"repo": row["repo"], "description": (row.get("description") or "")[:200]})
             continue
         evidence = row["evidence"]
-        contract = len(evidence.get("code", []))
+        contract = list(dict.fromkeys(e.split(": ", 1)[1] if e.startswith("code ") and ": " in e else e for e in evidence.get("code", [])))
         name_hit = bool(term.search(row["repo"].split("/", 1)[1].replace("_", "-")) or term.search(row.get("description") or ""))
-        order = len(evidence) + math.log2(1 + contract) + (1 if name_hit else 0)
-        rows.append({"repo": row["repo"], "order": round(order, 3), "channels": sorted(evidence), "contract_files": evidence.get("code", [])[:6],
+        order = len(evidence) + math.log2(1 + len(contract)) + (1 if name_hit else 0)
+        rows.append({"repo": row["repo"], "order": round(order, 3), "channels": sorted(evidence), "contract_files": contract[:6],
                      "evidence": {c: v[:3] for c, v in evidence.items()}, "name_hit": name_hit, "description": (row.get("description") or "")[:200],
                      "stars": row["stars"], "created": row["created"][:10], "pushed": row["pushed"][:10], "archived": row["archived"], "fork": row["fork"],
                      **{k: row[k] for k in ("closed_issues", "merged_prs", "license") if k in row}})
