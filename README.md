@@ -54,6 +54,7 @@ Run `/tedy:setup` in a project. On the first run it creates your profile: it ask
 | PR merge and ready | always on | Asks before `gh pr merge`, `gh pr ready` and the equivalent `gh api` calls, in any form the gate can read |
 | Work package in the PR body | always on in a project whose map has a `tracker` | Refuses `gh pr create` whose body does not carry `OP#<id>` |
 | Unchecked publish | always on | Asks before a `node <script>` publish that no `permissions.ask` rule covers, or whose draft the gate could not read |
+| Unreadable command | always on | Refuses, without asking the user, a command the gate cannot read (a command word built at run time, `eval`, a shell reading code from stdin or `-c`, over 10,000 characters, or nested too deep), and tells the agent to rewrite it as a script file run with `python3` or `node` |
 | Tracker token | always on | Refuses any tool call that reads the tracker token file or writes to the tracker host around `openproject.mjs` |
 | Profile guard | always on | Asks before a write to the profile's `config.json` or `rules.md`, and before a checkout, reset or pull in the release worktree |
 | `gates.noComments` | off | Blocks edits that add code comments and reports comments a push carries |

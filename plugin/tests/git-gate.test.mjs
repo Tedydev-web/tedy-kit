@@ -307,8 +307,23 @@ test("a project map that cannot be read makes gh pr create ask instead of passin
   assert.match(result.reason, /project map/);
 });
 
-test("command substitution nested past the gate's depth limit asks", () => {
-  assert.equal(evaluate("echo " + "$(".repeat(30) + "gh pr view 1" + ")".repeat(30), "/w").ask, true);
+test("commands the gate cannot read are sent back to the agent to rewrite, not to the user", () => {
+  for (const command of [
+    "g=gh; $g pr merge 1",
+    'echo "gh pr merge 1" | bash',
+    'eval "gh pr merge 1"',
+    `echo ${"a".repeat(10_001)}`,
+    "echo " + "$(".repeat(30) + "gh pr view 1" + ")".repeat(30),
+  ]) {
+    const result = evaluate(command, "/w");
+    assert.equal(result.allow, false, command);
+    assert.notEqual(result.ask, true, command);
+    assert.match(result.reason, /script file/, command);
+  }
+});
+
+test("command substitution nested past the gate's depth limit is refused", () => {
+  assert.equal(evaluate("echo " + "$(".repeat(30) + "gh pr view 1" + ")".repeat(30), "/w").allow, false);
   assert.equal(evaluate("echo $(echo $(gh pr view 1))", "/w").allow, true);
 });
 

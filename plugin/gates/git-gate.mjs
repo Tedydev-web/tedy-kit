@@ -50,7 +50,8 @@ const NOT_LITERAL = /[$`(*?,{]|^\[(?!\[?$)|.}/;
 const RUNNERS = new Set(["env", "script", "ssh", "su", "runuser", "sg", "setsid", "flock", "watch", "parallel", "tmux", "screen", "expect", "unbuffer", "at", "batch", "chroot", "systemd-run", "nsenter", "unshare", "firejail", "bwrap"]);
 const API_MERGE = /pulls\/\d+\/merge\b|mergePullRequest|markPullRequestReadyForReview|enablePullRequestAutoMerge/;
 const MAX_COMMAND = 10_000;
-const UNREADABLE_REASON = "tedy gate: this command runs code the gate cannot read (a command word built at run time, eval, a shell reading code from stdin or -c, an interpreter one-liner that mentions gh, or git -c alias/core). Allow it only if the user asked for it.";
+const REWRITE = "Rewrite it so every command word is literal: put the code in a script file with the Write tool and run it as `python3 <file>` or `node <file>`, with no eval, no `bash -c`, no heredoc code and no command word in a variable. The user is not asked, because they cannot check this form either.";
+const UNREADABLE_REASON = `tedy gate: this command runs code the gate cannot read (a command word built at run time, eval, a shell reading code from stdin or -c, an interpreter one-liner that mentions gh, or git -c alias/core). ${REWRITE}`;
 const MERGE_REASON = "tedy gate: merging or marking a PR ready belongs to the user. Allow it only if the user asked for this exact PR in this turn.";
 const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve|unresolve|pr-body)|openproject\.mjs["']?\s+apply|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor|edit|delete))\b|^(?=[\s\S]*--apply\b)[\s\S]*?(?:openproject\.mjs["']?\s+(?:set|comment|comment-edit|relation|relation-delete|rollback)|doc-comment-file\.mjs["']?\s+post)\b/;
 export const CLAUDE_SETTINGS = process.env.TEDY_CLAUDE_SETTINGS ?? join(homedir(), ".claude", "settings.json");
@@ -320,16 +321,20 @@ function mentionsGhMerge(segment) {
 
 export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, settingsFile } = {}) {
   let asked = null;
+  let rewrite = null;
   const askFor = (reason) => {
     asked ??= { allow: false, ask: true, reason };
+  };
+  const rewriteFor = (reason) => {
+    rewrite ??= { allow: false, reason };
   };
   const hidden = hiddenPublish(command);
   if (hidden) askFor(`tedy gate: this publishes through a kit script in a form the permission rules do not match (\`${hidden.slice(0, 120)}\`). Allow it only if the user approved this exact publish; otherwise run it as a plain \`node <script> …\` command.`);
   const uncovered = settingsFile ? uncoveredPublish(command, settingsFile) : null;
   if (uncovered) askFor(uncovered);
-  if (command.length > MAX_COMMAND) askFor(`tedy gate: this command is longer than ${MAX_COMMAND} characters, too long to check. Allow it only if the user asked for it.`);
+  if (command.length > MAX_COMMAND) rewriteFor(`tedy gate: this command is longer than ${MAX_COMMAND} characters, too long to check. ${REWRITE}`);
   const nested = substitutions(command);
-  if (nested === null) askFor("tedy gate: this command nests command substitutions too deeply to check. Allow it only if the user asked for it.");
+  if (nested === null) rewriteFor(`tedy gate: this command nests command substitutions too deeply to check. ${REWRITE}`);
   let dir = cwd;
   for (const segment of [...splitSegments(command), ...(nested ?? []).flatMap((body) => splitSegments(body))]) {
     const action = classify(segment, dir);
@@ -337,7 +342,7 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
       dir = action.dir;
       continue;
     }
-    if (unreadable(segment)) askFor(UNREADABLE_REASON);
+    if (unreadable(segment)) rewriteFor(UNREADABLE_REASON);
     if (action.kind === "push") {
       const risk = pushRisk(action.args, action.dir, gates.pushExempt);
       if (risk) askFor(`tedy gate: ${risk}, which belongs to the user. Allow it only if the user asked for this push.`);
@@ -375,7 +380,7 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
     }
     return { allow: false, reason: "tedy gate: publish to GitHub through github-write.mjs after the user approves the draft. Reading with gh (view, diff, list, GET, GraphQL queries) stays open." };
   }
-  return asked ?? { allow: true };
+  return rewrite ?? asked ?? { allow: true };
 }
 
 export function run() {
