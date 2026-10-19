@@ -9,6 +9,11 @@
   "terms": ["pruning", "retirement", "rule rationale","proportional", "risk-based", "lightweight", "tier", "approval fatigue", "model release", "stale","permission", "permissions", "sandbox", "pretooluse", "approval", "mcp", "lsp", "monitor", "output style", "surface","lint", "linter", "validator", "validate", "conformance", "migration", "migrate", "codemod", "deprecation", "deprecated", "changelog", "semver", "versioning", "contributing", "authoring", "skill-creator", "writing-skills", "plugin-dev", "eval", "evals", "baseline", "ablation", "fitness function", "fitness functions", "adr", "decision record", "decision records", "grandfather", "waiver", "ruleset", "style guide"],
   "sweep": "261019-canon",
   "qgs_list_topic": "claude|agent|coding|cursor|codex|copilot|llm|skill|plugin",
+  "pilot_rows": 20,
+  "sessions": {
+    "A": {"cli": "claude", "model": "claude-opus-5-5", "effort": "high"},
+    "B": {"candidates": [{"cli": "agy", "model": "gemini-3.8-flash-high"}, {"cli": "agy", "model": "gpt-oss-120b-medium"}], "fallback": {"cli": "claude", "model": "claude-sonnet-4-6", "effort": "high"}}
+  },
   "strata": {
     "config": {
       "stop_row": null,
@@ -21,6 +26,11 @@
         "awesome_queries": ["awesome claude code", "awesome claude skills", "awesome agent skills", "awesome claude code plugins", "awesome cursorrules", "awesome ai coding agents"],
         "awesome_lists_per_query": 3,
         "marketplaces": true,
+        "academic": {
+          "arxiv": ["abs:\"agent skills\"", "abs:\"coding agent\" AND abs:\"instruction files\"", "abs:\"AGENTS.md\"", "abs:\"architecture decision records\"", "abs:\"fitness functions\" AND abs:architecture", "abs:\"LLM agent\" AND abs:\"evaluation harness\""],
+          "semantic_scholar": ["agent skills for coding assistants", "maintaining rules for LLM coding agents"],
+          "max_results": 50
+        },
         "social": {
           "x": ["claude code skill creator", "how to write claude code skills", "claude code plugin validator", "agent skills evals", "claude code plugin versioning", "claude code skills breaking changes", "claude code permission prompts", "claude code sandbox hooks", "claude code mcp vs skills"],
           "reddit": [["ClaudeCode", "skill creator"], ["ClaudeCode", "plugin validate"], ["ClaudeCode", "maintain skills"], ["ClaudeCode", "skills evals"], ["ClaudeAI", "writing skills best practices"], ["ClaudeAI", "plugin marketplace versioning"], ["cursor", "rules maintenance"], ["ChatGPTCoding", "agents.md conventions"]],

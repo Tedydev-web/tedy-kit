@@ -152,6 +152,13 @@ class RunSessionTest(SessionBase):
         family = script("run-screening-session").model_family
         self.assertEqual([family(m) for m in ("claude-opus-5-5", "gemini-3.8-flash-high", "gpt-oss-120b-medium", "o3")], ["claude", "gemini", "gpt", "o3"])
 
+    def test_the_canon_topic_names_its_sessions_and_pilot_block(self):
+        from study_topic import pilot_rows, session_a, session_b_options
+        canon = load_topic(HERE.parents[3], "canon")
+        self.assertEqual((pilot_rows(canon), session_a(canon)["cli"]), (20, "claude"))
+        self.assertEqual([o["model"] for o in session_b_options(canon)], ["gemini-3.8-flash-high", "gpt-oss-120b-medium", "claude-sonnet-4-6"])
+        self.assertEqual({s: r["stop_row"] for s, r in canon["strata"].items()}, {"config": None, "product": None, "local": None})
+
     def test_a_session_option_without_a_cli_is_refused(self):
         bad = {**self.topic, "sessions": {"A": {"model": "x"}}}
         from study_topic import session_a
