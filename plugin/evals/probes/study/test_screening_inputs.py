@@ -125,7 +125,7 @@ class InputsTest(unittest.TestCase):
         self.assertEqual((self.rows()[1].get("error"), self.rows()[1]["evidence"]["package"]["npm"]), (None, {"name": "@o/tdd-kit", "published": False}))
 
     def test_a_forced_aggregator_in_the_order_is_fetched_like_any_row(self):
-        ranked = {"rows": POOL, "aggregators": [{"repo": "o/forced", "description": "awesome list", "stars": 1, "pushed": "2026-09-01", "channels": ["awesome-list"]}]}
+        ranked = {"rows": POOL, "aggregators": [{"repo": "o/forced", "description": "awesome list"}]}
         rows, _ = script("export-screening-order").screening_order(self.topic, "config", ranked, 200)
         write_jsonl(self.work / "config-screening-order.jsonl", rows)
         self.fetch_inputs(self.fetch())
