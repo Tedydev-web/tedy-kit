@@ -157,14 +157,15 @@ export function checkMethodEvidence(text, { files, read, criteriaText, topic }) 
 
 export function topicForSweep(repo, sweep) {
   const dir = join(repo, "docs", "prior-art", "topics");
-  const configs = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".json")).map((f) => JSON.parse(readFileSync(join(dir, f), "utf8"))) : [];
-  const whole = configs.find((config) => config.sweep === sweep);
-  if (whole) return whole;
-  for (const config of configs) {
-    const facet = Object.values(config.facets ?? {}).find((f) => f?.sweep === sweep);
-    if (!facet) continue;
-    const strata = Object.fromEntries(Object.entries(config.strata ?? {}).map(([s, rule]) => [s, { ...rule, ...(facet.strata?.[s] ?? {}) }]));
-    return { ...config, sweep, strata };
+  const configs = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".json")).sort().map((f) => [f.slice(0, -5), JSON.parse(readFileSync(join(dir, f), "utf8"))]) : [];
+  const whole = configs.find(([, config]) => config.sweep === sweep);
+  if (whole) return { ...whole[1], name: whole[0] };
+  for (const [stem, config] of configs) {
+    const found = Object.entries(config.facets ?? {}).find(([, facet]) => facet?.sweep === sweep);
+    if (!found) continue;
+    const [name, facet] = found;
+    const strata = Object.fromEntries(Object.entries(config.strata ?? {}).map(([s, rule]) => [s, { ...rule, stop_row: facet.strata?.[s]?.stop_row ?? null, forced_repos: facet.strata?.[s]?.forced_repos ?? [] }]));
+    return { ...config, name: `${stem}:${name}`, sweep, strata };
   }
   return undefined;
 }

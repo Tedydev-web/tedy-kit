@@ -25,8 +25,34 @@ class FacetTest(unittest.TestCase):
         topic = load_topic(self.repo, "demo:alpha")
         self.assertEqual((topic["name"], topic["facet"], topic["sweep"], topic["problems"], topic["terms"]), ("demo:alpha", "alpha", "261002-demo-alpha", ["X1"], ["tdd"]))
         self.assertEqual(topic["strata"]["config"], {"stop_row": None, "forced_repos": ["o/alpha"], "channels": {}})
-        self.assertEqual(topic["strata"]["local"], {"stop_row": 1, "forced_repos": []})
+        self.assertEqual(topic["strata"]["local"], {"stop_row": None, "forced_repos": []})
         self.assertEqual(load_topic(self.repo, "demo")["sweep"], "261001-demo")
+
+    def test_a_facet_never_inherits_the_topic_stop_row_or_forced_repositories(self):
+        self.write({**FACETS, "beta": {**FACETS["beta"], "strata": {"config": {"channels": {"x": ["q"]}}}}})
+        self.assertEqual(load_topic(self.repo, "demo:beta")["strata"]["config"], {"stop_row": None, "forced_repos": [], "channels": {}})
+
+    def test_the_facets_split_the_topic_problems_once_with_distinct_sweeps(self):
+        self.write({"alpha": FACETS["alpha"]})
+        with self.assertRaisesRegex(TopicError, r"facets leave problems \['X2'\] in no facet"):
+            load_topic(self.repo, "demo")
+        self.write({**FACETS, "beta": {**FACETS["beta"], "problems": ["X1", "X2"]}})
+        with self.assertRaisesRegex(TopicError, r"problem X1 sits in facets \['alpha', 'beta'\]"):
+            load_topic(self.repo, "demo:alpha")
+        self.write({**FACETS, "beta": {**FACETS["beta"], "sweep": "261001-demo"}})
+        with self.assertRaisesRegex(TopicError, r"sweep 261001-demo is named more than once"):
+            load_topic(self.repo, "demo")
+
+    def test_a_facet_with_a_malformed_shape_is_refused(self):
+        self.write({**FACETS, "alpha": {**FACETS["alpha"], "strata": {"config": None}}})
+        with self.assertRaisesRegex(TopicError, r"facets\.alpha\.strata\.config must be an object"):
+            load_topic(self.repo, "demo:alpha")
+        self.write({**FACETS, "alpha": {**FACETS["alpha"], "terms": ["tdd", 3]}})
+        with self.assertRaisesRegex(TopicError, r"facets\.alpha\.terms must be non-empty strings"):
+            load_topic(self.repo, "demo:alpha")
+        self.write({**FACETS, "alpha": None})
+        with self.assertRaisesRegex(TopicError, r"facets\.alpha must be an object"):
+            load_topic(self.repo, "demo:beta")
 
     def test_a_facet_must_exist_and_stay_inside_the_topic_terms_and_problems(self):
         with self.assertRaisesRegex(TopicError, "no facet gamma"):

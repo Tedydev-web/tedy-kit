@@ -23,14 +23,15 @@ function methodSweep(...flags) {
   return { repo, folder, meta, writeMeta, text: readFileSync(record, "utf8"), errors: (text = readFileSync(record, "utf8")) => evidence.sweepMethodErrors(repo, "261001-demo.md", text) };
 }
 
-test("a facet sweep is checked against its facet's written stop rows", () => {
+test("a facet sweep is checked against its facet's own stop rows and role", () => {
   const repo = tempDir("facet-topic-");
   mkdirSync(join(repo, "docs", "prior-art", "topics"), { recursive: true });
-  writeFileSync(join(repo, "docs", "prior-art", "topics", "demo.json"), JSON.stringify({ sweep: "261001-demo", strata: { config: { stop_row: 60 }, product: { stop_row: 61 } },
-    facets: { beta: { sweep: "261002-demo-beta", strata: { config: { stop_row: 70 } } } } }));
+  writeFileSync(join(repo, "docs", "prior-art", "topics", "demo.json"), JSON.stringify({ sweep: "261001-demo", strata: { config: { stop_row: 60, forced_repos: ["o/forced"], channels: {} }, product: { stop_row: 61 } },
+    facets: { beta: { sweep: "261002-demo-beta", strata: { config: { stop_row: 70, channels: { x: ["q"] } } } } } }));
   assert.equal(typeof evidence.topicForSweep, "function");
-  assert.deepEqual(evidence.topicForSweep(repo, "261002-demo-beta").strata, { config: { stop_row: 70 }, product: { stop_row: 61 } });
-  assert.equal(evidence.topicForSweep(repo, "261001-demo").strata.config.stop_row, 60);
+  const beta = evidence.topicForSweep(repo, "261002-demo-beta");
+  assert.deepEqual([beta.name, beta.strata], ["demo:beta", { config: { stop_row: 70, forced_repos: [], channels: {} }, product: { stop_row: null, forced_repos: [] } }]);
+  assert.deepEqual([evidence.topicForSweep(repo, "261001-demo").name, evidence.topicForSweep(repo, "261001-demo").strata.config.stop_row], ["demo", 60]);
   assert.equal(evidence.topicForSweep(repo, "261003-none"), undefined);
 });
 

@@ -147,19 +147,34 @@ test("every topic config names a registry that passes its coverage matrix", () =
   assert.deepEqual(checkTopicRegistries(tempDir("no-topics")), ["docs/prior-art/topics: no topic config"]);
 });
 
-test("a topic's facets stay inside its terms, problems and strata and each name a sweep", () => {
+test("a topic's facets stay inside its terms, problems and strata, split its problems once and name distinct sweeps", () => {
   const repo = tempDir("facets");
   const topics = join(repo, "docs", "prior-art", "topics");
   mkdirSync(topics, { recursive: true });
   writeFileSync(join(repo, "docs", "prior-art", "problems-coordination.md"), registry({ label: "Session lifecycle steps", steps: "1 Open or start; 2 Pick up work (hand-off, pending list)", id: "C1", topic: "coordination" }));
-  const config = (facets) => JSON.stringify({ registry: "docs/prior-art/problems-coordination.md", id_prefix: "C", frame: COORDINATION.frame, sweep: "261001-coordination",
+  const config = (facets, sweep = "261001-coordination") => JSON.stringify({ registry: "docs/prior-art/problems-coordination.md", id_prefix: "C", frame: COORDINATION.frame, sweep,
     terms: ["handoff", "lock"], problems: ["C1", "C2"], strata: { config: { stop_row: null } }, facets });
   const alpha = { sweep: "261002-coordination-alpha", problems: ["C1"], terms: ["handoff"], strata: { config: { stop_row: null } } };
-  writeFileSync(join(topics, "coordination.json"), config({ alpha }));
-  assert.deepEqual(checkTopicRegistries(repo), []);
-  writeFileSync(join(topics, "coordination.json"), config({ alpha: { ...alpha, terms: ["handoff", "queue"], problems: ["C9"], strata: { web: {} } }, beta: { problems: ["C2"], terms: ["lock"] } }));
-  assert.deepEqual(checkTopicRegistries(repo), ["topics/coordination.json: facets.alpha: terms queue are not topic terms", "topics/coordination.json: facets.alpha: problems C9 are not topic problems",
-    "topics/coordination.json: facets.alpha: strata web are not topic strata", "topics/coordination.json: facets.beta: sweep must name the facet's sweep"]);
+  const beta = { sweep: "261002-coordination-beta", problems: ["C2"], terms: ["lock"] };
+  const write = (facets, sweep) => writeFileSync(join(topics, "coordination.json"), config(facets, sweep));
+  const errors = () => checkTopicRegistries(repo).map((e) => e.replace("topics/coordination.json: ", ""));
+  write({ alpha, beta });
+  assert.deepEqual(errors(), []);
+  write({ alpha: { ...alpha, terms: ["handoff", "queue"], problems: ["C9"], strata: { web: {} } }, beta: { problems: ["C2"], terms: ["lock"] } });
+  assert.deepEqual(errors(), ["facets.alpha: terms queue are not topic terms", "facets.alpha: problems C9 are not topic problems", "facets.alpha: strata web are not topic strata",
+    "facets.beta: sweep must name the facet's sweep", "facets: problem C1 sits in no facet"]);
+  write({ alpha: { ...alpha, terms: [], problems: [] }, beta: { ...beta, problems: ["C1", "C2"] } });
+  assert.deepEqual(errors(), ["facets.alpha: terms must be a non-empty list", "facets.alpha: problems must be a non-empty list"]);
+  write({ alpha: { ...alpha, problems: ["C1", "C2"] }, beta });
+  assert.deepEqual(errors(), ["facets: problem C2 sits in facets alpha, beta"]);
+  write({ alpha, beta: null });
+  assert.deepEqual(errors(), ["facets.beta must be an object", "facets: problem C2 sits in no facet"]);
+  write({ alpha, beta: { ...beta, sweep: "261001-coordination" } });
+  assert.deepEqual(errors(), ["sweep 261001-coordination is named more than once (coordination, coordination:beta)"]);
+  write({ alpha, beta });
+  writeFileSync(join(repo, "docs", "prior-art", "problems-other.md"), registry({ label: "Session lifecycle steps", steps: "1 Open or start; 2 Pick up work (hand-off, pending list)", id: "C1", topic: "other" }));
+  writeFileSync(join(topics, "other.json"), config(undefined, "261002-coordination-alpha").replace("problems-coordination", "problems-other"));
+  assert.deepEqual(errors(), ["sweep 261002-coordination-alpha is named more than once (coordination:alpha, other)"]);
 });
 
 test("mechanism table aliases point at classified or reconciled names", () => {

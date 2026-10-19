@@ -1,4 +1,5 @@
 import argparse
+import hashlib
 import json
 import re
 from datetime import datetime, timedelta, timezone
@@ -37,6 +38,8 @@ def load_topic(repo, name):
         raise TopicError(f"{path}: not JSON: {error}") from error
     if not isinstance(topic, dict):
         raise TopicError(f"{path}: must be a JSON object")
+    if "facets" in topic:
+        check_facets(topic, path)
     if facet:
         topic = with_facet(topic, path, facet)
     _require(topic, path, "sweep", str)
@@ -50,26 +53,59 @@ def load_topic(repo, name):
     return {**topic, "name": name, "path": path, **({"facet": facet} if facet else {})}
 
 
+def check_facets(topic, path):
+    facets = topic["facets"]
+    if not isinstance(facets, dict) or not facets:
+        raise TopicError(f"{path}: facets must be a non-empty object")
+    terms = {t.lower() for t in topic.get("terms", []) if isinstance(t, str)}
+    for name, rule in facets.items():
+        where = f"{path}: facets.{name}"
+        if not isinstance(rule, dict):
+            raise TopicError(f"{where} must be an object")
+        if not isinstance(rule.get("sweep"), str) or not rule["sweep"]:
+            raise TopicError(f"{where}.sweep must name the facet's sweep")
+        for key in ("problems", "terms"):
+            if not isinstance(rule.get(key), list) or not rule[key] or not all(isinstance(v, str) and v for v in rule[key]):
+                raise TopicError(f"{where}.{key} must be non-empty strings")
+        strata = rule.get("strata", {})
+        if not isinstance(strata, dict):
+            raise TopicError(f"{where}.strata must be an object")
+        for stratum, value in strata.items():
+            if not isinstance(value, dict):
+                raise TopicError(f"{where}.strata.{stratum} must be an object")
+        outside = [t for t in rule["terms"] if t.lower() not in terms]
+        if outside:
+            raise TopicError(f"{where}: terms {outside} are not topic terms; the topic's discovery searches only its own terms")
+        outside = [p for p in rule["problems"] if p not in topic.get("problems", [])]
+        if outside:
+            raise TopicError(f"{where}: problems {outside} are not topic problems")
+        outside = sorted(set(strata) - set(topic.get("strata", {})))
+        if outside:
+            raise TopicError(f"{where}: strata {outside} are not topic strata")
+    homes = {p: [n for n, rule in facets.items() if p in rule["problems"]] for p in topic.get("problems", [])}
+    unplaced = [p for p, names in homes.items() if not names]
+    if unplaced:
+        raise TopicError(f"{path}: facets leave problems {unplaced} in no facet")
+    for problem, names in homes.items():
+        if len(names) > 1:
+            raise TopicError(f"{path}: problem {problem} sits in facets {names}; each problem sits in exactly one facet")
+    sweeps = [topic.get("sweep")] + [rule["sweep"] for rule in facets.values()]
+    for sweep in sweeps:
+        if sweeps.count(sweep) > 1:
+            raise TopicError(f"{path}: sweep {sweep} is named more than once")
+
+
 def with_facet(topic, path, facet):
     rule = (topic.get("facets") or {}).get(facet)
     if not isinstance(rule, dict):
         raise TopicError(f"{path}: no facet {facet} under facets")
-    where = f"{path}: facets.{facet}"
-    for key, kind in (("sweep", str), ("problems", list), ("terms", list)):
-        if not isinstance(rule.get(key), kind) or not rule[key]:
-            raise TopicError(f"{where}.{key} must be a non-empty {kind.__name__}")
-    outside = [t for t in rule["terms"] if t.lower() not in {u.lower() for u in topic.get("terms", [])}]
-    if outside:
-        raise TopicError(f"{where}: terms {outside} are not topic terms; the topic's discovery searches only its own terms")
-    outside = [p for p in rule["problems"] if p not in topic.get("problems", [])]
-    if outside:
-        raise TopicError(f"{where}: problems {outside} are not topic problems")
-    strata = rule.get("strata") or {}
-    outside = sorted(set(strata) - set(topic.get("strata", {})))
-    if outside:
-        raise TopicError(f"{where}: strata {outside} are not topic strata")
-    merged = {s: {**r, **{k: v for k, v in strata.get(s, {}).items() if k in ("stop_row", "forced_repos")}} for s, r in topic.get("strata", {}).items()}
-    return {**topic, "sweep": rule["sweep"], "problems": rule["problems"], "terms": rule["terms"], "strata": merged}
+    own = rule.get("strata", {})
+    strata = {s: {**r, "stop_row": own.get(s, {}).get("stop_row"), "forced_repos": own.get(s, {}).get("forced_repos", [])} for s, r in topic.get("strata", {}).items()}
+    return {**topic, "sweep": rule["sweep"], "problems": rule["problems"], "terms": rule["terms"], "strata": strata}
+
+
+def terms_digest(terms):
+    return hashlib.sha256(json.dumps(sorted({t.lower() for t in terms})).encode()).hexdigest()
 
 
 def topic_for_sweep(repo, sweep):
