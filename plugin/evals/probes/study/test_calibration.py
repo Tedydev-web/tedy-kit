@@ -66,6 +66,12 @@ class CalibrationTest(unittest.TestCase):
         self.draw()
         self.assertEqual((self.work / "calibration-sample.json").read_text(), first)
 
+    def test_the_sample_is_drawn_only_after_the_freeze(self):
+        (self.work / "protocol-freeze.json").unlink()
+        result = self.draw()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("no protocol-freeze.json in", result.stderr)
+
     def test_an_existing_sample_is_never_overwritten(self):
         self.draw()
         result = self.draw()

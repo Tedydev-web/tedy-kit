@@ -36,7 +36,9 @@ def draw(topic, work):
     if (work / SAMPLE_FILE).exists():
         raise TopicError(f"{work / SAMPLE_FILE} already exists; it may hold the user's ratings, so it is never redrawn")
     freeze_file = work / FREEZE_FILE
-    frozen = json.loads(freeze_file.read_text())["strata"] if freeze_file.is_file() else {}
+    if not freeze_file.is_file():
+        raise TopicError(f"no {FREEZE_FILE} in {work}; the calibration sample is drawn from rows screened after the freeze")
+    frozen = json.loads(freeze_file.read_text())["strata"]
     strata = [s for s in CALIBRATED_STRATA if s in topic["strata"]]
     if not strata:
         raise TopicError(f"topic {topic['name']} has neither a config nor a product stratum to calibrate")
