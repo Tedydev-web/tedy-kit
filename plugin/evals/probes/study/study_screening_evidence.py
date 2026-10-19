@@ -39,7 +39,10 @@ def registry(fetch, url, latest):
     if status != "ok":
         return ({"published": False}, None) if file_gone(status) else (None, status)
     try:
-        return {"published": True, "latest": latest(json.loads(out))}, None
+        body = json.loads(out)
+        if isinstance(body, dict) and isinstance(body.get("time"), dict) and body["time"].get("unpublished"):
+            return {"published": False}, None
+        return {"published": True, "latest": latest(body)}, None
     except (ValueError, KeyError, TypeError, AttributeError):
         return None, f"unparsable registry reply from {url}"
 
