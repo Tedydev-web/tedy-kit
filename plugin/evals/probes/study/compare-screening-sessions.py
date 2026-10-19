@@ -2,31 +2,11 @@ import json
 import sys
 from pathlib import Path
 
-from study_agreement import CHAPMAN_NOTE, session_kappas
+from study_agreement import CHAPMAN_NOTE, block_yields, effort_stop, session_kappas, stop_row
 from study_pool import read_json
 from study_protocol import read_freeze
 from study_sweep_record import JUDGED, MechanismTable, derive, read_jsonl
-from study_topic import TopicError, load_topic, sweep_folder, topic_arguments
-
-EFFORT_BOUND, BLOCK, HARD_CAP = 60, 10, 200
-
-
-def block_yields(ranks, firsts, forced):
-    seen, yields = set(), []
-    unforced = [r for r in ranks if r <= HARD_CAP and r not in forced]
-    for start in range(0, len(unforced), BLOCK):
-        block = unforced[start:start + BLOCK]
-        new = set().union(*(firsts.get(r, set()) for r in block)) - seen
-        seen |= new
-        yields.append((block[0], block[-1], len(new)))
-    return yields
-
-
-def stop_row(yields):
-    for first, last, new in yields:
-        if last >= EFFORT_BOUND and (new == 0 or last >= HARD_CAP):
-            return last
-    return None
+from study_topic import TopicError, load_topic, sweep_folder, topic_arguments, write_stop_row
 
 
 def compare(folder, stratum, max_rank):
@@ -59,15 +39,17 @@ def compare(folder, stratum, max_rank):
     chapman = (len(mech["A"]) + 1) * (len(mech["B"]) + 1) / (shared + 1) - 1
     union = len(mech["A"] | mech["B"])
     firsts = {r: rows[r]["A"]["mechs"] | rows[r]["B"]["mechs"] for r in common}
-    forced = {r["order_rank"] for r in read_jsonl(Path(folder), f"{stratum}-screening-order.jsonl") if r.get("forced")}
+    order = read_jsonl(Path(folder), f"{stratum}-screening-order.jsonl")
+    forced = {r["order_rank"] for r in order if r.get("forced")}
     yields = block_yields(common, firsts, forced)
+    stop, rule = effort_stop(common, firsts, forced, [r["order_rank"] for r in order])
     freeze = frozen and {"after_rank": frozen["frozen_after_rank"], "protocol_sha256": frozen["protocol_sha256"], "pilot_rows_left_out": len(common) - len(measured)}
     out = {"stratum": stratum, "rows": len(measured), "freeze": freeze, "judged_cells": cells, "identical": same, "agreement": round(same / cells, 3), "target": 0.9,
            "differing_by_criterion": by_criterion, "kappa": kappa, "eligibility_kappa": eligibility_kappa, "eligibility_differ": eligibility_differ,
            "decision_agreement": sum(rows[r]["A"]["decision"] == rows[r]["B"]["decision"] for r in common),
            "mechanisms": {"A": len(mech["A"]), "B": len(mech["B"]), "shared": shared, "union": union, "chapman_lower_bound": round(chapman, 1), "chapman_note": CHAPMAN_NOTE,
                           "third_reader_needed": chapman > union + 2, "only_A": sorted(mech["A"] - mech["B"]), "only_B": sorted(mech["B"] - mech["A"])},
-           "block_yields": yields, "effort_bound_stop": stop_row(yields), "mechanism_table": table_json is not None,
+           "block_yields": yields, "effort_bound_stop": stop_row(yields), "stop": {"row": stop, "rule": rule}, "mechanism_table": table_json is not None,
            "disputed": [{"rank": r, "repo": sides["A"][r]["repo"], "A": rows[r]["A"]["decision"], "B": rows[r]["B"]["decision"]}
                         for r in common if rows[r]["A"]["decision"] != rows[r]["B"]["decision"]]}
     return out
@@ -77,15 +59,22 @@ def main(argv=None):
     args = topic_arguments("Compare the two blind screening sessions of a stratum: agreement, kappa, the Chapman lower bound, decisions and new mechanisms per block.",
                            (["--stratum"], {"required": True, "help": "stratum to compare"}),
                            (["--folder"], {"help": "folder holding the session files, default the topic's sweep folder"}),
-                           (["--max-rank"], {"type": int, "help": "compare only rows up to this rank"})).parse_args(argv)
+                           (["--max-rank"], {"type": int, "help": "compare only rows up to this rank"}),
+                           (["--write-stop"], {"action": "store_true", "help": "write the derived stop row into the topic config's strata.<stratum>.stop_row"})).parse_args(argv)
     try:
         topic = load_topic(args.repo, args.topic)
         if args.stratum not in topic["strata"]:
             raise TopicError(f"topic {topic['name']} has no {args.stratum} stratum")
         out = compare(args.folder or sweep_folder(args.repo, topic), args.stratum, args.max_rank)
+        if args.write_stop:
+            if args.max_rank is not None or out["stop"]["row"] is None:
+                raise TopicError(f"no stop row to write ({out['stop']['rule']}); screen on, and compare every row without --max-rank")
+            write_stop_row(topic, args.stratum, out["stop"]["row"])
     except TopicError as error:
         sys.exit(f"compare-screening-sessions: {error}")
     print(json.dumps(out, indent=1))
+    if args.write_stop:
+        print(f"stop_row {out['stop']['row']} ({out['stop']['rule']}) written to {topic['path']}")
 
 
 if __name__ == "__main__":

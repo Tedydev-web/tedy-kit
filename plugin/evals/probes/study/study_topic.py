@@ -74,6 +74,28 @@ def stratum_rule(topic, stratum, key, kind):
     return value
 
 
+def write_stop_row(topic, stratum, row):
+    path = topic["path"]
+    text = path.read_text()
+    expected = json.loads(text)
+    if stratum not in expected.get("strata", {}):
+        raise TopicError(f"{path}: no strata.{stratum} to write a stop row into")
+    expected["strata"][stratum]["stop_row"] = row
+    block = re.compile(r'"' + re.escape(stratum) + r'"\s*:\s*\{').search(text, text.find('"strata"'))
+    key = re.compile(r'"stop_row"\s*:\s*(?:null|-?\d+|"[^"]*")').search(text, block.end())
+    attempts = [text[:key.start()] + f'"stop_row": {row}' + text[key.end():]] if key else []
+    closing = text[block.end():].lstrip().startswith("}")
+    attempts.append(text[:block.end()] + f'"stop_row": {row}' + ("" if closing else ", ") + text[block.end():])
+    for candidate in attempts:
+        try:
+            if json.loads(candidate) == expected:
+                path.write_text(candidate)
+                return
+        except ValueError:
+            continue
+    raise TopicError(f"{path}: could not write strata.{stratum}.stop_row without touching anything else; set it with the toolchain on a plain JSON file")
+
+
 def saigon_today():
     return datetime.now(SAIGON).date().isoformat()
 

@@ -2,8 +2,14 @@ import json
 import sys
 from pathlib import Path
 
+from study_agreement import EFFORT_BOUND
 from study_rank import order_key
-from study_topic import SNOWBALL_RANK_BASE, TopicError, load_topic, stratum_rule, topic_arguments
+from study_topic import SNOWBALL_RANK_BASE, TopicError, load_topic, topic_arguments
+
+
+def planned_cut(topic):
+    written = topic["strata"].get("config", {}).get("stop_row")
+    return written if isinstance(written, int) and not isinstance(written, bool) else EFFORT_BOUND
 
 
 def above_cut(before, after, stop_row):
@@ -18,7 +24,7 @@ def above_cut(before, after, stop_row):
 
 
 def main(argv=None):
-    args = topic_arguments("List the snowballed repositories that rank above the config stop row; they are screened as rows 1001 and on.",
+    args = topic_arguments("List the snowballed repositories that rank above the config cut (the written stop row, else the effort bound); they are screened as rows 1001 and on.",
                            (["--work"], {"required": True, "help": "study working folder"}),
                            (["--before"], {"default": "config-ranked.json", "help": "ranking without the snowball"}),
                            (["--after"], {"default": "config-ranked-snowball.json", "help": "ranking with the snowball state merged"})).parse_args(argv)
@@ -29,7 +35,7 @@ def main(argv=None):
         missing = [str(f) for f in files if not f.exists()]
         if missing:
             raise TopicError(f"missing rankings: {missing}")
-        cut, snowballed, rows = above_cut(*(json.loads(f.read_text()) for f in files), stratum_rule(topic, "config", "stop_row", int))
+        cut, snowballed, rows = above_cut(*(json.loads(f.read_text()) for f in files), planned_cut(topic))
     except TopicError as error:
         sys.exit(f"snowball-above-cut: {error}")
     (work / "snowball-screening-order.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))

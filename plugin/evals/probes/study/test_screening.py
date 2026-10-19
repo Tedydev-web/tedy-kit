@@ -1,5 +1,7 @@
 import json
 import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -54,6 +56,37 @@ class CompareTest(Base):
         self.assertEqual(compare.stop_row(compare.block_yields(ranks, firsts, {32})), 81)
         self.assertEqual(compare.stop_row(compare.block_yields(ranks, firsts, set())), 80)
         self.assertIsNone(compare.stop_row(compare.block_yields(ranks[:71], firsts, {32})))
+
+    def test_an_exhausted_pool_stops_at_its_last_unforced_row(self):
+        compare = script("compare-screening-sessions")
+        self.assertEqual(compare.effort_stop([1, 2, 3, 5], {}, {5}, [1, 2, 3, 5]), (3, "pool exhausted"))
+        self.assertEqual(compare.effort_stop([1, 2, 3], {}, set(), [1, 2, 3, 4]), (None, "not reached"))
+        ranks = list(range(1, 82))
+        self.assertEqual(compare.effort_stop(ranks, {5: {"a"}, 55: {"c"}, 63: {"b"}}, set(), ranks + [82]), (80, "effort bound"))
+
+    def test_the_toolchain_writes_the_stop_row_into_the_topic_config(self):
+        path = self.repo / "docs/prior-art/topics/demo.json"
+        result = subprocess.run([sys.executable, "-B", str(HERE / "compare-screening-sessions.py"), "--topic", "demo", "--repo", str(self.repo), "--stratum", "config", "--write-stop"],
+                                capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(path.read_text())["strata"]["config"]["stop_row"], 3)
+        self.assertIn("stop_row 3 (pool exhausted) written", result.stdout)
+
+    def test_writing_the_stop_row_keeps_the_hand_formatting(self):
+        from study_topic import write_stop_row
+        path = self.repo / "docs/prior-art/topics/demo.json"
+        path.write_text('{\n  "sweep": "261001-demo",\n  "terms": ["tdd", "test"],\n  "strata": {\n    "config": {\n      "stop_row": null,\n      "forced_repos": ["o/forced"]\n    },\n'
+                        '    "local": {"stop_row": null, "forced_repos": []}\n  }\n}\n')
+        write_stop_row(load_topic(self.repo, "demo"), "local", 7)
+        self.assertEqual(path.read_text().splitlines()[5:], ['      "stop_row": null,', '      "forced_repos": ["o/forced"]', "    },", '    "local": {"stop_row": 7, "forced_repos": []}', "  }", "}"])
+        write_json(path, {"sweep": "261001-demo", "terms": ["tdd"], "strata": {"config": {"forced_repos": []}}})
+        write_stop_row(load_topic(self.repo, "demo"), "config", 4)
+        self.assertEqual(json.loads(path.read_text())["strata"]["config"], {"stop_row": 4, "forced_repos": []})
+
+    def test_the_snowball_cut_before_screening_is_the_effort_bound(self):
+        snowball = script("snowball-above-cut")
+        self.assertEqual(snowball.planned_cut({**self.topic, "strata": {"config": {"stop_row": None}}}), 60)
+        self.assertEqual(snowball.planned_cut({**self.topic, "strata": {"config": {"stop_row": 101}}}), 101)
 
     def test_no_shared_rows_is_refused(self):
         write_jsonl(self.folder / "config-screen-B.jsonl", [])

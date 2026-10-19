@@ -11,7 +11,7 @@
   "qgs_list_topic": "claude|agent|coding|cursor|codex|copilot|llm|skill|plugin",
   "strata": {
     "config": {
-      "stop_row": 60,
+      "stop_row": null,
       "forced_repos": ["obra/superpowers", "anthropics/claude-plugins-official"],
       "channels": {
         "repo_queries": ["claude code skills", "agent skills", "claude code plugin", "claude code plugin template", "skill creator", "claude skill authoring", "agent skills linter", "claude code plugin validator", "claude code skills evals", "claude code subagents", "claude code hooks", "AGENTS.md", "cursor rules", "codex skills", "agent rules versioning", "claude code permissions sandbox", "claude code pretooluse hook guard", "claude code mcp server plugin", "claude code lsp plugin"],
@@ -30,7 +30,7 @@
       }
     },
     "product": {
-      "stop_row": 60,
+      "stop_row": null,
       "forced_repos": [],
       "channels": {
         "harness": "claude|ai agent|coding agent|agent skills?|llm|copilot|codex|cursor|architecture|decision records?|fitness functions?|rule ?sets?|codemods?|lint\\w*|schema",
@@ -52,7 +52,7 @@
       }
     },
     "local": {
-      "stop_row": 60,
+      "stop_row": null,
       "forced_repos": []
     }
   }
