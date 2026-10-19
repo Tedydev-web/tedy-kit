@@ -6,7 +6,7 @@
     "steps": ["Create", "Change", "Fix", "Audit", "Upgrade the standard", "Release", "Retire"]
   },
   "problems": ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "S10", "S11", "S12", "S13", "S14", "S15", "S16", "S17", "S18", "S19", "S20", "S21", "S22", "S23", "S24", "S25", "S26", "S27", "S28", "S29", "S30", "S31"],
-  "terms": ["pruning", "retirement", "rule rationale","proportional", "risk-based", "lightweight", "tier", "approval fatigue", "model release", "stale","permission", "permissions", "sandbox", "pretooluse", "approval", "mcp", "lsp", "monitor", "output style", "surface","lint", "linter", "validator", "validate", "conformance", "migration", "migrate", "codemod", "deprecation", "deprecated", "changelog", "semver", "versioning", "contributing", "authoring", "skill-creator", "writing-skills", "plugin-dev", "eval", "evals", "baseline", "ablation", "fitness function", "fitness functions", "adr", "decision record", "decision records", "grandfather", "waiver", "ruleset", "style guide"],
+  "terms": ["pruning", "retirement", "rule rationale","proportional", "risk-based", "lightweight", "tier", "approval fatigue", "model release", "stale","permission", "permissions", "sandbox", "pretooluse", "approval", "mcp", "lsp", "monitor", "output style", "surface","lint", "linter", "validator", "validate", "conformance", "migration", "migrate", "codemod", "deprecation", "deprecated", "changelog", "semver", "versioning", "contributing", "authoring", "skill-creator", "writing-skills", "plugin-dev", "eval", "evals", "baseline", "ablation", "fitness function", "fitness functions", "adr", "decision record", "decision records", "grandfather", "waiver", "ruleset", "style guide", "frontmatter", "grader", "rollback", "broken link", "denylist", "shim", "prior art", "acceptance criteria"],
   "sweep": "261019-canon",
   "qgs_list_topic": "claude|agent|coding|cursor|codex|copilot|llm|skill|plugin",
   "pilot_rows": 20,
@@ -64,6 +64,44 @@
     "local": {
       "stop_row": null,
       "forced_repos": []
+    }
+  },
+  "facets": {
+    "authoring": {
+      "sweep": "261020-canon-authoring",
+      "problems": ["S7", "S12", "S22", "S23"],
+      "terms": ["lint", "linter", "validator", "validate", "conformance", "contributing", "authoring", "skill-creator", "writing-skills", "plugin-dev", "style guide", "ruleset", "fitness function", "fitness functions", "frontmatter"],
+      "strata": {"config": {"stop_row": null, "forced_repos": ["obra/superpowers", "anthropics/claude-plugins-official"]}, "product": {"stop_row": null, "forced_repos": []}}
+    },
+    "evals": {
+      "sweep": "261020-canon-evals",
+      "problems": ["S8", "S9", "S10", "S16", "S24", "S30"],
+      "terms": ["eval", "evals", "baseline", "ablation", "grader", "model release", "stale"],
+      "strata": {"config": {"stop_row": null, "forced_repos": []}, "product": {"stop_row": null, "forced_repos": []}}
+    },
+    "versioning": {
+      "sweep": "261020-canon-versioning",
+      "problems": ["S1", "S2", "S3", "S13", "S17", "S25", "S31"],
+      "terms": ["versioning", "semver", "migration", "migrate", "codemod", "grandfather", "waiver", "changelog", "conformance", "pruning", "retirement", "rule rationale"],
+      "strata": {"config": {"stop_row": null, "forced_repos": []}, "product": {"stop_row": null, "forced_repos": []}}
+    },
+    "release": {
+      "sweep": "261020-canon-release",
+      "problems": ["S5", "S6", "S14", "S15", "S18", "S19"],
+      "terms": ["changelog", "semver", "deprecation", "deprecated", "rollback", "broken link", "denylist", "shim"],
+      "strata": {"config": {"stop_row": null, "forced_repos": []}, "product": {"stop_row": null, "forced_repos": []}}
+    },
+    "decisions": {
+      "sweep": "261020-canon-decisions",
+      "problems": ["S4", "S11", "S20", "S21", "S27", "S28"],
+      "terms": ["adr", "decision record", "decision records", "prior art", "acceptance criteria", "proportional", "risk-based", "lightweight", "tier", "mcp", "lsp", "monitor", "output style", "surface"],
+      "strata": {"config": {"stop_row": null, "forced_repos": []}, "product": {"stop_row": null, "forced_repos": []}}
+    },
+    "permissions": {
+      "sweep": "261020-canon-permissions",
+      "problems": ["S26", "S29"],
+      "terms": ["permission", "permissions", "sandbox", "pretooluse", "approval", "approval fatigue"],
+      "strata": {"config": {"stop_row": null, "forced_repos": []}, "product": {"stop_row": null, "forced_repos": []}}
     }
   }
 }
