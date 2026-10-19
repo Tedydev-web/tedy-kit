@@ -142,12 +142,14 @@ class ExportTest(Base):
         write_jsonl(self.work / "config-screening-inputs.jsonl", [{"order_rank": 1, "files": [{"text": "copied source"}]}])
         (self.work / "prompts").mkdir()
         (self.work / "prompts/config-screen-A-1-5.md").write_text("copied source")
+        (self.work / "calibration-inputs.md").write_text("copied source")
         out, counts = script("export-sweep-data").export(self.topic, self.repo, self.work)
         for name in ("protocol-freeze.json", "calibration-sample.json", "config-qgs-adjudicated.json", "config-qgs-judge-A.jsonl", "config-pilot-A-mechanisms.md"):
             self.assertTrue((out / name).is_file(), name)
         self.assertEqual(json.loads((out / "config-pilot-B-gemini-3.8-flash-high.jsonl").read_text())["commit"], "https://github.com/o/a/commit/" + "b" * 40)
         self.assertFalse((out / "config-screening-inputs.jsonl").exists())
         self.assertFalse((out / "prompts").exists())
+        self.assertFalse((out / "calibration-inputs.md").exists())
 
     def test_digests_survive_the_export_and_only_loose_hashes_are_cut(self):
         clean = script("export-sweep-data").clean
