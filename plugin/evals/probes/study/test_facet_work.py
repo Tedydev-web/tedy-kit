@@ -5,7 +5,7 @@ import unittest
 from pathlib import Path
 
 from study_fixtures import FakeFetch, script, topic_repo, write_json
-from study_pool import Pool
+from study_pool import Pool, work_file
 from study_topic import TopicError, load_topic, terms_digest
 
 FACETS = {"alpha": {"sweep": "261002-demo-alpha", "problems": ["X1"], "terms": ["tdd"], "strata": {"config": {"stop_row": None, "forced_repos": []}}},
@@ -39,13 +39,42 @@ class FacetWorkTest(unittest.TestCase):
     def test_a_facet_folder_links_a_discovery_whose_terms_match_the_topic(self):
         self.link()
         self.assertEqual(json.loads((self.work / "discovery.json").read_text()), {"folder": str(self.discovery.resolve()), "topic": "demo",
+                                                                                   "config": str((self.repo / "docs/prior-art/topics/demo.json").resolve()),
                                                                                    "terms_sha256": terms_digest(["tdd", "test"])})
         state = json.loads((self.discovery / "config-state.json").read_text())
         write_json(self.discovery / "config-state.json", {**state, "terms_sha256": terms_digest(["tdd"])})
-        with self.assertRaisesRegex(SystemExit, "config-state.json was discovered with other terms than topic demo"):
+        with self.assertRaisesRegex(SystemExit, "config-state.json was discovered with other terms"):
+            self.link()
+        write_json(self.discovery / "config-state.json", {k: v for k, v in state.items() if k != "terms_sha256"})
+        with self.assertRaisesRegex(SystemExit, "config-state.json predates the terms digest"):
             self.link()
         with self.assertRaisesRegex(SystemExit, "is not a facet"):
             script("link-discovery").main(["--topic", "demo", "--repo", str(self.repo), "--work", str(self.work), "--discovery", str(self.discovery)])
+
+    def test_a_facet_folder_with_its_own_discovery_state_is_not_linked(self):
+        write_json(self.work / "product-state.json", {"hits": {}, "log": [], "done": []})
+        with self.assertRaisesRegex(SystemExit, "holds its own product-state.json"):
+            self.link()
+
+    def test_a_link_refuses_reads_once_the_topic_terms_change(self):
+        self.link()
+        self.assertEqual(work_file(self.work, "config-pool.json"), self.discovery / "config-pool.json")
+        path = self.repo / "docs/prior-art/topics/demo.json"
+        write_json(path, {**json.loads(path.read_text()), "terms": ["tdd", "test", "red"]})
+        with self.assertRaisesRegex(TopicError, "links a discovery made with other terms than .*demo.json now lists"):
+            work_file(self.work, "config-pool.json")
+        with self.assertRaisesRegex(SystemExit, "links a discovery made with other terms"):
+            script("rank-config-pool").main(["--topic", "demo:alpha", "--repo", str(self.repo), "--work", str(self.work)])
+
+    def test_only_the_discovery_states_pools_and_caches_are_read_through_the_link(self):
+        write_json(self.discovery / "snowball-state.json", {"hits": {}, "log": [], "done": [], "papers": {}})
+        write_json(self.discovery / "config-ranked.json", {"rows": []})
+        self.link()
+        for name in ("snowball-state.json", "config-ranked.json", "cache/other/o__kit.json"):
+            self.assertEqual(work_file(self.work, name), self.work / name)
+        for name in ("config-state.json", "cache/trees/o__kit.json", "cache/asset-shas/o__kit.json", "cache/meta.json"):
+            self.assertEqual(work_file(self.work, name), self.discovery / name)
+        self.assertEqual(script("export-sweep-data").paper_rows(self.work), [])
 
     def test_facet_steps_read_the_linked_discovery_and_never_write_it(self):
         self.link()

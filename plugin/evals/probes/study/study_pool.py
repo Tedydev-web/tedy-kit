@@ -5,6 +5,8 @@ from pathlib import Path
 from study_topic import TopicError, terms_digest
 
 DISCOVERY_LINK = "discovery.json"
+DISCOVERY_STATES = ("config-state.json", "product-state.json")
+LINKED_FILES = (*DISCOVERY_STATES, "config-pool.json", "product-pool.json", "cache/meta.json", "cache/canonical.json", "cache/trees/", "cache/asset-shas/", "cache/readmes/")
 GH_LINK = re.compile(r"github\.com[/:]([A-Za-z0-9-]{1,39})/([A-Za-z0-9._-]{1,100})")
 INSTALL_REF = re.compile(r"(?:skills add|plugin install|plugin marketplace add|marketplace add)\s+([A-Za-z0-9-]{1,39})/([A-Za-z0-9._-]{1,100})", re.I)
 NOT_OWNERS = {"orgs", "topics", "sponsors", "features", "apps", "marketplace", "settings", "login", "about", "collections", "search",
@@ -26,13 +28,26 @@ def read_json(path, default):
     return json.loads(path.read_text()) if path.exists() else default
 
 
+def linked_discovery(work):
+    path = Path(work) / DISCOVERY_LINK
+    if not path.is_file():
+        return None
+    link = json.loads(path.read_text())
+    config = Path(link.get("config", ""))
+    if not config.is_file() or terms_digest(json.loads(config.read_text()).get("terms", [])) != link.get("terms_sha256"):
+        raise TopicError(f"{path} links a discovery made with other terms than {config} now lists; discover the whole topic again and link it again")
+    return Path(link["folder"])
+
+
 def work_file(work, relative):
     own = Path(work) / relative
-    link = Path(work) / DISCOVERY_LINK
-    if own.exists() or not link.is_file():
+    name = Path(relative).as_posix()
+    if not any(name == entry or (entry.endswith("/") and name.startswith(entry)) for entry in LINKED_FILES):
         return own
-    linked = Path(json.loads(link.read_text())["folder"]) / relative
-    return linked if linked.exists() else own
+    folder = linked_discovery(work)
+    if own.exists() or folder is None:
+        return own
+    return folder / relative if (folder / relative).exists() else own
 
 
 class Pool:
