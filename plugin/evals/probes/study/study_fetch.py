@@ -19,7 +19,7 @@ class Fetch:
             raise NetworkRefused(f"STUDY_NO_NETWORK is set; refused: {' '.join(cmd)[:200]}")
         started = time.time()
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=cwd, stdin=subprocess.DEVNULL)
+            result = subprocess.run(cmd, capture_output=True, text=True, errors="replace", timeout=timeout, cwd=cwd, stdin=subprocess.DEVNULL)
             status = "ok" if result.returncode == 0 else f"exit {result.returncode}: {result.stderr.strip()[:200]}"
             out = result.stdout
         except subprocess.TimeoutExpired:
