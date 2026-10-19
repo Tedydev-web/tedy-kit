@@ -4,7 +4,8 @@ from pathlib import Path
 
 from study_topic import TopicError, load_topic, topic_arguments
 
-FIELDS = ("order_rank", "repo", "order", "units", "contract_files", "stars", "pushed", "created", "channels", "via", "description", "aggregator", "archived")
+FIELDS = ("order_rank", "repo", "order", "units", "contract_files", "stars", "pushed", "created", "channels", "via", "description", "aggregator", "archived",
+          "closed_issues", "merged_prs", "license")
 HARD_CAP = 200
 
 

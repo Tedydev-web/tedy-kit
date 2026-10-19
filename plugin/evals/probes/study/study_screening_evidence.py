@@ -3,16 +3,25 @@ import re
 import urllib.parse
 
 WORKFLOW = re.compile(r"^\.github/workflows/([^/]+\.ya?ml)$")
-TEST_DIR = re.compile(r"^(tests?|__tests__|specs?|e2e)$", re.I)
+TEST_DIR = re.compile(r"^(tests?|__tests__|specs?|e2e|evals?|benchmarks?)$", re.I)
 TEST_FILE = re.compile(r"(^test_.+|.+_test\.\w+|.+\.(test|spec)\.\w+)$", re.I)
 CHANGELOG = re.compile(r"^(CHANGELOG|CHANGES|HISTORY)(\.md)?$", re.I)
 PYPROJECT_NAME = re.compile(r'^name\s*=\s*"([^"]+)"', re.M)
-PERMANENT = re.compile(r"\b(404|410)\b|not found|could not resolve", re.I)
-CHANGELOG_CHARS, TEST_PATHS = 1500, 30
+REPO_GONE = re.compile(r"\b(404|410)\b|Could not resolve to a Repository", re.I)
+FILE_GONE = re.compile(r"\b(404|410)\b")
+CHANGELOG_CHARS, TEST_PATHS, PAGE, TOP_REPOS, DESCRIPTION_CHARS = 1500, 30, 100, 10, 160
 
 
-def error_kind(status):
-    return "permanent" if PERMANENT.search(status) else "transient"
+def tree_error_kind(status):
+    return "permanent" if REPO_GONE.search(status) else "transient"
+
+
+def file_gone(status):
+    return bool(FILE_GONE.search(status))
+
+
+def counted(items):
+    return f"{PAGE}+" if len(items) >= PAGE else len(items)
 
 
 def api_json(fetch, path):
@@ -28,7 +37,7 @@ def api_json(fetch, path):
 def registry(fetch, url, latest):
     out, status, _ = fetch.run(["curl", "-sSf", url], timeout=60)
     if status != "ok":
-        return ({"published": False}, None) if error_kind(status) == "permanent" else (None, status)
+        return ({"published": False}, None) if file_gone(status) else (None, status)
     try:
         return {"published": True, "latest": latest(json.loads(out))}, None
     except (ValueError, KeyError, TypeError, AttributeError):
@@ -36,56 +45,63 @@ def registry(fetch, url, latest):
 
 
 def test_paths(paths):
-    found = []
-    for path in paths:
-        parts = path.split("/")
-        if len(parts) <= 2 and (any(TEST_DIR.match(p) for p in parts) or TEST_FILE.match(parts[-1])):
-            found.append(path)
-    return sorted(found)[:TEST_PATHS]
+    found = sorted(p for p in paths if any(TEST_DIR.match(part) for part in p.split("/")[:-1]) or TEST_FILE.match(p.rsplit("/", 1)[-1]))
+    return {"count": len(found), "paths": found[:TEST_PATHS]}
 
 
-def repo_evidence(fetch, repo, paths, read_text):
-    evidence, errors = {}, []
-    releases, status = api_json(fetch, f"repos/{repo}/releases?per_page=100")
-    if releases is None or not isinstance(releases, list):
-        errors.append(f"releases: {status}")
-    else:
-        evidence["releases"] = {"count": len(releases), "latest": releases[0].get("tag_name") if releases else None,
+def top_repos(listing):
+    owned = sorted((r for r in listing if isinstance(r, dict) and not r.get("fork")), key=lambda r: (-(r.get("stargazers_count") or 0), r.get("name") or ""))
+    return [{"name": r.get("name"), "stars": r.get("stargazers_count") or 0, "description": (r.get("description") or "")[:DESCRIPTION_CHARS]} for r in owned[:TOP_REPOS]]
+
+
+def listed(fetch, path, field, shape, problems):
+    body, status = api_json(fetch, path)
+    if not isinstance(body, shape):
+        (problems["missing"] if file_gone(status) else problems["errors"]).append(f"{field}: {status if status != 'ok' else 'unexpected reply shape'}")
+        return None
+    return body
+
+
+def package_facts(fetch, paths, read_text, problems):
+    package = {}
+    for manifest, kind, name_of, url, latest in (
+            ("package.json", "npm", lambda t: json.loads(t).get("name"), "https://registry.npmjs.org/{}", lambda d: d["dist-tags"]["latest"]),
+            ("pyproject.toml", "pypi", lambda t: (PYPROJECT_NAME.search(t) or [None, None])[1], "https://pypi.org/pypi/{}/json", lambda d: d["info"]["version"])):
+        if manifest not in paths:
+            continue
+        text = read_text(manifest, 20000)
+        try:
+            name = name_of(text) if text else None
+        except (ValueError, AttributeError):
+            name = None
+        if not isinstance(name, str) or not name:
+            continue
+        facts, error = registry(fetch, url.format(urllib.parse.quote(name, safe="@").replace("/", "%2F")), latest)
+        package[kind] = {"name": name, **(facts or {})}
+        if error:
+            problems["errors"].append(f"{kind}: {error}")
+    return package
+
+
+def repo_evidence(fetch, repo, paths, read_text, problems):
+    evidence, owner = {}, repo.split("/", 1)[0]
+    releases = listed(fetch, f"repos/{repo}/releases?per_page={PAGE}", "releases", list, problems)
+    if releases is not None:
+        evidence["releases"] = {"count": counted(releases), "latest": releases[0].get("tag_name") if releases else None,
                                 "published": (releases[0].get("published_at") or "")[:10] if releases else None}
-    tags, status = api_json(fetch, f"repos/{repo}/tags?per_page=100")
-    if tags is None or not isinstance(tags, list):
-        errors.append(f"tags: {status}")
-    else:
-        evidence["tags"] = {"count": len(tags), "latest": tags[0].get("name") if tags else None}
-    owner, status = api_json(fetch, f"users/{repo.split('/', 1)[0]}")
-    if not isinstance(owner, dict):
-        errors.append(f"owner: {status}")
-    else:
-        evidence["owner_public_repos"] = owner.get("public_repos")
+    tags = listed(fetch, f"repos/{repo}/tags?per_page={PAGE}", "tags", list, problems)
+    if tags is not None:
+        evidence["tags"] = {"count": counted(tags), "latest": tags[0].get("name") if tags else None}
+    user = listed(fetch, f"users/{owner}", "owner", dict, problems)
+    if user is not None:
+        evidence["owner_public_repos"] = user.get("public_repos")
+    repos = listed(fetch, f"users/{owner}/repos?per_page={PAGE}&type=owner", "owner repositories", list, problems)
+    if repos is not None:
+        evidence["owner_top_repos"] = top_repos(repos)
     evidence["workflows"] = sorted(m.group(1) for m in map(WORKFLOW.match, paths) if m)
     evidence["tests"] = test_paths(paths)
     changelog = next((p for p in paths if CHANGELOG.match(p)), None)
     if changelog:
-        text, error = read_text(changelog, CHANGELOG_CHARS)
-        evidence["changelog_head"] = text
-        errors += [f"{changelog}: {error}"] if error else []
-    package = {}
-    if "package.json" in paths:
-        text, error = read_text("package.json", 20000)
-        try:
-            name = json.loads(text).get("name") if not error else None
-        except ValueError:
-            name = None
-        if isinstance(name, str) and name:
-            facts, error = registry(fetch, f"https://registry.npmjs.org/{urllib.parse.quote(name, safe='@').replace('/', '%2F')}", lambda d: d["dist-tags"]["latest"])
-            package["npm"] = {"name": name, **(facts or {})}
-        errors += [f"npm: {error}"] if error else []
-    if "pyproject.toml" in paths:
-        text, error = read_text("pyproject.toml", 20000)
-        found = PYPROJECT_NAME.search(text or "")
-        if found:
-            facts, error = registry(fetch, f"https://pypi.org/pypi/{urllib.parse.quote(found.group(1))}/json", lambda d: d["info"]["version"])
-            package["pypi"] = {"name": found.group(1), **(facts or {})}
-        errors += [f"pypi: {error}"] if error else []
-    evidence["package"] = package
-    return evidence, errors
+        evidence["changelog_head"] = read_text(changelog, CHANGELOG_CHARS)
+    evidence["package"] = package_facts(fetch, paths, read_text, problems)
+    return evidence

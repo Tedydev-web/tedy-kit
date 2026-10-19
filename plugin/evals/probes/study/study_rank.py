@@ -111,7 +111,8 @@ def rank_product(pool_rows, terms):
         order = len(evidence) + math.log2(1 + contract) + (1 if name_hit else 0)
         rows.append({"repo": row["repo"], "order": round(order, 3), "channels": sorted(evidence), "contract_files": evidence.get("code", [])[:6],
                      "evidence": {c: v[:3] for c, v in evidence.items()}, "name_hit": name_hit, "description": (row.get("description") or "")[:200],
-                     "stars": row["stars"], "created": row["created"][:10], "pushed": row["pushed"][:10], "archived": row["archived"], "fork": row["fork"]})
+                     "stars": row["stars"], "created": row["created"][:10], "pushed": row["pushed"][:10], "archived": row["archived"], "fork": row["fork"],
+                     **{k: row[k] for k in ("closed_issues", "merged_prs", "license") if k in row}})
     rows.sort(key=order_key)
     for index, row in enumerate(rows, 1):
         row["order_rank"] = index

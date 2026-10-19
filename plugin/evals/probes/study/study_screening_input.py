@@ -5,10 +5,11 @@ from pathlib import Path
 
 from study_pool import cache_name, read_json
 from study_screening_core import read_jsonl
-from study_screening_evidence import error_kind, repo_evidence
+from study_screening_evidence import file_gone, repo_evidence, tree_error_kind
 from study_topic import SNOWBALL_RANK_BASE, TopicError
 
 HEX40 = re.compile(r"[0-9a-f]{40}")
+README = re.compile(r"^readme(\.[a-z]+)?$", re.I)
 FILES_PER_ROW, FILE_CHARS, README_CHARS, LISTING = 2, 8000, 8000, 60
 FACTS = ("stars", "pushed", "created", "description", "channels", "archived", "closed_issues", "merged_prs", "license")
 FIRST = re.compile(r"(^|/)(SKILL|AGENTS|CLAUDE)\.md$|(^|/)hooks/hooks\.json$")
@@ -18,37 +19,60 @@ def inputs_file(work, stratum):
     return Path(work) / f"{stratum}-screening-inputs.jsonl"
 
 
-def pinned_tree(fetch, work, repo):
-    cache = Path(work) / "cache" / "trees" / cache_name(repo)
-    tree = read_json(cache, {})
-    if HEX40.fullmatch(tree.get("oid") or "") and tree.get("paths") and not tree.get("truncated"):
-        return tree["oid"], tree["paths"], "ok"
-    out, status, _ = fetch.run(["gh", "api", f"repos/{repo}/commits/HEAD", "--jq", ".sha"], timeout=60)
-    sha = out.strip()
-    if status != "ok" or not HEX40.fullmatch(sha):
-        return None, [], f"commit: {status}" if status != "ok" else f"commit: no sha in {sha[:60]!r}"
-    out, status, _ = fetch.run(["gh", "api", f"repos/{repo}/git/trees/{sha}?recursive=1"], timeout=120)
+def tree_paths(fetch, repo, sha, recursive):
+    out, status, _ = fetch.run(["gh", "api", f"repos/{repo}/git/trees/{sha}" + ("?recursive=1" if recursive else "")], timeout=120)
     if status != "ok":
-        return sha, [], f"tree: {status}"
+        return None, False, f"tree: {status}"
     try:
         body = json.loads(out)
     except ValueError:
-        return sha, [], "tree: unparsable"
+        return None, False, "tree: unparsable"
     if not isinstance(body, dict) or not isinstance(body.get("tree"), list):
-        return sha, [], "tree: unparsable"
-    if body.get("truncated"):
-        return sha, [], "tree: truncated"
-    paths = [e["path"] for e in body["tree"] if isinstance(e, dict) and "path" in e]
+        return None, False, "tree: unparsable"
+    return [e["path"] for e in body["tree"] if isinstance(e, dict) and isinstance(e.get("path"), str)], bool(body.get("truncated")), "ok"
+
+
+def unit_paths(fetch, repo, sha, units):
+    found = []
+    for unit in units:
+        out, status, _ = fetch.run(["gh", "api", f"repos/{repo}/contents/{urllib.parse.quote(unit.rstrip('/'))}?ref={sha}"], timeout=120)
+        try:
+            body = json.loads(out) if status == "ok" else []
+        except ValueError:
+            body = []
+        found += [e["path"] for e in body if isinstance(e, dict) and isinstance(e.get("path"), str)] if isinstance(body, list) else []
+    return found
+
+
+def pinned_tree(fetch, work, repo, units=()):
+    cache = Path(work) / "cache" / "trees" / cache_name(repo)
+    tree = read_json(cache, {})
+    sha = tree.get("oid") if HEX40.fullmatch(tree.get("oid") or "") else None
+    if sha and tree.get("paths") and (not tree.get("truncated") or tree.get("partial")):
+        return sha, tree["paths"], "ok", bool(tree.get("truncated"))
+    if not sha:
+        out, status, _ = fetch.run(["gh", "api", f"repos/{repo}/commits/HEAD", "--jq", ".sha"], timeout=60)
+        sha = out.strip()
+        if status != "ok" or not HEX40.fullmatch(sha):
+            return None, [], f"commit: {status}" if status != "ok" else f"commit: no sha in {sha[:60]!r}", False
+    paths, truncated, status = tree_paths(fetch, repo, sha, True)
+    if status != "ok":
+        return sha, [], status, False
+    if truncated:
+        root, _, status = tree_paths(fetch, repo, sha, False)
+        if status != "ok":
+            return sha, [], status, False
+        paths = sorted(set(paths) | set(root) | set(unit_paths(fetch, repo, sha, units)))
     if not paths:
-        return sha, [], "tree: empty"
+        return sha, [], "tree: empty", False
     cache.parent.mkdir(parents=True, exist_ok=True)
-    cache.write_text(json.dumps({"oid": sha, "truncated": False, "paths": paths}))
-    return sha, paths, "ok"
+    cache.write_text(json.dumps({"oid": sha, "truncated": truncated, "partial": truncated, "paths": paths}))
+    return sha, paths, "ok", truncated
 
 
-def pick_files(row, paths):
+def pick_files(row, paths, partial):
     if row.get("contract_files"):
-        return row["contract_files"][:FILES_PER_ROW]
+        return row["contract_files"][:FILES_PER_ROW] if partial else [p for p in row["contract_files"] if p in set(paths)][:FILES_PER_ROW]
     units = row.get("units") or []
     under = [p for p in paths if any(p == u or p.startswith(u.rstrip("/") + "/") for u in units)]
     return sorted(under, key=lambda p: (not FIRST.search(p), p))[:FILES_PER_ROW]
@@ -64,25 +88,32 @@ def read_file(fetch, repo, sha, path, limit):
 
 
 def row_inputs(fetch, work, row):
-    sha, paths, status = pinned_tree(fetch, work, row["repo"])
+    sha, paths, status, partial = pinned_tree(fetch, work, row["repo"], row.get("units") or [])
     base = {"order_rank": row["order_rank"], "repo": row["repo"], "facts": {k: row[k] for k in FACTS if k in row}}
     if status != "ok":
-        return {**base, **({"sha": sha} if sha else {}), "error": status, "error_kind": error_kind(status)}
-    readme_path = next((p for p in paths if p.lower() == "readme.md"), None)
-    readme = read_file(fetch, row["repo"], sha, readme_path, README_CHARS) if readme_path else {"text": ""}
-    files = [read_file(fetch, row["repo"], sha, p, FILE_CHARS) for p in pick_files(row, paths)]
+        return {**base, **({"sha": sha} if sha else {}), "error": status, "error_kind": tree_error_kind(status)}
+    problems = {"missing": [], "errors": []}
+
+    def checked(entry, label):
+        if "error" not in entry:
+            return entry
+        problems["missing" if file_gone(entry["error"]) else "errors"].append(f"{label}: {entry['error']}")
+        return None
 
     def read_text(path, limit):
-        entry = read_file(fetch, row["repo"], sha, path, limit)
-        return entry["text"], entry.get("error")
+        entry = checked(read_file(fetch, row["repo"], sha, path, limit), path)
+        return entry["text"] if entry else ""
 
-    evidence, evidence_errors = repo_evidence(fetch, row["repo"], paths, read_text)
-    errors = ([f"README: {readme['error']}"] if "error" in readme else []) + [f"{f['path']}: {f['error']}" for f in files if "error" in f] + evidence_errors
-    out = {**base, "sha": sha, "listing": sorted({p.split("/", 1)[0] for p in paths})[:LISTING], "readme": readme["text"], "files": files, "evidence": evidence}
-    if not errors:
-        return out
-    kinds = {error_kind(e) for e in errors}
-    return {**out, "error": "; ".join(errors), "error_kind": "transient" if "transient" in kinds else "permanent"}
+    readme_path = next((p for p in paths if "/" not in p and README.match(p)), None)
+    readme = (checked(read_file(fetch, row["repo"], sha, readme_path, README_CHARS), "README") if readme_path else None) or {"text": ""}
+    if not readme_path:
+        problems["missing"].append("README: no root README in the pinned tree")
+    files = [f for f in (checked(read_file(fetch, row["repo"], sha, p, FILE_CHARS), p) for p in pick_files(row, paths, partial)) if f]
+    problems["missing"] += [f"{p}: not in the pinned tree" for p in (row.get("contract_files") or [])[:FILES_PER_ROW] if not partial and p not in set(paths)]
+    evidence = repo_evidence(fetch, row["repo"], paths, read_text, problems)
+    out = {**base, "sha": sha, "listing": sorted({p.split("/", 1)[0] for p in paths})[:LISTING], "readme": readme["text"], "files": files, "evidence": evidence,
+           **({"tree": "partial"} if partial else {}), **({"missing": problems["missing"]} if problems["missing"] else {})}
+    return {**out, "error": "; ".join(problems["errors"]), "error_kind": "transient"} if problems["errors"] else out
 
 
 def scored_ranks(work, stratum):
@@ -97,19 +128,27 @@ def write_rows(target, held):
     temporary.replace(target)
 
 
+def mark_gone(held, scored, stratum, ranks):
+    for rank in ranks:
+        if rank in scored:
+            raise TopicError(f"{stratum} rank {rank} is already scored; drop its blocks with drop-screening-block.py before changing its inputs")
+        if "error" not in held.get(rank, {}):
+            raise TopicError(f"{stratum} rank {rank} holds no fetch error to mark permanent")
+        if held[rank].get("error_kind") == "permanent":
+            raise TopicError(f"{stratum} rank {rank} is already permanent")
+        held[rank] = {**held[rank], "error_kind": "permanent", "error": held[rank]["error"] + "; marked permanent by the operator: repository or commit gone"}
+
+
 def fetch_inputs(topic, work, stratum, through, fetch, mark_permanent=()):
     order = read_jsonl(Path(work), f"{stratum}-screening-order.jsonl")
     if not order:
         raise TopicError(f"no {stratum}-screening-order.jsonl in {work}")
     target = inputs_file(work, stratum)
     held = {r["order_rank"]: r for r in read_jsonl(Path(work), target.name)}
-    for rank in mark_permanent:
-        if "error" not in held.get(rank, {}):
-            raise TopicError(f"{stratum} rank {rank} holds no fetch error to mark permanent")
-        held[rank] = {**held[rank], "error_kind": "permanent", "error": held[rank]["error"] + "; marked permanent by the operator"}
+    scored, fetched = scored_ranks(work, stratum), 0
+    mark_gone(held, scored, stratum, mark_permanent)
     if mark_permanent:
         write_rows(target, held)
-    scored, fetched = scored_ranks(work, stratum), 0
     for row in order:
         rank = row["order_rank"]
         if rank in scored or (rank in held and held[rank].get("error_kind") != "transient"):
