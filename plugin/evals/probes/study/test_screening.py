@@ -4,10 +4,11 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from study_fixtures import script, screen_row, topic_repo, write_json, write_jsonl
+from study_fixtures import HERE, script, screen_row, topic_repo, write_json, write_jsonl
 from study_sweep_record import MechanismTable
 from study_topic import TopicError, load_topic, sweep_folder
 
+KIT = HERE.parents[3]
 
 class Base(unittest.TestCase):
     def setUp(self):
@@ -25,6 +26,18 @@ class CompareTest(Base):
         self.assertEqual(out["mechanisms"]["chapman"], 1.0)
         self.assertFalse(out["mechanisms"]["third_reader_needed"])
         self.assertEqual(script("compare-screening-sessions").compare(self.folder, "config", 2)["rows"], 2)
+
+    def test_kappa_per_judged_criterion_leaves_out_the_computed_date_and_adds_eligibility(self):
+        out = script("compare-screening-sessions").compare(self.folder, "config", None)
+        self.assertEqual(out.get("kappa"), {"Authority": 0.556, "Methodology": 1.0, "Objectivity": 1.0, "Position": 1.0})
+        self.assertEqual((out.get("eligibility_kappa"), out.get("eligibility_differ")), (1.0, 0))
+
+    def test_kappa_on_the_dev_sweep_matches_the_recomputed_audit_figures(self):
+        compare = script("compare-screening-sessions")
+        folder = sweep_folder(KIT, load_topic(KIT, "dev"))
+        config, product = compare.compare(folder, "config", None), compare.compare(folder, "product", 70)
+        self.assertEqual({c: round(k, 2) for c, k in config["kappa"].items() if c != "Authority"}, {"Methodology": 0.49, "Objectivity": 0.79, "Position": 0.74})
+        self.assertEqual({c: round(k, 2) for c, k in product["kappa"].items() if c != "Authority"}, {"Methodology": 0.42, "Objectivity": 0.46, "Position": 0.40})
 
     def test_disjoint_lists_call_for_a_third_reader(self):
         write_jsonl(self.folder / "config-screen-B.jsonl", [screen_row(r, f"o/{r}", 1, [f"b{r}"]) for r in (1, 2, 3, 5)])

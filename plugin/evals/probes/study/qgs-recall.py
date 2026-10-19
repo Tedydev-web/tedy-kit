@@ -2,10 +2,9 @@ import json
 import sys
 from pathlib import Path
 
+from study_agreement import cohen_kappa
 from study_pool import read_json
 from study_topic import TopicError, load_topic, topic_arguments
-
-LABELS = ("yes", "no", "unsure")
 
 
 def judged(folder):
@@ -21,14 +20,6 @@ def judged(folder):
     return [j for j in rows.values() if "A" in j and "B" in j]
 
 
-def kappa(both):
-    observed = sum(j["A"] == j["B"] for j in both) / len(both)
-    pa = {label: sum(j["A"] == label for j in both) / len(both) for label in LABELS}
-    pb = {label: sum(j["B"] == label for j in both) / len(both) for label in LABELS}
-    expected = sum(pa[label] * pb[label] for label in LABELS)
-    return observed, (observed - expected) / (1 - expected) if expected < 1 else 1.0
-
-
 def recall(folder, work, states):
     both = judged(folder)
     if not both:
@@ -41,7 +32,7 @@ def recall(folder, work, states):
         for key, hit in json.loads(state.read_text())["hits"].items():
             hits.setdefault(key, set()).update(hit["channels"])
     channels = sorted({c for v in hits.values() for c in v})
-    observed, k = kappa(both)
+    observed, k = cohen_kappa((j["A"], j["B"]) for j in both)
     final = read_json(Path(folder) / "qgs-adjudicated.json", {}).get("final", [])
     standards = {"strict (yes by both)": [j["repo"] for j in both if j["A"] == j["B"] == "yes"],
                  "lenient (yes by either)": [j["repo"] for j in both if "yes" in (j["A"], j["B"])],
