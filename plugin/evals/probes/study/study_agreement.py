@@ -1,6 +1,9 @@
 from study_sweep_record import JUDGED
+from study_topic import SNOWBALL_RANK_BASE, TopicError
 
 EFFORT_BOUND, BLOCK, HARD_CAP = 60, 10, 200
+RECALL_TARGET = 0.8
+RECALL_FIX = "below the target: change the screening-order formula or the cut, not the terms"
 KAPPA_CRITERIA =tuple(c for c in JUDGED if c != "Date")
 CHAPMAN_NOTE = ("a lower bound, not an estimate: the two sessions are not independent captures (same packet, same rows, often the same model), "
                 "and positive dependence biases the Chapman figure low")
@@ -31,6 +34,20 @@ def effort_stop(common, firsts, forced, order_ranks):
     screened = {r for r in common if r <= HARD_CAP and r not in forced}
     left = [r for r in order_ranks if r <= HARD_CAP and r not in forced and r not in screened]
     return (max(screened), "pool exhausted") if screened and not left else (None, "not reached")
+
+
+def recall_at_cut(stratum, qgs, order_rows, cut):
+    if not qgs:
+        raise TopicError(f"the {stratum} quasi-gold standard is empty")
+    if not order_rows:
+        raise TopicError(f"no {stratum} screening order to measure recall at the cut against")
+    ranks = {r["repo"].lower(): r for r in order_rows}
+    screened = {k for k, r in ranks.items() if r["order_rank"] <= cut or r.get("forced") or r["order_rank"] > SNOWBALL_RANK_BASE}
+    at = [q for q in qgs if q.lower() in screened]
+    recall = len(at) / len(qgs)
+    out = {"stratum": stratum, "cut": cut, "size": len(qgs), "at_cut": len(at), "recall": round(recall, 3), "target": RECALL_TARGET, "below_target": recall < RECALL_TARGET,
+           "missed": [{"repo": q.lower(), "rank": ranks.get(q.lower(), {}).get("order_rank")} for q in qgs if q.lower() not in screened]}
+    return {**out, "fix": RECALL_FIX} if out["below_target"] else out
 
 
 def cohen_kappa(pairs):

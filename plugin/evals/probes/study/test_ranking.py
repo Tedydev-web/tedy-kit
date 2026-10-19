@@ -1,10 +1,12 @@
 import json
 import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
-from study_fixtures import FakeFetch, script, topic_repo, write_json, write_jsonl
+from study_fixtures import HERE, FakeFetch, script, topic_repo, write_json, write_jsonl
 from study_rank import Ranker, rank_product
 from study_topic import TopicError, load_topic
 
@@ -119,10 +121,26 @@ class OrderAndSnowballTest(unittest.TestCase):
             write_jsonl(self.work / f"qgs-judge-{side}.jsonl", [{"id": i, "repo": v[0], "verdict": v[index]} for i, v in enumerate(verdicts)])
         write_json(self.work / "qgs-adjudicated.json", {"final": ["a/one", "a/two", "a/four"]})
         write_json(self.work / "product-state.json", {"hits": {"a/one": {"channels": {"npm": [], "code": []}}, "a/two": {"channels": {"npm": []}}}})
-        out = script("qgs-recall").recall(self.work, self.work, ["product"])
+        out, _ = script("qgs-recall").recall(self.work, self.work, ["product"])
         self.assertEqual((out["agreement"], out["kappa"]), (0.75, 0.5))
         self.assertEqual(out["standards"]["strict (yes by both)"], {"size": 2, "found": 1, "quasi_sensitivity": 0.5, "per_channel": {"code": 1, "npm": 1}, "missed": ["a/four"]})
         self.assertEqual(out["standards"]["adjudicated (source read)"]["quasi_sensitivity"], 0.667)
+
+    def test_recall_at_the_cut_counts_each_stratum_against_its_own_standard(self):
+        for side, verdicts in (("A", ["yes", "yes", "yes"]), ("B", ["yes", "no", "yes"])):
+            write_jsonl(self.work / f"config-qgs-judge-{side}.jsonl", [{"id": i, "repo": r, "verdict": v} for i, (r, v) in enumerate(zip(["a/one", "a/two", "a/three"], verdicts))])
+        write_json(self.work / "config-qgs-adjudicated.json", {"final": ["a/one", "A/Two", "a/three", "a/four"]})
+        write_json(self.work / "config-state.json", {"hits": {k: {"channels": {"github-code-search": []}} for k in ("a/one", "a/two", "a/three")}})
+        write_jsonl(self.work / "config-screening-order.jsonl", [{"order_rank": 1, "repo": "a/one", "forced": False}, {"order_rank": 2, "repo": "a/two", "forced": True},
+                                                                 {"order_rank": 9, "repo": "a/three", "forced": False}])
+        result = subprocess.run([sys.executable, "-B", str(HERE / "qgs-recall.py"), "--topic", "demo", "--repo", str(self.repo), "--work", str(self.work),
+                                 "--states", "config", "--stratum", "config", "--cut", "3"], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        out = json.loads(result.stdout)
+        self.assertEqual(out["at_cut"], {"stratum": "config", "cut": 3, "size": 4, "at_cut": 2, "recall": 0.5, "target": 0.8, "below_target": True,
+                                         "missed": [{"repo": "a/three", "rank": 9}, {"repo": "a/four", "rank": None}],
+                                         "fix": "below the target: change the screening-order formula or the cut, not the terms"})
+        self.assertEqual(out["judged_by_both"], 3)
 
 
 if __name__ == "__main__":

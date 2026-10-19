@@ -45,12 +45,13 @@ def candidates(topic, work, fetch, ranked_name):
 def main(argv=None, fetch=None):
     args = topic_arguments("Extract quasi-gold-standard candidates from the curated lists among the aggregators, for two blind judges.",
                            (["--work"], {"required": True, "help": "study working folder"}),
-                           (["--ranked"], {"default": "config-ranked.json", "help": "ranking whose aggregators are read"})).parse_args(argv)
+                           (["--ranked"], {"default": "config-ranked.json", "help": "ranking whose aggregators are read"}),
+                           (["--stratum"], {"help": "write <stratum>-qgs-candidates.jsonl, the stratum's own standard"})).parse_args(argv)
     try:
         lists, failed, rows, unique = candidates(load_topic(args.repo, args.topic), args.work, fetch or Fetch(), args.ranked)
     except TopicError as error:
         sys.exit(f"extract-qgs-candidates: {error}")
-    (Path(args.work) / "qgs-candidates.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in unique))
+    (Path(args.work) / f"{args.stratum + '-' if args.stratum else ''}qgs-candidates.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in unique))
     print(f"curated lists {len(lists)}; readme failures {len(failed)} {failed[:5]}; candidate lines {len(rows)}; unique repos {len(unique)}")
 
 
