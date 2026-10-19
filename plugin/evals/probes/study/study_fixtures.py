@@ -1,3 +1,4 @@
+import importlib.util
 import json
 import tempfile
 from pathlib import Path
@@ -48,3 +49,33 @@ def topic_repo(strata=None, sweep="261001-demo", topic="demo"):
         for side in "AB":
             write_jsonl(D / f"local-screen-{side}.jsonl", [screen_row(1, "plugin:skill", 1, ["note"])])
     return repo
+
+
+HERE = Path(__file__).resolve().parent
+
+
+def script(name):
+    spec = importlib.util.spec_from_file_location(name.replace("-", "_"), HERE / f"{name}.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class FakeFetch:
+    def __init__(self, rules=()):
+        self.rules = list(rules)
+        self.calls = []
+
+    def run(self, cmd, timeout=180):
+        line = " ".join(cmd)
+        self.calls.append(line)
+        for needle, out in self.rules:
+            if needle in line:
+                return (out, "ok", 0) if isinstance(out, str) else (*out, 0)
+        return "", "ok", 0
+
+    def pace(self, seconds):
+        pass
+
+    def called(self, needle):
+        return [c for c in self.calls if needle in c]

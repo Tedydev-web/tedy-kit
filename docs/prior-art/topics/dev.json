@@ -8,14 +8,48 @@
   "problems": ["P1", "P2"],
   "terms": ["tdd", "test", "tests", "testing", "test-first", "test-driven", "red-green", "failing", "assertion", "assertions"],
   "sweep": "261018-dev",
+  "qgs_list_topic": "claude|agent|coding|cursor|codex|copilot|llm",
   "strata": {
     "config": {
       "stop_row": 101,
-      "forced_repos": ["obra/superpowers", "nizos/tdd-guard", "mattpocock/skills", "affaan-m/ECC", "metabase/metabase", "microsoft/playwright", "langgenius/dify", "Significant-Gravitas/AutoGPT", "OpenHands/OpenHands", "CherryHQ/cherry-studio"]
+      "forced_repos": ["obra/superpowers", "nizos/tdd-guard", "mattpocock/skills", "affaan-m/ECC", "metabase/metabase", "microsoft/playwright", "langgenius/dify", "Significant-Gravitas/AutoGPT", "OpenHands/OpenHands", "CherryHQ/cherry-studio"],
+      "channels": {
+        "repo_queries": ["claude code skills", "agent skills", "claude code plugin", "claude code subagents", "claude code hooks", "test driven development ai agent", "tdd claude", "ai coding agent testing", "playwright agent", "qa agent llm", "cursor rules", "AGENTS.md", "codex skills", "spec driven development", "ai code review agent"],
+        "topics": ["claude-code", "claude-skills", "agent-skills", "claude-code-plugin", "claude-code-skills", "cursor-rules", "claude-code-subagents"],
+        "code_queries": ["\"failing test\" filename:SKILL.md", "\"test-driven\" filename:SKILL.md", "\"red green refactor\" filename:SKILL.md", "\"write the test first\" filename:SKILL.md", "\"failing test\" filename:AGENTS.md", "\"failing test\" filename:CLAUDE.md", "\"test first\" filename:.cursorrules", "\"acceptance criteria\" test filename:SKILL.md"],
+        "code_pages": 1,
+        "awesome_queries": ["awesome claude code", "awesome claude skills", "awesome agent skills", "awesome cursorrules", "awesome ai coding agents"],
+        "awesome_lists_per_query": 3,
+        "marketplaces": true,
+        "social": {
+          "x": ["claude code skills github", "claude code tdd skill", "claude code testing plugin", "agent skills repo tests", "best claude code plugins", "codex agents.md testing"],
+          "reddit": [["ClaudeCode", "skills tdd"], ["ClaudeCode", "plugin testing"], ["ClaudeCode", "best skills repo"], ["ClaudeAI", "claude code skills github"], ["ClaudeAI", "tdd agent"], ["cursor", "rules testing"], ["ChatGPTCoding", "agent tests first"], ["QualityAssurance", "ai agent test automation"]],
+          "youtube": ["claude code skills tdd", "claude code plugins testing", "ai agent test driven development"],
+          "facebook": []
+        }
+      }
     },
     "product": {
       "stop_row": 70,
-      "forced_repos": []
+      "forced_repos": [],
+      "channels": {
+        "harness": "claude|ai agent|coding agent|llm|copilot|codex|cursor",
+        "extra_text": "tamper|weaken|relax\\w* tests?|delet\\w* tests?|skipp\\w* tests?|mutation|test integrity|zero tests",
+        "npm_queries": ["claude-code tdd", "claude-code test-driven", "claude-code red-green", "claude-code failing test", "claude-code test-first", "claude-code assertion", "claude-code testing", "claude-code test hook", "claude code tdd hook", "claude-code test guard", "keywords:claude-code-hook", "keywords:claude-code-hooks", "keywords:claude-code-plugin", "keywords:claude-code", "keywords:claude-hooks", "claude-code deleted tests", "claude-code weakened tests", "claude-code skipped tests", "claude-code test tampering", "claude-code mutation testing", "ai agent test integrity", "ai agent deleted tests", "llm test tampering"],
+        "code_fields": ["hook_event_name", "hookSpecificOutput", "permissionDecision"],
+        "code_terms": ["tdd", "\"test-driven\"", "\"red-green\"", "\"failing test\"", "\"test-first\"", "assertion"],
+        "code_extensions": ["ts", "js", "mjs", "cjs", "py", "go", "rs", "sh"],
+        "code_pages": 10,
+        "repo_queries": ["\"claude code\" tdd", "\"claude code\" test-driven", "tdd hook agent", "tdd enforcement ai", "test-first ai agent enforce", "red green refactor agent", "deleted tests ai agent", "weakened tests ai", "test tampering llm", "relaxed tests pull request ai", "skipped tests ai agent", "mutation testing ai agent", "mutation testing llm tests", "test integrity ai agent", "zero tests agent"],
+        "harness_topics": ["claude-code", "claude-code-plugin", "claude-code-hooks", "ai-agents", "coding-agent"],
+        "subject_topics": ["tdd", "test-driven-development", "testing", "mutation-testing", "unit-testing", "test-automation"],
+        "social": {
+          "x": ["claude code hook tdd", "claude code tdd guard", "claude code hooks tests", "claude code enforce tests", "claude code deleted tests"],
+          "reddit": [["ClaudeCode", "hook tdd"], ["ClaudeCode", "hook tests"], ["ClaudeCode", "enforce tdd"], ["ClaudeCode", "deleted tests"], ["ClaudeCode", "skipped tests"], ["ClaudeAI", "tdd hook"], ["ClaudeAI", "claude code tests cheating"]],
+          "youtube": ["claude code hooks tdd", "claude code tdd enforcement", "claude code test hook"],
+          "facebook": []
+        }
+      }
     }
   }
 }
