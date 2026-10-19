@@ -177,5 +177,8 @@ export function sweepMethodErrors(repo, file, text) {
   const files = existsSync(folder) ? readdirSync(folder).sort() : [];
   const read = (name) => (files.includes(name) ? readFileSync(join(folder, name), "utf8") : undefined);
   const criteriaText = (path) => (existsSync(join(repo, path)) ? readFileSync(join(repo, path), "utf8") : "");
-  return checkMethodEvidence(text, { files, read, criteriaText, topic: topicForSweep(repo, sweep) });
+  const topic = topicForSweep(repo, sweep);
+  const role = text.match(/^- Role: (\S+)$/m)?.[1];
+  const roleErrors = topic && role !== topic.name ? [`the record's role is ${role}, but its sweep belongs to ${topic.name}; set meta.json role to ${topic.name}`] : [];
+  return [...roleErrors, ...checkMethodEvidence(text, { files, read, criteriaText, topic })];
 }
