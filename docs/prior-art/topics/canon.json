@@ -5,8 +5,8 @@
     "label": "Kit lifecycle steps",
     "steps": ["Create", "Change", "Fix", "Audit", "Upgrade the standard", "Release", "Retire"]
   },
-  "problems": ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "S10", "S11", "S12", "S13", "S14", "S15", "S16", "S17", "S18", "S19", "S20", "S21", "S22", "S23", "S24", "S25"],
-  "terms": ["lint", "linter", "validator", "validate", "conformance", "migration", "migrate", "codemod", "deprecation", "deprecated", "changelog", "semver", "versioning", "contributing", "authoring", "skill-creator", "writing-skills", "plugin-dev", "eval", "evals", "baseline", "ablation", "fitness function", "fitness functions", "adr", "decision record", "decision records", "grandfather", "waiver", "ruleset", "style guide"],
+  "problems": ["S1", "S2", "S3", "S4", "S5", "S6", "S7", "S8", "S9", "S10", "S11", "S12", "S13", "S14", "S15", "S16", "S17", "S18", "S19", "S20", "S21", "S22", "S23", "S24", "S25", "S26", "S27"],
+  "terms": ["permission", "permissions", "sandbox", "pretooluse", "approval", "mcp", "lsp", "monitor", "output style", "surface","lint", "linter", "validator", "validate", "conformance", "migration", "migrate", "codemod", "deprecation", "deprecated", "changelog", "semver", "versioning", "contributing", "authoring", "skill-creator", "writing-skills", "plugin-dev", "eval", "evals", "baseline", "ablation", "fitness function", "fitness functions", "adr", "decision record", "decision records", "grandfather", "waiver", "ruleset", "style guide"],
   "sweep": "261019-canon",
   "qgs_list_topic": "claude|agent|coding|cursor|codex|copilot|llm|skill|plugin",
   "strata": {
@@ -14,7 +14,7 @@
       "stop_row": 60,
       "forced_repos": ["obra/superpowers", "anthropics/claude-plugins-official"],
       "channels": {
-        "repo_queries": ["claude code skills", "agent skills", "claude code plugin", "claude code plugin template", "skill creator", "claude skill authoring", "agent skills linter", "claude code plugin validator", "claude code skills evals", "claude code subagents", "claude code hooks", "AGENTS.md", "cursor rules", "codex skills", "agent rules versioning"],
+        "repo_queries": ["claude code skills", "agent skills", "claude code plugin", "claude code plugin template", "skill creator", "claude skill authoring", "agent skills linter", "claude code plugin validator", "claude code skills evals", "claude code subagents", "claude code hooks", "AGENTS.md", "cursor rules", "codex skills", "agent rules versioning", "claude code permissions sandbox", "claude code pretooluse hook guard", "claude code mcp server plugin", "claude code lsp plugin"],
         "topics": ["claude-code", "claude-skills", "agent-skills", "claude-code-plugin", "claude-code-skills", "cursor-rules", "claude-code-subagents"],
         "code_queries": ["\"skill-creator\" filename:SKILL.md", "\"frontmatter\" validate filename:SKILL.md", "\"baseline\" eval filename:SKILL.md", "\"deprecated\" filename:SKILL.md", "SKILL.md filename:CONTRIBUTING.md", "\"plugin.json\" filename:CONTRIBUTING.md", "\"breaking change\" skills filename:CHANGELOG.md", "\"migration\" filename:AGENTS.md", "\"conventions\" filename:AGENTS.md"],
         "code_pages": 1,
@@ -22,7 +22,7 @@
         "awesome_lists_per_query": 3,
         "marketplaces": true,
         "social": {
-          "x": ["claude code skill creator", "how to write claude code skills", "claude code plugin validator", "agent skills evals", "claude code plugin versioning", "claude code skills breaking changes"],
+          "x": ["claude code skill creator", "how to write claude code skills", "claude code plugin validator", "agent skills evals", "claude code plugin versioning", "claude code skills breaking changes", "claude code permission prompts", "claude code sandbox hooks", "claude code mcp vs skills"],
           "reddit": [["ClaudeCode", "skill creator"], ["ClaudeCode", "plugin validate"], ["ClaudeCode", "maintain skills"], ["ClaudeCode", "skills evals"], ["ClaudeAI", "writing skills best practices"], ["ClaudeAI", "plugin marketplace versioning"], ["cursor", "rules maintenance"], ["ChatGPTCoding", "agents.md conventions"]],
           "youtube": ["claude code skill creator", "claude code plugin development", "agent skills evals"],
           "facebook": ["claude code skills", "claude code plugin"]
