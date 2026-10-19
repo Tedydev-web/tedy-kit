@@ -16,12 +16,12 @@ Basis: Garousi, Felderer and Mäntylä, "Guidelines for including grey literatur
 |---|---|---|
 | Anchors were rewritten after measured misses and re-scored on the same rows, so 0.93 was a training-set figure. | Pilot block, then a protocol freeze; agreement only on rows after the freeze. | Kitchenham and Charters 5.4; AMSTAR-2 item 2 |
 | Each session chose which file of a row to read, so the two sessions did not judge the same record. | The toolchain fetches each row's inputs once; both sessions score them without tools. | Systematic-review practice: both reviewers judge the same records |
-| Percent agreement counted the computed Date column, a fifth of the cells. | Cohen's kappa per judged criterion without Date, plus eligibility kappa. | EmpiricalStandards IRR supplement |
-| The model and settings of the sessions were not recorded. | Each session's model id, effort, packet sha256 and date are recorded. | PRISMA 2020 items 8-9; SEGRESS 11 |
+| Percent agreement counted the computed Date column, a fifth of the cells. | The headline agreement and its target leave Date out; the figure with Date is also given, labelled; Cohen's kappa per judged criterion without Date, plus eligibility kappa. | EmpiricalStandards IRR supplement |
+| The model and settings of the sessions were not recorded. | Each session's model id, effort, CLI version and isolation, and per block the packet, criteria and input sha256 and the date, are recorded. | PRISMA 2020 items 8-9; SEGRESS 11 |
 | Chapman assumed independent sessions; reader C pushed the observed count past it. | Chapman is reported as a lower bound. | Capture-recapture assumption |
 | Recall 0.875 described the pool; 2 of 8 standard repositories were inside the screened rows. | Recall at the cut, per stratum against its own standard. | Zhang, Babar and Tell 3.2.5 |
 | No scholarly source was searched. | Academic channel: arXiv, and Semantic Scholar when it answers. | Garousi et al. G10 |
-| Both sessions ran on one model family. | Session B on a different family when reachable, else a different Claude tier named as a threat. | Kim et al. 2025, correlated errors |
+| Both sessions ran on one model family. | Session B fixed by the topic config on a different family, else its configured Claude fallback named as a threat; never chosen by agreement with A, which would pick the most error-correlated screener. | Kim et al. 2025, correlated errors |
 | The stop rows in a topic config were typed by hand. | The toolchain writes the stop row from the screening data. | Kongming counsel, 2026-10-19 |
 | No human checked the screening. | A 10-row blind calibration sample; unrated, the record names LLM-only screening as a threat. | Cartaxo et al. 4.2.2; RAISE |
 
@@ -116,7 +116,9 @@ Terms added to reach the target are word classes from the `terms` column, never 
 
 **Recall at the cut.** Each of the config and product strata has its own standard. Recall at the cut is the share of a stratum's standard whose repositories rank at or above the stop row, are forced, or were snowballed above the cut. The target is again 80%. Below it, change the screening-order formula or the cut, not the terms: the terms already find those repositories, the order ranks them too low.
 
-**Academic channel.** arXiv queries and, when it answers without a key, Semantic Scholar queries run per topic. Each paper is logged with the queries that found it, and the repositories its abstract names join the pool.
+**Academic channel.** arXiv queries and, when it answers without a key, Semantic Scholar queries run per topic. Each paper is logged with the queries that found it, and the repositories its abstract names join the pool. The papers themselves are logged, not screened, and the record names that as a threat.
+
+**Standards per stratum.** Both standards start from the repositories that the curated lists among the config aggregators name, extracted per stratum with `extract-qgs-candidates.py --stratum <s>`. The judge packet differs: for the config stratum a judge asks whether the repository's own agent assets (skills, agents, hooks, rules) carry a mechanism for the problem; for the product stratum, whether the repository ships the mechanism as source code a harness runs. Each stratum's judges and adjudication are recorded in its own `<stratum>-qgs-*` files.
 
 ## Posts, videos and threads (X, Reddit, YouTube, Facebook, blogs)
 
@@ -138,13 +140,15 @@ Terms added to reach the target are word classes from the `terms` column, never 
 - **Inputs.** For each row the toolchain pins the commit and fetches the README excerpt, the top-level listing and at most two asset files: for the config stratum the unit's files, `SKILL.md`, `AGENTS.md`, `CLAUDE.md` and `hooks/hooks.json` first; for the product stratum the contract files. Both sessions score these same inputs and have no tools, so neither chooses what to read. The fetched text stays out of the repository; the record pins its sha256.
 - **Pilot block and freeze.**
   - Both sessions screen the first `pilot_rows` unforced rows of each stratum (20 by default). The packet may be revised on what they show.
-  - Every session B candidate the topic lists screens the pilot block too. The one that agrees best with session A on the judged cells becomes session B.
-  - Then the protocol freezes: the sha256 of the criteria and the packet is pinned per stratum, and every row is screened under the frozen protocol, the pilot rows again included.
-- **Sessions.** Session A runs on the topic's Claude model. Session B runs on a different model family when one is reachable, otherwise on a different Claude tier, and the record then names "same model family" as a threat. Each session's model id, effort, packet sha256, input sha256 and date are recorded.
+  - Session B is the model the topic config names. Its fallback runs only when B's CLI is not on PATH, and other configured models may screen the pilot block for information; the freeze never picks B by its agreement with A.
+  - Both pilot files must cover every unforced rank of the pilot block, and the record states the real pilot size.
+  - Then the protocol freezes: the full sha256 of the criteria and of the packet are pinned separately per stratum, with sessions A and B. A packet revised after the pilot is recorded with what changed, and the pilot packet is kept beside the frozen one. Every row is then screened under the frozen protocol, the pilot rows again included; a session refuses to run when the criteria or the packet differ from the freeze.
+- **Sessions.** Session A runs on the frozen Claude model; session B on the frozen model, a different family when its CLI is reachable, otherwise the configured Claude fallback, and the record then names "same model family" and the fallback as threats. Each session runs in an empty temporary folder with stdin closed, no tools, no settings, MCP servers, slash commands or session persistence, and answers in one turn; a reply that used tools, wrote a file or came from another model than the one requested is refused. Each session records its model id, effort, CLI version and isolation; each block its ranks, packet, criteria and input sha256 and date. Sessions A and B must have scored identical inputs for every rank both screened.
 - **Stop.** The effort bound is N = 60 unforced rows per facet and stratum.
   - After that, extend in blocks of 10 while either session coded at least one new mechanism in the last block.
   - The hard cap is 200 rows per stratum.
   - A pool that runs out first stops at its last unforced row.
+  - Every unforced rank up to the stop must have been screened by both sessions.
   - The stop row is derived from both sessions' data and written into the topic config by the toolchain, never typed by hand.
 - **Saturation.** The longest run of rows that added no new mechanism is recorded. It does not stop screening.
 - **Second session.** A second session screen-codes the same rows blind.
@@ -152,11 +156,11 @@ Terms added to reach the target are word classes from the `terms` column, never 
   - Mechanism names are first reconciled by definition, in a recorded map.
   - Over the two reconciled lists, restricted to rows both sessions screened, N̂ = (n₁+1)(n₂+1)/(m+1) − 1 is a lower bound, not an estimate: the sessions share the packet and the rows, so they are not independent captures, and positive dependence biases N̂ low.
   - When N̂ exceeds the union by more than 2, a third reader, blind to the sessions' scores, re-reads the inputs both sessions scored, then lists the mechanisms neither list holds and the misattributions it finds.
-- **Agreement.** On the rows screened after the freeze:
-  - identical cells / all cells over Authority, Methodology, Objectivity, Date and Position, with a target of at least 90%;
-  - Cohen's kappa per judged criterion, without Date, which is computed and not judged;
+- **Agreement.** On the rows ranked after the pilot block:
+  - identical cells / all cells over Authority, Methodology, Objectivity and Position, with a target of at least 90%; Date is computed, not judged, so it is left out of the headline and the target, and the figure with Date is given beside it, labelled;
+  - Cohen's kappa per judged criterion, without Date; a criterion where both sessions used one category only has an undefined kappa, stated as such;
   - eligibility kappa over the derived decisions;
   - every differing cell is listed;
   - rows whose eligibility differs go to the user before deep study, or to adjudication by the user's decision. Adjudication records each row's cells and reasons.
-- **Calibration.** The toolchain draws 10 post-freeze rows, five per stratum, taken in turn from rows both sessions found eligible, both excluded and disputed. The user rates them blind under these anchors before reading the record. The record reports the user's agreement with each session on decisions and judged cells, or names "LLM-only screening" as a threat while the sample is not fully rated.
-- **Forced rows.** These are screened whatever their rank: the source of every existing card, the three tied repositories (obra/superpowers, mattpocock/skills, affaan-m/ECC) and the production-team stratum (metabase/metabase, microsoft/playwright, langgenius/dify, Significant-Gravitas/AutoGPT, OpenHands/OpenHands, CherryHQ/cherry-studio).
+- **Calibration.** The toolchain draws 10 rows ranked after the pilot block, five per stratum, taken in turn from rows both sessions found eligible, both excluded and disputed. The user rates them blind under these anchors from the same inputs the sessions scored, before reading the record; ratings are 1, 0.5 or 0, and decisions eligible or excluded. The record reports the user's agreement with each session on decisions and judged cells, or names "LLM-only screening" as a threat while the sample is not fully rated.
+- **Forced rows.** These are screened whatever their rank: the source of every existing card and the `forced_repos` of each stratum in the topic config.
