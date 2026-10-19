@@ -319,6 +319,8 @@ test("commands the gate cannot read are sent back to the agent to rewrite, not t
     assert.equal(result.allow, false, command);
     assert.notEqual(result.ask, true, command);
     assert.match(result.reason, /script file/, command);
+    assert.match(result.reason, /temp directory \(never inside the repository\)/, command);
+    assert.match(result.reason, /Never put a git push, a merge or a GitHub write inside a script/, command);
   }
 });
 
