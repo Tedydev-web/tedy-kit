@@ -119,7 +119,26 @@ function topicConfigErrors(config) {
   if (typeof config.id_prefix !== "string" || !/^[A-Z]+$/.test(config.id_prefix)) return ["id_prefix must be capital letters"];
   const { label, steps } = config.frame ?? {};
   if (typeof label !== "string" || !label || !Array.isArray(steps) || !steps.length || !steps.every((step) => typeof step === "string" && step)) return ["frame needs a label and a list of steps"];
-  return [];
+  return facetErrors(config);
+}
+
+function facetErrors(config) {
+  const terms = new Set((config.terms ?? []).map((t) => t.toLowerCase()));
+  const problems = new Set(config.problems ?? []);
+  const strata = new Set(Object.keys(config.strata ?? {}));
+  return Object.entries(config.facets ?? {}).flatMap(([name, facet]) => {
+    const where = `facets.${name}`;
+    const outside = (values, known) => (values ?? []).filter((v) => !known.has(typeof v === "string" ? v.toLowerCase() : v));
+    const errors = [];
+    const term = outside(facet.terms, terms);
+    if (term.length) errors.push(`${where}: terms ${term.join(", ")} are not topic terms`);
+    const problem = (facet.problems ?? []).filter((p) => !problems.has(p));
+    if (problem.length) errors.push(`${where}: problems ${problem.join(", ")} are not topic problems`);
+    const stratum = Object.keys(facet.strata ?? {}).filter((s) => !strata.has(s));
+    if (stratum.length) errors.push(`${where}: strata ${stratum.join(", ")} are not topic strata`);
+    if (typeof facet.sweep !== "string" || !facet.sweep) errors.push(`${where}: sweep must name the facet's sweep`);
+    return errors;
+  });
 }
 
 export function checkTopicRegistries(repo) {

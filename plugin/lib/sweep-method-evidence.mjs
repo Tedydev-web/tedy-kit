@@ -155,10 +155,18 @@ export function checkMethodEvidence(text, { files, read, criteriaText, topic }) 
   return errors;
 }
 
-function topicFor(repo, sweep) {
+export function topicForSweep(repo, sweep) {
   const dir = join(repo, "docs", "prior-art", "topics");
   const configs = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".json")).map((f) => JSON.parse(readFileSync(join(dir, f), "utf8"))) : [];
-  return configs.find((config) => config.sweep === sweep);
+  const whole = configs.find((config) => config.sweep === sweep);
+  if (whole) return whole;
+  for (const config of configs) {
+    const facet = Object.values(config.facets ?? {}).find((f) => f?.sweep === sweep);
+    if (!facet) continue;
+    const strata = Object.fromEntries(Object.entries(config.strata ?? {}).map(([s, rule]) => [s, { ...rule, ...(facet.strata?.[s] ?? {}) }]));
+    return { ...config, sweep, strata };
+  }
+  return undefined;
 }
 
 export function sweepMethodErrors(repo, file, text) {
@@ -168,5 +176,5 @@ export function sweepMethodErrors(repo, file, text) {
   const files = existsSync(folder) ? readdirSync(folder).sort() : [];
   const read = (name) => (files.includes(name) ? readFileSync(join(folder, name), "utf8") : undefined);
   const criteriaText = (path) => (existsSync(join(repo, path)) ? readFileSync(join(repo, path), "utf8") : "");
-  return checkMethodEvidence(text, { files, read, criteriaText, topic: topicFor(repo, sweep) });
+  return checkMethodEvidence(text, { files, read, criteriaText, topic: topicForSweep(repo, sweep) });
 }

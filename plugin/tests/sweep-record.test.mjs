@@ -147,6 +147,21 @@ test("every topic config names a registry that passes its coverage matrix", () =
   assert.deepEqual(checkTopicRegistries(tempDir("no-topics")), ["docs/prior-art/topics: no topic config"]);
 });
 
+test("a topic's facets stay inside its terms, problems and strata and each name a sweep", () => {
+  const repo = tempDir("facets");
+  const topics = join(repo, "docs", "prior-art", "topics");
+  mkdirSync(topics, { recursive: true });
+  writeFileSync(join(repo, "docs", "prior-art", "problems-coordination.md"), registry({ label: "Session lifecycle steps", steps: "1 Open or start; 2 Pick up work (hand-off, pending list)", id: "C1", topic: "coordination" }));
+  const config = (facets) => JSON.stringify({ registry: "docs/prior-art/problems-coordination.md", id_prefix: "C", frame: COORDINATION.frame, sweep: "261001-coordination",
+    terms: ["handoff", "lock"], problems: ["C1", "C2"], strata: { config: { stop_row: null } }, facets });
+  const alpha = { sweep: "261002-coordination-alpha", problems: ["C1"], terms: ["handoff"], strata: { config: { stop_row: null } } };
+  writeFileSync(join(topics, "coordination.json"), config({ alpha }));
+  assert.deepEqual(checkTopicRegistries(repo), []);
+  writeFileSync(join(topics, "coordination.json"), config({ alpha: { ...alpha, terms: ["handoff", "queue"], problems: ["C9"], strata: { web: {} } }, beta: { problems: ["C2"], terms: ["lock"] } }));
+  assert.deepEqual(checkTopicRegistries(repo), ["topics/coordination.json: facets.alpha: terms queue are not topic terms", "topics/coordination.json: facets.alpha: problems C9 are not topic problems",
+    "topics/coordination.json: facets.alpha: strata web are not topic strata", "topics/coordination.json: facets.beta: sweep must name the facet's sweep"]);
+});
+
 test("mechanism table aliases point at classified or reconciled names", () => {
   const table = { aliases: { "config:a": "product:b", "config:c": "product:zz" }, class: { "product:b": "K1" }, default: "new" };
   assert.deepEqual(checkMechanismTable(table, new Set(["config:a", "config:c", "product:b"])), ["alias config:c points at product:zz, which no session coded and the table does not classify"]);

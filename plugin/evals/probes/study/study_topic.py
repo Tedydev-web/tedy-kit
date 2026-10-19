@@ -10,6 +10,7 @@ SNOWBALL_RANK_BASE = 1000
 DEFAULT_PILOT_ROWS = 20
 SESSION_CLIS = ("claude", "agy")
 SAIGON = timezone(timedelta(hours=7))
+KEBAB = r"[a-z0-9]+(?:-[a-z0-9]+)*"
 
 
 class TopicError(ValueError):
@@ -24,9 +25,10 @@ def _require(topic, path, key, kind):
 
 
 def load_topic(repo, name):
-    if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name or ""):
-        raise TopicError(f"topic name {name!r} must be kebab-case")
-    path = Path(repo) / TOPICS / f"{name}.json"
+    base, _, facet = (name or "").partition(":")
+    if not re.fullmatch(KEBAB, base) or (facet and not re.fullmatch(KEBAB, facet)):
+        raise TopicError(f"topic name {name!r} must be kebab-case, or topic:facet")
+    path = Path(repo) / TOPICS / f"{base}.json"
     if not path.is_file():
         raise TopicError(f"no topic config at {path}")
     try:
@@ -35,6 +37,8 @@ def load_topic(repo, name):
         raise TopicError(f"{path}: not JSON: {error}") from error
     if not isinstance(topic, dict):
         raise TopicError(f"{path}: must be a JSON object")
+    if facet:
+        topic = with_facet(topic, path, facet)
     _require(topic, path, "sweep", str)
     terms = _require(topic, path, "terms", list)
     if not all(isinstance(t, str) and t for t in terms):
@@ -43,17 +47,41 @@ def load_topic(repo, name):
     for stratum, rule in strata.items():
         if not isinstance(rule, dict):
             raise TopicError(f"{path}: strata.{stratum} must be an object")
-    return {**topic, "name": name, "path": path}
+    return {**topic, "name": name, "path": path, **({"facet": facet} if facet else {})}
+
+
+def with_facet(topic, path, facet):
+    rule = (topic.get("facets") or {}).get(facet)
+    if not isinstance(rule, dict):
+        raise TopicError(f"{path}: no facet {facet} under facets")
+    where = f"{path}: facets.{facet}"
+    for key, kind in (("sweep", str), ("problems", list), ("terms", list)):
+        if not isinstance(rule.get(key), kind) or not rule[key]:
+            raise TopicError(f"{where}.{key} must be a non-empty {kind.__name__}")
+    outside = [t for t in rule["terms"] if t.lower() not in {u.lower() for u in topic.get("terms", [])}]
+    if outside:
+        raise TopicError(f"{where}: terms {outside} are not topic terms; the topic's discovery searches only its own terms")
+    outside = [p for p in rule["problems"] if p not in topic.get("problems", [])]
+    if outside:
+        raise TopicError(f"{where}: problems {outside} are not topic problems")
+    strata = rule.get("strata") or {}
+    outside = sorted(set(strata) - set(topic.get("strata", {})))
+    if outside:
+        raise TopicError(f"{where}: strata {outside} are not topic strata")
+    merged = {s: {**r, **{k: v for k, v in strata.get(s, {}).items() if k in ("stop_row", "forced_repos")}} for s, r in topic.get("strata", {}).items()}
+    return {**topic, "sweep": rule["sweep"], "problems": rule["problems"], "terms": rule["terms"], "strata": merged}
 
 
 def topic_for_sweep(repo, sweep):
     found = []
     for path in sorted((Path(repo) / TOPICS).glob("*.json")):
         try:
-            if json.loads(path.read_text()).get("sweep") == sweep:
-                found.append(path.stem)
+            config = json.loads(path.read_text())
         except ValueError as error:
             raise TopicError(f"{path}: not JSON: {error}") from error
+        if config.get("sweep") == sweep:
+            found.append(path.stem)
+        found += [f"{path.stem}:{f}" for f, rule in sorted((config.get("facets") or {}).items()) if isinstance(rule, dict) and rule.get("sweep") == sweep]
     if len(found) != 1:
         raise TopicError(f"sweep {sweep} is named by {len(found)} topic configs under {Path(repo) / TOPICS}, expected 1: {found}")
     return load_topic(repo, found[0])
@@ -89,14 +117,20 @@ def write_stop_row(topic, stratum, row):
     path = topic["path"]
     text = path.read_text()
     expected = json.loads(text)
+    facet = topic.get("facet")
+    holder = expected["facets"][facet] if facet else expected
     if stratum not in expected.get("strata", {}):
         raise TopicError(f"{path}: no strata.{stratum} to write a stop row into")
-    expected["strata"][stratum]["stop_row"] = row
-    block = re.compile(r'"' + re.escape(stratum) + r'"\s*:\s*\{').search(text, text.find('"strata"'))
-    key = re.compile(r'"stop_row"\s*:\s*(?:null|-?\d+|"[^"]*")').search(text, block.end())
-    attempts = [text[:key.start()] + f'"stop_row": {row}' + text[key.end():]] if key else []
-    closing = text[block.end():].lstrip().startswith("}")
-    attempts.append(text[:block.end()] + f'"stop_row": {row}' + ("" if closing else ", ") + text[block.end():])
+    holder.setdefault("strata", {}).setdefault(stratum, {})["stop_row"] = row
+    anchor = text.find('"' + facet + '"', text.find('"facets"')) if facet else 0
+    strata = text.find('"strata"', anchor)
+    block = re.compile(r'"' + re.escape(stratum) + r'"\s*:\s*\{').search(text, strata) if strata >= 0 else None
+    attempts = []
+    if block:
+        key = re.compile(r'"stop_row"\s*:\s*(?:null|-?\d+|"[^"]*")').search(text, block.end())
+        attempts = [text[:key.start()] + f'"stop_row": {row}' + text[key.end():]] if key else []
+        closing = text[block.end():].lstrip().startswith("}")
+        attempts.append(text[:block.end()] + f'"stop_row": {row}' + ("" if closing else ", ") + text[block.end():])
     for candidate in attempts:
         try:
             if json.loads(candidate) == expected:
@@ -104,7 +138,7 @@ def write_stop_row(topic, stratum, row):
                 return
         except ValueError:
             continue
-    raise TopicError(f"{path}: could not write strata.{stratum}.stop_row without touching anything else; set it with the toolchain on a plain JSON file")
+    raise TopicError(f"{path}: could not write {'facets.' + facet + '.' if facet else ''}strata.{stratum}.stop_row without touching anything else; set it with the toolchain on a plain JSON file")
 
 
 def saigon_today():
@@ -149,7 +183,7 @@ def session_b_options(topic):
 
 def topic_arguments(description, *extra):
     parser = argparse.ArgumentParser(description=description)
-    parser.add_argument("--topic", required=True, help="topic config name under docs/prior-art/topics/")
+    parser.add_argument("--topic", required=True, help="topic config name under docs/prior-art/topics/, or topic:facet for one of its facets")
     parser.add_argument("--repo", default=".", help="kit repository root")
     for flags, options in extra:
         parser.add_argument(*flags, **options)

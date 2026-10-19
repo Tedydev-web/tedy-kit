@@ -23,6 +23,17 @@ function methodSweep(...flags) {
   return { repo, folder, meta, writeMeta, text: readFileSync(record, "utf8"), errors: (text = readFileSync(record, "utf8")) => evidence.sweepMethodErrors(repo, "261001-demo.md", text) };
 }
 
+test("a facet sweep is checked against its facet's written stop rows", () => {
+  const repo = tempDir("facet-topic-");
+  mkdirSync(join(repo, "docs", "prior-art", "topics"), { recursive: true });
+  writeFileSync(join(repo, "docs", "prior-art", "topics", "demo.json"), JSON.stringify({ sweep: "261001-demo", strata: { config: { stop_row: 60 }, product: { stop_row: 61 } },
+    facets: { beta: { sweep: "261002-demo-beta", strata: { config: { stop_row: 70 } } } } }));
+  assert.equal(typeof evidence.topicForSweep, "function");
+  assert.deepEqual(evidence.topicForSweep(repo, "261002-demo-beta").strata, { config: { stop_row: 70 }, product: { stop_row: 61 } });
+  assert.equal(evidence.topicForSweep(repo, "261001-demo").strata.config.stop_row, 60);
+  assert.equal(evidence.topicForSweep(repo, "261003-none"), undefined);
+});
+
 test("the sweep-record gate checks the method evidence of every sweep after the dev sweep", () => {
   assert.equal(typeof evidence.sweepMethodErrors, "function");
   const sweep = methodSweep();
