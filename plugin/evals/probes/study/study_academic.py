@@ -1,9 +1,9 @@
+import json
 import re
 import urllib.parse
 import xml.etree.ElementTree as ET
 
-from study_pool import parse_json
-
+S2_UNPARSABLE = "unparsable Semantic Scholar response"
 ATOM = "{http://www.w3.org/2005/Atom}"
 ARXIV_COMMENT = "{http://arxiv.org/schemas/atom}comment"
 ARXIV_ID = re.compile(r"arxiv\.org/abs/(\S+?)(?:v\d+)?$")
@@ -37,6 +37,16 @@ def s2_papers(body):
     return papers
 
 
+def s2_response(out):
+    try:
+        body = json.loads(out)
+    except ValueError:
+        raise ValueError(S2_UNPARSABLE) from None
+    if not isinstance(body, dict) or not isinstance(body.get("data") or [], list) or not all(isinstance(p, dict) for p in body.get("data") or []):
+        raise ValueError(S2_UNPARSABLE)
+    return s2_papers(body)
+
+
 def keep_papers(pool, channel, label, papers):
     linked = new = 0
     for key, meta, text in papers:
@@ -60,6 +70,8 @@ def academic_search(fetch, pool, channel, label, url, parse, pause):
             papers = parse(out)
         except ET.ParseError:
             status = "unparsable Atom feed"
+        except ValueError as error:
+            status = str(error)
     linked, new = keep_papers(pool, channel, label, papers)
     pool.record(step, channel, label, status, seconds, len(papers), linked, new)
     fetch.pace(pause)
@@ -71,4 +83,4 @@ def run_academic(fetch, pool, academic):
         academic_search(fetch, pool, "arxiv", f"arxiv {query}", ARXIV_URL.format(query=urllib.parse.quote(query), size=size), arxiv_papers, 3)
     for query in academic.get("semantic_scholar", []):
         academic_search(fetch, pool, "semantic-scholar", f"s2 {query}", S2_URL.format(query=urllib.parse.quote(query), size=size),
-                        lambda out: s2_papers(parse_json(out, "ok", {})), 1.5)
+                        s2_response, 1.5)

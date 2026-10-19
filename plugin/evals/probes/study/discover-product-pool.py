@@ -143,7 +143,7 @@ def main(argv=None, fetch=None):
     except TopicError as error:
         sys.exit(f"discover-product-pool: {error}")
     counts = {c: sum(1 for h in product.pool.state["hits"].values() if c in h["channels"]) for c in ("npm", "code", "reverse", "social", "repo", "arxiv", "semantic-scholar")}
-    print(f"product repos {len(product.pool.state['hits'])}; per channel {counts}; failed steps {sum(1 for entry in product.pool.state['log'] if entry['status'] != 'ok')}")
+    print(f"product repos {len(product.pool.state['hits'])}; per channel {counts}; failed steps {product.pool.failed_steps()}, run again to retry them")
 
 
 if __name__ == "__main__":

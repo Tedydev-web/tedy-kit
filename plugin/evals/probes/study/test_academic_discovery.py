@@ -10,6 +10,7 @@ ATOM = """<?xml version="1.0" encoding="UTF-8"?>
  <entry><id>http://arxiv.org/abs/2510.00001v2</id><published>2025-10-01T00:00:00Z</published><title>Agents that
  tamper with tests</title><summary>Code at https://github.com/lab/bench.</summary><arxiv:comment>see github.com/lab/tool</arxiv:comment></entry>
 </feed>"""
+CODE = ("search/code", json.dumps({"total_count": 0, "items": []}))
 
 
 class AcademicDiscoveryTest(Base):
@@ -39,6 +40,19 @@ class AcademicDiscoveryTest(Base):
         pool = script("discover-config-pool").discover(self.academic_topic(), self.work, self.home, fetch)
         self.assertEqual([(e["channel"], e["status"]) for e in pool.state["log"] if e["channel"] in ("arxiv", "semantic-scholar")],
                          [("arxiv", "unparsable Atom feed"), ("semantic-scholar", "exit 22: The requested URL returned error: 429")])
+
+    def test_an_unparsable_or_non_object_semantic_scholar_body_is_logged_as_failed(self):
+        for body in ("<html>busy</html>", "[]", json.dumps({"data": "none"}), json.dumps({"data": [1]})):
+            (self.work / "config-state.json").unlink(missing_ok=True)
+            pool = script("discover-config-pool").discover(self.academic_topic(), self.work, self.home, FakeFetch([("export.arxiv.org", ATOM), ("api.semanticscholar.org", body)]))
+            self.assertEqual([e["status"] for e in pool.state["log"] if e["channel"] == "semantic-scholar"], ["unparsable Semantic Scholar response"])
+
+    def test_a_failed_step_is_retried_on_the_next_run_and_a_done_step_is_not(self):
+        script("discover-config-pool").discover(self.academic_topic(), self.work, self.home,
+                                                FakeFetch([CODE, ("export.arxiv.org", ATOM), ("api.semanticscholar.org", ("", "exit 22: 429"))]))
+        again = FakeFetch([CODE, ("export.arxiv.org", ATOM), ("api.semanticscholar.org", GQL({"data": []}))])
+        pool = script("discover-config-pool").discover(self.academic_topic(), self.work, self.home, again)
+        self.assertEqual((len(again.called("api.semanticscholar.org")), again.called("export.arxiv.org"), pool.failed_steps()), (1, [], 0))
 
     def test_the_product_stratum_runs_the_academic_channel_too(self):
         product = script("discover-product-pool").Product(self.academic_topic("product"), self.work, FakeFetch([("export.arxiv.org", ATOM)]))

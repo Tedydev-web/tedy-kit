@@ -48,9 +48,13 @@ class Pool:
     def record(self, step, channel, query, status, seconds, returned, linked, new, extra=None):
         self.state["log"].append({"step": step, "channel": channel, "query": query, "status": status, "seconds": seconds,
                                   "returned": returned, "repos_linked": linked, "new_repos": new, **(extra or {})})
-        self.state["done"].append(step)
+        if status == "ok":
+            self.state["done"].append(step)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(self.state))
+
+    def failed_steps(self):
+        return len({e["step"] for e in self.state["log"] if e["status"] != "ok"} - set(self.state["done"]))
 
     def per_channel(self):
         counts = {}

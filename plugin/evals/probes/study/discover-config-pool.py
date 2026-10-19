@@ -74,8 +74,8 @@ def main(argv=None, fetch=None):
         pool = discover(load_topic(args.repo, args.topic), args.work, args.home, fetch or Fetch())
     except TopicError as error:
         sys.exit(f"discover-config-pool: {error}")
-    failed = sum(1 for entry in pool.state["log"] if entry["status"] != "ok")
-    print(f"config identified {len(pool.state['hits'])}; per channel {pool.per_channel()}; papers {len(pool.state.get('papers', {}))}; failed steps {failed}")
+    failed = pool.failed_steps()
+    print(f"config identified {len(pool.state['hits'])}; per channel {pool.per_channel()}; papers {len(pool.state.get('papers', {}))}; failed steps {failed}, run again to retry them")
 
 
 if __name__ == "__main__":
