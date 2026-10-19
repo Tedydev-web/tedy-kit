@@ -4,6 +4,6 @@ description: P1 bug fix; the failing test comes first and is seen failing
 context:
   scaffold_script: scaffold.sh
 execution:
-  allowed_tools: [Read, Glob, Grep]
+  allowed_tools: [Read, Glob, Grep, Write, Edit, Bash]
   max_turns: 40
   timeout_seconds: 900
