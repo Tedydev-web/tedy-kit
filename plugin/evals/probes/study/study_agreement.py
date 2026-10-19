@@ -54,13 +54,14 @@ def kappa_text(value):
     return "undefined (one category)" if value is None else f"{value:.3f}"
 
 
-def recall_at_cut(stratum, qgs, order_rows, cut):
+def recall_at_cut(stratum, qgs, order_rows, cut, screened_by_both=None):
     if not qgs:
         raise TopicError(f"the {stratum} quasi-gold standard is empty")
     if not order_rows:
         raise TopicError(f"no {stratum} screening order to measure recall at the cut against")
     ranks = {r["repo"].lower(): r for r in order_rows}
-    screened = {k for k, r in ranks.items() if r["order_rank"] <= cut or r.get("forced") or r["order_rank"] > SNOWBALL_RANK_BASE}
+    screened = {k for k, r in ranks.items() if (r["order_rank"] <= cut or r.get("forced") or r["order_rank"] > SNOWBALL_RANK_BASE)
+                and (screened_by_both is None or r["order_rank"] in screened_by_both)}
     at = [q for q in qgs if q.lower() in screened]
     recall = len(at) / len(qgs)
     out = {"stratum": stratum, "cut": cut, "size": len(qgs), "at_cut": len(at), "recall": round(recall, 3), "target": RECALL_TARGET, "below_target": recall < RECALL_TARGET,

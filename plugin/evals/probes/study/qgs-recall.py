@@ -66,7 +66,9 @@ def main(argv=None):
         if args.stratum:
             cut = args.cut if args.cut is not None else topic["strata"].get(args.stratum, {}).get("stop_row")
             if isinstance(cut, int) and not isinstance(cut, bool):
-                out["at_cut"] = recall_at_cut(args.stratum, final, read_jsonl(Path(args.work), f"{args.stratum}-screening-order.jsonl"), cut)
+                sides = [{r["order_rank"] for r in read_jsonl(Path(args.work), f"{args.stratum}-screen-{s}.jsonl")} for s in "AB"]
+                both = sides[0] & sides[1] if all(sides) else None
+                out["at_cut"] = recall_at_cut(args.stratum, final, read_jsonl(Path(args.work), f"{args.stratum}-screening-order.jsonl"), cut, both)
             else:
                 out["at_cut"] = {"stratum": args.stratum, "cut": None, "note": "no stop row yet: recall at the cut is measured once screening wrote it, or pass --cut"}
     except TopicError as error:

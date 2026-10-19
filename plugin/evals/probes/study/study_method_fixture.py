@@ -1,4 +1,3 @@
-import hashlib
 import json
 import re
 import shutil
@@ -14,18 +13,26 @@ CRITERIA = "docs/prior-art/quality-criteria-v2.md"
 MODELS = {"A": {"cli": "claude", "model": "claude-opus-5-5", "effort": "high"}, "B": {"cli": "agy", "model": "gemini-3.8-flash-high"}}
 FALLBACK = {"cli": "claude", "model": "claude-sonnet-4-6", "effort": "high"}
 CELLS = ("Authority", "Methodology", "Objectivity", "Date", "Position", "Novelty", "Relevance")
-PLAN = {("config", "A"): {1: (1, ["gate"]), 2: (0, []), 3: (1, ["gate"]), 5: (1, ["gate", "proof"])},
-        ("config", "B"): {1: (1, ["gate"]), 2: (0, []), 3: (1, ["gate"]), 5: ({"Authority": 0.5}, ["gate", "proof"])},
-        ("product", "A"): {1: (1, ["hook"]), 2: (0, []), 3: (1, ["hook"])},
-        ("product", "B"): {1: (1, ["hook"]), 2: (0, []), 3: (0.5, ["hook"])}}
+RANKS = {"config": (1, 2, 3, 4, 5, 6, 8), "product": (1, 2, 3, 4, 5, 6)}
+EVIDENCE = [("/releases", "[]"), ("/tags", "[]"), ("users/", json.dumps({"public_repos": 3}))]
 
 
-def sha(text):
-    return hashlib.sha256(text.encode()).hexdigest()
+def repo_name(stratum, rank):
+    return "o/forced" if (stratum, rank) == ("config", 8) else f"{'o' if stratum == 'config' else 'p'}/r{rank}"
 
 
-def reply_row(row, side_plan):
-    value, mechanisms = side_plan[row["order_rank"]]
+def planned(stratum, side, rank):
+    mechanisms = (["gate"] if stratum == "config" else ["hook"]) if rank % 3 else []
+    value = 1 if mechanisms else 0
+    if side == "B" and (stratum, rank) == ("config", 8):
+        return {"Authority": 0.5}, mechanisms + ["proof"]
+    if side == "B" and (stratum, rank) == ("product", 2):
+        return 0.5, mechanisms
+    return value, mechanisms + (["proof"] if (stratum, rank) == ("config", 8) else [])
+
+
+def reply_row(stratum, side, row):
+    value, mechanisms = planned(stratum, side, row["order_rank"])
     cells = {c: {"v": (value.get(c, 1) if isinstance(value, dict) else value), "why": "w"} for c in CELLS}
     decision = "eligible" if mechanisms else "exclude: irrelevant"
     return json.dumps({"order_rank": row["order_rank"], "repo": row["repo"], "file": "f", "scores": cells, "mechanisms": mechanisms, "new": True, "decision": decision, "note": ""})
@@ -44,19 +51,22 @@ class ScriptedSessions(FakeFetch):
         model = cmd[cmd.index("--model") + 1]
         rows = [json.loads(block) for block in re.findall(r"```json\n(.+?)\n```", prompt)]
         stratum = "config" if rows[0]["repo"].startswith("o/") else "product"
-        text = "\n".join(reply_row(r, PLAN[(stratum, "A" if model == self.a_model else "B")]) for r in rows) + "\nmechanism: gate: blocks edits until a test fails\n"
+        side = "A" if model == self.a_model else "B"
+        text = "\n".join(reply_row(stratum, side, r) for r in rows) + "\nmechanism: gate: blocks edits until a test fails\n"
         if cmd[0] == "claude":
             return json.dumps({"is_error": False, "num_turns": 1, "permission_denials": [], "result": text, "modelUsage": {model: {}}}), "ok", 0
-        return json.dumps({"status": "SUCCESS", "num_turns": 1, "response": text}), "ok", 0
+        events = [{"event": "init", "init": {"model": model, "tools": []}},
+                  {"event": "step_update", "step_update": {"step_index": 0, "step_type": "user_input", "state": "DONE"}},
+                  {"event": "step_update", "step_update": {"step_index": 1, "step_type": "agent_response", "state": "DONE"}},
+                  {"event": "result", "result": {"status": "SUCCESS", "num_turns": 1, "response": text}}]
+        return "".join(json.dumps(e) + "\n" for e in events), "ok", 0
 
 
 def session(repo, work, fetch, which, environ, *args):
     script("run-screening-session").main(["--topic", "demo", "--repo", str(repo), "--work", str(work), *args, "--today", "2026-10-20"], fetch=fetch, which=which, environ=environ)
 
 
-def method_repo(same_family=False, rated=None, bare=True):
-    repo = topic_repo(strata={"config": {"stop_row": None, "forced_repos": ["o/forced"], "channels": {"academic": {"arxiv": ["abs:tdd"]}}},
-                              "product": {"stop_row": None, "forced_repos": [], "channels": {}}})
+def work_folder(repo):
     topic_file = repo / "docs/prior-art/topics/demo.json"
     topic = json.loads(topic_file.read_text())
     topic["strata"]["local"] = {"stop_row": None, "forced_repos": []}
@@ -66,37 +76,61 @@ def method_repo(same_family=False, rated=None, bare=True):
     shutil.rmtree(D)
     for side in "AB":
         (work / f"config-screen-{side}.jsonl").unlink()
-    write_jsonl(work / "product-screening-order.jsonl", [{"order_rank": r, "repo": f"p/{r}", "forced": False} for r in (1, 2, 3)])
-    write_json(work / "product-adjudication.json", {"rows": {"3": {"decision": "eligible", "why": "the hook source runs the tests"}}, "capture_recapture": {"union": 1}})
-    write_json(work / "meta.json", {**json.loads((work / "meta.json").read_text()), "criteria": CRITERIA})
-    for stratum in ("config", "product"):
+    for stratum, ranks in RANKS.items():
+        write_jsonl(work / f"{stratum}-screening-order.jsonl", [{"order_rank": r, "repo": repo_name(stratum, r), "forced": r == 8} for r in ranks])
         (work / f"screening-packet-{stratum}.md").write_text(f"packet {stratum}, pilot draft\n")
-        for row in map(json.loads, (work / f"{stratum}-screening-order.jsonl").read_text().splitlines()):
-            write_json(work / "cache/trees" / (row["repo"].replace("/", "__") + ".json"), {"oid": "e" * 40, "paths": ["README.md"]})
+        for r in ranks:
+            if (stratum, r) != ("product", 2):
+                write_json(work / "cache/trees" / (repo_name(stratum, r).replace("/", "__") + ".json"), {"oid": "e" * 40, "paths": ["README.md"]})
+    write_json(work / "study.json", {**json.loads((work / "study.json").read_text()), "study": {"o/r1": "picked for the ledger"}})
+    write_json(work / "product-adjudication.json", {"rows": {"2": {"decision": "eligible", "why": "the hook source runs the tests"}}, "capture_recapture": {"union": 1}})
+    write_json(work / "meta.json", {**json.loads((work / "meta.json").read_text()), "criteria": CRITERIA})
+    write_json(work / "config-state.json", {"papers": {"arxiv:2510.00001": {"title": "Agents that tamper with tests", "url": "https://arxiv.org/abs/2510.00001", "queries": ["arxiv abs:tdd"]}},
+                                            "hits": {"o/r1": {"repo": "o/r1", "channels": {"arxiv": ["arxiv:2510.00001"]}}}})
+    write_json(work / "config-qgs-adjudicated.json", {"final": ["o/r1", "O/R2"]})
+    write_json(work / "product-qgs-adjudicated.json", {"final": ["p/r1", "p/r9"]})
+    return work
+
+
+def method_repo(same_family=False, rated=None, bare=True, events=None):
+    events = [] if events is None else events
+    repo = topic_repo(strata={"config": {"stop_row": None, "forced_repos": ["o/forced"], "channels": {"academic": {"arxiv": ["abs:tdd"]}}},
+                              "product": {"stop_row": None, "forced_repos": [], "channels": {}}})
+    work = work_folder(repo)
     loaded = load_topic(repo, "demo")
     which = (lambda cli: cli != "agy") if same_family else (lambda cli: True)
     environ = {"ANTHROPIC_API_KEY": "fixture"} if bare else {}
     fetch = ScriptedSessions(MODELS["A"]["model"])
-    for stratum in ("config", "product"):
-        fetch_inputs(loaded, work, stratum, 200, FakeFetch())
+    broken = FakeFetch([("repos/p/r2/commits/HEAD", "d" * 40 + "\n"), ("repos/p/r2/git/trees/", ("", "exit 1: HTTP 502")), *EVIDENCE])
+    for stratum in RANKS:
+        fetch_inputs(loaded, work, stratum, 200, broken if stratum == "product" else FakeFetch(EVIDENCE))
+    try:
+        session(repo, work, fetch, which, environ, "--stratum", "product", "--side", "A", "--ranks", "1-2", "--pilot", "--criteria", CRITERIA)
+    except SystemExit as refused:
+        events.append(f"refused: {refused}")
+    for stratum in RANKS:
         for side in "AB":
             session(repo, work, fetch, which, environ, "--stratum", stratum, "--side", side, "--ranks", "1-1", "--pilot", "--criteria", CRITERIA)
         (work / f"screening-packet-{stratum}.md").write_text(f"packet {stratum}\n")
+    healed = FakeFetch([("repos/p/r2/commits/HEAD", "d" * 40 + "\n"), ("repos/p/r2/git/trees/", json.dumps({"tree": [{"path": "README.md"}]})), *EVIDENCE])
+    fetched, kept, failed = fetch_inputs(loaded, work, "product", 200, healed)
+    events.append(f"refetch after a scored block: fetched {fetched}, kept {kept}, still transient {failed}, calls to the scored rank {len(healed.called('p/r1'))}")
     script("freeze-protocol").main(["--topic", "demo", "--repo", str(repo), "--work", str(work), "--criteria", CRITERIA, "--today", "2026-10-20",
                                     "--amendment", "the pilot draft became the frozen packet"])
-    for stratum in ("config", "product"):
+    for stratum in RANKS:
         for side in "AB":
-            session(repo, work, fetch, which, environ, "--stratum", stratum, "--side", side, "--ranks", "1-5")
+            session(repo, work, fetch, which, environ, "--stratum", stratum, "--side", side, "--ranks", "1-9")
         write_stop_row(load_topic(repo, "demo"), stratum, script("compare-screening-sessions").compare(work, stratum, None)["stop"]["row"])
-    write_json(work / "config-qgs-adjudicated.json", {"final": ["o/one", "O/Three"]})
-    write_json(work / "product-qgs-adjudicated.json", {"final": ["p/1", "p/9"]})
     if rated:
-        inputs = {r["order_rank"]: r for r in map(json.loads, (work / "config-screening-inputs.jsonl").read_text().splitlines())}
-        rows = [{"stratum": "config", "order_rank": r, "repo": n, "commit": "c", "inputs_sha256": "0" * 64,
-                 "user": {"Authority": 1, "Methodology": 1, "Objectivity": 1, "Position": 1, "decision": "eligible"}} for r, n in ((3, "o/three"), (5, "o/forced")) if r in inputs]
+        script("draw-calibration-sample").main(["--topic", "demo", "--repo", str(repo), "--work", str(work)])
+        sample = json.loads((work / "calibration-sample.json").read_text())
+        for row in sample["rows"]:
+            eligible = row["order_rank"] % 3 != 0
+            row["user"] = {"Authority": 1 if eligible else 0, "Methodology": 1 if eligible else 0, "Objectivity": 1 if eligible else 0, "Position": 1 if eligible else 0,
+                           "decision": "eligible" if eligible else "excluded: irrelevant"}
         if rated == "partial":
-            rows[0]["user"]["decision"] = None
-        write_json(work / "calibration-sample.json", {"instructions": "i", "rows": rows})
+            sample["rows"][0]["user"]["decision"] = None
+        write_json(work / "calibration-sample.json", sample)
     script("export-sweep-data").export(load_topic(repo, "demo"), repo, work)
     shutil.rmtree(work)
     return repo

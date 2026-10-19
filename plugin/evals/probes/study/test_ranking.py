@@ -141,6 +141,12 @@ class OrderAndSnowballTest(unittest.TestCase):
                                          "missed": [{"repo": "a/three", "rank": 9}, {"repo": "a/four", "rank": None}],
                                          "fix": "below the target: change the screening-order formula or the cut, not the terms"})
         self.assertEqual(out["judged_by_both"], 3)
+        write_jsonl(self.work / "config-screen-A.jsonl", [{"order_rank": 1}, {"order_rank": 2}])
+        write_jsonl(self.work / "config-screen-B.jsonl", [{"order_rank": 1}])
+        result = subprocess.run([sys.executable, "-B", str(HERE / "qgs-recall.py"), "--topic", "demo", "--repo", str(self.repo), "--work", str(self.work),
+                                 "--states", "config", "--stratum", "config", "--cut", "3"], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((json.loads(result.stdout)["at_cut"]["at_cut"], json.loads(result.stdout)["at_cut"]["missed"][0]), (1, {"repo": "a/two", "rank": 2}))
 
     def test_recall_before_screening_works_without_a_cut(self):
         topic = json.loads((self.repo / "docs/prior-art/topics/demo.json").read_text())

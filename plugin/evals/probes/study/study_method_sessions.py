@@ -1,8 +1,8 @@
 from study_screening_core import read_jsonl
 from study_topic import TopicError
 
-HEADER_FIELDS = ("model", "effort", "cli_version")
-BLOCK_FIELDS = ("packet_sha256", "criteria_sha256", "inputs_sha256", "date")
+HEADER_FIELDS = ("model", "effort")
+BLOCK_FIELDS = ("packet_sha256", "criteria_sha256", "prompt_sha256", "inputs_sha256", "cli_version", "date")
 
 
 def session_keys(folder, strata):
@@ -25,6 +25,9 @@ def checked_entry(sessions, key, path, frozen):
         for field in BLOCK_FIELDS:
             if not block.get(field):
                 raise TopicError(f"meta.json sessions.{key} has a block without {field}")
+        ranks, hashes = block.get("ranks"), block.get("row_sha256")
+        if not isinstance(ranks, list) or not ranks or not isinstance(hashes, dict) or any(str(r) not in hashes for r in ranks):
+            raise TopicError(f"meta.json sessions.{key} has a block whose ranks lack a row_sha256 each")
         if frozen and (block["packet_sha256"], block["criteria_sha256"]) != (frozen["packet_sha256"], frozen["criteria_sha256"]):
             raise TopicError(f"meta.json sessions.{key}: a block ran under a packet or criteria other than the frozen ones")
     covered = {r for block in entry["blocks"] for r in block["ranks"]}
@@ -44,8 +47,9 @@ def session_lines(folder, meta, strata, freeze):
         stratum = key.split("-", 1)[0]
         frozen = None if "-pilot-" in key else freeze["strata"][stratum]
         entry = checked_entry(sessions, key, path, frozen)
-        blocks = "; ".join(f"ranks {b['ranks'][0]}-{b['ranks'][-1]} packet `{b['packet_sha256'][:16]}` inputs `{b['inputs_sha256'][:16]}` {b['date']}" for b in entry["blocks"])
-        lines.append(f"- {key}: {entry.get('cli', '-')} {entry['model']} ({entry['cli_version']}), effort {entry['effort']}; {blocks}")
+        blocks = "; ".join(f"ranks {b['ranks'][0]}-{b['ranks'][-1]} packet `{b['packet_sha256'][:16]}` prompt `{b['prompt_sha256'][:16]}` inputs `{b['inputs_sha256'][:16]}` "
+                           f"{b['cli_version']} {b['date']}" for b in entry["blocks"])
+        lines.append(f"- {key}: {entry.get('cli', '-')} {entry['model']}, effort {entry['effort']}; {blocks}")
     for stratum in strata:
         a, b = row_hashes(sessions[f"{stratum}-A"]), row_hashes(sessions[f"{stratum}-B"])
         differ = sorted(int(r) for r in set(a) & set(b) if a[r] != b[r])

@@ -50,22 +50,60 @@ test("a missing freeze, or a protocol changed after it, fails", () => {
 test("recall at the cut and kappa are required per stratum", () => {
   const sweep = methodSweep();
   assert.match(sweep.errors(sweep.text.replace(/^- product: recall at the cut.*\n/m, "")).join("\n"), /product: no recall at the cut/);
+  assert.match(sweep.errors(sweep.text.replace(", counting rows both sessions screened", "")).join("\n"), /config: no recall at the cut counting rows both sessions screened/);
   assert.match(sweep.errors(sweep.text.replace(/^- config kappa: .*\n/m, "")).join("\n"), /config: no kappa per judged criterion/);
 });
 
-test("every screening session needs its header, and every block its packet, criteria and input hashes and date", () => {
+test("every screening session needs its header, and every block its packet, criteria, prompt and input hashes, CLI version and date", () => {
   const sweep = methodSweep();
   const meta = sweep.meta();
   delete meta.sessions["product-B"].effort;
   delete meta.sessions["config-A"].blocks[0].inputs_sha256;
   meta.sessions["config-A"].blocks[0].packet_sha256 = "0".repeat(64);
-  delete meta.sessions["config-pilot-A"].cli_version;
+  delete meta.sessions["config-pilot-A"].blocks[0].cli_version;
+  delete meta.sessions["product-A"].blocks[0].prompt_sha256;
+  delete meta.sessions["product-pilot-A"].blocks[0].row_sha256["1"];
+  delete meta.sessions["config-pilot-B-gemini-3.8-flash-high"].blocks[0].ranks;
   sweep.writeMeta(meta);
   const errors = sweep.errors().join("\n");
   assert.match(errors, /product-B: meta\.json session lacks effort/);
   assert.match(errors, /config-A: a session block lacks inputs_sha256/);
   assert.match(errors, /config-A: a block ran under a packet or criteria other than the frozen ones/);
-  assert.match(errors, /config-pilot-A: meta\.json session lacks cli_version/);
+  assert.match(errors, /config-pilot-A: a session block lacks cli_version/);
+  assert.match(errors, /product-A: a session block lacks prompt_sha256/);
+  assert.match(errors, /product-pilot-A: a session block lacks ranks with a row_sha256 each/);
+  assert.match(errors, /config-pilot-B-gemini-3\.8-flash-high: a session block lacks ranks with a row_sha256 each/);
+});
+
+test("recorded session models must be the frozen ones, and a CLI version change needs its threat", () => {
+  const sweep = methodSweep();
+  const meta = sweep.meta();
+  meta.sessions["product-A"].model = "claude-haiku-4-5";
+  const block = meta.sessions["config-B"].blocks.pop();
+  meta.sessions["config-B"].blocks.push({ ...block, ranks: block.ranks.slice(0, 2) }, { ...block, ranks: block.ranks.slice(2), cli_version: "1.4.3" });
+  sweep.writeMeta(meta);
+  const errors = sweep.errors().join("\n");
+  assert.match(errors, /product-A ran claude claude-haiku-4-5, the freeze names claude claude-opus-5-5/);
+  assert.match(errors, /config-B: its blocks ran under different CLI versions and the record names no CLI version threat/);
+});
+
+test("agy sessions need the agy isolation threat", () => {
+  const sweep = methodSweep();
+  assert.match(sweep.errors(sweep.text.replace(/^- agy MCP servers, hooks and user settings not excluded: .*\n/m, "")).join("\n"), /config-B ran through agy and the record names no "agy MCP servers/);
+});
+
+test("a rated calibration sample must hold ten rows over both strata, score the inputs both sessions scored, and hold no booleans", () => {
+  const sweep = methodSweep("--rated");
+  assert.deepEqual(sweep.errors(), []);
+  const file = join(sweep.folder, "calibration-sample.json");
+  const sample = JSON.parse(readFileSync(file, "utf8"));
+  sample.rows[0].inputs_sha256 = "0".repeat(64);
+  sample.rows[1].user.Position = true;
+  writeFileSync(file, JSON.stringify({ ...sample, rows: sample.rows.slice(0, 9) }));
+  const errors = sweep.errors().join("\n");
+  assert.match(errors, new RegExp(`calibration row ${sample.rows[0].stratum} #${sample.rows[0].order_rank}: its inputs_sha256 is not the row_sha256 session A scored`));
+  assert.match(errors, /a rating is a JSON boolean/);
+  assert.match(errors, /the calibration sample holds 9 rows over config, product; it needs 10 over config, product/);
 });
 
 test("both session files and both entries are required for every screened stratum, and A and B must score the same inputs", () => {
@@ -106,7 +144,7 @@ test("the topic config's stop row must be the one the data give", () => {
   const topic = JSON.parse(readFileSync(topicFile, "utf8"));
   topic.strata.config.stop_row = 60;
   writeFileSync(topicFile, JSON.stringify(topic));
-  assert.match(sweep.errors().join("\n"), /config: the topic config's stop_row is 60, the record stops at row 3/);
+  assert.match(sweep.errors().join("\n"), /config: the topic config's stop_row is 60, the record stops at row 6/);
 });
 
 test("a tag-only stratum must be stated as not screened, an array of channels is not channels, and a screened one needs its section", () => {

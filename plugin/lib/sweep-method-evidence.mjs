@@ -13,8 +13,10 @@ export const GRANDFATHERED = new Map([
   ],
 ]);
 
-const HEADER_FIELDS = ["model", "effort", "cli_version"];
-const BLOCK_FIELDS = ["packet_sha256", "criteria_sha256", "inputs_sha256", "date"];
+const HEADER_FIELDS = ["model", "effort"];
+const BLOCK_FIELDS = ["packet_sha256", "criteria_sha256", "prompt_sha256", "inputs_sha256", "cli_version", "date"];
+const AGY_THREAT = "agy MCP servers, hooks and user settings not excluded";
+const SAMPLE_SIZE = 10;
 const CALIBRATED = new Set(["config", "product"]);
 const SESSION_FILE = /^([a-z0-9]+)-(?:screen-[AB]|pilot-.+)\.jsonl$/;
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
@@ -60,16 +62,46 @@ function sessionErrors(files, sessions, strata, digests) {
     errors.push(...HEADER_FIELDS.filter((f) => typeof entry[f] !== "string" || !entry[f]).map((f) => `${key}: meta.json session lacks ${f}`));
     for (const block of entry.blocks) {
       errors.push(...BLOCK_FIELDS.filter((f) => typeof block[f] !== "string" || !block[f]).map((f) => `${key}: a session block lacks ${f}`));
+      const hashes = block.row_sha256;
+      if (!Array.isArray(block.ranks) || !block.ranks.length || typeof hashes !== "object" || hashes === null || block.ranks.some((r) => typeof hashes[String(r)] !== "string")) {
+        errors.push(`${key}: a session block lacks ranks with a row_sha256 each`);
+      }
       const frozen = key.includes("-pilot-") ? undefined : digests[stratum];
       if (frozen && (block.packet_sha256 !== frozen.packet || block.criteria_sha256 !== frozen.criteria)) errors.push(`${key}: a block ran under a packet or criteria other than the frozen ones`);
     }
   }
   for (const stratum of strata) {
-    const hashes = (side) => Object.assign({}, ...(sessions[`${stratum}-${side}`]?.blocks ?? []).map((b) => b.row_sha256 ?? {}));
-    const a = hashes("A");
-    const b = hashes("B");
+    const a = rowHashes(sessions[`${stratum}-A`]);
+    const b = rowHashes(sessions[`${stratum}-B`]);
     const differ = Object.keys(a).filter((rank) => rank in b && a[rank] !== b[rank]);
     if (differ.length) errors.push(`${stratum}: sessions A and B scored different inputs for ranks ${differ.join(", ")}`);
+  }
+  return errors;
+}
+
+const rowHashes = (entry) => Object.assign({}, ...(entry?.blocks ?? []).map((b) => b.row_sha256 ?? {}));
+
+function frozenModelErrors(freeze, sessions, strata) {
+  if (!freeze) return ["no protocol-freeze.json in the sweep folder"];
+  return strata.flatMap((stratum) =>
+    [["A", freeze.session_a], ["B", freeze.session_b?.chosen]].flatMap(([side, frozen]) => {
+      const entry = sessions[`${stratum}-${side}`];
+      return entry && (entry.cli !== frozen?.cli || entry.model !== frozen?.model) ? [`${stratum}-${side} ran ${entry.cli} ${entry.model}, the freeze names ${frozen?.cli} ${frozen?.model}`] : [];
+    }),
+  );
+}
+
+function calibrationErrors(sample, sessions, strata) {
+  if (!sample) return [];
+  const rows = Array.isArray(sample.rows) ? sample.rows : [];
+  const want = strata.filter((s) => CALIBRATED.has(s)).sort();
+  const got = [...new Set(rows.map((r) => r.stratum))].sort();
+  const errors = rows.length === SAMPLE_SIZE && got.join() === want.join() ? [] : [`the calibration sample holds ${rows.length} rows over ${got.join(", ") || "no stratum"}; it needs ${SAMPLE_SIZE} over ${want.join(", ")}`];
+  for (const row of rows) {
+    for (const side of ["A", "B"]) {
+      if (rowHashes(sessions[`${row.stratum}-${side}`])[String(row.order_rank)] !== row.inputs_sha256) errors.push(`calibration row ${row.stratum} #${row.order_rank}: its inputs_sha256 is not the row_sha256 session ${side} scored`);
+    }
+    if (Object.values(row.user ?? {}).some((v) => typeof v === "boolean")) errors.push(`calibration row ${row.stratum} #${row.order_rank}: a rating is a JSON boolean`);
   }
   return errors;
 }
@@ -83,9 +115,15 @@ export function checkMethodEvidence(text, { files, read, criteriaText, topic }) 
   errors.push(...sessionErrors(files, sessions, strata, digests));
   if (!topic) errors.push("no topic config names this sweep, so its stop rows cannot be checked");
   const hookThreat = /^- plugin hooks not excluded \(no --bare\): /m.test(threats);
+  const agyThreat = threats.includes(`\n- ${AGY_THREAT}: `);
+  const versionThreat = /^- CLI version changed within a session: /m.test(threats);
   for (const [key, entry] of Object.entries(sessions)) {
     if (entry?.cli === "claude" && !String(entry.isolation ?? "").includes("--bare") && !hookThreat) errors.push(`${key} ran claude without --bare and the record names no plugin hooks threat`);
+    if (entry?.cli === "agy" && !agyThreat) errors.push(`${key} ran through agy and the record names no "${AGY_THREAT}" threat`);
+    if (new Set((entry?.blocks ?? []).map((b) => b.cli_version)).size > 1 && !versionThreat) errors.push(`${key}: its blocks ran under different CLI versions and the record names no CLI version threat`);
   }
+  errors.push(...frozenModelErrors(JSON.parse(read("protocol-freeze.json") ?? "null"), sessions, strata));
+  errors.push(...calibrationErrors(JSON.parse(read("calibration-sample.json") ?? "null"), sessions, strata));
   const tagOnly = part(text, "Tag-only strata");
   for (const [stratum, rule] of Object.entries(topic?.strata ?? {})) {
     if (!screenedRule(rule) && !new RegExp(`^- ${escape(stratum)}: tag-only `, "m").test(tagOnly)) errors.push(`${stratum}: a stratum without channels is not stated as tag-only`);
@@ -97,7 +135,9 @@ export function checkMethodEvidence(text, { files, read, criteriaText, topic }) 
     if (!new RegExp(`^- ${s}: post-freeze rows \\d+ `, "m").test(agreement)) errors.push(`${stratum}: agreement is not measured on post-freeze rows`);
     if (!new RegExp(`^- ${s} kappa: .*; eligibility kappa `, "m").test(agreement)) errors.push(`${stratum}: no kappa per judged criterion with eligibility kappa`);
     if (!new RegExp(`^- ${s} capture-recapture.*Chapman [\\d.]+ is a lower bound`, "m").test(agreement)) errors.push(`${stratum}: no capture-recapture line with Chapman as a lower bound`);
-    if (CALIBRATED.has(stratum) && !new RegExp(`^- ${s}: recall at the cut \\d+/\\d+ `, "m").test(part(text, "Recall"))) errors.push(`${stratum}: no recall at the cut`);
+    if (CALIBRATED.has(stratum) && !new RegExp(`^- ${s}: recall at the cut \\d+/\\d+ \\([\\d.]+\\) of the ${s} standard, counting rows both sessions screened; `, "m").test(part(text, "Recall"))) {
+      errors.push(`${stratum}: no recall at the cut counting rows both sessions screened`);
+    }
     const a = sessions[`${stratum}-A`]?.model ?? "";
     const b = sessions[`${stratum}-B`]?.model ?? "";
     if (family(a) === family(b) && !/^- same model family: /m.test(threats)) errors.push(`${stratum}: sessions A and B are both ${family(a)} models and the record names no same model family threat`);
