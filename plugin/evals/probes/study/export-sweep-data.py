@@ -3,6 +3,7 @@ import re
 import sys
 from pathlib import Path
 
+from study_pool import DISCOVERY_LINK, work_file
 from study_topic import TopicError, load_topic, sweep_folder, topic_arguments
 
 HEX40 = re.compile(r"[0-9a-f]{40}")
@@ -35,8 +36,10 @@ def clean(value):
 
 def paper_rows(work):
     papers, hits = {}, {}
-    for state_file in sorted(Path(work).glob("*-state.json")):
-        state = json.loads(state_file.read_text())
+    link = Path(work) / DISCOVERY_LINK
+    names = {p.name for p in Path(work).glob("*-state.json")} | ({p.name for p in Path(json.loads(link.read_text())["folder"]).glob("*-state.json")} if link.is_file() else set())
+    for name in sorted(names):
+        state = json.loads(work_file(work, name).read_text())
         for key, paper in (state.get("papers") or {}).items():
             entry = papers.setdefault(key, {"key": key, "title": paper.get("title", ""), "url": paper.get("url", ""), "queries": []})
             entry["queries"] += [q for q in paper.get("queries", []) if q not in entry["queries"]]

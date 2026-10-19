@@ -24,7 +24,7 @@ class Product:
         self.term = term_regex(topic["terms"])
         self.harness = re.compile(channels["harness"], re.I)
         self.extra = re.compile(channels["extra_text"], re.I) if channels.get("extra_text") else None
-        self.pool = Pool(self.work / "product-state.json")
+        self.pool = Pool(self.work / "product-state.json", topic["terms"])
 
     def relevant(self, text):
         return bool(self.harness.search(text) and (self.term.search(text) or (self.extra and self.extra.search(text))))

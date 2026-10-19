@@ -50,7 +50,7 @@ def marketplaces(pool, home):
 
 def discover(topic, work, home, fetch):
     channels = channels_of(topic, "config")
-    pool = Pool(Path(work) / "config-state.json")
+    pool = Pool(Path(work) / "config-state.json", topic["terms"])
     for query in channels.get("repo_queries", []):
         repo_search(fetch, pool, [query], f"repo {query}", "github-repo-search", f'repos "{query}"')
     for name in channels.get("topics", []):

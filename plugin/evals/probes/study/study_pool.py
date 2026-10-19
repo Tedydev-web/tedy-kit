@@ -2,7 +2,9 @@ import json
 import re
 from pathlib import Path
 
+from study_topic import TopicError, terms_digest
 
+DISCOVERY_LINK = "discovery.json"
 GH_LINK = re.compile(r"github\.com[/:]([A-Za-z0-9-]{1,39})/([A-Za-z0-9._-]{1,100})")
 INSTALL_REF = re.compile(r"(?:skills add|plugin install|plugin marketplace add|marketplace add)\s+([A-Za-z0-9-]{1,39})/([A-Za-z0-9._-]{1,100})", re.I)
 NOT_OWNERS = {"orgs", "topics", "sponsors", "features", "apps", "marketplace", "settings", "login", "about", "collections", "search",
@@ -24,10 +26,26 @@ def read_json(path, default):
     return json.loads(path.read_text()) if path.exists() else default
 
 
+def work_file(work, relative):
+    own = Path(work) / relative
+    link = Path(work) / DISCOVERY_LINK
+    if own.exists() or not link.is_file():
+        return own
+    linked = Path(json.loads(link.read_text())["folder"]) / relative
+    return linked if linked.exists() else own
+
+
 class Pool:
-    def __init__(self, path):
+    def __init__(self, path, terms=None):
         self.path = Path(path)
         self.state = read_json(self.path, {"hits": {}, "log": [], "done": []})
+        if terms is None:
+            return
+        digest = terms_digest(terms)
+        if self.path.exists() and "terms_sha256" not in self.state:
+            raise TopicError(f"{self.path} predates the terms digest, so the terms it was discovered with are unknown; discover again in a new working folder")
+        if self.state.setdefault("terms_sha256", digest) != digest:
+            raise TopicError(f"{self.path} was discovered with other terms than the topic now lists; discover again in a new working folder")
 
     def add(self, owner, repo, channel, evidence):
         repo = re.sub(r"\.git$", "", repo).rstrip(".")
@@ -155,8 +173,9 @@ README_LINK = re.compile(r"github\.com/([A-Za-z0-9][\w.-]*)/([\w.-]+?)(?:\.git)?
 
 def readme(fetch, cache, repo):
     target = Path(cache) / "readmes" / (repo.lower().replace("/", "__") + ".md")
-    if target.exists():
-        return target.read_text()
+    cached = work_file(Path(cache).parent, Path(Path(cache).name) / "readmes" / target.name)
+    if cached.exists():
+        return cached.read_text()
     out, status, _ = fetch.run(["gh", "api", "-H", "Accept: application/vnd.github.raw", f"repos/{repo}/readme"], timeout=120)
     if status != "ok":
         return None

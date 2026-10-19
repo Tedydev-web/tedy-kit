@@ -4,7 +4,7 @@ from pathlib import Path
 
 from study_agreement import cohen_kappa, recall_at_cut, resolved_standard, rounded
 from study_fetch import Fetch
-from study_pool import graphql_repositories, read_json
+from study_pool import graphql_repositories, read_json, work_file
 from study_screening_core import read_jsonl
 from study_topic import TopicError, load_topic, topic_arguments
 
@@ -28,8 +28,8 @@ def judged(folder, stratum=None):
 
 def canonical_names(work, names, fetch):
     cache_file = Path(work) / "cache" / "canonical.json"
-    cache = read_json(cache_file, {})
-    discovered = read_json(Path(work) / "cache" / "meta.json", {})
+    cache = read_json(work_file(work, Path("cache") / "canonical.json"), {})
+    discovered = read_json(work_file(work, Path("cache") / "meta.json"), {})
     known = {k: (v or {}).get("nameWithOwner") for k, v in discovered.items()}
     pending = {n.lower(): n for n in sorted(names, key=str.lower) if n.lower() not in cache and n.lower() not in known}
     if pending:
@@ -46,10 +46,10 @@ def recall(folder, work, states, stratum=None, fetch=None):
     both = judged(folder, stratum)
     if not both:
         raise TopicError("no candidate was judged by both judges")
-    discovered = read_json(Path(work) / "cache" / "meta.json", {})
+    discovered = read_json(work_file(work, Path("cache") / "meta.json"), {})
     hits = {}
     for name in states:
-        state = Path(work) / f"{name}-state.json"
+        state = work_file(work, f"{name}-state.json")
         if not state.exists():
             raise TopicError(f"no discovery state at {state}")
         for key, hit in json.loads(state.read_text())["hits"].items():

@@ -2,7 +2,7 @@ import math
 import re
 from pathlib import Path
 
-from study_pool import AGGREGATOR_TEXT, ASSET, SOCIAL, cache_name, read_json
+from study_pool import AGGREGATOR_TEXT, ASSET, SOCIAL, cache_name, read_json, work_file
 from study_topic import term_regex
 
 VENDORED = {"fixtures", "fixture", "mirrors", "mirror", "dataset", "datasets", "profiles", "examples", "example", "vendor", "vendored",
@@ -40,7 +40,7 @@ class Ranker:
         return found
 
     def load(self, folder, key):
-        return read_json(self.cache / folder / cache_name(key), {"error": "not fetched"})
+        return read_json(work_file(self.cache.parent, Path(self.cache.name) / folder / cache_name(key)), {"error": "not fetched"})
 
     def name_hit(self, row):
         return bool(self.term.search(row["repo"].split("/", 1)[1].replace("_", "-")) or self.term.search(row.get("description") or ""))

@@ -3,7 +3,7 @@ import re
 import urllib.parse
 from pathlib import Path
 
-from study_pool import cache_name, read_json
+from study_pool import cache_name, read_json, work_file
 from study_screening_core import read_jsonl
 from study_screening_evidence import file_gone, repo_evidence, tree_error_kind
 from study_topic import SNOWBALL_RANK_BASE, TopicError
@@ -54,7 +54,7 @@ def unit_paths(fetch, repo, sha, units):
 
 def pinned_tree(fetch, work, repo, units=()):
     cache = Path(work) / "cache" / "trees" / cache_name(repo)
-    tree = read_json(cache, {})
+    tree = read_json(work_file(work, Path("cache") / "trees" / cache_name(repo)), {})
     sha = tree.get("oid") if HEX40.fullmatch(tree.get("oid") or "") else None
     if sha and tree.get("paths") and (not tree.get("truncated") or tree.get("partial")):
         return sha, tree["paths"], "ok", bool(tree.get("truncated"))

@@ -2,7 +2,7 @@ import json
 import sys
 from pathlib import Path
 
-from study_pool import product_code_queries
+from study_pool import product_code_queries, work_file
 from study_rank import rank_product
 from study_topic import TopicError, load_topic, topic_arguments
 
@@ -15,11 +15,11 @@ def main(argv=None):
     work = Path(args.work)
     try:
         topic = load_topic(args.repo, args.topic)
-        if not (work / "product-pool.json").exists():
+        if not work_file(work, "product-pool.json").exists():
             raise TopicError(f"no pool at {work / 'product-pool.json'}; run resolve-pool.py --stratum product --states product first")
     except TopicError as error:
         sys.exit(f"rank-product-pool: {error}")
-    pool = json.loads((work / "product-pool.json").read_text())
+    pool = json.loads(work_file(work, "product-pool.json").read_text())
     ranked = rank_product(pool["rows"], topic["terms"], product_code_queries(topic["strata"]["product"].get("channels") or {}))
     identified = {c: sum(1 for r in pool["rows"] if c in r["evidence"]) for c in PRODUCT_CHANNELS}
     prisma = {"identified_per_channel": identified, "union": pool["prisma"]["identified"], "not_resolvable": pool["prisma"]["not_resolvable"],

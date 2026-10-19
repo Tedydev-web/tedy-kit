@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from study_fetch import Fetch
-from study_pool import graphql_repositories, read_json
+from study_pool import graphql_repositories, read_json, work_file
 from study_topic import TopicError, load_topic, topic_arguments
 
 FIELDS = ("nameWithOwner description createdAt pushedAt stargazerCount isArchived isFork licenseInfo { spdxId } "
@@ -15,7 +15,7 @@ FIELDS = ("nameWithOwner description createdAt pushedAt stargazerCount isArchive
 def merged_hits(work, states):
     hits = {}
     for name in states:
-        path = Path(work) / f"{name}-state.json"
+        path = work_file(work, f"{name}-state.json")
         if not path.exists():
             raise TopicError(f"no discovery state at {path}")
         for key, hit in json.loads(path.read_text())["hits"].items():
@@ -36,7 +36,7 @@ def impact(info, channels, now):
 def resolve(work, states, fetch, now):
     hits = merged_hits(work, states)
     meta_file = Path(work) / "cache" / "meta.json"
-    meta = read_json(meta_file, {})
+    meta = read_json(work_file(work, Path("cache") / "meta.json"), {})
     pending = {k: hits[k]["repo"] for k in hits if k not in meta}
     found, failed = graphql_repositories(fetch, pending, FIELDS)
     meta.update(found)

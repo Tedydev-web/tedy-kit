@@ -24,7 +24,7 @@ def snowball(topic, work, fetch, ranked_name):
             continue
         for owner, name, _ in term_links(text, term, agg["repo"]):
             found.setdefault(f"{owner}/{name}".lower(), set()).add(agg["repo"])
-    pool = Pool(work / "snowball-state.json")
+    pool = Pool(work / "snowball-state.json", topic["terms"])
     fresh = 0
     for key, sources in sorted(found.items()):
         if key in known:
