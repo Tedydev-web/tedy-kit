@@ -4,7 +4,7 @@ from pathlib import Path
 
 from study_calibration_set import draw_batch, set_file
 from study_fetch import Fetch, NetworkRefused
-from study_topic import TopicError, load_topic, topic_arguments
+from study_topic import TopicError, load_topic, saigon_today, topic_arguments
 
 
 def main(argv=None, fetch=None):
@@ -13,9 +13,10 @@ def main(argv=None, fetch=None):
                            "anchors only, never an answer or how a row was drawn.",
                            (["--work"], {"required": True, "help": "the topic's working folder, holding the pool orders, the stage-1 inputs and the QGS candidates"}),
                            (["--criteria"], {"required": True, "help": "criteria file whose anchors the page shows, relative to the repository"}),
-                           (["--top-up"], {"type": int, "help": "draw the top-up batch of this many enriched rows (30-40); refused unless a trigger fired"})).parse_args(argv)
+                           (["--top-up"], {"type": int, "help": "draw the top-up batch of this many enriched rows (30-40); refused unless a trigger fired"}),
+                           (["--today"], {"default": saigon_today(), "help": "draw date, default today in Asia/Saigon; the calibration set is drawn on the date the sweep is named for"})).parse_args(argv)
     try:
-        batch, text, provenance, page = draw_batch(load_topic(args.repo, args.topic), args.repo, args.work, args.criteria, fetch or Fetch(), args.top_up)
+        batch, text, provenance, page = draw_batch(load_topic(args.repo, args.topic), args.repo, args.work, args.criteria, fetch or Fetch(), args.top_up, args.today)
     except (TopicError, NetworkRefused) as error:
         sys.exit(f"draw-calibration-set: {error}")
     work = Path(args.work)

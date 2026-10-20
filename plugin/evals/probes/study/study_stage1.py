@@ -188,7 +188,8 @@ def choose_rung(folder, labelled):
         if meets:
             return {"rung": rung["rung"], "tried": tried}
     detail = "; ".join(f"rung {t['rung']} lower bounds {[round(r['lower'], 3) for r in t['runs']]}" for t in tried) or "no rung was run twice on the calibration set"
-    raise TopicError(f"no stage-1 rung meets the pass rule yet ({detail}); run the next rung twice on the calibration set with run-stage1.py --set calibration")
+    raise TopicError(f"no stage-1 rung meets the pass rule yet ({detail}); run the next rung, or a rung whose runs miss calibration rows, twice on every calibration "
+                     "row with run-stage1.py --set calibration, which skips the rows a run already judged")
 
 
 def ladder_rung(number):

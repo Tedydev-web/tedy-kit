@@ -200,7 +200,7 @@ def saved_labels(work, batch, labels=None):
 def drawn_and_labelled(repo, work, top_up=None, labels=None):
     from study_calibration_set import top_up_trigger
     batch = "calibration" if top_up is None else top_up_trigger(work)[0]
-    quiet(repo, "draw-calibration-set", "--work", str(work), "--criteria", CRITERIA, *(("--top-up", str(top_up)) if top_up else ()), fetch=inputs_fetch())
+    quiet(repo, "draw-calibration-set", "--work", str(work), "--criteria", CRITERIA, "--today", TODAY, *(("--top-up", str(top_up)) if top_up else ()), fetch=inputs_fetch())
     path = saved_labels(work, batch, labels)
     quiet(repo, "import-calibration-labels", "--work", str(work), "--batch", batch, "--labels", str(path))
     path.unlink()

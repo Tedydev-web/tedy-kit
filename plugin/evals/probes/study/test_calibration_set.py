@@ -11,8 +11,8 @@ from study_session import canonical_sha256, qgs_shape
 from study_v4_fixture import CRITERIA, SECRET, SWEEP, TODAY, drawn_and_labelled, inputs_fetch, quiet, screening_row, user_labels, v4_repo, v4_work
 
 
-def draw(repo, work, *extra):
-    script("draw-calibration-set").main(["--topic", "demo", "--repo", str(repo), "--work", str(work), "--criteria", CRITERIA, *extra], fetch=inputs_fetch())
+def draw(repo, work, *extra, today=TODAY):
+    script("draw-calibration-set").main(["--topic", "demo", "--repo", str(repo), "--work", str(work), "--criteria", CRITERIA, "--today", today, *extra], fetch=inputs_fetch())
 
 
 class CalibrationSetTest(unittest.TestCase):
@@ -65,6 +65,10 @@ class CalibrationSetTest(unittest.TestCase):
         again = v4_work(self.repo)
         draw(self.repo, again)
         self.assertEqual((again / "calibration-set.json").read_text(), (self.work / "calibration-set.json").read_text())
+        late = v4_work(self.repo)
+        with self.assertRaisesRegex(SystemExit, r"the sweep 261020-demo is not named for the draw date 2026-10-22; name the v4 sweep <yymmdd>-<topic> at the calibration draw"):
+            draw(self.repo, late, today="2026-10-22")
+        self.assertEqual(self.sample["drawn"], TODAY)
         early = v4_work(self.repo)
         (early / "stage1-inputs-product-brief.jsonl").unlink()
         with self.assertRaisesRegex(SystemExit, "no stage1-inputs-product-brief.jsonl in .*; the calibration set is drawn after the stage-1 inputs exist"):

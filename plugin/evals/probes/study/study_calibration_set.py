@@ -151,9 +151,12 @@ def top_up_trigger(folder):
                      + ("rung 1 was chosen" if rung == 1 else "no stage-1 rung is chosen yet"))
 
 
-def draw_batch(topic, repo, work, criteria, fetch, top_up=None):
+def draw_batch(topic, repo, work, criteria, fetch, top_up=None, today=None):
     work = Path(work)
     if top_up is None:
+        if today is None or required_sweep_date(topic).isoformat() != today:
+            raise TopicError(f"the sweep {topic['sweep']} is not named for the draw date {today}; name the v4 sweep <yymmdd>-<topic> at the calibration draw, "
+                             "so no earlier work folder is mistaken for it")
         batch, purpose, size = "calibration", "the calibration set", {s: SET_SIZE for s in calibrated(topic)}
     else:
         if not TOP_UP_MIN <= top_up <= TOP_UP_MAX:
@@ -179,7 +182,7 @@ def draw_batch(topic, repo, work, criteria, fetch, top_up=None):
                          "inputs_sha256": canonical_sha256(held), "qgs_sha256": canonical_sha256(qgs_shape(held))})
             provenance.append({"id": key, **{k: how[k] for k in ("facet", "class", "facet_rank")}})
             shown.append((key, stratum, held))
-    sample = {"sweep": topic["sweep"], "batch": batch, "purpose": purpose, "criteria": criteria, "criteria_sha256": hashlib.sha256(criteria_path.read_bytes()).hexdigest(),
+    sample = {"sweep": topic["sweep"], "batch": batch, "purpose": purpose, "drawn": today, "criteria": criteria, "criteria_sha256": hashlib.sha256(criteria_path.read_bytes()).hexdigest(),
               "rows_per_stratum": size, "rows": rows}
     text = json.dumps(sample, indent=1, ensure_ascii=False) + "\n"
     return batch, text, {"seed": f"{topic['sweep']}:{batch}:<stratum>", "rows": provenance}, page(topic, batch, hashlib.sha256(text.encode()).hexdigest(), shown, anchor)
