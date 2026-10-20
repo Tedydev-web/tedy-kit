@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { v4Errors } from "./sweep-method-evidence-v4.mjs";
 
 export const GRANDFATHERED = new Map([
   [
@@ -111,84 +112,7 @@ function calibrationErrors(sample, sessions, strata) {
   return errors;
 }
 
-const CALIBRATION_ROWS = 60;
-const JUDGE_RUNS = [1, 2];
 const criteriaVersion = (text) => Number(text.match(/^- Criteria: docs\/prior-art\/quality-criteria-v(\d+)\.md /m)?.[1] ?? 0);
-const lineIn = (body, pattern) => new RegExp(pattern, "m").test(body);
-
-function judgeRoster(topic, freeze) {
-  const roster = [["qgs-A", topic.qgs_judges?.A?.model], ["qgs-B", topic.qgs_judges?.B?.model], ["reader", topic.reader?.model]];
-  return [["screening-A", freeze?.session_a?.model], ["screening-B", freeze?.session_b?.chosen?.model], ...roster];
-}
-
-function facetStopErrors(text, topic, facets, stratum) {
-  const stop = part(text, `Stratum: ${stratum}`).match(/^stop: .*; facet stop rows (.+)$/m);
-  if (!stop) return [`${stratum}: no stop line stating each facet's stop row`];
-  const rows = Object.fromEntries(stop[1].split(", ").map((entry) => entry.match(/^(\S+) (\d+) \(/)).filter(Boolean).map((m) => [m[1], Number(m[2])]));
-  return facets.flatMap((facet) => {
-    const written = topic.facets[facet]?.strata?.[stratum]?.stop_row ?? null;
-    return rows[facet] === written ? [] : [`${stratum}: facet ${facet}'s stop_row is ${written}, the record stops it at row ${rows[facet]}; write it with facet-depth.py --write-stop`];
-  });
-}
-
-function judgeRunErrors(sessions, set, stratum, judge, model) {
-  const rows = (set?.rows ?? []).filter((r) => r.stratum === stratum);
-  return JUDGE_RUNS.flatMap((run) => {
-    const key = `judge-${stratum}-${judge}-${model}-run${run}`;
-    if (!sessions[key]?.blocks?.length) return [`${key}: meta.json records no judge run on the calibration set`];
-    const hashes = rowHashes(sessions[key]);
-    return rows.some((r) => hashes[String(r.order_rank)] !== r.inputs_sha256) ? [`${key}: the run judged other inputs than the calibration set holds`] : [];
-  });
-}
-
-function v4Errors(text, { read, topic, sessions, strata }) {
-  const facets = Object.keys(topic?.facets ?? {});
-  if (!facets.length) return ["a quality criteria v4 record needs a topic config that declares its facets"];
-  const [recall, facetText, calibration, judges, threats] = ["Recall", "Facets", "Calibration", "Judges", "Threats"].map((heading) => part(text, heading));
-  const setText = read("calibration-set.json");
-  const set = JSON.parse(setText ?? "null");
-  const labels = JSON.parse(read("calibration-labels.json") ?? "null");
-  const freeze = JSON.parse(read("protocol-freeze.json") ?? "null");
-  const errors = [];
-  if (!set || !labels) errors.push("no calibration-set.json and calibration-labels.json in the sweep folder");
-  else if (labels.set_sha256 !== sha256(setText)) errors.push("calibration-labels.json was imported for another calibration set");
-  else if (labels.complete !== labels.rows?.length) errors.push(`the user labelled ${labels.complete} of ${labels.rows?.length} calibration rows`);
-  const roster = judgeRoster(topic, freeze);
-  for (const stratum of strata) {
-    const s = escape(stratum);
-    errors.push(...facetStopErrors(text, topic, facets, stratum));
-    const pooled = recall.match(new RegExp(`^- ${s}: pooled recall at the stop \\d+/\\d+ \\([\\d.]+, 95% CI [\\d.]+-[\\d.]+\\) of the deduplicated ${s} standard.*; (meets|below) the`, "m"));
-    if (!pooled) errors.push(`${stratum}: no pooled recall at the stop with its 95% interval`);
-    else if (pooled[1] === "below" && !lineIn(threats, `^- recall target not reached: ${s} `)) errors.push(`${stratum}: pooled recall is below the target and the record names no recall target threat`);
-    for (const facet of facets) if (!lineIn(recall, `^- ${s} facet ${escape(facet)}: `)) errors.push(`${stratum}: no recall line for facet ${facet}`);
-    if (!lineIn(facetText, `^- ${s}: \\d+ repositories screened once, counted per facet `)) errors.push(`${stratum}: no facet overlap line counting each repository once`);
-    if (!lineIn(calibration, `^- ${s}: calibration set of ${CALIBRATION_ROWS} rows, drawn per facet `)) errors.push(`${stratum}: no calibration set of ${CALIBRATION_ROWS} rows drawn per facet`);
-    if (set && (set.rows ?? []).filter((r) => r.stratum === stratum).length !== CALIBRATION_ROWS) errors.push(`${stratum}: calibration-set.json does not hold ${CALIBRATION_ROWS} rows`);
-    for (const [judge, model] of roster) {
-      if (!model) {
-        errors.push(`${judge}: the topic config or the freeze names no model`);
-        continue;
-      }
-      if (!lineIn(judges, `^- ${escape(judge)} \\S+ ${escape(model)}, ${s}: run 1 sensitivity .*; run 2 sensitivity .*; runs differ on \\d+ of \\d+ rows .*; qualified$`)) {
-        errors.push(`${judge} ${model} ${stratum}: no validation on the calibration set that qualifies it`);
-      }
-      errors.push(...judgeRunErrors(sessions, set, stratum, judge, model));
-    }
-    const cross = topic.cross_family?.model;
-    if (cross && !lineIn(judges, `^- ${s} cross-family QGS judge ${escape(cross)}: `)) errors.push(`${stratum}: no agreement of the cross-family QGS judge ${cross}`);
-    if (cross && !lineIn(judges, `^- ${s} audit: \\d+ rows screened again by ${escape(cross)}: `) && !lineIn(threats, `^- cross-family audit pending: ${s}: `)) {
-      errors.push(`${stratum}: no cross-family audit result and no pending audit threat`);
-    }
-  }
-  if (topic.strata?.product?.channels?.config_pool === true && strata.includes("product") && !lineIn(recall, "^- product channel from the config pool: \\d+ repositories joined the product pool; ")) {
-    errors.push("no count of the repositories the config-pool channel joined and the product standard members they hold");
-  }
-  for (const facet of facets) if (!lineIn(facetText, `^- ${escape(facet)} ranking: .*; counted code-search queries `)) errors.push(`facet ${facet}: the record does not state the code-search queries its ranking counted`);
-  const families = [topic.reader?.model, topic.qgs_judges?.A?.model, topic.qgs_judges?.B?.model].filter(Boolean).map(family);
-  if (families.length === 3 && new Set(families).size === 1 && !lineIn(threats, "^- reader shares the QGS judges' model family: ")) errors.push("the reader shares the QGS judges' model family and the record names no threat");
-  if (!lineIn(threats, "^- recall is an upper estimate: ")) errors.push("no threat stating that recall is an upper estimate");
-  return errors;
-}
 
 export function checkMethodEvidence(text, { files, read, criteriaText, topic }) {
   const v4 = criteriaVersion(text) >= 4;
@@ -232,7 +156,7 @@ export function checkMethodEvidence(text, { files, read, criteriaText, topic }) 
     if (!stop) errors.push(`${stratum}: no stop line derived from the screening data`);
     else if (topic && Number(stop[1]) !== written) errors.push(`${stratum}: the topic config's stop_row is ${written}, the record stops at row ${stop[1]}; write it with compare-screening-sessions.py --write-stop`);
   }
-  if (v4) return [...errors, ...v4Errors(text, { read, topic, sessions, strata })];
+  if (v4) return [...errors, ...v4Errors(text, { read, topic, meta: JSON.parse(read("meta.json") ?? "{}") })];
   if (topic?.clusters) errors.push(`the record pins quality criteria v${criteriaVersion(text)}, but its topic holds a facet of more than one problem, a cluster that quality criteria v4 introduced; screen it under v4`);
   if (!/^- user vs session A: /m.test(part(text, "Calibration")) && !/^- LLM-only screening: /m.test(threats)) errors.push("no user calibration agreement and no LLM-only screening threat");
   return errors;
@@ -259,7 +183,7 @@ export function sweepMethodErrors(repo, file, text) {
   if (GRANDFATHERED.get(sweep)?.sha256 === sha256(text)) return [];
   const folder = join(repo, "docs", "prior-art", "sweeps", sweep);
   const files = existsSync(folder) ? readdirSync(folder).sort() : [];
-  const read = (name) => (files.includes(name) ? readFileSync(join(folder, name), "utf8") : undefined);
+  const read = (name) => (files.includes(name) || (/^dropped\/[\w.-]+$/.test(name) && existsSync(join(folder, name))) ? readFileSync(join(folder, name), "utf8") : undefined);
   const criteriaText = (path) => (existsSync(join(repo, path)) ? readFileSync(join(repo, path), "utf8") : "");
   const topic = topicForSweep(repo, sweep);
   const role = text.match(/^- Role: (\S+)$/m)?.[1];

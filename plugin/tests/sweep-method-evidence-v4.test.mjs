@@ -6,6 +6,7 @@ import { cpSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sweepMethodErrors } from "../lib/sweep-method-evidence.mjs";
+import { kappa, lowerBound } from "../lib/sweep-method-evidence-v4.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const STUDY = fileURLToPath(new URL("../evals/probes/study/", import.meta.url));
@@ -26,70 +27,134 @@ function sweep(source = built) {
   cpSync(source, repo, { recursive: true });
   const folder = join(repo, "docs", "prior-art", "sweeps", SWEEP);
   const text = readFileSync(join(repo, "docs", "prior-art", "sweeps", `${SWEEP}.md`), "utf8");
-  const json = (name) => JSON.parse(readFileSync(join(folder, name), "utf8"));
+  const raw = (name) => readFileSync(join(folder, name), "utf8");
+  const json = (name) => JSON.parse(raw(name));
+  const jsonl = (name) => raw(name).split("\n").filter(Boolean).map((line) => JSON.parse(line));
   const write = (name, value) => writeFileSync(join(folder, name), typeof value === "string" ? value : JSON.stringify(value));
-  const topicFile = join(repo, "docs", "prior-art", "topics", "demo.json");
-  return { repo, folder, text, json, write, topicFile, errors: (body = text) => sweepMethodErrors(repo, `${SWEEP}.md`, body).join("\n") };
+  const writeRows = (name, rows) => write(name, rows.map((r) => `${JSON.stringify(r)}\n`).join(""));
+  return { repo, folder, text, json, jsonl, write, writeRows, errors: (body = text) => sweepMethodErrors(repo, `${SWEEP}.md`, body).join("\n") };
 }
 
-const without = (text, pattern) => text.replace(new RegExp(`^${pattern}.*\\n`, "gm"), "");
+test("the Clopper-Pearson lower bound and kappa match the study toolchain", () => {
+  assert.equal(lowerBound(59, 59).toFixed(4), "0.9505");
+  assert.ok(lowerBound(58, 58) < 0.95);
+  assert.equal(kappa([[true, true], [false, false]]), 1);
+  assert.ok(kappa([...Array(6).fill([true, true]), ...Array(7).fill([false, true]), ...Array(90).fill([false, false])]) < 0.6);
+});
 
-test("a v4 sweep run end to end through the toolchain passes the gate, with the audit run or pending", () => {
+test("a v4 sweep run end to end through the toolchain passes the gate, with the cross-family audit run or pending", () => {
   assert.equal(sweep().errors(), "");
   assert.equal(sweep(pending).errors(), "");
   assert.match(sweep(pending).text, /^- cross-family audit pending: config: /m);
 });
 
-test("the gate requires pooled recall with its interval, every facet's recall, and the config-pool channel count", () => {
+test("item 2: a QGS candidate judged by one judge and not dropped with a reason fails the gate", () => {
   const s = sweep();
-  assert.match(s.errors(without(s.text, "- config: pooled recall")), /config: no pooled recall at the stop with its 95% interval/);
-  assert.match(s.errors(s.text.replace(/95% CI ([\d.]+)-([\d.]+)\) of the deduplicated product/, "of the deduplicated product")), /product: no pooled recall at the stop with its 95% interval/);
-  assert.match(s.errors(without(s.text, "- product facet beta: ")), /product: no recall line for facet beta/);
-  assert.match(s.errors(without(s.text, "- product channel from the config pool: ")), /no count of the repositories the config-pool channel joined/);
-  const below = s.text.replace("of the deduplicated config standard, counting rows both sessions screened within a facet's depth; meets the 0.80 target", "of the deduplicated config standard, counting rows both sessions screened within a facet's depth; below the 0.80 target; missed: o/x");
-  assert.match(s.errors(below), /config: pooled recall is below the target and the record names no recall target threat/);
-});
-
-test("the gate requires one screen per repository and each facet's own stop row and ranking", () => {
-  const s = sweep();
-  assert.match(s.errors(without(s.text, "- config: \\d+ repositories screened once")), /config: no facet overlap line counting each repository once/);
-  assert.match(s.errors(without(s.text, "- beta ranking: ")), /facet beta: the record does not state the code-search queries its ranking counted/);
-  assert.match(s.errors(s.text.replace(/; facet stop rows .*/g, "")), /config: no stop line stating each facet's stop row/);
-  const topic = JSON.parse(readFileSync(s.topicFile, "utf8"));
-  topic.facets.alpha.strata.config.stop_row = 30;
-  writeFileSync(s.topicFile, JSON.stringify(topic));
-  assert.match(s.errors(), /config: facet alpha's stop_row is 30, the record stops it at row 40; write it with facet-depth\.py --write-stop/);
-});
-
-test("the gate requires the calibration set, the user's complete labels and every judge qualified in two runs on it", () => {
-  const s = sweep();
-  assert.match(s.errors(without(s.text, "- product: calibration set of 60 rows")), /product: no calibration set of 60 rows drawn per facet/);
-  assert.match(s.errors(without(s.text, "- qgs-B claude claude-sonnet-5-5, config: ")), /qgs-B claude-sonnet-5-5 config: no validation on the calibration set that qualifies it/);
-  assert.match(s.errors(s.text.replace(/(- reader claude claude-opus-5-5, product: .*); qualified$/m, "$1; NOT qualified")), /reader claude-opus-5-5 product: no validation on the calibration set that qualifies it/);
+  const rows = s.jsonl("qgs-judge-B.jsonl");
+  s.writeRows("qgs-judge-B.jsonl", rows.slice(1));
   const meta = s.json("meta.json");
-  const block = meta.sessions["judge-config-screening-B-claude-sonnet-5-5-run2"].blocks[0];
-  block.row_sha256[String(block.ranks[0])] = "0".repeat(64);
-  delete meta.sessions["judge-product-qgs-A-claude-opus-5-5-run1"];
+  for (const block of meta.sessions["qgs-judge-B"].blocks) block.ranks = block.ranks.filter((r) => r !== rows[0].id);
+  s.write("meta.json", meta);
+  assert.match(s.errors(), new RegExp(`QGS gap: candidate ${rows[0].id} ${rows[0].repo} is not judged by both judges and not dropped with a reason`));
+  const dropped = s.json("qgs-dropped.json");
+  s.write("qgs-dropped.json", { ...dropped, [rows[0].id]: { repo: rows[0].repo, reason: " ", date: "2026-10-20" } });
+  assert.match(s.errors(), new RegExp(`QGS candidate ${rows[0].id} is dropped without a reason`));
+  const t = sweep();
+  const final = t.json("qgs-adjudicated.json");
+  t.write("qgs-adjudicated.json", { ...final, final: final.final.slice(1) });
+  assert.match(t.errors(), /qgs-adjudicated\.json is not the standard the judge, reader and cross-family files give/);
+});
+
+test("item 7: judgments from an unvalidated judge, input shape or packet fail the gate", () => {
+  const s = sweep();
+  const meta = s.json("meta.json");
+  meta.sessions["qgs-judge-A"].blocks[0].shape = "full";
+  meta.sessions["qgs-reader"].model = "claude-sonnet-5-5";
   s.write("meta.json", meta);
   const errors = s.errors();
-  assert.match(errors, /judge-config-screening-B-claude-sonnet-5-5-run2: the run judged other inputs than the calibration set holds/);
-  assert.match(errors, /judge-product-qgs-A-claude-opus-5-5-run1: meta\.json records no judge run on the calibration set/);
-  const labels = s.json("calibration-labels.json");
-  s.write("calibration-labels.json", { ...labels, complete: labels.complete - 1 });
-  assert.match(s.errors(), /the user labelled 119 of 120 calibration rows/);
-  s.write("calibration-set.json", `${JSON.stringify(s.json("calibration-set.json"))}\n`);
-  assert.match(s.errors(), /calibration-labels\.json was imported for another calibration set/);
+  assert.match(errors, /qgs-judge-A\.jsonl: its judgments come from outside the validated workflow/);
+  assert.match(errors, /qgs-reader\.jsonl: its judgments come from outside the validated workflow/);
+  const t = sweep();
+  const runs = t.json("meta.json");
+  const block = runs.sessions["judge-config-qgs-B-claude-sonnet-5-5-run1"].blocks[0];
+  const set = t.json("calibration-labels.json").rows.find((r) => r.stratum === "config" && String(r.order_rank) === String(block.ranks[0]));
+  block.row_sha256[String(block.ranks[0])] = set.inputs_sha256;
+  t.write("meta.json", runs);
+  assert.match(t.errors(), /judge-config-qgs-B-claude-sonnet-5-5-run1: the run judged other inputs than the calibration rows hold in the thin shape/);
+  const u = sweep();
+  const flipped = u.jsonl("judge-product-qgs-A-claude-opus-5-5-run2.jsonl").map((r, i) => (i < 8 ? { ...r, verdict: r.verdict === "yes" ? "no" : "yes" } : r));
+  u.writeRows("judge-product-qgs-A-claude-opus-5-5-run2.jsonl", flipped);
+  assert.match(u.errors(), /judge-product-qgs-A-claude-opus-5-5-run2: qgs-A claude-opus-5-5 does not qualify on the product calibration rows/);
+  const v = sweep();
+  v.write("stage1-rung.json", { ...v.json("stage1-rung.json"), rung: 2 });
+  assert.match(v.errors(), /stage1-rung\.json chose rung 2, but the first rung the calibration files certify is rung 1/);
 });
 
-test("the gate requires the cross-family check, the audit result or its threat, and the roster's family threats", () => {
+test("item 9: a cross-family row joined by another id, or an audit run before stage 2 ended, fails the gate", () => {
   const s = sweep();
-  assert.match(s.errors(without(s.text, "- product cross-family QGS judge ")), /product: no agreement of the cross-family QGS judge gemini-3\.8-flash-high/);
-  assert.match(s.errors(without(s.text, "- config audit: ")), /config: no cross-family audit result and no pending audit threat/);
-  const p = sweep(pending);
-  assert.match(p.errors(without(p.text, "- cross-family audit pending: product: ")), /product: no cross-family audit result and no pending audit threat/);
-  assert.match(s.errors(without(s.text, "- reader shares the QGS judges' model family: ")), /the reader shares the QGS judges' model family and the record names no threat/);
-  assert.match(s.errors(without(s.text, "- recall is an upper estimate: ")), /no threat stating that recall is an upper estimate/);
-  assert.match(s.errors(without(s.text, "- same model family: ")), /config: sessions A and B are both claude models and the record names no same model family threat/);
+  const cross = s.jsonl("qgs-cross-gemini-3.8-flash-high.jsonl");
+  const candidates = s.jsonl("qgs-candidates.jsonl");
+  const other = candidates.find((c) => c.repo !== cross[0].repo);
+  s.writeRows("qgs-cross-gemini-3.8-flash-high.jsonl", [{ ...cross[0], id: other.id }, ...cross.slice(1)]);
+  assert.match(s.errors(), /row id \d+ names .*, which is candidate \d+; the join is by repository name and the two disagree/);
+  s.writeRows("qgs-cross-gemini-3.8-flash-high.jsonl", [{ ...cross[0], repo: "o/elsewhere" }, ...cross.slice(1)]);
+  assert.match(s.errors(), /names o\/elsewhere, which is not a candidate; the cross-family judgments join by repository name/);
+  const t = sweep();
+  const meta = t.json("meta.json");
+  meta.sessions["config-audit-gemini-3.8-flash-high"].blocks[0].date = "2026-10-19";
+  t.write("meta.json", meta);
+  assert.match(t.errors(), /config: the cross-family audit ran before stage 2 ended on 2026-10-20; the audit sample is drawn after stage 2 ends/);
+});
+
+test("item 10: a drop without its reason or copy, or a block removed by hand, fails the gate", () => {
+  const s = sweep();
+  const meta = s.json("meta.json");
+  assert.equal(meta.drops.length, 1);
+  meta.drops[0].reason = "";
+  s.write("meta.json", meta);
+  assert.match(s.errors(), /a drop of qgs-judge-B ranks 1,5 records no reason/);
+  const t = sweep();
+  const hand = t.json("meta.json");
+  hand.drops[0].copy = "dropped/missing-copy";
+  hand.sessions["judge-config-reader-claude-opus-5-5-run1"].blocks.pop();
+  t.write("meta.json", hand);
+  const errors = t.errors();
+  assert.match(errors, /the drop of qgs-judge-B ranks 1,5 has no copy of its block in the sweep folder/);
+  assert.match(errors, /judge-config-reader-claude-opus-5-5-run1\.jsonl holds rows .* that no recorded block covers; drop or rerun a block with the redo tools/);
+});
+
+test("item 11: PRISMA and recall are recomputed from the files, so an edited count fails the gate", () => {
+  const s = sweep();
+  assert.match(s.errors(s.text.replace("| config | stage-1 screened | 99 |", "| config | stage-1 screened | 98 |")), /PRISMA config "stage-1 screened": the record says 98, the files give 99/);
+  assert.match(s.errors(s.text.replace("| product | identified: config-pool | 21 |", "")), /PRISMA product "identified: config-pool": the record says nothing, the files give 21/);
+  assert.match(s.errors(s.text.replace(/^- pooled topic recall \d+\//m, "- pooled topic recall 44/")), /pooled topic recall: the record says 44\/45, the files give \d+\/45/);
+  assert.match(s.errors(s.text.replace(/^- facet beta: recall \d+\//m, "- facet beta: recall 1/")), /facet beta recall: the record says 1\/\d+, the files give/);
+  const plan = s.json("config-stage2.json");
+  const excluded = s.jsonl("stage1-config-brief-claude-sonnet-5-5.jsonl").find((r) => r.verdict === "no").order_rank;
+  s.write("config-stage2.json", { ...plan, passes: [...plan.passes, excluded] });
+  assert.match(s.errors(), /config-stage2\.json does not list the stage-1 passes the stage-1 files give/);
+});
+
+test("stage 1 and stage 2 are checked against the files: unscreened pool rows and stage-2 rows that passed no model fail", () => {
+  const s = sweep();
+  const rows = s.jsonl("stage1-product-brief-claude-sonnet-5-5.jsonl");
+  s.writeRows("stage1-product-brief-claude-sonnet-5-5.jsonl", rows.slice(1));
+  assert.match(s.errors(), new RegExp(`product: stage 1 has not screened ranks ${rows[0].order_rank}`));
+  const t = sweep();
+  const excluded = t.jsonl("stage1-config-brief-claude-sonnet-5-5.jsonl").find((r) => r.verdict === "no");
+  const a = t.jsonl("config-screen-A.jsonl");
+  t.writeRows("config-screen-A.jsonl", [...a, { ...a[0], order_rank: excluded.order_rank, repo: excluded.repo }]);
+  assert.match(t.errors(), new RegExp(`config: stage 2 screened ranks ${excluded.order_rank} that passed no stage-1 model`));
+  const u = sweep();
+  u.writeRows("snowball-screening-order.jsonl", [{ order_rank: 1001, repo: "s/elsewhere" }]);
+  assert.match(u.errors(), /snowballed repositories s\/elsewhere are not in the config stage-1 pool/);
+});
+
+test("a v4 record whose labels were imported before the ladder was frozen fails the gate", () => {
+  const s = sweep();
+  const labels = s.json("calibration-labels.json");
+  s.write("calibration-labels.json", { ...labels, stage1_freeze_sha256: "0".repeat(64) });
+  assert.match(s.errors(), /calibration-labels\.json was not imported under stage1-freeze\.json: the ladder is frozen before any label is read/);
 });
 
 test("a record pinning criteria before v4 may not screen a facet that clusters several problems", () => {
