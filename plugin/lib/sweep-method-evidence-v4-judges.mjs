@@ -114,5 +114,19 @@ export function judgeErrors(io, topic, sessions, strata, rows, batches) {
       : "- QGS reader: no candidate was queued for the reader";
     if (!io.text.split("\n").includes(line)) errors.push(`the record's QGS ${judge} line is not the one ${file}.jsonl gives ("${line}")`);
   }
-  return errors;
+  return [...errors, ...qgsHashErrors(sessions, ["qgs-judge-A", "qgs-judge-B", "qgs-reader"])];
+}
+
+export function qgsHashErrors(sessions, names) {
+  const seen = new Map();
+  for (const name of names) {
+    for (const block of sessions[name]?.blocks ?? []) {
+      for (const rank of block.ranks ?? []) {
+        const digest = block.row_sha256?.[String(rank)];
+        seen.set(rank, (seen.get(rank) ?? new Set()).add(typeof digest === "string" && /^[0-9a-f]{64}$/.test(digest) ? digest : null));
+      }
+    }
+  }
+  const split = [...seen].filter(([, digests]) => digests.size > 1 || digests.has(null)).map(([rank]) => rank).sort((a, b) => a - b);
+  return split.length ? [`the QGS sessions judged candidates ${split.slice(0, 10).join(", ")} on different thin inputs, or recorded no input hash for them; every QGS judge reads the same candidate inputs`] : [];
 }

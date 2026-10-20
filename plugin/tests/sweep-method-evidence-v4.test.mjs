@@ -670,6 +670,22 @@ test("every session names the roster cli as well as the model: production QGS, s
   }
 });
 
+test("the production QGS sessions record the same thin-input hash for every candidate they share, and one for each candidate they judged", () => {
+  const split = /^the QGS sessions judged candidates 1 on different thin inputs, or recorded no input hash for them; every QGS judge reads the same candidate inputs$/;
+  const probes = [
+    ["qgs-judge-A hash changed", "qgs-judge-A", (h) => { h["1"] = "0".repeat(64); }],
+    ["qgs-judge-B hash deleted", "qgs-judge-B", (h) => { delete h["1"]; }],
+    ["qgs-reader hash changed", "qgs-reader", (h) => { h["1"] = "f".repeat(64); }],
+  ];
+  for (const [name, key, edit] of probes) {
+    const s = sweep();
+    const meta = s.json("meta.json");
+    edit(meta.sessions[key].blocks.find((b) => b.ranks.includes(1)).row_sha256);
+    s.write("meta.json", meta);
+    failsBothLayers(s, new RegExp(`prior-art-sweep-record: ${split.source.slice(1)}`), split, name);
+  }
+});
+
 test("the agy threat lists every session that ran through agy, whatever the session's threats field holds", () => {
   const s = sweep();
   const meta = s.json("meta.json");

@@ -318,6 +318,22 @@ class V4RecordTest(unittest.TestCase):
         with self.assertRaisesRegex(TopicError, r"^the drop of qgs-judge-B ranks \[1, 5\] records no reason"):
             self.render(repo)
 
+    def test_the_production_qgs_sessions_record_the_same_thin_input_hash_for_every_candidate_they_share(self):
+        def change(key, edit):
+            def apply(folder):
+                meta = json.loads((folder / "meta.json").read_text())
+                edit(next(b for b in meta["sessions"][key]["blocks"] if 1 in b["ranks"])["row_sha256"])
+                (folder / "meta.json").write_text(json.dumps(meta))
+            return apply
+        for name, edit in (("qgs-judge-A hash changed", change("qgs-judge-A", lambda h: h.update({"1": "0" * 64}))),
+                           ("qgs-judge-B hash deleted", change("qgs-judge-B", lambda h: h.pop("1"))),
+                           ("qgs-reader hash changed", change("qgs-reader", lambda h: h.update({"1": "f" * 64})))):
+            with self.subTest(name=name):
+                repo, folder = self.copy()
+                edit(folder)
+                with self.assertRaisesRegex(TopicError, r"^the QGS sessions judged candidates 1 on different thin inputs, or recorded no input hash for them; "):
+                    self.render(repo)
+
     def test_the_agy_threat_lists_every_session_that_ran_through_agy_whatever_its_threats_field_holds(self):
         repo, folder = self.copy()
         meta = json.loads((folder / "meta.json").read_text())
@@ -398,7 +414,7 @@ class QgsWorkflowTest(unittest.TestCase):
         folder = Path(tempfile.mkdtemp(prefix="study-reader-"))
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
         write_jsonl(folder / "qgs-candidates.jsonl", [{"id": 1, "repo": "o/a"}])
-        block = {"ranks": [1], "shape": "thin", "packet_sha256": "p" * 64}
+        block = {"ranks": [1], "shape": "thin", "packet_sha256": "p" * 64, "row_sha256": {"1": "a" * 64}}
         for name in ("qgs-judge-A", "qgs-judge-B"):
             write_jsonl(folder / f"{name}.jsonl", [{"id": 1, "repo": "o/a", "verdict": "yes", "problems": ["X1"], "why": "w"}])
         sessions = {"qgs-judge-A": {**opus, "blocks": [block]}, "qgs-judge-B": {**sonnet, "blocks": [block]}}

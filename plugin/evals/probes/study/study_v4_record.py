@@ -331,7 +331,22 @@ def qgs_workflow(topic, folder, sessions, found):
             raise TopicError(f"{name}.jsonl: its {len(ids)} judgments are not all {judges[judge]['cli']} {judges[judge]['model']} runs on the thin QGS inputs under the validated {PACKET}; "
                              "only a validated judge in the validated workflow counts")
         lines.append(f"- QGS {judge}: {judges[judge]['model']} judged {len(ids)} candidates on the thin inputs it was validated on, under the validated packet")
+    qgs_hash_checks(sessions, list(JUDGE_FILES.values()))
     return lines
+
+
+def qgs_hash_checks(sessions, names):
+    seen = {}
+    for name in names:
+        for block in (sessions.get(name) or {}).get("blocks") or []:
+            hashes = block.get("row_sha256") or {}
+            for rank in block.get("ranks") or []:
+                digest = hashes.get(str(rank))
+                seen.setdefault(rank, set()).add(digest if isinstance(digest, str) and re.fullmatch(r"[0-9a-f]{64}", digest) else None)
+    split = sorted(r for r, digests in seen.items() if len(digests) > 1 or None in digests)
+    if split:
+        raise TopicError(f"the QGS sessions judged candidates {', '.join(map(str, split[:10]))} on different thin inputs, or recorded no input hash for them; every QGS judge "
+                         "reads the same candidate inputs")
 
 
 def judge_lines(topic, folder, strata, freeze, sessions):
