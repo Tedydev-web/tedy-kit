@@ -21,6 +21,8 @@ import {
 export { canonical, kappa, lowerBound } from "./sweep-method-evidence-v4-shared.mjs";
 
 const DROP_COPY = /^dropped\/[\w.-]+$/;
+const AUDIT_KEY = /^[a-z0-9]+-audit-(.+)$/;
+const CROSS_FILE = /^qgs-cross-(.+)\.jsonl$/;
 
 function crossQgsErrors(text, model, sides, cross) {
   const head = `- cross-family QGS judge ${model}: `;
@@ -125,6 +127,20 @@ function dropErrors(io, read, meta) {
     if (!runLike.test(file)) continue;
     const key = file.slice(0, -6).replace(/^([a-z0-9]+)-screen-([AB])$/, "$1-$2");
     if (!meta.sessions?.[key]) errors.push(`${file} has no session in meta.json: its rows count only when a recorded run produced them`);
+  }
+  const files = io.files ?? [];
+  const missing = Object.keys(meta.sessions ?? {}).filter((key) => !files.includes(`${key.replace(/^([a-z0-9]+)-([AB])$/, "$1-screen-$2")}.jsonl`));
+  if (missing.length) {
+    errors.push(`meta.json records sessions ${missing.slice(0, 10).join(", ")} whose output files are not in the sweep folder; a recorded run's rows are never deleted, only dropped with drop-run.py`);
+  }
+  const audits = Object.keys(meta.sessions ?? {}).filter((key) => AUDIT_KEY.test(key));
+  const model = io.topic?.cross_family?.model;
+  const runs = [...new Set([...audits.map((key) => key.match(AUDIT_KEY)[1]), ...files.map((f) => f.match(CROSS_FILE)?.[1]).filter(Boolean)])].sort();
+  if (runs.some((m) => m !== model)) {
+    errors.push(`the sweep folder holds cross-family runs of ${runs.join(", ")}, but the topic's cross_family is ${model ?? "none"}; a topic config edit never removes the cross-family audit or QGS judgments that ran`);
+  }
+  if (audits.length && !files.includes("audit-sample.json")) {
+    errors.push(`meta.json records the cross-family audit sessions ${audits.sort().join(", ")}, but the sweep folder has no audit-sample.json they screened`);
   }
   for (const [key, entry] of Object.entries(meta.sessions ?? {})) {
     const rows = io.jsonl(`${key}.jsonl`);

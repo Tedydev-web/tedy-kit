@@ -34,7 +34,19 @@ function sweep(source = built) {
   const jsonl = (name) => raw(name).split("\n").filter(Boolean).map((line) => JSON.parse(line));
   const write = (name, value) => writeFileSync(join(folder, name), typeof value === "string" ? value : JSON.stringify(value));
   const writeRows = (name, rows) => write(name, rows.map((r) => `${JSON.stringify(r)}\n`).join(""));
-  return { repo, folder, text, json, jsonl, write, writeRows, errors: (body = text) => sweepMethodErrors(repo, `${SWEEP}.md`, body).join("\n") };
+  const topicPath = join(repo, "docs", "prior-art", "topics", "demo.json");
+  const topic = (edit) => writeFileSync(topicPath, JSON.stringify(edit(JSON.parse(readFileSync(topicPath, "utf8")))));
+  const rendered = () => {
+    const run = spawnSync("python3", ["-B", join(STUDY, "..", "prior-art-sweep-record.py"), repo, SWEEP, "--stdout"], { encoding: "utf8", env: { ...process.env, STUDY_NO_NETWORK: "1" } });
+    return run.status === 0 ? run.stdout : text;
+  };
+  return { repo, folder, text, json, jsonl, write, writeRows, topic, rendered, errors: (body = text) => sweepMethodErrors(repo, `${SWEEP}.md`, body).join("\n") };
+}
+
+function failsBothLayers(s, python, gate, name) {
+  const errors = s.errors(s.rendered());
+  assert.ok(errors.split("\n").some((l) => l.startsWith("the record renderer refused the sweep files: ") && python.test(l)), `${name}: renderer\n${errors}`);
+  assert.ok(errors.split("\n").some((l) => !l.startsWith("the record renderer refused") && gate.test(l)), `${name}: gate\n${errors}`);
 }
 
 test("the Clopper-Pearson lower bound and kappa match the study toolchain", () => {
@@ -258,6 +270,30 @@ test("item 10: a drop without its reason or copy, or a block removed by hand, fa
   const errors = t.errors();
   assert.match(errors, /the drop of qgs-judge-B ranks 1,5 has no copy of its block in the sweep folder/);
   assert.match(errors, /judge-config-reader-claude-opus-5-5-run1\.jsonl holds rows .* that no recorded block covers; drop or rerun a block with the redo tools/);
+});
+
+test("every recorded session has its output file and every run file its session, so a completed cross-family audit never reads as pending or absent", () => {
+  const unrecorded = /^meta\.json records sessions .* whose output files are not in the sweep folder; /;
+  const foreign = /^the sweep folder holds cross-family runs of gemini-3\.8-flash-high, but the topic's cross_family is (none|gemini-9-pro); /;
+  const probes = [
+    ["AS2 audit rows deleted", built, (s) => rmSync(join(s.folder, "product-audit-gemini-3.8-flash-high.jsonl")), unrecorded],
+    ["a judge validation run deleted", built, (s) => rmSync(join(s.folder, "judge-config-qgs-A-claude-opus-5-5-run1.jsonl")), unrecorded],
+    ["a stage-1 pool run deleted", built, (s) => rmSync(join(s.folder, "stage1-config-brief-claude-sonnet-5-5.jsonl")), unrecorded, /prior-art-sweep-record: config: stage 1 has not screened ranks /],
+    ["AS1 audit sample deleted", built, (s) => rmSync(join(s.folder, "audit-sample.json")), /^meta\.json records the cross-family audit sessions .*, but the sweep folder has no audit-sample\.json they screened$/],
+    ["C7 cross_family removed", built, (s) => s.topic(({ cross_family: _, ...t }) => t), foreign],
+    ["M7d cross_family renamed", built, (s) => s.topic((t) => ({ ...t, cross_family: { ...t.cross_family, model: "gemini-9-pro" } })), foreign],
+    ["C7' cross_family removed, audit pending", pending, (s) => s.topic(({ cross_family: _, ...t }) => t), foreign],
+    ["C7'' cross_family removed, escalated", escalated, (s) => s.topic(({ cross_family: _, ...t }) => t), foreign],
+  ];
+  for (const [name, source, edit, message, python] of probes) {
+    const s = sweep(source);
+    edit(s);
+    failsBothLayers(s, python ?? new RegExp(`prior-art-sweep-record: ${message.source.slice(1)}`), message, name);
+  }
+  const t = sweep();
+  writeFileSync(join(t.folder, "judge-config-qgs-A-claude-haiku-4-5-run1.jsonl"), "");
+  assert.match(t.errors(), /^judge-config-qgs-A-claude-haiku-4-5-run1\.jsonl has no session in meta\.json: its rows count only when a recorded run produced them$/m);
+  assert.match(t.errors(), /^the record renderer refused the sweep files: prior-art-sweep-record: judge-config-qgs-A-claude-haiku-4-5-run1\.jsonl has no session in meta\.json: /m);
 });
 
 test("meta.drops matches the copies under dropped/ in both directions", () => {

@@ -1,10 +1,11 @@
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from study_agreement import RECALL_TARGET, cohen_kappa, interval_text, kappa_text
 from study_calibration_set import all_batches, calibration_checks, labelled, labels_file, set_file
-from study_drop import drop_checks
+from study_drop import drop_checks, file_stem
 from study_judges import AUDIT_FILE, AUDIT_ROWS, SHAPES, criteria_version, decided, judged_batches, reader_shares_family, roster, validate
 from study_method_sessions import checked_entry, row_hashes
 from study_qgs import ADJUDICATED, JUDGE_FILES, PACKET, UPPER_ESTIMATE, candidate_rows, cross_family, member_facets, qgs_standard, stratum_members
@@ -17,6 +18,30 @@ from study_topic import SNOWBALL_RANK_BASE, TopicError
 
 STAGE2_THREAT = "- stage 2 stopped before every stage-1 pass: "
 STAGE2_UNREACHABLE = "- pooled recall target unreachable at stage 2: "
+RUN_FILE = re.compile(r"^(?:judge-.+|stage1-(?!inputs-).+|qgs-judge-[AB]|qgs-reader|[a-z0-9]+-(?:stage1-)?audit-.+|[a-z0-9]+-screen-[AB]|[a-z0-9]+-pilot-.+)\.jsonl$")
+AUDIT_KEY = re.compile(r"^[a-z0-9]+-audit-(.+)$")
+CROSS_FILE = re.compile(r"^qgs-cross-(.+)\.jsonl$")
+
+
+def run_file_checks(topic, folder, sessions):
+    files = sorted(p.name for p in Path(folder).glob("*.jsonl"))
+    missing = [k for k in sessions if f"{file_stem(k)}.jsonl" not in files]
+    if missing:
+        raise TopicError(f"meta.json records sessions {', '.join(missing[:10])} whose output files are not in the sweep folder; a recorded run's rows are never deleted, "
+                         "only dropped with drop-run.py")
+    for name in files:
+        if RUN_FILE.match(name) and re.sub(r"^([a-z0-9]+)-screen-([AB])$", r"\1-\2", name[:-6]) not in sessions:
+            raise TopicError(f"{name} has no session in meta.json: its rows count only when a recorded run produced them")
+    audits = [k for k in sessions if AUDIT_KEY.match(k)]
+    option = cross_family(topic)
+    if option and model_family(option["model"]) == "claude":
+        raise TopicError(f"the cross_family model {option['model']} is a Claude model; the audit needs a model outside the Claude family")
+    runs = sorted({AUDIT_KEY.match(k).group(1) for k in audits} | {CROSS_FILE.match(n).group(1) for n in files if CROSS_FILE.match(n)})
+    if [m for m in runs if m != (option or {}).get("model")]:
+        raise TopicError(f"the sweep folder holds cross-family runs of {', '.join(runs)}, but the topic's cross_family is {(option or {}).get('model', 'none')}; a topic config edit "
+                         "never removes the cross-family audit or QGS judgments that ran")
+    if audits and not (Path(folder) / AUDIT_FILE).is_file():
+        raise TopicError(f"meta.json records the cross-family audit sessions {', '.join(sorted(audits))}, but the sweep folder has no {AUDIT_FILE} they screened")
 
 
 def is_v4(meta):
@@ -354,8 +379,6 @@ def audit_lines(topic, folder, strata, sides, sessions, freeze):
     option = cross_family(topic)
     if option is None:
         return [], ["- no cross-family audit: the topic config names no cross_family model, so no model of another family checks the screening"]
-    if model_family(option["model"]) == "claude":
-        raise TopicError(f"the cross_family model {option['model']} is a Claude model; the audit needs a model outside the Claude family")
     for stratum in strata:
         entry = sessions.get(f"{stratum}-audit-{option['model']}")
         if entry and (entry.get("cli"), entry.get("model")) != (option["cli"], option["model"]):
@@ -394,6 +417,7 @@ def audit_lines(topic, folder, strata, sides, sessions, freeze):
 def v4_parts(topic, folder, strata, freeze, sessions, faceted, common, decided_rows):
     calibration_checks(topic, folder)
     drop_checks(folder)
+    run_file_checks(topic, folder, sessions)
     sides = {s: {side: {r["order_rank"]: r for r in read_jsonl(folder, f"{s}-screen-{side}.jsonl")} for side in "AB"} for s in strata}
     for stratum in strata:
         faceted[stratum]["inputs"] = list(stage1_inputs(folder, stratum, stage1_results(folder, stratum)[0]["shape"]).values())

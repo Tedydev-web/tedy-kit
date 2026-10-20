@@ -245,6 +245,27 @@ class V4RecordTest(unittest.TestCase):
                 with self.assertRaisesRegex(TopicError, rf"^{key}: the run was \S+ \S+, not the roster's \S+ \S+ it validates; a validation run counts only for its own judge$"):
                     self.render(repo)
 
+    def test_every_recorded_session_has_its_output_file_and_a_completed_cross_family_audit_never_reads_as_pending(self):
+        def topic(repo, edit):
+            path = repo / "docs/prior-art/topics/demo.json"
+            path.write_text(json.dumps(edit(json.loads(path.read_text()))))
+        foreign = r"^the sweep folder holds cross-family runs of gemini-3.8-flash-high, but the topic's cross_family is (none|gemini-9-pro); "
+        for name, edit, message in (
+                ("audit rows deleted", lambda repo, folder: (folder / "product-audit-gemini-3.8-flash-high.jsonl").unlink(),
+                 r"^meta.json records sessions product-audit-gemini-3.8-flash-high whose output files are not in the sweep folder; "),
+                ("audit sample deleted", lambda repo, folder: (folder / "audit-sample.json").unlink(),
+                 r"^meta.json records the cross-family audit sessions config-audit-gemini-3.8-flash-high, product-audit-gemini-3.8-flash-high, but the sweep folder has no "
+                 r"audit-sample.json they screened$"),
+                ("cross_family removed", lambda repo, folder: topic(repo, lambda t: {k: v for k, v in t.items() if k != "cross_family"}), foreign),
+                ("cross_family renamed", lambda repo, folder: topic(repo, lambda t: {**t, "cross_family": {**t["cross_family"], "model": "gemini-9-pro"}}), foreign),
+                ("a run file without its session", lambda repo, folder: (folder / "judge-config-qgs-A-claude-haiku-4-5-run1.jsonl").write_text(""),
+                 r"^judge-config-qgs-A-claude-haiku-4-5-run1.jsonl has no session in meta.json: its rows count only when a recorded run produced them$")):
+            with self.subTest(name=name):
+                repo, folder = self.copy()
+                edit(repo, folder)
+                with self.assertRaisesRegex(TopicError, message):
+                    self.render(repo)
+
     def test_meta_drops_matches_the_copies_under_dropped_in_both_directions(self):
         repo, folder = self.copy()
         meta = json.loads((folder / "meta.json").read_text())
