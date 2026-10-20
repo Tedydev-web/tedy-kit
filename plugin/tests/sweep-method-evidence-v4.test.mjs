@@ -345,6 +345,22 @@ test("a recorded session's output file holds exactly the rows its blocks cover, 
   failsBothLayers(s, /prior-art-sweep-record: /, /^qgs-reader\.jsonl does not hold exactly the rows its recorded blocks cover \(rows outside its blocks: none; rows its blocks cover that it lacks: \d+\); /, "a reader row deleted");
 });
 
+test("the pilot sessions run the roster's session A and session B options, cli and model", () => {
+  const probes = [
+    ["config-pilot-B-claude-sonnet-5-5", { cli: "claudex" }],
+    ["config-pilot-A", { model: "claude-haiku-4-5" }],
+    ["product-pilot-A", { cli: "agy" }],
+  ];
+  for (const [key, change] of probes) {
+    const s = sweep();
+    const meta = s.json("meta.json");
+    Object.assign(meta.sessions[key], change);
+    s.write("meta.json", meta);
+    const message = new RegExp(`^${key}: the pilot session ran \\S+ \\S+, not the topic's (session A|session B option) \\S+ \\S+; a pilot counts only for the roster session it pilots$`);
+    failsBothLayers(s, new RegExp(`prior-art-sweep-record: ${message.source.slice(1)}`), message, key);
+  }
+});
+
 test("the snowball rows equal the pool's snowballed rows and the stage-1 inputs, once each", () => {
   const snowball = /^snowball-screening-order\.jsonl holds (33 rows \(33|35 rows \(34|0 rows \(0) distinct\), but the config pool holds 34 and the stage-1 inputs 34 snowballed rows above rank 1000; /;
   const probes = [

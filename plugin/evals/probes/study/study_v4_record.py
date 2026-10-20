@@ -15,13 +15,14 @@ from study_session import model_family
 from study_stage1 import FREEZE_FILE, RUNG_FILE, choose_rung, held_out_batches, held_out_binding, held_out_check, ladder_rung, pool_name, stage1_inputs
 from study_stage1_audit import cross_audit_sample, elusion
 from study_stage2 import plan_file, stage1_results, stage2_plan
-from study_topic import SNOWBALL_RANK_BASE, TopicError
+from study_topic import SNOWBALL_RANK_BASE, TopicError, session_a, session_b_options
 
 STAGE2_THREAT = "- stage 2 stopped before every stage-1 pass: "
 STAGE2_UNREACHABLE = "- pooled recall target unreachable at stage 2: "
 RUN_FILE = re.compile(r"^(?:judge-.+|stage1-(?!inputs-).+|qgs-judge-[AB]|qgs-reader|qgs-cross-.+|[a-z0-9]+-(?:stage1-)?audit-.+|[a-z0-9]+-screen-[AB]|[a-z0-9]+-pilot-.+)\.jsonl$")
 AUDIT_KEY = re.compile(r"^[a-z0-9]+-audit-(.+)$")
 CROSS_FILE = re.compile(r"^qgs-cross-(.+)\.jsonl$")
+PILOT_KEY = re.compile(r"^[a-z0-9]+-pilot-(A|B-(.+))$")
 
 
 def listed(values):
@@ -41,6 +42,16 @@ def run_file_checks(topic, folder, sessions):
         if held != covered:
             raise TopicError(f"{file_stem(key)}.jsonl does not hold exactly the rows its recorded blocks cover (rows outside its blocks: {listed((held - covered).elements())}; "
                              f"rows its blocks cover that it lacks: {listed((covered - held).elements())}); drop or rerun a block with the redo tools, never by editing meta.json")
+    a, options = session_a(topic), session_b_options(topic)
+    for key, entry in sessions.items():
+        pilot = PILOT_KEY.match(key)
+        if not pilot:
+            continue
+        expected = [(a["cli"], a["model"])] if pilot.group(1) == "A" else [(o["cli"], o["model"]) for o in options if o["model"] == pilot.group(2)]
+        if (entry.get("cli"), entry.get("model")) not in expected:
+            shown = " ".join(expected[0]) if expected else f"none {pilot.group(2)}"
+            raise TopicError(f"{key}: the pilot session ran {entry.get('cli')} {entry.get('model')}, not the topic's {'session A' if pilot.group(1) == 'A' else 'session B option'} "
+                             f"{shown}; a pilot counts only for the roster session it pilots")
     for name in files:
         if RUN_FILE.match(name) and re.sub(r"^([a-z0-9]+)-screen-([AB])$", r"\1-\2", name[:-6]) not in sessions:
             raise TopicError(f"{name} has no session in meta.json: its rows count only when a recorded run produced them")

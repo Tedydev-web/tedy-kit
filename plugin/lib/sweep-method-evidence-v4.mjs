@@ -159,6 +159,18 @@ function dropErrors(io, read, meta, dropped) {
         + `${listed(lacking)}); drop or rerun a block with the redo tools, never by editing meta.json`);
     }
   }
+  const sessionB = io.topic?.sessions?.B;
+  const options = [sessionB, sessionB?.fallback, ...(Array.isArray(sessionB?.pilot_also) ? sessionB.pilot_also : [])].filter(Boolean);
+  for (const [key, entry] of Object.entries(meta.sessions ?? {})) {
+    const pilot = key.match(/^[a-z0-9]+-pilot-(A|B-(.+))$/);
+    if (!pilot) continue;
+    const roster = pilot[1] === "A" ? [io.topic?.sessions?.A].filter(Boolean) : options.filter((o) => o.model === pilot[2]);
+    if (!roster.some((o) => o.cli === entry?.cli && o.model === entry?.model)) {
+      const shown = roster.length ? `${roster[0].cli} ${roster[0].model}` : `none ${pilot[2]}`;
+      errors.push(`${key}: the pilot session ran ${entry?.cli} ${entry?.model}, not the topic's ${pilot[1] === "A" ? "session A" : "session B option"} ${shown}; a pilot counts only for `
+        + "the roster session it pilots");
+    }
+  }
   const audits = Object.keys(meta.sessions ?? {}).filter((key) => AUDIT_KEY.test(key));
   const model = io.topic?.cross_family?.model;
   const runs = [...new Set([...audits.map((key) => key.match(AUDIT_KEY)[1]), ...files.map((f) => f.match(CROSS_FILE)?.[1]).filter(Boolean)])].sort();

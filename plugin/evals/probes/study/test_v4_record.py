@@ -281,6 +281,17 @@ class V4RecordTest(unittest.TestCase):
                                                 r"that it lacks: \d+\); "):
             self.render(repo)
 
+    def test_the_pilot_sessions_run_the_roster_session_a_and_session_b_options(self):
+        for key, change in (("config-pilot-B-claude-sonnet-5-5", {"cli": "claudex"}), ("config-pilot-A", {"model": "claude-haiku-4-5"}), ("product-pilot-A", {"cli": "agy"})):
+            with self.subTest(key=key):
+                repo, folder = self.copy()
+                meta = json.loads((folder / "meta.json").read_text())
+                meta["sessions"][key].update(change)
+                (folder / "meta.json").write_text(json.dumps(meta))
+                with self.assertRaisesRegex(TopicError, rf"^{key}: the pilot session ran \S+ \S+, not the topic's (session A|session B option) \S+ \S+; a pilot counts only "
+                                                        r"for the roster session it pilots$"):
+                    self.render(repo)
+
     def test_the_snowball_rows_equal_the_pool_snowballed_rows_and_the_stage_1_inputs_once_each(self):
         def rows(folder):
             return (folder / "snowball-screening-order.jsonl").read_text().splitlines(keepends=True)
