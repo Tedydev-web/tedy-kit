@@ -167,7 +167,9 @@ def facet_lines(topic, strata, faceted, decided_rows):
 
 def snowball_lines(folder, strata, faceted):
     snow = read_jsonl(folder, "snowball-screening-order.jsonl")
-    cut_row = read_json(folder, "snowball-cut.json").get("cut_row") if (folder / "snowball-cut.json").is_file() else None
+    if not (folder / "snowball-cut.json").is_file():
+        raise TopicError("no snowball-cut.json in the sweep folder; under quality criteria v4 snowball-above-cut.py --all records cut_row null")
+    cut_row = read_json(folder, "snowball-cut.json").get("cut_row")
     if cut_row is not None:
         raise TopicError(f"snowball-cut.json cuts the snowball at row {cut_row}; quality criteria v4 refuses a snowball cut: every snowballed repository joins the pool, "
                          "so run snowball-above-cut.py --all and merge-snowball-order.py again")

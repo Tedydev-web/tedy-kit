@@ -11,8 +11,12 @@ export function normal(decision) {
   return text.startsWith("eligible") ? "eligible" : `excluded: ${code}`;
 }
 
+export class MalformedRow extends Error {}
+
 export function derive(table, stratum, mapping, side, row) {
   const scores = Object.fromEntries(Object.entries(row.scores ?? {}).map(([k, v]) => [capitalize(k), v?.v]));
+  const lacking = JUDGED.find((k) => typeof scores[k] !== "number");
+  if (lacking) throw new MalformedRow(`${stratum} rank ${row.order_rank} (session ${side}) lacks the judged score ${lacking}`);
   const evidence = new Set(Object.entries(table.class ?? {}).filter(([, kind]) => kind === "evidence").map(([m]) => m));
   const canon = (name) => {
     const key = `${stratum}:${mapping?.[side]?.[name] ?? name}`;

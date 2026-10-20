@@ -1,3 +1,4 @@
+import { MalformedRow } from "./sweep-screening-derive.mjs";
 import { proseErrors } from "./sweep-method-evidence-v4-prose.mjs";
 import { calibrationErrors } from "./sweep-method-evidence-v4-calibration.mjs";
 import { judgeErrors } from "./sweep-method-evidence-v4-judges.mjs";
@@ -179,7 +180,9 @@ function recallErrors(io, text, topic, strata, members, memberStrata, passes, sc
   if (snowballed && !text.split("\n").some((l) => l.startsWith(`- snowball: ${snowballed} repositories from the aggregators joined the config pool from rank 1001 on `))) {
     errors.push(`the record's snowball line does not state the ${snowballed} snowballed repositories snowball-screening-order.jsonl holds`);
   }
-  const cut = io.json("snowball-cut.json")?.cut_row;
+  const cutFile = io.json("snowball-cut.json");
+  if (!cutFile) errors.push("no snowball-cut.json in the sweep folder; under quality criteria v4 snowball-above-cut.py --all records cut_row null");
+  const cut = cutFile?.cut_row;
   if (cut !== undefined && cut !== null) errors.push(`snowball-cut.json cuts the snowball at row ${cut}; quality criteria v4 refuses a snowball cut, every snowballed repository joins the pool`);
   if (topic?.strata?.product?.channels?.config_pool === true && strata.includes("product")) errors.push(...configPoolErrors(io, text, topic, strata, passes, pools, memberStrata));
   return errors;
@@ -242,7 +245,7 @@ function configPoolErrors(io, text, topic, strata, passes, pools, memberStrata) 
   return errors;
 }
 
-export function v4Errors(text, { read, files, topic, meta }) {
+function recomputedErrors(text, { read, files, topic, meta }) {
   const io = { ...reader(read), read, topic, files, text, sessions: meta.sessions ?? {} };
   const sessions = meta.sessions ?? {};
   const strata = CALIBRATED.filter((s) => topic?.strata?.[s]?.channels && typeof topic.strata[s].channels === "object");
@@ -269,4 +272,13 @@ export function v4Errors(text, { read, files, topic, meta }) {
     ...agreementErrors(io, text, strata),
     ...recallErrors(io, text, topic, strata, qgs.members, qgs.strata ?? {}, stage1.passes, stage2.screened),
   ];
+}
+
+export function v4Errors(text, evidence) {
+  try {
+    return recomputedErrors(text, evidence);
+  } catch (error) {
+    if (error instanceof MalformedRow) return [error.message];
+    throw error;
+  }
 }

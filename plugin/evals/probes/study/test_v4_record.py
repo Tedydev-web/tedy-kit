@@ -223,6 +223,18 @@ class V4RecordTest(unittest.TestCase):
         with self.assertRaisesRegex(TopicError, "the cross_family model claude-haiku-5-5 is a Claude model; the audit needs a model outside the Claude family"):
             self.render(repo)
 
+    def test_a_missing_snowball_cut_file_and_a_screening_row_without_a_judged_score_are_refused(self):
+        repo, folder = self.copy()
+        (folder / "snowball-cut.json").unlink()
+        with self.assertRaisesRegex(TopicError, "no snowball-cut.json in the sweep folder; under quality criteria v4 snowball-above-cut.py --all records cut_row null"):
+            self.render(repo)
+        repo, folder = self.copy()
+        rows = [json.loads(line) for line in (folder / "config-screen-A.jsonl").read_text().splitlines()]
+        del rows[0]["scores"]["Position"]
+        (folder / "config-screen-A.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+        with self.assertRaisesRegex(TopicError, rf"config rank {rows[0]['order_rank']} \(session A\) lacks the judged score Position"):
+            self.render(repo)
+
     def test_a_snowball_with_a_cut_is_refused_under_v4(self):
         repo, folder = self.copy()
         cut = json.loads((folder / "snowball-cut.json").read_text())

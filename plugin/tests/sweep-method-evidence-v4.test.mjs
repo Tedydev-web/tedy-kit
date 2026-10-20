@@ -296,6 +296,14 @@ test("stage 1 and stage 2 are checked against the files: unscreened pool rows an
   const u = sweep();
   u.writeRows("snowball-screening-order.jsonl", [{ order_rank: 1001, repo: "s/elsewhere" }]);
   assert.match(u.errors(), /snowballed repositories s\/elsewhere are not in the config stage-1 pool/);
+  const n4 = sweep();
+  rmSync(join(n4.folder, "snowball-cut.json"));
+  assert.match(n4.errors(), /no snowball-cut\.json in the sweep folder; under quality criteria v4 snowball-above-cut\.py --all records cut_row null/);
+  const malformed = sweep();
+  const screened = malformed.jsonl("config-screen-A.jsonl");
+  delete screened[0].scores.Position;
+  malformed.writeRows("config-screen-A.jsonl", screened);
+  assert.equal(malformed.errors(), `config rank ${screened[0].order_rank} (session A) lacks the judged score Position`);
   const v = sweep();
   v.write("snowball-cut.json", { ...v.json("snowball-cut.json"), cut_row: 200 });
   assert.match(v.errors(), /snowball-cut\.json cuts the snowball at row 200; quality criteria v4 refuses a snowball cut/);
