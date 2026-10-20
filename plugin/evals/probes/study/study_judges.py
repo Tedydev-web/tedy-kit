@@ -70,10 +70,14 @@ def label_agreement(kind, rows, answers):
     return {c: share(sum(answers[r["order_rank"]]["scores"][c]["v"] == r["user"][c] for r in rows), len(rows)) for c in LABELLED}
 
 
-def judge_run(folder, sessions, stratum, rows, name, kind, frozen):
+def judge_run(folder, sessions, stratum, rows, name, option, frozen):
     path = Path(folder) / f"{name}.jsonl"
     if not path.is_file():
         return None
+    kind, entry = option["kind"], sessions.get(name) or {}
+    if (entry.get("cli"), entry.get("model")) != (option["cli"], option["model"]):
+        raise TopicError(f"{name}: the run was {entry.get('cli')} {entry.get('model')}, not the roster's {option['cli']} {option['model']} it validates; "
+                         "a validation run counts only for its own judge")
     answers = {r["order_rank"]: r for r in read_jsonl(path.parent, path.name)}
     if set(answers) != {r["order_rank"] for r in rows}:
         raise TopicError(f"{name}.jsonl covers ranks {sorted(set(answers) ^ {r['order_rank'] for r in rows})[:10]} that the {stratum} calibration rows do not, or the reverse")
@@ -105,7 +109,7 @@ def validate(topic, folder, freeze=None, strata=("config", "product")):
             if not rows:
                 continue
             frozen = freeze["strata"][stratum] if option["kind"] == "screening" and freeze else None
-            runs = [judge_run(folder, sessions, stratum, rows, run_name(stratum, judge, option, n), option["kind"], frozen) for n in RUNS]
+            runs = [judge_run(folder, sessions, stratum, rows, run_name(stratum, judge, option, n), option, frozen) for n in RUNS]
             both = None not in runs
             differ = sum(a != b for a, b in zip(runs[0]["decisions"], runs[1]["decisions"])) if both else None
             run_kappa = cohen_kappa(list(zip(runs[0]["decisions"], runs[1]["decisions"])))[1] if both else None

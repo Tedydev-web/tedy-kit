@@ -220,6 +220,20 @@ class V4RecordTest(unittest.TestCase):
         with self.assertRaisesRegex(TopicError, rf"{key}: ranks \[{shared}\] were read on other inputs than the calibration rows of the same ranks hold"):
             self.render(repo)
 
+    def test_every_judge_validation_run_must_be_the_roster_model_for_its_role(self):
+        for key, change in (("judge-config-screening-A-claude-opus-5-5-run1", {"model": "claude-haiku-4-5"}),
+                            ("judge-config-screening-B-claude-sonnet-5-5-run2", {"model": "claude-haiku-4-5"}),
+                            ("judge-product-qgs-A-claude-opus-5-5-run1", {"cli": "agy"}),
+                            ("judge-config-reader-claude-opus-5-5-run2", {"model": None})):
+            with self.subTest(key=key):
+                repo, folder = self.copy()
+                meta = json.loads((folder / "meta.json").read_text())
+                entry = {**meta["sessions"][key], **change}
+                meta["sessions"][key] = {k: v for k, v in entry.items() if v is not None}
+                (folder / "meta.json").write_text(json.dumps(meta))
+                with self.assertRaisesRegex(TopicError, rf"^{key}: the run was \S+ \S+, not the roster's \S+ \S+ it validates; a validation run counts only for its own judge$"):
+                    self.render(repo)
+
     def test_the_cross_family_audit_must_be_the_topic_cross_family_model_outside_the_claude_family(self):
         repo, folder = self.copy()
         meta = json.loads((folder / "meta.json").read_text())

@@ -207,6 +207,26 @@ test("H-judges: the gate recomputes screening judge qualification and every judg
   assert.match(w.errors(), /product-B did not run the validated screening-B claude-sonnet-5-5 on the full inputs it was validated on/);
 });
 
+test("every judge validation run must be the roster model for its role, in the renderer and in the gate", () => {
+  const screeningA = ["config", "product"].flatMap((s) => [1, 2].map((n) => `judge-${s}-screening-A-claude-opus-5-5-run${n}`));
+  const probes = [
+    [["judge-config-screening-A-claude-opus-5-5-run1"], { model: "claude-haiku-4-5" }],
+    [["judge-config-screening-B-claude-sonnet-5-5-run2"], { model: "claude-haiku-4-5" }],
+    [["judge-product-qgs-A-claude-opus-5-5-run1"], { cli: "agy" }],
+    [["judge-config-reader-claude-opus-5-5-run2"], { model: undefined }],
+    [screeningA, { model: "claude-haiku-4-5" }],
+  ];
+  for (const [keys, change] of probes) {
+    const s = sweep();
+    const meta = s.json("meta.json");
+    for (const key of keys) Object.assign(meta.sessions[key], change);
+    s.write("meta.json", meta);
+    const errors = s.errors();
+    assert.match(errors, new RegExp(`^the record renderer refused the sweep files: prior-art-sweep-record: ${keys[0]}: the run was \\S+ \\S+, not the roster's \\S+ \\S+ it validates`, "m"), keys[0]);
+    for (const key of keys) assert.match(errors, new RegExp(`^${key}: the run was \\S+ \\S+, not the roster's \\S+ \\S+ it validates; a validation run counts only for its own judge$`, "m"), key);
+  }
+});
+
 test("item 9: a cross-family row joined by another id, or an audit run before stage 2 ended, fails the gate", () => {
   const s = sweep();
   const cross = s.jsonl("qgs-cross-gemini-3.8-flash-high.jsonl");

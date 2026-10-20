@@ -60,6 +60,9 @@ export function judgeErrors(io, topic, sessions, strata, rows, batches) {
           errors.push(`${key}: meta.json records no validation run on the calibration rows`);
           continue;
         }
+        if (entry.cli !== option.cli || entry.model !== model) {
+          errors.push(`${key}: the run was ${entry.cli} ${entry.model}, not the roster's ${option.cli} ${model} it validates; a validation run counts only for its own judge`);
+        }
         const hashes = blockHashes(entry);
         if (mine.some((r) => hashes[String(r.order_rank)] !== (thin ? r.qgs_sha256 : r.inputs_sha256))) errors.push(`${key}: the run judged other inputs than the calibration rows hold in the ${shape} shape`);
         if (entry.blocks.some((b) => b.shape !== shape)) errors.push(`${key}: the run read another input shape than the ${shape} shape its production runs read`);
