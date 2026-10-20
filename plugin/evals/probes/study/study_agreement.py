@@ -1,3 +1,5 @@
+import math
+
 from study_screening_core import JUDGED
 from study_topic import SNOWBALL_RANK_BASE, TopicError
 
@@ -77,6 +79,34 @@ def resolved_standard(members, names):
     return {"of": list(members), "final": [canonical for canonical, _ in groups.values()],
             "renamed": {m: names[m.lower()] for m in members if names.get(m.lower()) and names[m.lower()].lower() != m.lower()},
             "collapsed": {canonical: group for canonical, group in groups.values() if len(group) > 1}}
+
+
+def binomial_tail(k, n, p, upper):
+    terms = range(k, n + 1) if upper else range(0, k + 1)
+    return sum(math.comb(n, i) * p ** i * (1 - p) ** (n - i) for i in terms)
+
+
+def clopper_pearson(k, n, confidence=0.95):
+    if n < 1 or not 0 <= k <= n:
+        raise TopicError(f"an interval needs 0 <= hits <= members and at least one member, got {k}/{n}")
+    alpha = (1 - confidence) / 2
+
+    def solve(upper, target):
+        low, high = 0.0, 1.0
+        for _ in range(100):
+            mid = (low + high) / 2
+            if (binomial_tail(k, n, mid, upper) < target) == upper:
+                low = mid
+            else:
+                high = mid
+        return (low + high) / 2
+
+    return (0.0 if k == 0 else solve(True, alpha), 1.0 if k == n else solve(False, alpha))
+
+
+def interval_text(k, n):
+    low, high = clopper_pearson(k, n)
+    return f"{k}/{n} ({k / n:.3f}, 95% CI {low:.2f}-{high:.2f})"
 
 
 def cohen_kappa(pairs):

@@ -5,12 +5,14 @@ from pathlib import Path
 
 from study_fetch import Fetch
 from study_pool import readme, term_links
+from study_qgs import whole_topic
 from study_topic import TopicError, load_topic, term_regex, topic_arguments
 
 CURATED = re.compile(r"awesome|curated", re.I)
 
 
 def candidates(topic, work, fetch, ranked_name):
+    whole_topic(topic, "quasi-gold-standard extraction")
     pattern = topic.get("qgs_list_topic")
     if not isinstance(pattern, str) or not pattern:
         raise TopicError(f"{topic['path']}: qgs_list_topic must be a pattern naming what a curated list is about")
