@@ -66,6 +66,17 @@ class SweepRecordTest(unittest.TestCase):
         result = subprocess.run([sys.executable, str(HERE.parent / "prior-art-sweep-record.py"), str(repo), "nope"], capture_output=True, text=True)
         self.assertIn("sweep nope is named by 0 topic configs", result.stderr)
 
+    def test_the_stdout_entry_point_prints_the_rendered_record_and_writes_nothing(self):
+        repo = self.repo()
+        record = repo / "docs/prior-art/sweeps/261001-demo.md"
+        before = record.read_text() if record.exists() else None
+        result = subprocess.run([sys.executable, str(HERE.parent / "prior-art-sweep-record.py"), str(repo), "261001-demo", "--stdout"], capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout, render(repo, load_topic(repo, "demo"))[0])
+        self.assertEqual(record.read_text() if record.exists() else None, before)
+        result = subprocess.run([sys.executable, str(HERE.parent / "prior-art-sweep-record.py"), str(repo), "261001-demo", "--write"], capture_output=True, text=True)
+        self.assertIn("usage: prior-art-sweep-record.py <repo> <sweep> [--stdout]", result.stderr)
+
     def test_topic_configs_are_validated_at_load(self):
         repo = self.repo()
         with self.assertRaisesRegex(TopicError, "must be kebab-case"):

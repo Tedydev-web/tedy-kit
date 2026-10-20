@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { v4Errors } from "./sweep-method-evidence-v4.mjs";
+import { regenerationErrors } from "./sweep-method-evidence-v4-regeneration.mjs";
 
 export const GRANDFATHERED = new Map([
   [
@@ -188,5 +189,7 @@ export function sweepMethodErrors(repo, file, text) {
   const topic = topicForSweep(repo, sweep);
   const role = text.match(/^- Role: (\S+)$/m)?.[1];
   const roleErrors = topic && role !== topic.name ? [`the record's role is ${role}, but its sweep belongs to ${topic.name}; set meta.json role to ${topic.name}`] : [];
-  return [...roleErrors, ...checkMethodEvidence(text, { files, read, criteriaText, topic })];
+  const pinned = Number(String(JSON.parse(read("meta.json") ?? "{}").criteria ?? "").match(/quality-criteria-v(\d+)\.md$/)?.[1] ?? 0);
+  const regeneration = Math.max(criteriaVersion(text), pinned) >= 4 ? regenerationErrors(repo, sweep, text) : [];
+  return [...regeneration, ...roleErrors, ...checkMethodEvidence(text, { files, read, criteriaText, topic })];
 }

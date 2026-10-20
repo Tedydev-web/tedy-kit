@@ -50,6 +50,72 @@ test("a v4 sweep run end to end through the toolchain passes the gate, with the 
   assert.match(sweep(pending).text, /^- cross-family audit pending: config: /m);
 });
 
+test("a v4 record with any added line fails the gate at that line, because the gate rebuilds the record with the Python renderer", () => {
+  const s = sweep();
+  const lines = s.text.split("\n");
+  const audit = "- cross-family audit pending: config: 0 of 20 audit rows screened by gemini-3.8-flash-high; the same-family screening has no cross-family check until it runs";
+  const probes = [
+    ["judges: a qgs-A line for agy gemini", "- qgs-A claude claude-opus-5-5, config", (l) => l.replace("claude claude-opus-5-5", "agy gemini-3.8-flash-high")],
+    ["judges: a screening-B line for claude-haiku-4-5", "- screening-B claude claude-sonnet-5-5, config", (l) => l.replace("claude-sonnet-5-5", "claude-haiku-4-5")],
+    ["judges: a standard of 60 members", "- standard: ", (l) => l.replace("47 members", "60 members")],
+    ["judges: a second QGS reader line", "- QGS reader: ", (l) => l.replace("judged 2", "judged 3")],
+    ["judges: a product audit line with A 10/19", "- product audit: ", (l) => l.replace("with A 19/19 (kappa 1.000)", "with A 10/19 (kappa 0.100)")],
+    ["stage 1: rung 2 meets the rule", "- rung 1: ", (l) => l.replace("- rung 1:", "- rung 2:")],
+    ["stage 1: rung 2 chosen", "- chosen: ", (l) => l.replace("rung 1 after 1", "rung 2 after 2")],
+    ["stage 1: a held-out confirmation on a rung-1 sweep", "- config stage-1 audit: ", () => "- held-out confirmation: rung 2 passed 10/10 held-out positives, missed none; the batch's own one-sided lower bound 0.7411; the pooled bound above was measured on the set the rung was chosen on"],
+    ["stage 1: an audit line with bound 0.0100", "- config stage-1 audit: ", (l) => l.replace("0.1707", "0.0100")],
+    ["stage 1: a ladder line naming claude-haiku-4-5", "- ladder frozen ", (l) => l.replace("rung 1 claude-sonnet-5-5", "rung 1 claude-haiku-4-5")],
+    ["calibration: a top-up line without a top-up", "- positives pooled ", () => "- top-up product: 15 rows (fewer than 59 positives pooled (40): the rows join the pooled bound), drawn per facet alpha 8, beta 7; likely positives 15; the user labelled 9 eligible"],
+    ["calibration: positives pooled 99", "- positives pooled ", (l) => l.replace(": 66", ": 99")],
+    ["calibration: a 59-row config line", "- calibration config: ", (l) => l.replace("60 rows", "59 rows")],
+    ["recall: a facet gamma", "- facet beta: ", (l) => l.replace("facet beta", "facet gamma")],
+    ["recall: pooled recall 47/47", "- pooled topic recall ", (l) => l.replace("38/47", "47/47")],
+    ["recall: facet alpha 26/26", "- facet alpha: ", (l) => l.replace("20/26", "26/26")],
+    ["recall: the config pool recovers 23 of 23", "- product channel from the config pool: ", (l) => l.replace("recover 4 of", "recover 23 of")],
+    ["recall: QGS recall is exact", "- QGS recall is an upper estimate", () => "- QGS recall is exact: the standard holds every relevant repository"],
+    ["PRISMA: identified fake", "| product | identified: repo |", () => "| product | identified: fake | 5 |"],
+    ["PRISMA: a duplicate stage-2 eligible row", "| product | stage 2: eligible |", (l) => l.replace("| 16 |", "| 20 |")],
+    ["stratum table: an invented row", /^\| \d+ \| /, () => `| 999 | o/fake | https://github.com/o/fake/commit/${"a".repeat(40)} | A1 M1 O1 D1 P1 N1 | eligible | - | - | alpha |`],
+    ["threats: a second discovery gap", "- discovery gap: ", (l) => l.replace("o/outside1", "o/outside2")],
+    ["threats: no cross-family audit while it ran", "- discovery gap: ", () => "- no cross-family audit: the topic config names no cross_family model, so no model of another family checks the screening"],
+    ["threats: a pending audit beside the audit", "- discovery gap: ", () => audit],
+    ["threats: a second stage 2 stopped line", "- stage 2 stopped before every stage-1 pass: product", (l) => l.replace("20 of 85", "85 of 85")],
+    ["facets: alpha with other terms", "- alpha: problems ", (l) => l.replace("terms tdd, test", "terms tdd")],
+    ["facets: config 30 repositories included", "- config: 16 repositories included", (l) => l.replace("16 repositories", "30 repositories")],
+    ["other: an extra stop line", "stop: stage 2 ranked", (l) => l.replace("depth 42", "depth 183")],
+    ["other: an extra kappa line", "- config kappa: ", (l) => l.replace("eligibility kappa 1.000", "eligibility kappa 0.400")],
+    ["other: a snowball line with a cut", "- snowball: ", (l) => l.replace(/\(cut: .*\)/, "(cut: row 5)")],
+    ["other: a Notes section claiming rung 2", "## Threats", () => "## Notes"],
+  ];
+  assert.equal(probes.length, 31);
+  for (const [name, anchor, make] of probes) {
+    const at = lines.findIndex((l) => (typeof anchor === "string" ? l.startsWith(anchor) : anchor.test(l)));
+    assert.ok(at >= 0, name);
+    const added = make(lines[at]);
+    assert.notEqual(added, lines[at], name);
+    const body = [...lines.slice(0, at), added, ...lines.slice(at)].join("\n");
+    assert.ok(s.errors(body).includes(`the record is not the one the renderer rebuilds from the sweep files: line ${at + 1} reads ${JSON.stringify(added)}, the renderer writes ${JSON.stringify(lines[at])}`), name);
+  }
+  assert.match(s.errors(`${s.text}\n`), /line \d+ reads "", the renderer writes the end of the file/);
+});
+
+test("the gate fails when the Python renderer refuses the sweep files, as for QGS labels that are not the standard the judge files give", () => {
+  const s = sweep();
+  s.writeRows("qgs-judge-A.jsonl", s.jsonl("qgs-judge-A.jsonl").map((r) => (r.repo === "o/a2" ? { ...r, problems: ["X1", "X3"] } : r)));
+  assert.match(s.errors(), /^the record renderer refused the sweep files: .*qgs-adjudicated\.json is not the standard its judge files give/m);
+});
+
+test("the gate fails when python3 cannot run the record renderer", () => {
+  const s = sweep();
+  const path = process.env.PATH;
+  process.env.PATH = tempDir("no-python-");
+  try {
+    assert.match(s.errors(), /^python3 could not run the record renderer \(ENOENT\): the v4 gate rebuilds the record with plugin\/evals\/probes\/prior-art-sweep-record\.py and needs python3 on PATH/m);
+  } finally {
+    process.env.PATH = path;
+  }
+});
+
 test("item 2: a QGS candidate judged by one judge and not dropped with a reason fails the gate", () => {
   const s = sweep();
   const rows = s.jsonl("qgs-judge-B.jsonl");
@@ -312,7 +378,8 @@ test("stage 1 and stage 2 are checked against the files: unscreened pool rows an
   const screened = malformed.jsonl("config-screen-A.jsonl");
   delete screened[0].scores.Position;
   malformed.writeRows("config-screen-A.jsonl", screened);
-  assert.equal(malformed.errors(), `config rank ${screened[0].order_rank} (session A) lacks the judged score Position`);
+  const lacks = `config rank ${screened[0].order_rank} (session A) lacks the judged score Position`;
+  assert.equal(malformed.errors(), `the record renderer refused the sweep files: prior-art-sweep-record: ${lacks}\n${lacks}`);
   const v = sweep();
   v.write("snowball-cut.json", { ...v.json("snowball-cut.json"), cut_row: 200 });
   assert.match(v.errors(), /snowball-cut\.json cuts the snowball at row 200; quality criteria v4 refuses a snowball cut/);
@@ -561,11 +628,15 @@ test("every round-3 probe the gate already failed stays a failing negative fixtu
 
 test("a stage-2 limit never stops stage 2 while the pooled target is reachable: the plan runs past it to the target", () => {
   const s = sweep();
-  for (const stratum of ["config", "product"]) {
-    const plan = s.json(`${stratum}-stage2.json`);
-    s.write(`${stratum}-stage2.json`, { ...plan, limit: 3, stop: { ...plan.stop, limit: 3 } });
-  }
-  assert.equal(s.errors(s.text.replaceAll("stopped at pooled depth 42 (limit 150)", "stopped at pooled depth 42 (limit 3)")), "");
+  const tool = (script, ...args) => {
+    const run = spawnSync("python3", ["-B", join(STUDY, script), ...args], { encoding: "utf8", env: { ...process.env, STUDY_NO_NETWORK: "1" } });
+    assert.equal(run.status, 0, run.stderr);
+  };
+  tool("plan-stage2.py", "--topic", "demo", "--repo", s.repo, "--work", s.folder, "--limit", "3");
+  tool(join("..", "prior-art-sweep-record.py"), s.repo, SWEEP);
+  const text = readFileSync(join(s.repo, "docs", "prior-art", "sweeps", `${SWEEP}.md`), "utf8");
+  assert.match(text, /stopped at pooled depth 42 \(limit 3\)/);
+  assert.equal(s.errors(text), "");
   const t = sweep();
   for (const stratum of ["config", "product"]) {
     const plan = t.json(`${stratum}-stage2.json`);
