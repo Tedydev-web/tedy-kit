@@ -6,12 +6,14 @@ const SHOWN = "plugin/evals/probes/prior-art-sweep-record.py";
 
 const quoted = (line) => (line === undefined ? "the end of the file" : JSON.stringify(line));
 
-export function regenerationErrors(repo, sweep, text) {
+export function regenerationErrors(repo, sweep, text, { timeout = 120000 } = {}) {
   const run = spawnSync("python3", ["-B", RENDERER, repo, sweep, "--stdout"], {
     encoding: "utf8",
     maxBuffer: 256 * 1024 * 1024,
+    timeout,
     env: { ...process.env, STUDY_NO_NETWORK: "1" },
   });
+  if (run.error?.code === "ETIMEDOUT") return [`the record renderer ran longer than ${timeout} ms and was stopped; the v4 gate fails rather than wait on a hung renderer`];
   if (run.error) return [`python3 could not run the record renderer (${run.error.code ?? run.error.message}): the v4 gate rebuilds the record with ${SHOWN} and needs python3 on PATH`];
   if (run.status !== 0) {
     const reason = (run.stderr ?? "").trim().split("\n").at(-1) || `exit ${run.status ?? run.signal}`;

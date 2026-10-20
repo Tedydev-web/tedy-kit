@@ -3,11 +3,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { cpSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, cpSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sweepMethodErrors } from "../lib/sweep-method-evidence.mjs";
 import { canonical, kappa, lowerBound } from "../lib/sweep-method-evidence-v4.mjs";
+import { regenerationErrors } from "../lib/sweep-method-evidence-v4-regeneration.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const STUDY = fileURLToPath(new URL("../evals/probes/study/", import.meta.url));
@@ -123,6 +124,24 @@ test("the gate fails when python3 cannot run the record renderer", () => {
   process.env.PATH = tempDir("no-python-");
   try {
     assert.match(s.errors(), /^python3 could not run the record renderer \(ENOENT\): the v4 gate rebuilds the record with plugin\/evals\/probes\/prior-art-sweep-record\.py and needs python3 on PATH/m);
+  } finally {
+    process.env.PATH = path;
+  }
+});
+
+test("the gate stops a hung record renderer at its timeout and fails", () => {
+  const s = sweep();
+  const bin = tempDir("hung-python-");
+  writeFileSync(join(bin, "python3"), `#!${process.execPath}\nsetTimeout(() => {}, 30000);\n`);
+  chmodSync(join(bin, "python3"), 0o755);
+  const path = process.env.PATH;
+  process.env.PATH = bin;
+  try {
+    const started = Date.now();
+    assert.deepEqual(regenerationErrors(s.repo, SWEEP, s.text, { timeout: 300 }), [
+      "the record renderer ran longer than 300 ms and was stopped; the v4 gate fails rather than wait on a hung renderer",
+    ]);
+    assert.ok(Date.now() - started < 10000);
   } finally {
     process.env.PATH = path;
   }
