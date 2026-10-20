@@ -1,6 +1,6 @@
 import { judgeErrors } from "./sweep-method-evidence-v4-judges.mjs";
 import { stage1AuditErrors, stage1Errors } from "./sweep-method-evidence-v4-stage1.mjs";
-import { decisionErrors, prismaErrors, stage2Errors } from "./sweep-method-evidence-v4-stage2.mjs";
+import { agreementErrors, decisionErrors, prismaErrors, stage2Errors } from "./sweep-method-evidence-v4-stage2.mjs";
 import {
   CALIBRATED,
   RECALL_TARGET,
@@ -8,6 +8,7 @@ import {
   covered,
   escapeRegex,
   figureLine,
+  interval,
   kappa,
   labelledRows,
   lower,
@@ -89,7 +90,8 @@ function qgsErrors({ json, jsonl, text }, topic) {
   if (members.some((m) => JSON.stringify(writtenStrata[m]) !== JSON.stringify(strata[m]))) errors.push("qgs-adjudicated.json does not hold the member strata the judges labelled");
   const line = `- standard: ${members.length} members from ${candidates.size} candidates; ${queue.both} judged by both Claude judges; reader queue ${queue.disputed} disputed or unsure, `
     + `${queue.cross} cross-family only; dropped ${Object.keys(drops).length}`;
-  if (!text.split("\n").some((l) => l === line || l.startsWith(`${line};`))) errors.push(`the record's standard line is not the one the QGS files give ("${line}")`);
+  const dropped = Object.entries(drops).sort(([a], [b]) => Number(a) - Number(b)).map(([id, d]) => `; dropped ${id} ${d.repo} (${d.reason}, ${d.date})`).join("");
+  if (!text.split("\n").includes(`${line}${dropped}`)) errors.push(`the record's standard line is not the one the QGS files give ("${line}${dropped}")`);
   if (model) errors.push(...crossQgsErrors(text, model, sides, cross));
   return { errors, members, strata };
 }
@@ -103,6 +105,8 @@ function facetRankingErrors(io, topic, strata) {
       if (!ranked) errors.push(`no facets/${facet}/${stratum}-ranked.json in the sweep folder: a facet's ranking orders stage 2 when it must stop`);
       else if (!same(ranked.terms, rule.terms)) errors.push(`facets/${facet}/${stratum}-ranked.json was ranked with the terms ${JSON.stringify(ranked.terms)}, not the facet's own ${JSON.stringify(rule.terms)}`);
     }
+    const line = `- ${facet}: problems ${rule.problems.join(", ")}; terms ${rule.terms.join(", ")}; its ranking orders stage 2 only when stage 2 must stop`;
+    if (!io.text.split("\n").includes(line)) errors.push(`the record's facet ${facet} line is not the topic config's ("${line}")`);
   }
   return errors;
 }
@@ -136,15 +140,21 @@ function recallErrors(io, text, topic, strata, members, memberStrata, passes, sc
     const inPool = list.filter((m) => strata.some((s) => pools[s].has(m)));
     const passed = inPool.filter((m) => strata.some((s) => pools[s].has(m) && passes[s].passed.has(pools[s].get(m))));
     const done = passed.filter((m) => strata.some((s) => pools[s].has(m) && screened[s]?.both.has(pools[s].get(m))));
-    return [done.length, list.length, inPool.length, passed.length];
+    return [done.length, list.length, inPool.length, passed.length, done];
   };
   const rates = (line) => (line ? line.slice(1).map(Number) : null);
-  const [found, size, inPool, passed] = count(members);
+  const rate = (k, n) => (n ? [`${k}/${n} (`, [k / n, 3], ", 95% CI ", [interval(k, n)[0], 2], "-", [interval(k, n)[1], 2], ")"] : ["0/0 (no member)"]);
+  const [found, size, inPool, passed, done] = count(members);
   const line = rates(text.match(/^- pooled topic recall (\d+)\/(\d+) .*?; in-pool rate (\d+)\/(\d+) .*?; stage-1 pass rate of in-pool members (\d+)\/(\d+) /m));
   if (canonical(line) !== canonical([found, size, inPool, size, passed, inPool])) {
     errors.push(`pooled topic recall: the record says ${line ? `${line[0]}/${line[1]}, in-pool ${line[2]}/${line[3]}, stage-1 pass ${line[4]}/${line[5]}` : "nothing"}, `
       + `the files give ${found}/${size}, in-pool ${inPool}/${size}, stage-1 pass ${passed}/${inPool}`);
   }
+  const met = size && found / size >= RECALL_TARGET;
+  const missed = members.filter((m) => !done.includes(m)).sort();
+  const pooled = ["- pooled topic recall ", ...rate(found, size), ` of the ${size} deduplicated standard members, screened by both stage-2 sessions; in-pool rate `, ...rate(inPool, size),
+    "; stage-1 pass rate of in-pool members ", ...rate(passed, inPool), met ? `; meets the ${RECALL_TARGET.toFixed(2)} target` : `; below the ${RECALL_TARGET.toFixed(2)} target; missed: ${missed.join(", ")}`];
+  if (!figureLine(text, pooled)) errors.push("the record's pooled recall line is not the one the files give (rates, intervals, target and missed members)");
   const threat = text.match(/^- recall target not reached: pooled topic recall (\d+)\/(\d+); outside every pool (\d+), excluded by stage 1 (\d+), not screened in stage 2 (\d+)$/m);
   if (size && found / size < RECALL_TARGET && canonical(rates(threat)) !== canonical([found, size, size - inPool, inPool - passed, passed - found])) {
     errors.push("pooled topic recall is below the target and the record does not name the recall target threat with the losses the files give");
@@ -157,6 +167,8 @@ function recallErrors(io, text, topic, strata, members, memberStrata, passes, sc
     if (canonical(written) !== canonical([k, n, a, n, b, a])) {
       errors.push(`facet ${facet} recall: the record says ${written ? `${written[0]}/${written[1]}` : "nothing"} (in-pool and stage-1 pass rates included), the files give ${k}/${n}, in-pool ${a}/${n}, stage-1 pass ${b}/${a}`);
     }
+    const full = [`- facet ${facet}: recall `, ...rate(k, n), ` of the ${n} members labelled for it; in-pool rate `, ...rate(a, n), "; stage-1 pass rate ", ...rate(b, a), "; reported, no pass or fail"];
+    if (!figureLine(text, full)) errors.push(`the record's facet ${facet} recall line is not the one the files give (rates and intervals)`);
   }
   const snow = io.jsonl("snowball-screening-order.jsonl").filter((r) => !pools.config?.has(lower(r.repo)));
   if (snow.length) errors.push(`snowballed repositories ${snow.map((r) => r.repo).join(", ")} are not in the config stage-1 pool`);
@@ -236,7 +248,7 @@ export function v4Errors(text, { read, files, topic, meta }) {
   const labelled = labelledRows(io, read, batches);
   const qgs = qgsErrors(io, topic);
   const stage1 = stage1Errors(io, sessions, strata, labelled.rows);
-  const stage2 = stage2Errors(io, sessions, strata, stage1.passes, qgs.members);
+  const stage2 = stage2Errors(io, sessions, strata, stage1.passes, qgs.members, stage1.rung?.rung);
   return [
     ...labelled.errors,
     ...batchLineErrors(io, topic, strata, text),
@@ -249,6 +261,7 @@ export function v4Errors(text, { read, files, topic, meta }) {
     ...dropErrors(io, read, meta),
     ...prismaErrors(io, text, strata, stage1.passes, stage2.screened),
     ...decisionErrors(io, text, topic, strata, stage1.passes, stage2.screened),
+    ...agreementErrors(io, text, strata),
     ...recallErrors(io, text, topic, strata, qgs.members, qgs.strata ?? {}, stage1.passes, stage2.screened),
   ];
 }

@@ -1,4 +1,4 @@
-import { EMPTY_TABLE, derive, normal } from "./sweep-screening-derive.mjs";
+import { EMPTY_TABLE, JUDGED, derive, normal } from "./sweep-screening-derive.mjs";
 import {
   AUDIT_ROWS,
   RECALL_TARGET,
@@ -10,6 +10,8 @@ import {
   kappa,
   lower,
 } from "./sweep-method-evidence-v4-shared.mjs";
+
+const SHORT = { Authority: "A", Methodology: "M", Objectivity: "O", Date: "D", Position: "P" };
 
 export function stage2Plans(io, topic, strata, passes, members, limit) {
   const plans = Object.fromEntries(strata.map((s) => {
@@ -50,7 +52,7 @@ export function samePlan(written, plan) {
   return keys.every((k) => written.stop[k] === plan.stop[k]) && plan.stop.interval.every((v, i) => Math.abs(v - written.stop.interval?.[i]) < 1e-9);
 }
 
-export function stopTextErrors(text, strata, plans) {
+export function stopTextErrors(text, strata, plans, passes, rung) {
   const errors = [];
   for (const stratum of strata) {
     const plan = plans[stratum];
@@ -61,6 +63,22 @@ export function stopTextErrors(text, strata, plans) {
     if (!line.includes(expected)) errors.push(`${stratum}: the record's stage-2 stop line is not the plan the files give ("${expected.trim()}")`);
     if (stop && !stop.reachable && !line.includes(`only ${stop.passed} of the ${stop.members} deduplicated standard members passed stage 1 in any stratum`)) {
       errors.push(`${stratum}: the record's stage-2 stop line does not state the unreachable target the files give`);
+    }
+    const every = `stop: stage 2 screened every one of the ${plan.passes.length} stage-1 passes of the ${passes[stratum]?.pool.size}-row pool (rung ${rung})`;
+    const full = !stop ? [every]
+      : !stop.reachable ? [`${every} and ignored the limit of ${stop.limit} rows: only ${stop.passed} of the ${stop.members} deduplicated standard members passed stage 1 in any stratum, `
+        + `and the ${RECALL_TARGET.toFixed(2)} pooled recall target needs ${stop.need}`]
+        : [`stop: stage 2 ranked the stage-1 passes of every stratum together by facet and stopped at pooled depth ${stop.depth} (limit ${stop.limit}); this stratum screens `
+          + `${plan.order.length} of its ${plan.passes.length} passes; pooled recall at the stop ${stop.found}/${stop.members} (`, [stop.found / stop.members, 3], ", 95% CI ",
+        [stop.interval[0], 2], "-", [stop.interval[1], 2], `) of the ${stop.members} deduplicated standard members; ${stop.reached ? "target reached" : "target not reached"}`];
+    if (!figureLine(line, full)) errors.push(`${stratum}: the record's stage-2 stop line is not the whole stop the plan gives`);
+  }
+  for (const stratum of strata) {
+    const plan = plans[stratum];
+    const threat = text.match(new RegExp(`^- stage 2 stopped before every stage-1 pass: ${stratum} screened (\\d+) of (\\d+) passes$`, "m"));
+    const cut = plan.order.length < plan.passes.length;
+    if (cut ? Number(threat?.[1]) !== plan.order.length || Number(threat?.[2]) !== plan.passes.length : threat) {
+      errors.push(`${stratum}: the record's stage-2 stop threat is not the one the plan gives (${plan.order.length} of ${plan.passes.length} passes screened)`);
     }
   }
   const stop = plans[strata[0]]?.stop;
@@ -90,13 +108,13 @@ function crossAuditErrors(io, stratum, sample, model) {
   return figureLine(io.text, line) ? [] : [`${stratum}: the record's cross-family audit line is not the agreement the audit and screening files give`];
 }
 
-export function stage2Errors(io, sessions, strata, passes, members) {
+export function stage2Errors(io, sessions, strata, passes, members, rung) {
   const errors = [];
   const screened = {};
   const limits = strata.map((s) => io.json(`${s}-stage2.json`)?.limit ?? null);
   if (new Set(limits).size > 1) errors.push(`the stage-2 plans hold different limits ${limits.join(", ")}; plan-stage2.py plans every stratum together`);
   const plans = stage2Plans(io, io.topic, strata, passes, members, limits[0]);
-  if (strata.every((s) => io.json(`${s}-stage2.json`))) errors.push(...stopTextErrors(io.text, strata, plans));
+  if (strata.every((s) => io.json(`${s}-stage2.json`))) errors.push(...stopTextErrors(io.text, strata, plans, passes, rung));
   for (const stratum of strata) {
     const plan = io.json(`${stratum}-stage2.json`);
     if (!plan) {
@@ -112,6 +130,11 @@ export function stage2Errors(io, sessions, strata, passes, members) {
     const open = plan.order.filter((r) => !(both[0].has(r) && both[1].has(r)));
     if (open.length) errors.push(`${stratum}: stage-2 ranks ${open.slice(0, 10).join(", ")} are not screened by both sessions`);
     screened[stratum] = { plan, both: new Set(plan.order.filter((r) => both[0].has(r) && both[1].has(r))) };
+    const beyond = new Set([...both[0], ...both[1]].filter((r) => !screened[stratum].both.has(r))).size;
+    const section = io.text.split(`## Stratum: ${stratum}\n\n`)[1]?.split("\n## ")[0] ?? "";
+    if (!section.split("\n").includes(`Screened beyond the stop or outside both sessions: ${beyond} rows, kept in the data files.`)) {
+      errors.push(`${stratum}: the record does not state the ${beyond} rows screened beyond the stop or outside both sessions`);
+    }
     const last = ["A", "B"].flatMap((side) => (sessions[`${stratum}-${side}`]?.blocks ?? []).map((b) => b.date)).sort().at(-1);
     const model = io.topic?.cross_family?.model;
     const audit = sessions[`${stratum}-audit-${model}`];
@@ -156,25 +179,74 @@ function stage2Rows(io, stratum, ranks) {
   const table = io.json("mechanism-table.json") ?? EMPTY_TABLE;
   const mapping = io.json(`${stratum}-mechanism-map.json`) ?? { A: {}, B: {} };
   const adjudicated = io.json(`${stratum}-adjudication.json`)?.rows ?? {};
-  const studied = new Set(Object.keys(io.json("study.json")?.study ?? {}).map(lower));
+  const studied = new Map(Object.entries(io.json("study.json")?.study ?? {}).map(([k, v]) => [lower(k), v]));
   const sides = Object.fromEntries(["A", "B"].map((side) => [side, new Map(io.jsonl(`${stratum}-screen-${side}.jsonl`).map((r) => [r.order_rank, r]))]));
   const rows = [];
   for (const rank of ranks) {
     const a = derive(table, stratum, mapping, "A", sides.A.get(rank));
     const b = derive(table, stratum, mapping, "B", sides.B.get(rank));
     const adj = adjudicated[String(rank)];
+    const sums = `sums A ${a.total}, B ${b.total}`;
     let decision;
-    if (!adj && (a.decision === b.decision || ![a.decision, b.decision].includes("eligible"))) decision = a.decision;
-    else if (adj) decision = normal(adj.decision);
+    let reason;
+    if (!adj && a.decision === b.decision) [decision, reason] = [a.decision, `both sessions ${a.decision}; ${sums}`];
+    else if (!adj && ![a.decision, b.decision].includes("eligible")) [decision, reason] = [a.decision, `both sessions exclude; codes differ (A ${a.decision}, B ${b.decision}); ${sums}`];
+    else if (adj) [decision, reason] = [normal(adj.decision), `adjudicated: ${adj.why}`];
     else {
       errors.push(`${stratum}: stage-2 rank ${rank} needs an adjudication row in ${stratum}-adjudication.json: one session says eligible, the other ${a.decision === "eligible" ? b.decision : a.decision}`);
       continue;
     }
     const repo = sides.A.get(rank).repo;
-    if (studied.has(lower(repo))) decision = decision === "eligible" ? "study" : `study (below-threshold: ${a.total})`;
-    rows.push({ rank, repo, decision });
+    if (studied.has(lower(repo))) [decision, reason] = [decision === "eligible" ? "study" : `study (below-threshold: ${a.total})`, studied.get(lower(repo))];
+    const score = [...JUDGED.map((c) => `${SHORT[c]}${a.scores[c]}${a.scores[c] === b.scores[c] ? "" : `/${b.scores[c]}`}`), `N${a.novelty}${a.novelty === b.novelty ? "" : `/${b.novelty}`}`].join(" ");
+    const commit = sides.A.get(rank).commit || sides.B.get(rank).commit || "-";
+    rows.push({ rank, repo, commit, decision, score, reason: String(reason).replaceAll("|", "/") });
   }
   return { errors, rows };
+}
+
+function categoricalKappa(pairs) {
+  if (!pairs.length) return null;
+  const share = (side, label) => pairs.filter((p) => p[side] === label).length / pairs.length;
+  const observed = pairs.filter(([a, b]) => a === b).length / pairs.length;
+  const expected = [...new Set(pairs.flat())].reduce((sum, label) => sum + share(0, label) * share(1, label), 0);
+  return expected < 1 ? (observed - expected) / (1 - expected) : null;
+}
+
+const kappaParts = (k) => (k === null ? ["undefined (one category)"] : [[k, 3]]);
+
+export function agreementErrors(io, text, strata) {
+  const errors = [];
+  const table = io.json("mechanism-table.json") ?? EMPTY_TABLE;
+  const criteria = JUDGED.filter((c) => c !== "Date");
+  for (const stratum of strata) {
+    const mapping = io.json(`${stratum}-mechanism-map.json`) ?? { A: {}, B: {} };
+    const sides = ["A", "B"].map((side) => new Map(io.jsonl(`${stratum}-screen-${side}.jsonl`).map((r) => [r.order_rank, r])));
+    const common = [...sides[0].keys()].filter((r) => sides[1].has(r)).sort((a, b) => a - b);
+    const pairs = common.map((r) => [derive(table, stratum, mapping, "A", sides[0].get(r)), derive(table, stratum, mapping, "B", sides[1].get(r))]);
+    const after = io.json("protocol-freeze.json")?.strata?.[stratum]?.frozen_after_rank;
+    const measured = pairs.filter((_, i) => common[i] > after);
+    if (!measured.length) continue;
+    const same = (list) => measured.reduce((sum, [a, b]) => sum + list.filter((c) => a.scores[c] === b.scores[c]).length, 0);
+    const cells = measured.length * criteria.length;
+    const dated = measured.length * JUDGED.length;
+    const eligible = measured.map(([a, b]) => [a.decision === "eligible", b.decision === "eligible"]);
+    const lines = [
+      [`- ${stratum}: post-freeze rows ${measured.length} (every row both sessions screened that is ranked after the pilot block, which ends at row ${after}): `
+        + `${same(criteria)}/${cells} judged cells identical without the computed Date (`, [same(criteria) / cells, 3], `); with Date ${same(JUDGED)}/${dated} (`, [same(JUDGED) / dated, 3],
+      "); target 0.90 without Date"],
+      [`- ${stratum} kappa: `, ...criteria.flatMap((c, i) => [`${i ? ", " : ""}${c} `, ...kappaParts(categoricalKappa(measured.map(([a, b]) => [a.scores[c], b.scores[c]])))]),
+        "; eligibility kappa ", ...kappaParts(categoricalKappa(eligible)), ` (${eligible.filter(([a, b]) => a !== b).length} of ${measured.length} decisions differ); Date is computed, not judged, and left out`],
+    ];
+    const mechs = [0, 1].map((side) => new Set(pairs.flatMap((p) => [...p[side].mechs])));
+    const shared = [...mechs[0]].filter((m) => mechs[1].has(m)).length;
+    const chapman = ((mechs[0].size + 1) * (mechs[1].size + 1)) / (shared + 1) - 1;
+    lines.push([`- ${stratum} capture-recapture over every row both sessions screened: A ${mechs[0].size}, B ${mechs[1].size}, shared ${shared}, union ${mechs[0].size + mechs[1].size - shared}; Chapman `,
+      [Math.round(chapman * 10) / 10, 1], " is a lower bound"]);
+    const wrong = lines.filter((parts, i) => !figureLine(text, parts, i === 2));
+    if (wrong.length) errors.push(`${stratum}: the record's session agreement lines are not the ones the screening files give (${wrong.length} of 3 differ)`);
+  }
+  return errors;
 }
 
 export function decisionErrors(io, text, topic, strata, passes, screened) {
@@ -194,8 +266,11 @@ export function decisionErrors(io, text, topic, strata, passes, screened) {
     const held = (rank) => facets.filter((f) => [...(p.problems.get(rank) ?? [])].some((problem) => topic.facets[f].problems.includes(problem)));
     const section = text.split(`## Stratum: ${stratum}\n\n`)[1]?.split("\n## ")[0] ?? "";
     const cells = new Map(section.split("\n").filter((l) => /^\| \d+ \| /.test(l)).map((l) => l.split(" | ")).map((c) => [Number(c[0].slice(2)), c]));
-    const wrong = found.rows.filter((r) => cells.get(r.rank)?.[1] !== r.repo || cells.get(r.rank)?.[4] !== r.decision || cells.get(r.rank)?.at(-1) !== `${held(r.rank).join(", ") || "-"} |`);
-    if (wrong.length) errors.push(`${stratum}: the record's stage-2 rows ${wrong.slice(0, 10).map((r) => r.rank).join(", ")} do not hold the decision and facets the screening files give`);
+    const wrong = found.rows.filter((r) => {
+      const c = cells.get(r.rank);
+      return c?.[1] !== r.repo || c?.[2] !== r.commit || c?.[3] !== r.score || c?.[4] !== r.decision || c?.[6] !== r.reason || c?.at(-1) !== `${held(r.rank).join(", ") || "-"} |`;
+    });
+    if (wrong.length) errors.push(`${stratum}: the record's stage-2 rows ${wrong.slice(0, 10).map((r) => r.rank).join(", ")} do not hold the commit, scores, decision, reason and facets the screening files give`);
     const included = found.rows.filter((r) => r.decision === "eligible" || r.decision === "study");
     const pairs = {};
     for (const r of included) {

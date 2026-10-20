@@ -46,6 +46,9 @@ export function stage1Errors(io, sessions, strata, rows) {
   const chosen = io.json("stage1-rung.json");
   if (!freeze || !chosen) return { errors: ["no stage1-freeze.json and stage1-rung.json in the sweep folder"], passes: {} };
   if (canonical(freeze.ladder) !== canonical(LADDER)) errors.push("stage1-freeze.json froze another ladder than the toolchain's");
+  const ladder = `- ladder frozen ${freeze.date} before any label was read (stage1-freeze.json sha256 \`${sha256(io.read("stage1-freeze.json")).slice(0, 16)}\`): `
+    + (freeze.ladder ?? []).map((r) => `rung ${r.rung} ${r.models.join(" + ")} on ${r.shape}`).join("; ");
+  if (!io.text.split("\n").includes(ladder)) errors.push(`the record's ladder line is not the one stage1-freeze.json gives ("${ladder}")`);
   const inputs = {};
   const checked = new Set();
   const loadInputs = (stratum, shape) => {

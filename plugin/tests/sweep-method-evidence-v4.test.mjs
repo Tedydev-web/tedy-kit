@@ -195,7 +195,7 @@ test("PRISMA stage-2 decisions, the per-row decisions and the facet inclusion ar
     /product: the record's facet line is not the inclusion the files give/);
   const row = s.text.match(/^\| (\d+) \| o\/\S+ \| [^|]+ \| [^|]+ \| eligible \| .*$/m);
   assert.match(s.errors(s.text.replace(row[0], row[0].replace("| eligible |", "| excluded: irrelevant |"))),
-    new RegExp(`config: the record's stage-2 rows ${row[1]} do not hold the decision and facets the screening files give`));
+    new RegExp(`config: the record's stage-2 rows ${row[1]} do not hold the commit, scores, decision, reason and facets the screening files give`));
   const t = sweep();
   const b = t.jsonl("config-screen-B.jsonl");
   const eligible = b.find((r) => r.decision === "eligible");
@@ -245,6 +245,31 @@ test("the cross-family audit sample is redrawn and the cross-family and QGS judg
   assert.match(t.errors(t.text.replace("(kappa 0.571)", "(kappa 0.900)")), /the record's cross-family QGS line is not the agreement/);
   assert.match(t.errors(t.text.replace("- QGS qgs-B: claude-sonnet-5-5 judged 66 candidates", "- QGS qgs-B: claude-sonnet-5-5 judged 70 candidates")),
     /the record's QGS qgs-B line is not the one qgs-judge-B\.jsonl gives/);
+});
+
+test("every figure in the stop, agreement, row, ladder, facet and drop lines is recomputed from the files", () => {
+  const s = sweep();
+  const probes = [
+    [/(stopped at pooled depth 42 \(limit 150\); .*pooled recall at the stop 38\/47 \()0\.809/, "$10.900", /config: the record's stage-2 stop line is not the whole stop the plan gives/],
+    [/^(- config: post-freeze rows \d+ .*?: )(\d+)\//m, (_, h, n) => `${h}${Number(n) - 1}/`, /config: the record's session agreement lines are not the ones the screening files give/],
+    [/^(- product kappa: Authority )1\.000/m, "$10.500", /product: the record's session agreement lines are not/],
+    [/^(- config capture-recapture .*?: A )(\d+)/m, (_, h, n) => `${h}${Number(n) + 2}`, /config: the record's session agreement lines are not/],
+    [/^(\| 1 \| o\/a1 \| [^|]+ \| )A1 M1/m, "$1A0 M1", /config: the record's stage-2 rows 1 do not hold the commit, scores/],
+    [/^(\| 1 \| o\/a1 \| [^|]+ \| [^|]+ \| eligible \| [^|]+ \| )both sessions eligible/m, "$1adjudicated", /config: the record's stage-2 rows 1 do not hold/],
+    [/^(Screened beyond the stop or outside both sessions: )0 rows/m, "$15 rows", /config: the record does not state the 0 rows screened beyond the stop/],
+    [/^- stage 2 stopped before every stage-1 pass: config screened 22 of 98 passes$/m, "- stage 2 stopped before every stage-1 pass: config screened 98 of 98 passes",
+      /config: the record's stage-2 stop threat is not the one the plan gives \(22 of 98 passes screened\)/],
+    [/rung 2 claude-opus-5-5 \+ claude-sonnet-5-5 on brief/, "rung 2 claude-opus-5-5 on brief", /the record's ladder line is not the one stage1-freeze\.json gives/],
+    [/^- alpha: problems X1, X2;/m, "- alpha: problems X1;", /the record's facet alpha line is not the topic config's/],
+    [/dropped 63 o\/missing7 \(the repository is gone/, "dropped 63 o/missing7 (it moved", /the record's standard line is not the one the QGS files give/],
+    [/(- facet alpha: recall 20\/26 \()0\.769/, "$10.900", /the record's facet alpha recall line is not the one the files give/],
+    [/(in-pool rate 46\/47 \(0\.979, 95% CI )0\.89/, "$10.50", /the record's pooled recall line is not the one the files give/],
+  ];
+  for (const [pattern, replacement, error] of probes) {
+    const body = s.text.replace(pattern, replacement);
+    assert.notEqual(body, s.text, String(pattern));
+    assert.match(s.errors(body), error);
+  }
 });
 
 test("stage 1 and stage 2 are checked against the files: unscreened pool rows and stage-2 rows that passed no model fail", () => {
