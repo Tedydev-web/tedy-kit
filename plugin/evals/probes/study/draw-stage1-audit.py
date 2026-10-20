@@ -9,7 +9,7 @@ from study_topic import TopicError, load_topic, require_screened, topic_argument
 
 def main(argv=None):
     args = topic_arguments(f"Draw the stage-1 audit of a stratum: the model disagreements, {NEAR_ROWS} near-boundary excludes (both models said no, but the name or "
-                           f"description holds a topic term) and {FAR_ROWS} random far excludes, seeded by the sweep name.",
+                           f"description holds a term of a facet, or a topic term when the topic has no facets) and {FAR_ROWS} far excludes, each ranked by its sha256 under the sweep name.",
                            (["--work"], {"required": True, "help": "the topic's working folder"}),
                            (["--stratum"], {"required": True, "help": "stratum to audit"})).parse_args(argv)
     try:

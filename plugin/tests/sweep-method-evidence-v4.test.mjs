@@ -240,17 +240,34 @@ test("item 8: a facet ranking made with other terms than the facet's own fails t
   assert.match(s.errors(), /facets\/alpha\/product-ranked\.json was ranked with the terms \["tdd","test","guard"\], not the facet's own \["tdd","test"\]/);
 });
 
-test("the stage-1 audit draws only stage-1 excludes, read by the stage-2 screener and checked by the user", () => {
+test("H-audit: the gate redraws the stage-1 audit, requires a check of every flagged row and recomputes the elusion bounds", () => {
+  const sample = /is not the sample the stage-1 files give: 200 near and 100 far excludes ranked by their sha256 under the sweep's seed/;
   const s = sweep();
   const audit = s.json("product-stage1-audit.json");
-  const passed = s.json("product-stage2.json").passes[0];
-  s.write("product-stage1-audit.json", { ...audit, far: [...audit.far, passed] });
-  const errors = s.errors();
-  assert.match(errors, new RegExp(`product-stage1-audit\\.json draws ranks ${passed} that stage 1 did not exclude`));
-  assert.match(errors, new RegExp(`product: the stage-2 screener has not read stage-1 audit ranks ${passed}`));
+  s.write("product-stage1-audit.json", { ...audit, far: [...audit.far, s.json("product-stage2.json").passes[0]] });
+  assert.match(s.errors(), new RegExp(`product-stage1-audit\\.json ${sample.source}`));
   const t = sweep();
-  rmSync(join(t.folder, "config-stage1-audit-checks.json"));
-  assert.match(t.errors(), /no config-stage1-audit-checks\.json: the user checks every row the screener flagged/);
+  const config = t.json("config-stage1-audit.json");
+  t.write("config-stage1-audit.json", { ...config, near: config.near.slice(0, 1), far: config.far.slice(0, 1) });
+  assert.match(t.errors(), new RegExp(`config-stage1-audit\\.json ${sample.source}`));
+  const u = sweep();
+  u.write("config-stage1-audit.json", { ...config, near: [], far: [], near_pool: 0, far_pool: 0 });
+  assert.match(u.errors(), new RegExp(`config-stage1-audit\\.json ${sample.source}`));
+  const v = sweep();
+  const flagged = Object.keys(v.json("config-stage1-audit-checks.json"));
+  assert.equal(flagged.length, 1);
+  v.write("config-stage1-audit-checks.json", {});
+  assert.match(v.errors(), new RegExp(`config: the user has not checked stage-1 audit ranks ${flagged[0]} that the screener flagged`));
+  const w = sweep();
+  rmSync(join(w.folder, "config-stage1-audit-checks.json"));
+  assert.match(w.errors(), /no config-stage1-audit-checks\.json: the user checks every row the screener flagged/);
+  const x = sweep();
+  const bound = x.text.match(/^- config stage-1 audit: .*?upper elusion bound (0\.\d{4})/m)[1];
+  assert.match(x.errors(x.text.replace(`upper elusion bound ${bound}`, "upper elusion bound 0.0001")), /config: the record's stage-1 audit line is not the elusion the audit files give/);
+  assert.match(x.errors(x.text.replace(/^(- config stage-1 audit: .*?near excludes )\d+/m, "$1999")), /config: the record's stage-1 audit line is not the elusion the audit files give/);
+  const y = sweep();
+  y.write("config-stage1-audit-checks.json", { [flagged[0]]: "eligible" });
+  assert.match(y.errors(), /config: the record's stage-1 audit line is not the elusion the audit files give/);
 });
 
 test("a v4 record whose labels were imported before the ladder was frozen fails the gate", () => {

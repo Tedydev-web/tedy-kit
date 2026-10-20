@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { EMPTY_TABLE, derive } from "./sweep-screening-derive.mjs";
 
 const RECALL_TARGET = 0.8;
 const SENSITIVITY_FLOOR = 0.9;
@@ -6,6 +7,8 @@ const KAPPA_FLOOR = 0.6;
 const STAGE1_BOUND = 0.95;
 const POSITIVES_NEEDED = 59;
 const HELD_OUT_POSITIVES = 10;
+const NEAR_ROWS = 200;
+const FAR_ROWS = 100;
 const CALIBRATED = ["config", "product"];
 const DROP_COPY = /^dropped\/[\w.-]+$/;
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
@@ -379,7 +382,27 @@ function stage2Errors(io, sessions, strata, passes, members) {
   return { errors, screened };
 }
 
-function stage1AuditErrors(io, strata, passes) {
+const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const upperBound = (k, n) => 1 - lowerBound(n - k, n);
+const hashedSample = (pool, size, seed) => pool.map((r) => [sha256(`${seed}:${r}`), r]).sort((a, b) => (a[0] < b[0] ? -1 : 1)).slice(0, size).map(([, r]) => r).sort((a, b) => a - b);
+
+function auditSample(io, topic, stratum, rung, passes) {
+  const terms = [...new Set(Object.values(topic?.facets ?? {}).flatMap((f) => f.terms ?? []))].sort();
+  const term = new RegExp(`(?<![a-z0-9])(${(terms.length ? terms : topic?.terms ?? []).map(escapeRegex).join("|")})(?![a-z0-9])`, "i");
+  const pool = passes[stratum].pool;
+  const ranks = [...pool.keys()].sort((a, b) => a - b);
+  const excluded = ranks.filter((r) => !passes[stratum].passed.has(r));
+  const answers = rung.models.map((m) => new Map(io.jsonl(`stage1-${stratum}-${rung.shape}-${m}.jsonl`).map((r) => [r.order_rank, r.verdict])));
+  const disagreements = ranks.filter((r) => !autoPass(pool.get(r)) && new Set(answers.map((a) => a.get(r))).size > 1);
+  const text = (row) => `${String(row.repo).split("/").slice(1).join("/").replaceAll("_", "-")} ${row.description ?? ""}`;
+  const near = excluded.filter((r) => term.test(text(pool.get(r))));
+  const far = excluded.filter((r) => !near.includes(r));
+  const seed = `${topic?.sweep}:stage1-audit:${stratum}`;
+  return { stratum, rung: rung.rung, excluded: excluded.length, disagreements, near_pool: near.length, far_pool: far.length,
+    near: hashedSample(near, NEAR_ROWS, `${seed}:near`), far: hashedSample(far, FAR_ROWS, `${seed}:far`) };
+}
+
+function stage1AuditErrors(io, topic, strata, passes, rung) {
   const errors = [];
   const screener = io.json("protocol-freeze.json")?.session_a?.model;
   for (const stratum of strata) {
@@ -388,14 +411,44 @@ function stage1AuditErrors(io, strata, passes) {
       errors.push(`no ${stratum}-stage1-audit.json in the sweep folder: the stage-1 excludes are audited before stage 2`);
       continue;
     }
-    const drawn = [...(audit.near ?? []), ...(audit.far ?? [])];
-    const passed = passes[stratum]?.passed ?? new Set();
-    const wrong = drawn.filter((r) => passed.has(r) || !passes[stratum]?.pool.has(r));
-    if (wrong.length) errors.push(`${stratum}-stage1-audit.json draws ranks ${wrong.slice(0, 10).join(", ")} that stage 1 did not exclude`);
-    const read = new Set(io.jsonl(`${stratum}-stage1-audit-${screener}.jsonl`).map((r) => r.order_rank));
-    const unread = drawn.filter((r) => !read.has(r));
-    if (unread.length) errors.push(`${stratum}: the stage-2 screener has not read stage-1 audit ranks ${unread.slice(0, 10).join(", ")}`);
-    if (io.json(`${stratum}-stage1-audit-checks.json`) === undefined) errors.push(`no ${stratum}-stage1-audit-checks.json: the user checks every row the screener flagged`);
+    if (!rung || !passes[stratum]) continue;
+    const expected = auditSample(io, topic, stratum, rung, passes);
+    if (canonical(audit) !== canonical(expected)) {
+      errors.push(`${stratum}-stage1-audit.json is not the sample the stage-1 files give: ${NEAR_ROWS} near and ${FAR_ROWS} far excludes ranked by their sha256 under the sweep's seed`);
+      continue;
+    }
+    const drawn = [...expected.near, ...expected.far];
+    const rows = new Map(io.jsonl(`${stratum}-stage1-audit-${screener}.jsonl`).map((r) => [r.order_rank, r]));
+    const unread = drawn.filter((r) => !rows.has(r));
+    if (unread.length) {
+      errors.push(`${stratum}: the stage-2 screener has not read stage-1 audit ranks ${unread.slice(0, 10).join(", ")}`);
+      continue;
+    }
+    const flagged = drawn.filter((r) => derive(EMPTY_TABLE, stratum, { A: {}, B: {} }, "A", rows.get(r)).decision === "eligible");
+    const checks = io.json(`${stratum}-stage1-audit-checks.json`);
+    if (checks === undefined) {
+      errors.push(`no ${stratum}-stage1-audit-checks.json: the user checks every row the screener flagged`);
+      continue;
+    }
+    const unchecked = flagged.filter((r) => !["eligible", "excluded"].includes(checks[String(r)]));
+    if (unchecked.length) errors.push(`${stratum}: the user has not checked stage-1 audit ranks ${unchecked.slice(0, 10).join(", ")} that the screener flagged`);
+    const outside = Object.keys(checks).map(Number).filter((r) => !flagged.includes(r));
+    if (outside.length) errors.push(`${stratum}-stage1-audit-checks.json checks ranks ${outside.slice(0, 10).join(", ")} the screener did not flag`);
+    const bounds = [];
+    const parts = ["near", "far"].map((part) => {
+      const n = expected[part].length;
+      const misses = expected[part].filter((r) => checks[String(r)] === "eligible").length;
+      if (!n) return `${part} excludes 0 of ${expected[`${part}_pool`]} read, 0 confirmed eligible, upper elusion bound n/a`;
+      const upper = upperBound(misses, n);
+      bounds.push(upper);
+      return `${part} excludes ${n} of ${expected[`${part}_pool`]} read, ${misses} confirmed eligible, upper elusion bound ([0-9.]+), at most ${Math.ceil(upper * expected[`${part}_pool`])} of the ${expected[`${part}_pool`]} eligible`;
+    });
+    const literal = (s) => s.split("([0-9.]+)").map(escapeRegex).join("([0-9.]+)");
+    const line = new RegExp(`^${literal(`- ${stratum} stage-1 audit: ${expected.disagreements.length} model disagreements (they pass under the union); ${parts.join("; ")}; the stage-2 screener flagged ${flagged.length} and the user checked every flagged row`)}$`, "m");
+    const written = io.text.match(line);
+    if (!written || bounds.some((b, i) => Math.abs(Number(written[i + 1]) - b) > 5.1e-5)) {
+      errors.push(`${stratum}: the record's stage-1 audit line is not the elusion the audit files give (bounds ${bounds.map((b) => b.toFixed(4)).join(", ")}, ${flagged.length} flagged)`);
+    }
   }
   return errors;
 }
@@ -510,7 +563,7 @@ export function v4Errors(text, { read, files, topic, meta }) {
     ...qgs.errors,
     ...judgeErrors(io, topic, sessions, strata, labelled.rows),
     ...stage1.errors,
-    ...stage1AuditErrors(io, strata, stage1.passes),
+    ...stage1AuditErrors(io, topic, strata, stage1.passes, stage1.rung),
     ...facetRankingErrors(io, topic, strata),
     ...stage2.errors,
     ...dropErrors(io, read, meta),

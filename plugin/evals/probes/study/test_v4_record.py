@@ -73,7 +73,7 @@ class V4RecordTest(unittest.TestCase):
         stage1 = section(self.text, "Stage 1")
         self.assertIn("- chosen: rung 1 after 1 rungs tried", stage1)
         self.assertIn("- rung 1: run 1 71/71 positives passed, one-sided 95% lower bound 0.9587", stage1)
-        self.assertRegex(stage1, r"- config stage-1 audit: 0 model disagreements .*; near excludes \d+ of \d+ read, 0 confirmed eligible, upper elusion bound 0\.\d+; far excludes")
+        self.assertRegex(stage1, r"- config stage-1 audit: 0 model disagreements .*; near excludes \d+ of \d+ read, 0 confirmed eligible, upper elusion bound 0\.\d+, at most \d+ of the \d+ eligible; far excludes .*; the stage-2 screener flagged 1 and the user checked every flagged row")
 
     def test_the_standard_lists_drops_and_the_cross_family_join_and_the_audit_follows_stage_2(self):
         judges = section(self.text, "Judges")

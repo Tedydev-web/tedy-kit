@@ -1,5 +1,6 @@
+import hashlib
 import json
-import random
+import math
 from pathlib import Path
 
 from study_agreement import upper_bound
@@ -25,22 +26,34 @@ def screener_name(stratum, option):
     return f"{stratum}-stage1-audit-{option['model']}"
 
 
-def draw(topic, folder, stratum):
+def audit_terms(topic):
+    return sorted({t for rule in (topic.get("facets") or {}).values() for t in rule["terms"]}) or topic["terms"]
+
+
+def hashed_sample(pool, size, seed):
+    return sorted(sorted(pool, key=lambda r: hashlib.sha256(f"{seed}:{r}".encode()).hexdigest())[:size])
+
+
+def sample(topic, folder, stratum):
     folder = Path(folder)
-    if (folder / audit_file(stratum)).exists():
-        raise TopicError(f"{folder / audit_file(stratum)} already exists; the stage-1 audit is drawn once")
     rung = chosen_rung(folder)
     results = stage1_results(folder, stratum)[1]
-    term = term_regex(topic["terms"])
+    term = term_regex(audit_terms(topic))
     inputs = stage1_inputs(folder, stratum, rung["shape"])
     excluded = [r for r, v in results.items() if not v["pass"]]
     near_pool = [r for r in excluded if term.search(inputs[r]["repo"].split("/", 1)[1].replace("_", "-") + " " + inputs[r]["description"])]
     far_pool = [r for r in excluded if r not in set(near_pool)]
-    rng = random.Random(f"{topic['sweep']}:stage1-audit:{stratum}")
+    seed = f"{topic['sweep']}:stage1-audit:{stratum}"
     return {"stratum": stratum, "rung": rung["rung"], "excluded": len(excluded),
             "disagreements": [r for r, v in results.items() if len(set(v["verdicts"].values())) > 1],
             "near_pool": len(near_pool), "far_pool": len(far_pool),
-            "near": sorted(rng.sample(near_pool, min(NEAR_ROWS, len(near_pool)))), "far": sorted(rng.sample(far_pool, min(FAR_ROWS, len(far_pool))))}
+            "near": hashed_sample(near_pool, NEAR_ROWS, f"{seed}:near"), "far": hashed_sample(far_pool, FAR_ROWS, f"{seed}:far")}
+
+
+def draw(topic, folder, stratum):
+    if (Path(folder) / audit_file(stratum)).exists():
+        raise TopicError(f"{Path(folder) / audit_file(stratum)} already exists; the stage-1 audit is drawn once")
+    return sample(topic, folder, stratum)
 
 
 def read_audit(folder, stratum):
@@ -62,7 +75,9 @@ def flagged(folder, stratum, option):
     return audit, sorted(r for r in wanted if derive(table, stratum, {"A": {}, "B": {}}, "A", rows[r])["decision"] == "eligible")
 
 
-def elusion(folder, stratum, option):
+def elusion(topic, folder, stratum, option):
+    if read_audit(folder, stratum) != sample(topic, folder, stratum):
+        raise TopicError(f"{audit_file(stratum)} is not the sample the stage-1 files give; the stage-1 audit is drawn once, by draw-stage1-audit.py")
     audit, flags = flagged(folder, stratum, option)
     path = Path(folder) / checks_file(stratum)
     checks = {int(k): v for k, v in json.loads(path.read_text()).items()} if path.is_file() else {}
@@ -72,8 +87,9 @@ def elusion(folder, stratum, option):
     out = {"disagreements": len(audit["disagreements"]), "flagged": flags}
     for part in PARTS:
         misses = [r for r in audit[part] if checks.get(r) == "eligible"]
-        out[part] = {"rows": len(audit[part]), "pool": audit[f"{part}_pool"], "misses": misses,
-                     "upper": upper_bound(len(misses), len(audit[part])) if audit[part] else None}
+        upper = upper_bound(len(misses), len(audit[part])) if audit[part] else None
+        out[part] = {"rows": len(audit[part]), "pool": audit[f"{part}_pool"], "misses": misses, "upper": upper,
+                     "at_most": None if upper is None else math.ceil(upper * audit[f"{part}_pool"])}
     return out
 
 

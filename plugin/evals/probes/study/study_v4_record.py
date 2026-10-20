@@ -301,12 +301,13 @@ def standard_lines(out):
     return lines
 
 
-def stage1_audit_lines(folder, strata, freeze):
+def stage1_audit_lines(topic, folder, strata, freeze):
     lines = []
     for stratum in strata:
-        out = elusion(folder, stratum, freeze["session_a"])
+        out = elusion(topic, folder, stratum, freeze["session_a"])
         parts = "; ".join(f"{part} excludes {out[part]['rows']} of {out[part]['pool']} read, {len(out[part]['misses'])} confirmed eligible, upper elusion bound "
-                          + ("n/a" if out[part]["upper"] is None else f"{out[part]['upper']:.4f}") for part in ("near", "far"))
+                          + ("n/a" if out[part]["upper"] is None else f"{out[part]['upper']:.4f}, at most {out[part]['at_most']} of the {out[part]['pool']} eligible")
+                          for part in ("near", "far"))
         lines.append(f"- {stratum} stage-1 audit: {out['disagreements']} model disagreements (they pass under the union); {parts}; the stage-2 screener flagged "
                      f"{len(out['flagged'])} and the user checked every flagged row")
     return lines
@@ -351,5 +352,5 @@ def v4_parts(topic, folder, strata, freeze, sessions, faceted, common, decided_r
     prisma = prisma_rows(topic, folder, strata, faceted, decided_rows)
     return {"recall": recall, "prisma": ["| stratum | stage | count |", "|---|---|---|"] + [f"| {s} | {k} | {v} |" for s, k, v in prisma],
             "facets": facet_lines(topic, strata, faceted, decided_rows) + snowball_lines(folder, strata, faceted),
-            "calibration": batch_lines(topic, folder, strata), "stage1": stage1 + stage1_audit_lines(folder, strata, freeze),
+            "calibration": batch_lines(topic, folder, strata), "stage1": stage1 + stage1_audit_lines(topic, folder, strata, freeze),
             "judges": judges + standard_lines(out) + audits, "threats": recall_threats + judge_threats + audit_threats + stops}

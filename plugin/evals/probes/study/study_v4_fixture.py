@@ -331,7 +331,11 @@ def stage1_audited(repo, work, judges):
     for stratum in STRATA:
         quiet(repo, "draw-stage1-audit", "--work", str(work), "--stratum", stratum)
         quiet(repo, "fetch-screening-inputs", "--work", str(work), "--stratum", stratum, "--set", "stage1-audit", fetch=inputs_fetch())
+        audit = json.loads((work / f"{stratum}-stage1-audit.json").read_text())
+        inputs = {json.loads(line)["order_rank"]: json.loads(line)["repo"] for line in (work / f"stage1-inputs-{stratum}-brief.jsonl").read_text().splitlines()}
+        judges.flip = {inputs[audit["near"][0]]}
         quiet(repo, "run-judge", "--work", str(work), "--stratum", stratum, "--judge", "screening-A", "--set", "stage1-audit", "--today", TODAY, fetch=judges)
+        judges.flip = set()
         from study_stage1_audit import flagged
         flags = flagged(work, stratum, OPUS)[1]
         checks = work / f"saved-{stratum}-checks.json"

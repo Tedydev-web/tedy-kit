@@ -1,4 +1,7 @@
+import hashlib
 import json
+import math
+import re
 import unittest
 
 from study_topic import TopicError, load_topic
@@ -95,18 +98,39 @@ class StageTwoTest(unittest.TestCase):
         quiet(self.repo, "run-judge", *args, "--judge", "screening-A", "--set", "stage1-audit", "--today", TODAY, fetch=self.judges)
         self.judges.flip = set()
         with self.assertRaisesRegex(TopicError, rf"the user has not checked stage-1 audit ranks \[{missed}\] that the screener flagged"):
-            elusion(self.work, "config", OPUS)
+            elusion(load_topic(self.repo, "demo"), self.work, "config", OPUS)
         checks = self.work / "checks.json"
         checks.write_text(json.dumps({str(audit["far"][0]): "eligible"}))
         with self.assertRaisesRegex(SystemExit, "were not flagged by the screener; the user checks only the flagged rows"):
             call(self.repo, "import-audit-checks", *args, "--checks", str(checks))
         checks.write_text(json.dumps({str(missed): "eligible"}))
         quiet(self.repo, "import-audit-checks", *args, "--checks", str(checks))
-        result = elusion(self.work, "config", OPUS)
+        result = elusion(load_topic(self.repo, "demo"), self.work, "config", OPUS)
         n = len(audit["near"])
         self.assertEqual((result["flagged"], result["near"]["misses"], result["far"]["misses"]), ([missed], [missed], []))
         self.assertGreater(result["near"]["upper"], 1 / n)
         self.assertEqual(round(result["far"]["upper"], 4), round(1 - 0.05 ** (1 / len(audit["far"])), 4))
+        self.assertEqual(result["near"]["at_most"], math.ceil(result["near"]["upper"] * audit["near_pool"]))
+
+    def test_the_stage_1_audit_is_a_hash_ranked_draw_of_excludes_matching_facet_terms_and_elusion_redraws_it(self):
+        stage1_pooled(self.repo, self.work, self.judges)
+        from study_stage1_audit import elusion, sample
+        topic = load_topic(self.repo, "demo")
+        quiet(self.repo, "draw-stage1-audit", "--work", str(self.work), "--stratum", "config")
+        path = self.work / "config-stage1-audit.json"
+        audit = json.loads(path.read_text())
+        inputs = {json.loads(line)["order_rank"]: json.loads(line) for line in (self.work / "stage1-inputs-config-brief.jsonl").read_text().splitlines()}
+        excluded = sorted(r for r, v in self.stage1("config").items() if v["verdict"] == "no")
+        facet = re.compile(r"(?<![a-z0-9])(tdd|test|guard|lint)(?![a-z0-9])", re.I)
+        near = [r for r in excluded if facet.search(inputs[r]["repo"].split("/", 1)[1].replace("_", "-") + " " + inputs[r]["description"])]
+        ranked = sorted(near, key=lambda r: hashlib.sha256(f"261020-demo:stage1-audit:config:near:{r}".encode()).hexdigest())
+        self.assertEqual((audit["near"], audit["near_pool"]), (sorted(ranked[:200]), len(near)))
+        wide = {**topic, "terms": topic["terms"] + ["web"]}
+        self.assertEqual(sample(wide, self.work, "config"), audit)
+        self.assertGreater(sample({**wide, "facets": {}}, self.work, "config")["near_pool"], audit["near_pool"])
+        path.write_text(json.dumps({**audit, "near": audit["near"][:1], "far": audit["far"][:1]}))
+        with self.assertRaisesRegex(TopicError, "config-stage1-audit.json is not the sample the stage-1 files give; the stage-1 audit is drawn once, by draw-stage1-audit.py"):
+            elusion(topic, self.work, "config", OPUS)
 
     def test_a_stage_2_session_is_refused_without_the_stage_2_plan(self):
         stage1_pooled(self.repo, self.work, self.judges)
