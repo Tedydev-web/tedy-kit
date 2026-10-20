@@ -72,7 +72,10 @@ def row_problems(row, expected):
     return problems
 
 
-def parse_qgs_reply(text, expected, topic_problems, allowed=("yes", "no", "unsure")):
+STRATA = ("config", "product")
+
+
+def parse_qgs_reply(text, expected, topic_problems, allowed=("yes", "no", "unsure"), strata=False):
     rows, problems = {}, []
     for line in (raw.strip() for raw in text.splitlines()):
         if not line.startswith("{"):
@@ -99,11 +102,15 @@ def parse_qgs_reply(text, expected, topic_problems, allowed=("yes", "no", "unsur
                 issues.append(f"rank {rank} names problems {outside} outside the topic")
             if row.get("verdict") == "yes" and not row["problems"]:
                 issues.append(f"rank {rank} answers yes without a problem id")
+        if strata:
+            named = row.get("strata")
+            if not isinstance(named, list) or not set(named) <= set(STRATA) or (row.get("verdict") == "yes") != bool(named):
+                issues.append(f"rank {rank} needs strata naming config, product or both for a yes, and none otherwise")
         if rank in rows:
             issues.append(f"rank {rank} appears twice")
         problems += issues
         if not issues:
-            rows[rank] = {"id": rank, "order_rank": rank, "repo": expected[rank]["repo"], "verdict": row["verdict"], "problems": row["problems"], "why": str(row.get("why", ""))}
+            rows[rank] = {"id": rank, "order_rank": rank, "repo": expected[rank]["repo"], "verdict": row["verdict"], "problems": row["problems"], **({"strata": sorted(set(row["strata"]))} if strata else {}), "why": str(row.get("why", ""))}
     problems += [f"rank {rank} missing from the reply" for rank in expected if rank not in rows and not any(f"rank {rank} " in p for p in problems)]
     return [rows[r] for r in sorted(rows)], problems
 

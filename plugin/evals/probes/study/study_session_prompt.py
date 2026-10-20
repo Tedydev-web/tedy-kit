@@ -22,8 +22,9 @@ QGS_ROWS_NOTE = ("Each row below is one JSON object: the pinned commit, the repo
                  "read at that commit, and the evidence the toolchain fetched. Judge only from these inputs; you have no tools. A file listed under missing could not be read "
                  "at the pinned commit and counts as absent.")
 QGS_REPLY_FORMAT = ("## Reply format\n\nReply with nothing but these lines. One JSON object per row, on one line, in order_rank order, with the fields order_rank, repo, "
-                    "verdict (\"yes\", \"no\" or \"unsure\"), problems (the ids of the problems the repository carries a mechanism for; at least one for a yes, none otherwise) "
-                    "and why (one sentence).")
+                    "verdict (\"yes\", \"no\" or \"unsure\"), problems (the ids of the problems the repository carries a mechanism for; at least one for a yes, none otherwise), "
+                    "strata (\"config\" when the repository's own agent assets carry the mechanism, \"product\" when it ships the mechanism as source code a harness runs, "
+                    "or both; at least one for a yes, none otherwise) and why (one sentence).")
 QGS_TEMPLATE_SHA256 = hashlib.sha256((QGS_ROWS_NOTE + "\n\n" + QGS_REPLY_FORMAT).encode()).hexdigest()
 STAGE1_ROWS_NOTE = ("Each row below is one repository: its name and description and, when given, its agent-asset paths or the first lines of its README. Answer yes when it "
                     "plausibly carries a mechanism for a listed problem; unsure when the text is empty, vague or could plausibly address a listed problem; no only when it clearly "

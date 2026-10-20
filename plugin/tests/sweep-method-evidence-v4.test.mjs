@@ -60,6 +60,14 @@ test("item 2: a QGS candidate judged by one judge and not dropped with a reason 
   const dropped = s.json("qgs-dropped.json");
   s.write("qgs-dropped.json", { ...dropped, [rows[0].id]: { repo: rows[0].repo, reason: " ", date: "2026-10-20" } });
   assert.match(s.errors(), new RegExp(`QGS candidate ${rows[0].id} is dropped without a reason`));
+  const r = sweep();
+  const judged = r.jsonl("qgs-judge-A.jsonl");
+  const yes = judged.find((row) => row.verdict === "yes");
+  r.writeRows("qgs-judge-A.jsonl", judged.map((row) => (row === yes ? { ...row, strata: [] } : row)));
+  assert.match(r.errors(), new RegExp(`qgs-judge-A\\.jsonl id ${yes.id}: a yes names its strata \\(config, product or both\\), any other verdict none`));
+  const adjudicated = r.json("qgs-adjudicated.json");
+  r.write("qgs-adjudicated.json", { ...adjudicated, strata: { ...adjudicated.strata, [yes.repo]: ["config", "product"] } });
+  assert.match(r.errors(), /qgs-adjudicated\.json does not hold the member strata the judges labelled/);
   const t = sweep();
   const final = t.json("qgs-adjudicated.json");
   t.write("qgs-adjudicated.json", { ...final, final: final.final.slice(1) });

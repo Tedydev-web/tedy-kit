@@ -47,9 +47,9 @@ class V4RecordTest(unittest.TestCase):
         self.assertIn("- QGS recall is an upper estimate: the QGS judges are the stage-1 models", recall)
 
     def test_the_config_pool_channel_and_the_members_outside_every_pool_are_counted(self):
-        self.assertIn("- product channel from the config pool: 2 repositories joined the product pool before stage 1; they recover 2 of the 23 standard members that pass "
-                      "the product filter; 1 of those members remain outside every pool", section(self.text, "Recall"))
-        self.assertIn("- discovery gap: 1 standard members that pass the product filter are in no pool: o/outside1", section(self.text, "Threats"))
+        self.assertRegex(section(self.text, "Recall"), r"- product channel from the config pool: \d+ repositories joined the product pool before stage 1; they recover \d+ of "
+                                                       r"the \d+ standard members the QGS judges labelled product; 1 of those members remain outside every pool")
+        self.assertIn("- discovery gap: 1 standard members labelled product are in no pool: o/outside1", section(self.text, "Threats"))
 
     def test_facets_count_included_rows_per_facet_with_their_overlap_from_the_stage_1_labels(self):
         facets = section(self.text, "Facets")

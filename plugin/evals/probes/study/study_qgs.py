@@ -3,7 +3,8 @@ from pathlib import Path
 
 from study_agreement import cohen_kappa, rounded
 from study_screening_core import read_jsonl
-from study_topic import TopicError, product_filter, session_option
+from study_session_reply import STRATA
+from study_topic import TopicError, session_option
 
 VERDICTS = ("yes", "no", "unsure")
 CANDIDATES, DROPPED, ADJUDICATED, INPUTS, PACKET = "qgs-candidates.jsonl", "qgs-dropped.json", "qgs-adjudicated.json", "qgs-inputs.jsonl", "qgs-packet.md"
@@ -48,7 +49,7 @@ def dropped(folder):
     return {int(k): v for k, v in json.loads(path.read_text()).items()} if path.is_file() else {}
 
 
-def checked_row(name, row, problems):
+def checked_row(name, row, problems, strata=True):
     where = f"{name} id {row.get('id')}"
     if row.get("verdict") not in VERDICTS:
         raise TopicError(f"{where}: verdict must be yes, no or unsure, not {row.get('verdict')!r}")
@@ -60,6 +61,9 @@ def checked_row(name, row, problems):
         raise TopicError(f"{where}: problems {outside} are not topic problems")
     if row["verdict"] == "yes" and not labels:
         raise TopicError(f"{where}: a yes verdict needs at least one problem id")
+    named = row.get("strata", [] if not strata else None)
+    if not isinstance(named, list) or not set(named) <= set(STRATA) or (strata and (row["verdict"] == "yes") != bool(named)):
+        raise TopicError(f"{where}: strata must name config, product or both for a yes, and none otherwise")
     return row
 
 
@@ -85,7 +89,7 @@ def read_cross(folder, name, problems, listed):
     by_repo = {repo.lower(): i for i, repo in listed.items()}
     rows = {}
     for row in read_jsonl(path.parent, path.name):
-        checked_row(name, row, problems)
+        checked_row(name, row, problems, strata=False)
         joined = by_repo.get(str(row.get("repo", "")).lower())
         if joined is None:
             raise TopicError(f"{name} names {row.get('repo')!r}, which is not a candidate; the cross-family judgments join the candidates by repository name")
@@ -124,16 +128,18 @@ def qgs_standard(topic, folder):
     unread = sorted(i for i in queued if i not in reader)
     if unread:
         raise TopicError(f"the reader has not judged queued candidates {unread}; run run-judge.py --judge reader --set qgs")
-    final, labels = [], {}
+    final, labels, strata = [], {}, {}
     for i in both:
         if a[i]["verdict"] == b[i]["verdict"] == "yes":
             final.append(a[i]["repo"])
             labels[a[i]["repo"]] = sorted(set(a[i]["problems"]) | set(b[i]["problems"]))
+            strata[a[i]["repo"]] = sorted(set(a[i]["strata"]) | set(b[i]["strata"]))
     for i in sorted(queued):
         if reader[i]["verdict"] == "yes":
             final.append(reader[i]["repo"])
             labels[reader[i]["repo"]] = sorted(reader[i]["problems"])
-    out = {"final": final, "labels": labels, "queue": queue, "rule": STANDARD_RULE, "candidates": len(listed), "judged_by_both": len(both),
+            strata[reader[i]["repo"]] = sorted(reader[i]["strata"])
+    out = {"final": final, "labels": labels, "strata": strata, "queue": queue, "rule": STANDARD_RULE, "candidates": len(listed), "judged_by_both": len(both),
            "dropped": {str(i): drops[i] for i in sorted(drops)}}
     if option:
         overlap = sorted(set(cross) & set(both))
@@ -155,7 +161,5 @@ def member_facets(topic, labels):
     return {member: sorted({homes[p] for p in problems if p in homes}) for member, problems in labels.items()}
 
 
-def product_members(topic, folder, final):
-    passes = product_filter(topic)
-    lines = {r["repo"].lower(): r for r in candidate_rows(folder)}
-    return [m for m in final if passes(m + " " + lines.get(m.lower(), {}).get("line", ""))]
+def stratum_members(standard, stratum):
+    return [m for m in standard["final"] if stratum in standard["strata"].get(m, [])]

@@ -69,6 +69,8 @@ function qgsErrors({ json, jsonl }, topic) {
     sides[side] = new Map();
     for (const row of jsonl(name)) {
       if (lower(candidates.get(row.id)) !== lower(row.repo)) errors.push(`${name} id ${row.id} names ${row.repo}, but candidate ${row.id} is ${candidates.get(row.id)}`);
+      const strata = Array.isArray(row.strata) ? row.strata : [];
+      if ((row.verdict === "yes") !== (strata.length > 0) || strata.some((s) => !CALIBRATED.includes(s))) errors.push(`${name} id ${row.id}: a yes names its strata (config, product or both), any other verdict none`);
       sides[side].set(row.id, row);
     }
   }
@@ -84,17 +86,25 @@ function qgsErrors({ json, jsonl }, topic) {
     else cross.set(id, row);
   }
   const members = [];
+  const strata = {};
   for (const [id, a] of sides.A) {
     const b = sides.B.get(id);
     if (!b) continue;
     const queued = a.verdict !== b.verdict || a.verdict === "unsure" || (a.verdict === "no" && b.verdict === "no" && cross.get(id)?.verdict === "yes");
-    if (a.verdict === "yes" && b.verdict === "yes") members.push(lower(a.repo));
-    else if (queued && sides.reader.get(id)?.verdict === "yes") members.push(lower(a.repo));
-    else if (queued && !sides.reader.has(id)) errors.push(`QGS candidate ${id} ${a.repo} is queued for the reader, who has not judged it`);
+    if (a.verdict === "yes" && b.verdict === "yes") {
+      members.push(lower(a.repo));
+      strata[lower(a.repo)] = [...new Set([...(a.strata ?? []), ...(b.strata ?? [])])].sort();
+    } else if (queued && sides.reader.get(id)?.verdict === "yes") {
+      members.push(lower(a.repo));
+      strata[lower(a.repo)] = [...new Set(sides.reader.get(id).strata ?? [])].sort();
+    } else if (queued && !sides.reader.has(id)) errors.push(`QGS candidate ${id} ${a.repo} is queued for the reader, who has not judged it`);
   }
-  const written = new Set((json("qgs-adjudicated.json")?.final ?? []).map(lower));
+  const adjudicated = json("qgs-adjudicated.json") ?? {};
+  const written = new Set((adjudicated.final ?? []).map(lower));
   if (written.size !== members.length || members.some((m) => !written.has(m))) errors.push("qgs-adjudicated.json is not the standard the judge, reader and cross-family files give");
-  return { errors, members };
+  const writtenStrata = Object.fromEntries(Object.entries(adjudicated.strata ?? {}).map(([m, s]) => [lower(m), [...s].sort()]));
+  if (members.some((m) => JSON.stringify(writtenStrata[m]) !== JSON.stringify(strata[m]))) errors.push("qgs-adjudicated.json does not hold the member strata the judges labelled");
+  return { errors, members, strata };
 }
 
 function labelledRows({ json }, read, batches) {

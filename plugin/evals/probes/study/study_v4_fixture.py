@@ -139,7 +139,12 @@ def screening_row(row, flip=False):
 
 def verdict_row(row, flip=False):
     yes = relevant(row["repo"]) != flip
-    return {"order_rank": row["order_rank"], "repo": row["repo"], "verdict": "yes" if yes else "no", "problems": problems_for(row["repo"]) if yes else [], "why": SECRET}
+    return {"order_rank": row["order_rank"], "repo": row["repo"], "verdict": "yes" if yes else "no", "problems": problems_for(row["repo"]) if yes else [],
+            "strata": strata_for(row["repo"]) if yes else [], "why": SECRET}
+
+
+def strata_for(repo):
+    return ["product"] if repo.startswith("p/") or repo == OUTSIDE else ["config"]
 
 
 class ScriptedJudges(FakeFetch):

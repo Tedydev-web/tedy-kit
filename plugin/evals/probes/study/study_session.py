@@ -205,7 +205,7 @@ def run_block(job, fetch):
         rows, mechanisms, problems = parse_reply(text, expected)
         rows = [with_computed_date(r, expected[r["order_rank"]], job["sweep_date"]) for r in rows]
     else:
-        (rows, problems), mechanisms = parse_qgs_reply(text, expected, job["problems"], ("yes", "unsure", "no")), []
+        (rows, problems), mechanisms = parse_qgs_reply(text, expected, job["problems"], ("yes", "unsure", "no"), kind == "qgs"), []
     if problems:
         (prompts / f"{stem}.response.txt").write_text(text)
         raise TopicError(f"{name} ranks {first}-{last}: {'; '.join(problems)}; reply kept in prompts/{stem}.response.txt, nothing written")

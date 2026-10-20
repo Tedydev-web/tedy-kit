@@ -12,8 +12,9 @@ FACETS = {"alpha": {"sweep": "261020-demo-alpha", "problems": ["X1", "X2"], "ter
 REPOS = {1: "o/a", 2: "o/b", 3: "o/c", 4: "o/d", 5: "o/e", 6: "o/f", 7: "o/g"}
 
 
-def verdicts(path, rows):
-    write_jsonl(path, [{"id": i, "repo": REPOS[i], "verdict": verdict, "problems": problems, "why": "w"} for i, verdict, problems in rows])
+def verdicts(path, rows, strata=None):
+    write_jsonl(path, [{"id": i, "repo": REPOS[i], "verdict": verdict, "problems": problems, "strata": (strata or {}).get(i, ["config"]) if verdict == "yes" else [], "why": "w"}
+                       for i, verdict, problems in rows])
 
 
 class ClopperPearsonTest(unittest.TestCase):
@@ -131,12 +132,23 @@ class TopicQgsTest(unittest.TestCase):
         self.assertEqual((written["final"], written["labels"]["o/g"], written["candidates"]), (["o/a", "o/g", "o/d", "o/e"], ["X2", "X3"], 7))
         self.assertIn("every candidate is judged by both Claude judges, or dropped with a recorded reason", written["rule"])
 
-    def test_product_members_are_the_members_whose_name_or_list_line_passes_the_product_filter(self):
-        from study_qgs import product_members
-        write_jsonl(self.work / "qgs-candidates.jsonl", [{"id": 1, "repo": "o/a", "list": "l", "heading": "h", "line": "- o/a: a claude hook that runs tdd"},
-                                                         {"id": 2, "repo": "o/b", "list": "l", "heading": "h", "line": "- o/b: a tdd skill"},
-                                                         {"id": 3, "repo": "o/claude-test", "list": "l", "heading": "h", "line": "- o/claude-test"}])
-        self.assertEqual(product_members(load_topic(self.repo, "demo"), self.work, ["o/a", "o/b", "O/Claude-Test"]), ["o/a", "O/Claude-Test"])
+    def test_the_judges_label_each_member_stratum_and_product_members_come_from_those_labels(self):
+        from study_qgs import stratum_members
+        from study_session_reply import parse_qgs_reply
+        reply = "\n".join(json.dumps(r) for r in ({"order_rank": 1, "repo": "o/a", "verdict": "yes", "problems": ["X1"], "strata": [], "why": "w"},
+                                                  {"order_rank": 2, "repo": "o/b", "verdict": "yes", "problems": ["X1"], "strata": ["product", "config"], "why": "w"}))
+        rows, problems = parse_qgs_reply(reply, {1: {"repo": "o/a"}, 2: {"repo": "o/b"}}, ["X1"], strata=True)
+        self.assertEqual((rows[0]["strata"], problems), (["config", "product"], ["rank 1 needs strata naming config, product or both for a yes, and none otherwise"]))
+        verdicts(self.work / "qgs-judge-A.jsonl", [(1, "yes", ["X1"]), (2, "yes", ["X3"]), (3, "no", []), (4, "no", []), (5, "no", []), (6, "no", []), (7, "yes", ["X2"])],
+                 {1: ["config"], 2: ["product"], 7: ["product"]})
+        verdicts(self.work / "qgs-judge-B.jsonl", [(1, "yes", ["X1"]), (2, "yes", ["X3"]), (3, "no", []), (4, "no", []), (5, "no", []), (6, "no", []), (7, "yes", ["X2"])],
+                 {1: ["product"], 2: ["product"], 7: ["product"]})
+        out = self.standard()
+        self.assertEqual((out["strata"], stratum_members(out, "product"), stratum_members(out, "config")),
+                         ({"o/a": ["config", "product"], "o/b": ["product"], "o/g": ["product"]}, ["o/a", "o/b", "o/g"], ["o/a"]))
+        verdicts(self.work / "qgs-judge-B.jsonl", [(1, "yes", ["X1"])], {1: []})
+        with self.assertRaisesRegex(TopicError, "qgs-judge-B.jsonl id 1: strata must name config, product or both for a yes, and none otherwise"):
+            self.standard()
 
 
 if __name__ == "__main__":

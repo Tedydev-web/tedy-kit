@@ -4,7 +4,7 @@ import json
 from study_agreement import RECALL_TARGET, cohen_kappa, interval_text, kappa_text
 from study_calibration_set import BATCHES, labelled, labels_file, set_file
 from study_judges import AUDIT_FILE, SHAPES, criteria_version, decided, judged_batches, reader_shares_family, roster, validate
-from study_qgs import ADJUDICATED, JUDGE_FILES, PACKET, UPPER_ESTIMATE, candidate_rows, cross_family, member_facets, product_members, qgs_standard
+from study_qgs import ADJUDICATED, JUDGE_FILES, PACKET, UPPER_ESTIMATE, candidate_rows, cross_family, member_facets, qgs_standard, stratum_members
 from study_screening_core import read_json, read_jsonl
 from study_session import model_family
 from study_stage1 import FREEZE_FILE, RUNG_FILE, held_out_check, ladder_rung, pool_name, stage1_inputs
@@ -55,7 +55,7 @@ def row_facets(topic, faceted, stratum):
 def standard(topic, folder):
     out = qgs_standard(topic, folder)
     written = read_json(folder, ADJUDICATED)
-    if (out["final"], out["labels"]) != (written.get("final"), written.get("labels")):
+    if (out["final"], out["labels"], out["strata"]) != (written.get("final"), written.get("labels"), written.get("strata")):
         raise TopicError(f"{ADJUDICATED} is not the standard its judge files give; rebuild it with qgs-standard.py --write")
     return out
 
@@ -93,12 +93,12 @@ def recall_lines(topic, folder, strata, faceted):
     if (topic["strata"].get("product", {}).get("channels") or {}).get("config_pool") is True and "product" in strata:
         channel = read_json(folder, "config-pool-channel.json")
         joined = {r.lower() for r in channel["joined"]}
-        product = [m.lower() for m in product_members(topic, folder, out["final"])]
+        product = [m.lower() for m in stratum_members(out, "product")]
         outside = [m for m in product if not any(m in pools[s] for s in strata)]
         lines.append(f"- product channel from the config pool: {len(joined)} repositories joined the product pool before stage 1; they recover {len(set(product) & joined)} of "
-                     f"the {len(product)} standard members that pass the product filter; {len(outside)} of those members remain outside every pool")
+                     f"the {len(product)} standard members the QGS judges labelled product; {len(outside)} of those members remain outside every pool")
         if outside:
-            threats.append(f"- discovery gap: {len(outside)} standard members that pass the product filter are in no pool: {', '.join(outside)}")
+            threats.append(f"- discovery gap: {len(outside)} standard members labelled product are in no pool: {', '.join(outside)}")
     lines.append(f"- {UPPER_ESTIMATE}")
     return lines, threats, out
 
