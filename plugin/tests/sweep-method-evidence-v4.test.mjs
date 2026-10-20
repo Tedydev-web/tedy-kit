@@ -345,6 +345,29 @@ test("a recorded session's output file holds exactly the rows its blocks cover, 
   failsBothLayers(s, /prior-art-sweep-record: /, /^qgs-reader\.jsonl does not hold exactly the rows its recorded blocks cover \(rows outside its blocks: none; rows its blocks cover that it lacks: \d+\); /, "a reader row deleted");
 });
 
+test("a retired session with no blocks names no CLI version, in both layers, whether the only or every agy session is retired", () => {
+  const tool = (s, script, key, ...args) => {
+    const run = spawnSync("python3", ["-B", join(STUDY, script), "--topic", "demo", "--repo", s.repo, "--work", s.folder, "--key", key, "--today", "2026-10-20", ...args],
+      { encoding: "utf8", env: { ...process.env, STUDY_NO_NETWORK: "1" } });
+    assert.equal(run.status, 0, run.stderr);
+  };
+  const cases = [
+    [pending, ["qgs-cross-gemini-3.8-flash-high"]],
+    [built, ["config-audit-gemini-3.8-flash-high", "product-audit-gemini-3.8-flash-high", "qgs-cross-gemini-3.8-flash-high"]],
+  ];
+  for (const [source, keys] of cases) {
+    const s = sweep(source);
+    assert.deepEqual(Object.entries(s.json("meta.json").sessions).filter(([, e]) => e.cli === "agy").map(([k]) => k).sort(), keys);
+    for (const key of keys) {
+      for (const block of s.json("meta.json").sessions[key].blocks) tool(s, "drop-run.py", key, "--ranks", `${block.ranks[0]}-${block.ranks.at(-1)}`, "--reason", "agy quota ran out");
+      tool(s, "retire-run.py", key, "--reason", "Gemini unreachable until the quota resets");
+    }
+    const text = s.rendered();
+    assert.match(text, /^- CLI versions: claude 9\.9\.9 \(fixture\)$/m, keys.join(", "));
+    assert.equal(s.errors(text), "", keys.join(", "));
+  }
+});
+
 test("a cross-family run whose blocks were all dropped is retired with retire-run.py and reads as pending with its reason; a roster session cannot be retired", () => {
   const tool = (s, script, key, ...args) => {
     const run = spawnSync("python3", ["-B", join(STUDY, script), "--topic", "demo", "--repo", s.repo, "--work", s.folder, "--key", key, "--today", "2026-10-20", ...args],

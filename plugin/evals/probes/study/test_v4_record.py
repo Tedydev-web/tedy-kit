@@ -289,6 +289,22 @@ class V4RecordTest(unittest.TestCase):
         if reason:
             script("retire-run").main([*common, "--reason", reason])
 
+    def test_a_retired_session_with_no_blocks_names_no_cli_version_whether_one_or_every_agy_session_is_retired(self):
+        pending = v4_sweep(audit=False)
+        cases = ((pending, ["qgs-cross-gemini-3.8-flash-high"]),
+                 (self.built, ["config-audit-gemini-3.8-flash-high", "product-audit-gemini-3.8-flash-high", "qgs-cross-gemini-3.8-flash-high"]))
+        for source, keys in cases:
+            with self.subTest(keys=keys):
+                repo = Path(tempfile.mkdtemp(prefix="study-v4-retire-"))
+                self.addCleanup(shutil.rmtree, repo, ignore_errors=True)
+                shutil.copytree(source, repo, dirs_exist_ok=True)
+                folder = repo / "docs/prior-art/sweeps" / SWEEP
+                agy = [k for k, e in json.loads((folder / "meta.json").read_text())["sessions"].items() if e["cli"] == "agy"]
+                self.assertEqual(sorted(agy), keys)
+                for key in keys:
+                    self.retire(repo, folder, key)
+                self.assertIn("\n- CLI versions: claude 9.9.9 (fixture)\n", self.render(repo))
+
     def test_a_retired_cross_family_audit_reads_as_pending_with_its_reason_and_a_roster_session_cannot_be_retired(self):
         repo, folder = self.copy()
         self.retire(repo, folder, "product-audit-gemini-3.8-flash-high")

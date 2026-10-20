@@ -77,7 +77,8 @@ def session_summary_lines(sessions):
     isolation = sorted({(e["cli"], e["isolation"]) for e in sessions.values()})
     versions = {}
     for entry in sessions.values():
-        versions.setdefault(entry["cli"], set()).update(b["cli_version"] for b in entry["blocks"])
+        for block in entry["blocks"]:
+            versions.setdefault(entry["cli"], set()).add(block["cli_version"])
     return ["- isolation: " + "; ".join(f"{cli} {flags}" for cli, flags in isolation),
             "- CLI versions: " + ", ".join(f"{cli} {', '.join(sorted(v))}" for cli, v in sorted(versions.items()))]
 
