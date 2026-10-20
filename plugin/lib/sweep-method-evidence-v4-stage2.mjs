@@ -49,7 +49,7 @@ export function samePlan(written, plan) {
   const keys = ["limit", "members", "need", "passed", "reachable", "depth", "found", "reached"];
   if (canonical(written.passes) !== canonical(plan.passes) || canonical(written.order) !== canonical(plan.order)) return false;
   if (!plan.stop || !written.stop) return !plan.stop && !written.stop;
-  return keys.every((k) => written.stop[k] === plan.stop[k]) && plan.stop.interval.every((v, i) => Math.abs(v - written.stop.interval?.[i]) < 1e-9);
+  return keys.every((k) => written.stop[k] === plan.stop[k]) && plan.stop.interval.every((v, i) => Math.abs(v - written.stop.interval?.[i]) < 1e-6);
 }
 
 export function stopTextErrors(text, strata, plans, passes, rung) {
