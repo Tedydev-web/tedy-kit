@@ -11,6 +11,7 @@ UNIT = re.compile(r"(?:^|/)(?:skills|agents|commands|hooks|rules|workflows)/[^/]
 CONFIG_DIR = re.compile(r"(?:^|/)(?:\.claude|\.claude-plugin|\.agents)/[^/]+/")
 FOREIGN_SEGMENT = re.compile(r"^([A-Za-z0-9][\w.-]*)[@§]([\w.-]+)$")
 SKILL_FILE = re.compile(r"(?:^|/)skills/[^/]+/SKILL\.md$")
+CONFIG_CHANNELS = ("config-pool",)
 NOT_SOCIAL_VIA = ("code ", "repos ", "topic ", "listed ", "marketplace ")
 
 
@@ -127,6 +128,8 @@ def rank_product(pool_rows, terms, code_queries=(), counted="all"):
             continue
         own = [e for e in row["evidence"].get("code", []) if counts_query(counted, e)]
         evidence = {c: (own if c == "code" else v) for c, v in row["evidence"].items() if c != "code" or own}
+        if counted != "all":
+            evidence = {c: kept for c, v in evidence.items() if c not in CONFIG_CHANNELS for kept in [[e for e in v if term.search(e)]] if kept}
         contract = list(dict.fromkeys(contract_path(e, prefixes) for e in evidence.get("code", [])))
         name_hit = bool(term.search(row["repo"].split("/", 1)[1].replace("_", "-")) or term.search(row.get("description") or ""))
         order = len(evidence) + math.log2(1 + len(contract)) + (1 if name_hit else 0)
