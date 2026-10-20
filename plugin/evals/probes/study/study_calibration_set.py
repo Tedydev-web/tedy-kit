@@ -315,8 +315,13 @@ SCRIPT = """(() => {
   const status = document.getElementById("progress");
   let labels = {};
   try { labels = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (error) { status.textContent = "Không đọc được tiến độ đã lưu: " + error.message; }
-  const complete = (label) => Boolean(label) && FIELDS.every((f) => f === "problems" ? label.problems !== undefined || label.Relevance === 0 : label[f] !== undefined);
-  const show = (extra) => { status.textContent = "Đã gán đủ nhãn " + ids.filter((id) => complete(labels[id])).length + "/" + ids.length + " dòng" + (extra || ""); };
+  const valid = (label) => !(label.decision === "eligible" && label.Relevance !== 1) && !(label.Relevance === 1 && Array.isArray(label.problems) && !label.problems.length);
+  const complete = (label) => Boolean(label) && valid(label) && FIELDS.every((f) => f === "problems" ? label.problems !== undefined || label.Relevance === 0 : label[f] !== undefined);
+  const show = (extra) => {
+    const broken = ids.filter((id) => labels[id] && !valid(labels[id]));
+    status.textContent = "Đã gán đủ nhãn " + ids.filter((id) => complete(labels[id])).length + "/" + ids.length + " dòng"
+      + (broken.length ? "; " + broken.length + " dòng trái quy tắc (Đủ điều kiện cần Relevance = 1; Relevance = 1 cần ít nhất một mã vấn đề): " + broken.join(", ") : "") + (extra || "");
+  };
   const apply = () => {
     document.querySelectorAll("input").forEach((input) => {
       const [id, field] = input.name.split("|");

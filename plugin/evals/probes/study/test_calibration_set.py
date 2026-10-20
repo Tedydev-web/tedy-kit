@@ -92,6 +92,29 @@ class CalibrationSetTest(unittest.TestCase):
         write_json(copy / "calibration-draw.json", {**drawn, "skipped": {**drawn["skipped"], "config": sorted(drawn["skipped"]["config"] + [config[0]])}})
         self.assertNotIn(config[0], [r["order_rank"] for r in redraw(topic, copy, "calibration")[0]])
 
+    def test_the_page_counts_a_row_as_labelled_exactly_when_the_import_would_keep_it_complete(self):
+        import subprocess
+        from study_calibration_set import FIELDS, checked_label
+        from study_topic import TopicError
+        full = {"Authority": 1, "Methodology": 1, "Objectivity": 1, "Position": 1, "Relevance": 1, "problems": ["X1"], "decision": "eligible"}
+        cases = [full, {**full, "Relevance": 0.5}, {**full, "problems": []}, {**full, "Relevance": 0.5, "decision": "excluded: below-threshold", "problems": []},
+                 {k: v for k, v in full.items() if k != "problems"}, {**{k: v for k, v in full.items() if k != "problems"}, "Relevance": 0, "decision": "excluded: irrelevant"},
+                 {**full, "Relevance": 0, "decision": "eligible", "problems": []}, {k: v for k, v in full.items() if k != "decision"}]
+
+        def imported(label):
+            try:
+                kept = checked_label("row", label, ["X1", "X2", "X3", "X4"])
+            except TopicError:
+                return False
+            return all(f in kept for f in FIELDS)
+
+        script_text = re.search(r"<script>(.*)</script>", self.page, re.S).group(1)
+        functions = "\n".join(re.findall(r"^  const (?:FIELDS|valid|complete) = .*$", script_text, re.M))
+        code = f"{functions}\nconsole.log(JSON.stringify({json.dumps(cases)}.map((label) => complete(label))));"
+        page = json.loads(subprocess.run(["node", "-e", code], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(page, [imported(c) for c in cases])
+        self.assertEqual(page, [True, False, False, True, False, True, False, False])
+
     def test_repositories_used_as_stage1_worked_examples_are_never_drawn(self):
         repo = v4_repo()
         path = repo / "docs/prior-art/topics/demo.json"
