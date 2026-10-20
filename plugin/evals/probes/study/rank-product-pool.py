@@ -6,7 +6,7 @@ from study_pool import product_code_queries, work_file
 from study_rank import counted_code_queries, rank_product
 from study_topic import TopicError, load_topic, topic_arguments
 
-PRODUCT_CHANNELS = ("npm", "code", "reverse", "social", "repo", "arxiv", "semantic-scholar")
+PRODUCT_CHANNELS = ("npm", "code", "reverse", "social", "repo", "arxiv", "semantic-scholar", "config-pool")
 
 
 def main(argv=None):

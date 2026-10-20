@@ -193,6 +193,21 @@ class ProductDiscoveryTest(Base):
         self.assertEqual((sorted(pool.state["hits"]), pool.failed_steps()), (["o/skipped"], 2))
         self.assertEqual(pool.state["log"][0]["status"], "ok")
 
+    def test_config_pool_repositories_that_pass_the_product_filter_join_the_product_pool(self):
+        write_json(self.work / "config-pool.json", {"rows": [{"repo": "o/claude-tdd-hook", "description": "blocks edits"}, {"repo": "o/guard", "description": "agent hook that stops weakened tests"},
+                                                             {"repo": "o/web", "description": "claude web app"}, {"repo": "o/tdd-kit", "description": "plain kit"}]})
+        product = script("discover-product-pool").Product(self.topic, self.work, FakeFetch([("search repos tdd hook", GQL([{"fullName": "o/guard", "description": "claude tdd"}]))]))
+        with self.assertRaisesRegex(TopicError, "strata.product.channels.config_pool is not true"):
+            product.config_pool()
+        self.topic["strata"]["product"]["channels"]["config_pool"] = True
+        product.repo()
+        product.config_pool()
+        self.assertEqual(sorted(k for k, v in product.pool.state["hits"].items() if "config-pool" in v["channels"]), ["o/claude-tdd-hook", "o/guard"])
+        self.assertEqual(product.pool.state["hits"]["o/guard"]["channels"]["config-pool"], ["config pool: name or description passes the product filter"])
+        self.assertEqual({k: product.pool.state["log"][-1][k] for k in ("step", "returned", "repos_linked")}, {"step": "config-pool", "returned": 4, "repos_linked": 2})
+        write_json(self.work / "cache/meta.json", {"o/guard": {"nameWithOwner": "O/Guard"}})
+        self.assertEqual(script("export-sweep-data").config_pool_channel(self.work), {"joined": ["o/claude-tdd-hook", "O/Guard"], "only": ["o/claude-tdd-hook"]})
+
     def test_social_hits_land_in_one_social_channel(self):
         product = script("discover-product-pool").Product(self.topic, self.work, FakeFetch([("twitter", "github.com/o/s")]))
         product.social()

@@ -47,6 +47,15 @@ def paper_rows(work):
     return [{**paper, "linked_repos": sorted(repo for repo, evidence in hits.items() if paper["key"] in evidence)} for paper in papers.values()]
 
 
+def config_pool_channel(work):
+    state = work_file(work, "product-state.json")
+    hits = json.loads(state.read_text())["hits"] if state.exists() else {}
+    meta = json.loads(work_file(work, "cache/meta.json").read_text()) if work_file(work, "cache/meta.json").exists() else {}
+    names = {key: (meta.get(key) or {}).get("nameWithOwner") or hit["repo"] for key, hit in hits.items() if "config-pool" in hit["channels"]}
+    only = [names[key] for key, hit in hits.items() if key in names and set(hit["channels"]) == {"config-pool"}]
+    return {"joined": sorted(names.values(), key=str.lower), "only": sorted(only, key=str.lower)}
+
+
 def export(topic, repo, work):
     repo, work = Path(repo).resolve(), Path(work).resolve()
     out = sweep_folder(repo, topic)
@@ -107,6 +116,9 @@ def export(topic, repo, work):
         packet(path.name)
     for path in sorted(work.glob("*-qgs-log.md")):
         text(path.name)
+    if (topic["strata"].get("product", {}).get("channels") or {}).get("config_pool") is True:
+        (out / "config-pool-channel.json").write_text(json.dumps(config_pool_channel(work), indent=1, ensure_ascii=False) + "\n")
+        counts["config-pool-channel.json"] = "written"
     if any(s.get("channels", {}).get("academic") for s in topic["strata"].values()):
         rows = paper_rows(work)
         (out / "papers.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
