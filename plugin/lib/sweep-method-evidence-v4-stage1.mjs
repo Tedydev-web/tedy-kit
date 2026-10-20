@@ -35,8 +35,8 @@ function rungTextErrors(text, tried, chosen) {
       })]);
     }
   }
-  lines.push([`- chosen: rung ${chosen} after ${tried.length} rungs tried; `]);
-  const missing = lines.filter((parts) => !figureLine(text, parts, parts === lines.at(-1)));
+  lines.push([`- chosen: rung ${chosen} after ${tried.length} rungs tried; rule: pooled one-sided 95% Clopper-Pearson lower bound >= 0.95 in both runs`]);
+  const missing = lines.filter((parts) => !figureLine(text, parts));
   return missing.length ? [`the record's stage-1 rung lines are not the ones the calibration runs give (first differing: "${missing[0].map((p) => (Array.isArray(p) ? p[0].toFixed(p[1]) : p)).join("")}")`] : [];
 }
 

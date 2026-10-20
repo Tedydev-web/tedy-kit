@@ -1,3 +1,5 @@
+import { canonical } from "./sweep-method-evidence-v4-shared.mjs";
+
 const NO_BARE_THREAT = "plugin hooks not excluded (no --bare)";
 const AGY_THREAT = "agy MCP servers, hooks and user settings not excluded";
 const UPPER_ESTIMATE = "QGS recall is an upper estimate: the QGS judges are the stage-1 models, and the candidates come from curated lists filtered by the topic's terms";
@@ -82,9 +84,29 @@ function baseThreats(topic, strata, sessions, freeze, papers) {
   return threats;
 }
 
-export function proseErrors(io, topic, strata, sessions) {
+function headerLines(meta, freeze, strata, topic) {
+  const name = topic?.sweep;
+  return [`# ${meta.title}`, "", `- Role: ${meta.role}`, `- Date: ${meta.date}`,
+    `- Criteria: ${meta.criteria} sha256[:16] \`${String(freeze.strata?.[strata[0]]?.criteria_sha256).slice(0, 16)}\``,
+    `- Inventory: llms.txt sha256[:16] \`${meta.inventory_digest}\` (docs/prior-art/claude-code-surfaces.md)`,
+    `- Problems: ${(meta.problems ?? []).join(", ")}; terms matched: ${(meta.terms_matched ?? []).join(", ")}`,
+    `- Data: \`${name}/\` (screening sessions A and B, reader C, maps, mechanism table, adjudications, recall standard); regenerate with `
+      + `\`python3 plugin/evals/probes/prior-art-sweep-record.py . ${name}\``,
+    "", "Scores read A1 M1 O1 D1 P1 N1 for Authority, Methodology, Objectivity, Date, Position and the derived Novelty; a/b shows session A's and B's values where they differ."];
+}
+
+export function proseErrors(io, topic, strata, sessions, meta = {}) {
   const errors = [];
   const freeze = io.json("protocol-freeze.json") ?? {};
+  const header = headerLines(meta, freeze, strata, topic);
+  const head = io.text.split("\n").slice(0, header.length);
+  const differs = header.findIndex((line, i) => head[i] !== line);
+  if (differs >= 0) errors.push(`the record's header is not the one meta.json, the freeze and the topic give (line ${differs + 1}: "${header[differs]}")`);
+  const headings = ["PRISMA", "Recall", "Protocol", "Screening sessions", "Facets", "Calibration", "Stage 1", "Judges", "Threats", ...strata.map((s) => `Stratum: ${s}`)];
+  const written = [...io.text.matchAll(/^## (.+)$/gm)].map((m) => m[1]).filter((h) => headings.includes(h));
+  if (canonical(written) !== canonical(headings)) errors.push(`the record's v4 sections are not ${headings.join(", ")} in that order`);
+  if (meta.date !== sweepDate(topic?.sweep)) errors.push(`meta.json dates the sweep ${meta.date}, but its name ${topic?.sweep} gives ${sweepDate(topic?.sweep)}`);
+  if (canonical(meta.problems ?? []) !== canonical(topic?.problems ?? [])) errors.push("meta.json lists other problems than the topic config");
   for (const [side, frozen] of [["A", freeze.session_a], ["B", freeze.session_b?.chosen]]) {
     const named = topic?.sessions?.[side];
     if (named?.cli !== frozen?.cli || named?.model !== frozen?.model) errors.push(`protocol-freeze.json session ${side} is ${frozen?.cli} ${frozen?.model}, but the topic config names ${named?.cli} ${named?.model}`);

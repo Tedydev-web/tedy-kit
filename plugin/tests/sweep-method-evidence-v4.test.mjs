@@ -471,6 +471,34 @@ test("H-prose: the Protocol, screening session and threat lines and the four sta
   assert.match(m7.errors(), /protocol-freeze\.json session B is claude claude-sonnet-5-5, but the topic config names agy gemini-3\.8-flash-high/);
 });
 
+test("the header, headings, rule and snowball lines are rebuilt, and a sample of the record's numbers fails the gate when changed", () => {
+  const s = sweep();
+  const header = /the record's header is not the one meta\.json, the freeze and the topic give/;
+  for (const [name, body, error] of [
+    ["criteria hash", s.text.replace(/^(- Criteria: \S+ sha256\[:16\] `)[0-9a-f]/m, "$1z"), header],
+    ["problems", s.text.replace("- Problems: X1, X2, X3, X4;", "- Problems: X1, X2;"), header],
+    ["heading", s.text.replace("\n## Stage 1\n", "\n## Stage 4\n"), /the record's v4 sections are not PRISMA, Recall/],
+    ["rule", s.text.replace("lower bound >= 0.95 in both runs", "lower bound >= 0.90 in both runs"), /the record's stage-1 rung lines are not the ones the calibration runs give/],
+    ["snowball cut", s.text.replace("(cut: none: ", "(cut: row 200: "), /the record's snowball line does not state/],
+  ]) {
+    assert.notEqual(body, s.text, name);
+    assert.match(s.errors(body), error, name);
+  }
+  const m = sweep();
+  const meta = m.json("meta.json");
+  m.write("meta.json", { ...meta, date: "2026-10-21" });
+  assert.match(m.errors(m.text.replace("- Date: 2026-10-20", "- Date: 2026-10-21")), /meta\.json dates the sweep 2026-10-21, but its name 261020-demo gives 2026-10-20/);
+  const lines = s.text.split("\n");
+  const numbers = lines.flatMap((line, i) => [...line.matchAll(/\d+(?:\.\d+)?/g)].map((found) => [i, found]));
+  const silent = numbers.filter((_, k) => k % 25 === 0).filter(([i, found]) => {
+    const changed = found[0].includes(".") ? (Number(found[0]) + 0.5).toFixed(found[0].split(".")[1].length) : String(Number(found[0]) + 3);
+    const mutated = [...lines];
+    mutated[i] = lines[i].slice(0, found.index) + changed + lines[i].slice(found.index + found[0].length);
+    return s.errors(mutated.join("\n")) === "";
+  }).map(([i, found]) => `${i + 1}: ${lines[i].slice(Math.max(0, found.index - 30), found.index + 10)}`);
+  assert.deepEqual(silent, []);
+});
+
 test("every round-3 probe the gate already failed stays a failing negative fixture", () => {
   const rows = (s, name, edit) => s.writeRows(name, edit(s.jsonl(name)));
   const meta = (s, edit) => {
