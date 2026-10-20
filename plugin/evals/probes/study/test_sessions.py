@@ -241,7 +241,7 @@ class PilotAndFreezeRunTest(SessionBase):
         self.assertEqual({s: r["stop_row"] for s, r in canon["strata"].items()}, {"config": None, "product": None, "local": None})
         from datetime import date
         from study_session_prompt import sweep_date
-        self.assertEqual(sweep_date(canon), date(2026, 10, 19))
+        self.assertEqual(sweep_date(canon), date(2026, 10, 20))
 
     def test_a_session_option_without_a_cli_is_refused(self):
         from study_topic import session_a
