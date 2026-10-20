@@ -41,7 +41,7 @@ def screen(repo, topic, faceted=None):
                 for rank in e["rows"]:
                     extras.setdefault(rank, set()).add(key)
         ranks = screened_ranks(topic, D, stratum, sides)
-        held = row_facets(topic, faceted, stratum) if faceted else None
+        held = row_facets(topic, D, stratum) if faceted else None
         beyond[stratum] = sorted((set(sides["A"]) | set(sides["B"])) - set(ranks))
         same = cells = 0
         rows = []

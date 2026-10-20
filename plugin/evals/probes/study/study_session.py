@@ -9,7 +9,8 @@ from pathlib import Path
 
 from study_screening_core import read_jsonl
 from study_screening_input import inputs_file, repo_level
-from study_session_prompt import QGS_TEMPLATE_SHA256, STAGE1_TEMPLATE_SHA256, TEMPLATE_SHA256, build_prompt, build_qgs_prompt, build_stage1_prompt, with_computed_date
+from study_session_prompt import (QGS_TEMPLATE_SHA256, STAGE1_TEMPLATE_SHA256, build_prompt, build_qgs_prompt, build_stage1_prompt, criteria_version, template_sha256,
+                                  with_computed_date)
 from study_session_reply import parse_qgs_reply, parse_reply, reply_text
 from study_topic import TopicError
 
@@ -169,7 +170,7 @@ def run_block(job, fetch):
     if not packet.is_file():
         raise TopicError(f"no {packet.name} in {work}")
     criteria = Path(job["repo"]) / job["criteria"] if screening else None
-    template = {"screening": TEMPLATE_SHA256, "qgs": QGS_TEMPLATE_SHA256, "stage1": STAGE1_TEMPLATE_SHA256}[kind]
+    template = {"screening": template_sha256(job.get("criteria")), "qgs": QGS_TEMPLATE_SHA256, "stage1": STAGE1_TEMPLATE_SHA256}[kind]
     hashes = {"packet_sha256": sha256_bytes(packet.read_bytes()), **({"criteria_sha256": sha256_bytes(criteria.read_bytes())} if screening else {}),
               **({"examples_sha256": sha256_bytes(job["examples"].encode())} if kind == "stage1" else {})}
     frozen = job.get("frozen")
@@ -202,7 +203,7 @@ def run_block(job, fetch):
     (prompts / f"{stem}.md").write_text(prompt)
     text, served = reply_text(option, *call_isolated(fetch, session_command(option, prompt, job["bare"])))
     if screening:
-        rows, mechanisms, problems = parse_reply(text, expected)
+        rows, mechanisms, problems = parse_reply(text, expected, (job.get("problems") or []) if criteria_version(job.get("criteria")) >= 4 else None)
         rows = [with_computed_date(r, expected[r["order_rank"]], job["sweep_date"]) for r in rows]
     else:
         (rows, problems), mechanisms = parse_qgs_reply(text, expected, job["problems"], ("yes", "unsure", "no"), kind == "qgs"), []

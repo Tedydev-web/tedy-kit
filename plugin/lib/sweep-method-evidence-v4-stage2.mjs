@@ -284,7 +284,9 @@ export function decisionErrors(io, text, topic, strata, passes, screened) {
     for (const row of found.rows) counts[row.decision] = (counts[row.decision] ?? 0) + 1;
     const written = Object.fromEntries([...table].filter(([k]) => k.startsWith(`${stratum}|stage 2: `)).map(([k, n]) => [k.slice(`${stratum}|stage 2: `.length), n]));
     if (canonical(written) !== canonical(counts)) errors.push(`PRISMA ${stratum} stage 2: the record says ${canonical(written)}, the files give ${canonical(counts)}`);
-    const held = (rank) => facets.filter((f) => [...(p.problems.get(rank) ?? [])].some((problem) => topic.facets[f].problems.includes(problem)));
+    const ids = new Map();
+    for (const side of ["A", "B"]) for (const row of io.jsonl(`${stratum}-screen-${side}.jsonl`)) ids.set(row.order_rank, new Set([...(ids.get(row.order_rank) ?? []), ...(row.problems ?? [])]));
+    const held = (rank) => facets.filter((f) => [...(ids.get(rank) ?? [])].some((problem) => topic.facets[f].problems.includes(problem)));
     const section = text.split(`## Stratum: ${stratum}\n\n`)[1]?.split("\n## ")[0] ?? "";
     const cells = new Map(section.split("\n").filter((l) => /^\| \d+ \| /.test(l)).map((l) => l.split(" | ")).map((c) => [Number(c[0].slice(2)), c]));
     const wrong = found.rows.filter((r) => {
@@ -299,9 +301,10 @@ export function decisionErrors(io, text, topic, strata, passes, screened) {
       mine.forEach((f, i) => mine.slice(i + 1).forEach((g) => { pairs[`${f}+${g}`] = (pairs[`${f}+${g}`] ?? 0) + 1; }));
     }
     const per = facets.map((f) => `${f} ${included.filter((r) => held(r.rank).includes(f)).length}`).join(", ");
-    const unread = included.filter((r) => autoPass(p.pool.get(r.rank))).length;
+    const bare = included.filter((r) => !ids.get(r.rank)?.size);
+    if (bare.length) errors.push(`${stratum}: included rank ${bare[0].rank} names no registry problem at stage 2; eligibility means addressing a registry problem`);
     const line = `- ${stratum}: ${included.length} repositories included once each; counted per facet ${per}; overlap ${Object.entries(pairs).map(([k, v]) => `${k} ${v}`).join(", ") || "none"}; `
-      + `facets come from the stage-1 problem labels; ${unread} of them passed stage 1 unread and carry no facet label`;
+      + "facets come from the problem ids the stage-2 sessions name, at least one per included row";
     if (!text.split("\n").includes(line)) errors.push(`${stratum}: the record's facet line is not the inclusion the files give ("${line}")`);
   }
   return errors;

@@ -1,5 +1,6 @@
 import hashlib
 import json
+from pathlib import Path
 
 from study_agreement import RECALL_TARGET, cohen_kappa, interval_text, kappa_text
 from study_calibration_set import all_batches, calibration_checks, labelled, labels_file, set_file
@@ -63,9 +64,16 @@ def stage2_threats(strata, faceted):
     return stops
 
 
-def row_facets(topic, faceted, stratum):
-    results = faceted[stratum]["results"]
-    return {r: ", ".join(problem_facets(topic, v["problems"])) or "-" for r, v in results.items()}
+def stage2_problems(folder, stratum):
+    out = {}
+    for side in "AB":
+        for row in read_jsonl(Path(folder), f"{stratum}-screen-{side}.jsonl"):
+            out.setdefault(row["order_rank"], set()).update(row.get("problems") or [])
+    return out
+
+
+def row_facets(topic, folder, stratum):
+    return {r: ", ".join(problem_facets(topic, ids)) or "-" for r, ids in stage2_problems(folder, stratum).items()}
 
 
 def standard(topic, folder):
@@ -144,11 +152,15 @@ def prisma_rows(topic, folder, strata, faceted, decided_rows):
     return rows
 
 
-def facet_lines(topic, strata, faceted, decided_rows):
+def facet_lines(topic, folder, strata, decided_rows):
     lines = []
     for stratum in strata:
         included = [r for r in decided_rows.get(stratum, []) if r["decision"] in ("eligible", "study")]
-        labels = row_facets(topic, faceted, stratum)
+        ids = stage2_problems(folder, stratum)
+        bare = [r["rank"] for r in included if not ids.get(r["rank"])]
+        if bare:
+            raise TopicError(f"{stratum}: included rank {bare[0]} names no registry problem at stage 2; eligibility means addressing a registry problem")
+        labels = row_facets(topic, folder, stratum)
         per = {f: sum(f in labels[r["rank"]].split(", ") for r in included) for f in facet_names(topic)}
         pairs = {}
         for r in included:
@@ -157,8 +169,8 @@ def facet_lines(topic, strata, faceted, decided_rows):
                 for b in held[i + 1:]:
                     pairs[f"{a}+{b}"] = pairs.get(f"{a}+{b}", 0) + 1
         lines.append(f"- {stratum}: {len(included)} repositories included once each; counted per facet " + ", ".join(f"{f} {n}" for f, n in per.items())
-                     + f"; overlap {', '.join(f'{k} {v}' for k, v in pairs.items()) or 'none'}; facets come from the stage-1 problem labels; "
-                     f"{sum(faceted[stratum]['results'][r['rank']]['auto'] for r in included)} of them passed stage 1 unread and carry no facet label")
+                     + f"; overlap {', '.join(f'{k} {v}' for k, v in pairs.items()) or 'none'}; facets come from the problem ids the stage-2 sessions name, "
+                     "at least one per included row")
     for facet in facet_names(topic):
         rule = topic["facets"][facet]
         lines.append(f"- {facet}: problems {', '.join(rule['problems'])}; terms {', '.join(rule['terms'])}; its ranking orders stage 2 only when stage 2 must stop")
@@ -381,6 +393,6 @@ def v4_parts(topic, folder, strata, freeze, sessions, faceted, common, decided_r
     stops = stage2_threats(strata, faceted)
     prisma = prisma_rows(topic, folder, strata, faceted, decided_rows)
     return {"recall": recall, "prisma": ["| stratum | stage | count |", "|---|---|---|"] + [f"| {s} | {k} | {v} |" for s, k, v in prisma],
-            "facets": facet_lines(topic, strata, faceted, decided_rows) + snowball_lines(folder, strata, faceted),
+            "facets": facet_lines(topic, folder, strata, decided_rows) + snowball_lines(folder, strata, faceted),
             "calibration": batch_lines(topic, folder, strata), "stage1": stage1 + stage1_audit_lines(topic, folder, strata, freeze),
             "judges": judges + standard_lines(out) + audits, "threats": recall_threats + judge_threats + audit_threats + stops}

@@ -173,7 +173,7 @@ def screening_row(row, flip=False):
     yes = eligible(row["repo"]) != flip
     value = 1 if yes else 0
     cells = {c: {"v": value, "why": SECRET} for c in CELLS}
-    return {"order_rank": row["order_rank"], "repo": row["repo"], "file": "f", "scores": cells, "mechanisms": ["gate"] if yes else [], "new": True,
+    return {"order_rank": row["order_rank"], "repo": row["repo"], "file": "f", "scores": cells, "mechanisms": ["gate"] if yes else [], "problems": problems_for(row["repo"]) if yes else [], "new": True,
             "decision": "eligible" if yes else "exclude: irrelevant", "note": SECRET}
 
 
@@ -348,8 +348,12 @@ def stage2_screened(repo, work, judges, limit=None):
     quiet(repo, "plan-stage2", "--work", str(work), *(("--limit", str(limit)) if limit else ()))
     for stratum in STRATA:
         quiet(repo, "fetch-screening-inputs", "--work", str(work), "--stratum", stratum, "--set", "stage2", fetch=inputs_fetch())
+        order = json.loads((work / f"{stratum}-stage2.json").read_text())["order"]
+        blocks = [order[i:i + 50] for i in range(0, len(order), 50)]
         for side in "AB":
-            quiet(repo, "run-screening-session", "--work", str(work), "--stratum", stratum, "--side", side, "--ranks", "1-2000", "--today", TODAY, fetch=judges)
+            for block in blocks:
+                quiet(repo, "run-screening-session", "--work", str(work), "--stratum", stratum, "--side", side, "--ranks", f"{block[0]}-{block[-1]}", "--today", TODAY,
+                      fetch=judges)
 
 
 def cross_audited(repo, work, judges):

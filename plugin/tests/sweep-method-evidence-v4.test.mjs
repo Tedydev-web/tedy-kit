@@ -215,6 +215,15 @@ test("PRISMA stage-2 decisions, the per-row decisions and the facet inclusion ar
   const u = sweep();
   u.write("study.json", { ...u.json("study.json"), study: { [eligible.repo]: "kept for study" } });
   assert.match(u.errors(), /PRISMA config stage 2: the record says/);
+  assert.match(s.text, /^- config: .*; facets come from the problem ids the stage-2 sessions name, at least one per included row$/m);
+  const v = sweep();
+  for (const side of ["A", "B"]) v.writeRows(`config-screen-${side}.jsonl`, v.jsonl(`config-screen-${side}.jsonl`).map((r) => (r.order_rank === eligible.order_rank ? { ...r, problems: [] } : r)));
+  assert.match(v.errors(), new RegExp(`config: included rank ${eligible.order_rank} names no registry problem at stage 2; eligibility means addressing a registry problem`));
+  const w = sweep();
+  for (const side of ["A", "B"]) {
+    w.writeRows(`config-screen-${side}.jsonl`, w.jsonl(`config-screen-${side}.jsonl`).map((r) => (r.order_rank === eligible.order_rank ? { ...r, problems: ["X3"] } : r)));
+  }
+  assert.match(w.errors(), new RegExp(`config: the record's stage-2 rows ${eligible.order_rank} do not hold the commit, scores, decision, reason and facets`));
 });
 
 test("the config-pool channel must have run on the final config pool, and its recover and outside counts are recomputed", () => {

@@ -18,6 +18,22 @@ REPLY_FORMAT = ("## Reply format\n\nReply with nothing but these lines. One JSON
                 "mechanisms (names), new (true when a mechanism is new to you), decision (eligible, or exclude: <code>) and note. Then one line per mechanism you name "
                 "for the first time: mechanism: <kebab-case-name>: <one-line definition>.")
 TEMPLATE_SHA256 = hashlib.sha256((ROWS_NOTE + "\n\n" + REPLY_FORMAT).encode()).hexdigest()
+REPLY_FORMAT_V4 = REPLY_FORMAT.replace("mechanisms (names), ", "mechanisms (names), problems (the ids of the registry problems the repository carries a mechanism for; "
+                                                             "at least one for an eligible row), ")
+TEMPLATE_SHA256_V4 = hashlib.sha256((ROWS_NOTE + "\n\n" + REPLY_FORMAT_V4).encode()).hexdigest()
+
+
+def criteria_version(path):
+    found = re.search(r"quality-criteria-v(\d+)\.md$", str(path or ""))
+    return int(found.group(1)) if found else 0
+
+
+def reply_format(criteria):
+    return REPLY_FORMAT_V4 if criteria_version(criteria) >= 4 else REPLY_FORMAT
+
+
+def template_sha256(criteria):
+    return TEMPLATE_SHA256_V4 if criteria_version(criteria) >= 4 else TEMPLATE_SHA256
 QGS_ROWS_NOTE = ("Each row below is one JSON object: the pinned commit, the repository facts from discovery, the top-level listing, the README excerpt, up to two asset files "
                  "read at that commit, and the evidence the toolchain fetched. Judge only from these inputs; you have no tools. A file listed under missing could not be read "
                  "at the pinned commit and counts as absent.")
@@ -68,7 +84,7 @@ def with_computed_date(row, inputs, when):
 def build_prompt(packet, criteria_path, criteria_text, mechanisms_text, rows, when):
     blocks = ["```json\n" + json.dumps(r, ensure_ascii=False) + "\n```" for r in rows]
     parts = [packet.rstrip(), f"## Criteria ({criteria_path})", criteria_text.rstrip(), "## Your mechanism names so far", mechanisms_text.strip() or "none yet",
-             "## Rows", ROWS_NOTE.format(sweep_date=when.isoformat()), *blocks, REPLY_FORMAT]
+             "## Rows", ROWS_NOTE.format(sweep_date=when.isoformat()), *blocks, reply_format(criteria_path)]
     return "\n\n".join(parts) + "\n"
 
 

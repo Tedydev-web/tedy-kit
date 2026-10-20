@@ -64,11 +64,21 @@ class V4RecordTest(unittest.TestCase):
                                                        r"the \d+ standard members the QGS judges labelled product; 1 of those members remain outside every pool")
         self.assertIn("- discovery gap: 1 standard members labelled product are in no pool: o/outside1", section(self.text, "Threats"))
 
-    def test_facets_count_included_rows_per_facet_with_their_overlap_from_the_stage_1_labels(self):
+    def test_facets_count_included_rows_per_facet_from_the_problem_ids_the_stage_2_sessions_name(self):
         facets = section(self.text, "Facets")
-        self.assertRegex(facets, r"- config: \d+ repositories included once each; counted per facet alpha \d+, beta \d+; overlap alpha\+beta 1; facets come from the stage-1 "
-                                 r"problem labels; \d+ of them passed stage 1 unread and carry no facet label\n")
+        self.assertRegex(facets, r"- config: \d+ repositories included once each; counted per facet alpha \d+, beta \d+; overlap alpha\+beta 1; facets come from the problem ids "
+                                 r"the stage-2 sessions name, at least one per included row\n")
         self.assertIn("| facets |", self.text)
+        repo, folder = self.copy()
+        rows = [json.loads(line) for line in (folder / "config-screen-B.jsonl").read_text().splitlines()]
+        eligible = next(r for r in rows if r["decision"] == "eligible")
+        for side in "AB":
+            path = folder / f"config-screen-{side}.jsonl"
+            changed = [{**r, "problems": []} if r["order_rank"] == eligible["order_rank"] else r for r in map(json.loads, path.read_text().splitlines())]
+            path.write_text("".join(json.dumps(r) + "\n" for r in changed))
+        with self.assertRaisesRegex(TopicError, rf"config: included rank {eligible['order_rank']} names no registry problem at stage 2; eligibility means addressing a registry "
+                                                rf"problem"):
+            self.render(repo)
 
     def test_stage_1_states_the_frozen_ladder_the_rung_used_the_rungs_tried_and_the_audit_bounds(self):
         stage1 = section(self.text, "Stage 1")

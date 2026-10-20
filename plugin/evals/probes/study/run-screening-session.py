@@ -95,7 +95,7 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
         job = {"work": args.work, "repo": args.repo, "stratum": args.stratum, "name": name, "key": key, "option": option, "criteria": criteria, "frozen": frozen,
                **({"ranks": ranks} if ranks else {}),
                "pilot": args.pilot, "fallback_reason": reason, "bare": bool(environ.get("ANTHROPIC_API_KEY")), "first": int(first), "last": int(last), "today": args.today,
-               "sweep_date": required_sweep_date(topic)}
+               "sweep_date": required_sweep_date(topic), "problems": topic.get("problems") or []}
         rows = run_block(job, fetch or Fetch())
         print(f"{name}: {rows} rows from {option['cli']} {option['model']} (family {model_family(option['model'])})")
     except (TopicError, NetworkRefused) as error:

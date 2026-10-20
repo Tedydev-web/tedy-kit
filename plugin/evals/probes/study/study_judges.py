@@ -1,5 +1,4 @@
 import json
-import re
 from pathlib import Path
 
 from study_agreement import clopper_pearson, cohen_kappa
@@ -8,6 +7,7 @@ from study_protocol import EMPTY_TABLE
 from study_qgs import cross_family
 from study_screening_core import MechanismTable, derive, read_jsonl
 from study_session import model_family
+from study_session_prompt import criteria_version
 from study_topic import TopicError, session_option
 
 SENSITIVITY_FLOOR, KAPPA_FLOOR, RUNS = 0.90, 0.60, (1, 2)
@@ -15,11 +15,6 @@ SCREENING_JUDGES, QGS_JUDGES = ("screening-A", "screening-B"), ("qgs-A", "qgs-B"
 SHAPES = {"screening": "full", "qgs": "thin"}
 HASHES = {"screening": "inputs_sha256", "qgs": "qgs_sha256"}
 AUDIT_FILE, AUDIT_ROWS = "audit-sample.json", 20
-
-
-def criteria_version(path):
-    found = re.search(r"quality-criteria-v(\d+)\.md$", str(path or ""))
-    return int(found.group(1)) if found else 0
 
 
 def roster(topic, freeze=None):

@@ -66,6 +66,24 @@ class ParseReplyTest(unittest.TestCase):
         _, _, problems = parse_reply(json.dumps({"order_rank": 1, "repo": "o/one", "scores": true_cells, "mechanisms": [], "decision": "eligible"}), expected)
         self.assertEqual(problems, ["rank 1 lacks a 1 / 0.5 / 0 score for every cell"])
 
+    def test_under_quality_criteria_v4_an_eligible_row_names_the_registry_problems_it_addresses(self):
+        from study_session_prompt import REPLY_FORMAT, REPLY_FORMAT_V4, TEMPLATE_SHA256, reply_format, template_sha256
+        from study_session_reply import parse_reply
+        expected = {1: EXPECTED[1]}
+        base = {"order_rank": 1, "repo": "o/one", "scores": CELLS, "mechanisms": ["gate"], "decision": "eligible"}
+        self.assertEqual(parse_reply(json.dumps(base), expected)[2], [])
+        self.assertEqual(parse_reply(json.dumps(base), expected, ["X1", "X2"])[2], ["rank 1 has no problems list naming the registry problems it addresses"])
+        self.assertEqual(parse_reply(json.dumps({**base, "problems": []}), expected, ["X1", "X2"])[2], ["rank 1 is eligible but names no registry problem"])
+        self.assertEqual(parse_reply(json.dumps({**base, "problems": ["X9"]}), expected, ["X1", "X2"])[2], ["rank 1 names problems ['X9'] outside the topic"])
+        rows, _, problems = parse_reply(json.dumps({**base, "problems": ["X2"]}), expected, ["X1", "X2"])
+        self.assertEqual((problems, rows[0]["problems"]), ([], ["X2"]))
+        self.assertEqual(parse_reply(json.dumps({**base, "decision": "exclude: irrelevant", "problems": []}), expected, ["X1"])[2], [])
+        self.assertIn("problems (the ids of the registry problems the repository carries a mechanism for; at least one for an eligible row)", REPLY_FORMAT_V4)
+        self.assertNotIn("problems", REPLY_FORMAT)
+        self.assertEqual((reply_format("docs/prior-art/quality-criteria-v3.md"), template_sha256("docs/prior-art/quality-criteria-v3.md")), (REPLY_FORMAT, TEMPLATE_SHA256))
+        self.assertEqual(reply_format("docs/prior-art/quality-criteria-v4.md"), REPLY_FORMAT_V4)
+        self.assertNotEqual(template_sha256("docs/prior-art/quality-criteria-v4.md"), TEMPLATE_SHA256)
+
 
 if __name__ == "__main__":
     unittest.main()
