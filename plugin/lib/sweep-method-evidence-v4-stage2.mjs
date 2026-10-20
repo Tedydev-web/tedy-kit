@@ -32,9 +32,9 @@ export function stage2Plans(io, topic, strata, passes, members, limit) {
   const ranks = Object.keys(topic?.facets ?? {}).flatMap((f) => strata.map((s) => [s, new Map((io.json(`facets/${f}/${s}-ranked.json`)?.rows ?? []).map((r) => [lower(r.repo), r.order_rank]))]));
   const best = (s, r) => Math.min(Infinity, ...ranks.filter(([t, m]) => t === s && m.has(repo(s, r))).map(([, m]) => m.get(repo(s, r))));
   const ordered = strata.flatMap((s) => plans[s].passes.map((r) => [s, r, best(s, r)])).sort((a, b) => a[2] - b[2] || strata.indexOf(a[0]) - strata.indexOf(b[0]) || a[1] - b[1]);
-  let depth = limit;
+  let depth = ordered.length;
   const found = new Set();
-  for (const [index, [s, r]] of ordered.slice(0, limit).entries()) {
+  for (const [index, [s, r]] of ordered.entries()) {
     if (standard.has(repo(s, r))) found.add(repo(s, r));
     if (found.size >= need) {
       depth = index + 1;

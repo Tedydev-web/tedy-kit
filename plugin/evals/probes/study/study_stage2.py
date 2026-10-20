@@ -86,13 +86,13 @@ def stage2_plan(topic, folder, limit=None):
                          f"stage 1 and {need} are needed, so stage 2 screens every pass and ignores the limit of {limit} rows")
         return {s: {**p, "stop": stop} for s, p in plans.items()}
     ordered = facet_order(topic, folder, strata, plans, results)
-    depth, found = limit, set()
-    for index, (stratum, rank) in enumerate(ordered[:limit], 1):
+    depth, found = len(ordered), set()
+    for index, (stratum, rank) in enumerate(ordered, 1):
         found |= {results[stratum][rank]["repo"].lower()} & standard
         if len(found) >= need:
             depth = index
             break
     stop.update(depth=depth, found=len(found), reached=len(found) >= need, interval=clopper_pearson(len(found), len(standard)),
                 rule=f"passes of every stratum ranked together by their best facet rank; screening stops at the first depth where pooled recall over the "
-                     f"{len(standard)} deduplicated standard members reaches {RECALL_TARGET:.2f}, or at the limit of {limit} rows")
+                     f"{len(standard)} deduplicated standard members reaches {RECALL_TARGET:.2f}, going past the limit of {limit} rows while the target is reachable")
     return {s: {**p, "order": sorted(r for t, r in ordered[:depth] if t == s), "stop": stop} for s, p in plans.items()}

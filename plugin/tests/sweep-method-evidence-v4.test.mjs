@@ -559,6 +559,21 @@ test("every round-3 probe the gate already failed stays a failing negative fixtu
   }
 });
 
+test("a stage-2 limit never stops stage 2 while the pooled target is reachable: the plan runs past it to the target", () => {
+  const s = sweep();
+  for (const stratum of ["config", "product"]) {
+    const plan = s.json(`${stratum}-stage2.json`);
+    s.write(`${stratum}-stage2.json`, { ...plan, limit: 3, stop: { ...plan.stop, limit: 3 } });
+  }
+  assert.equal(s.errors(s.text.replaceAll("stopped at pooled depth 42 (limit 150)", "stopped at pooled depth 42 (limit 3)")), "");
+  const t = sweep();
+  for (const stratum of ["config", "product"]) {
+    const plan = t.json(`${stratum}-stage2.json`);
+    t.write(`${stratum}-stage2.json`, { ...plan, limit: 3, order: plan.order.slice(0, 1), stop: { ...plan.stop, limit: 3, depth: 3, reached: false } });
+  }
+  assert.match(t.errors(), /config-stage2\.json is not the pooled plan the stage-1 files, the facet rankings and the QGS standard give/);
+});
+
 test("H-rung: stage-1 verdicts count only with their recorded session, frozen packet, examples, template and row hashes", () => {
   const key = "judge-config-stage1-brief-claude-sonnet-5-5-run1";
   const probe = (edit) => {

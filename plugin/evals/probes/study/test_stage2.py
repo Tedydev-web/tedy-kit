@@ -63,7 +63,8 @@ class StageTwoTest(unittest.TestCase):
         self.assertLess(stop["depth"], total - 1)
         self.assertIn("passes of every stratum ranked together by their best facet rank", stop["rule"])
         tight = self.plan("--limit", "3")["config"]["stop"]
-        self.assertEqual((tight["depth"], tight["reached"], tight["members"]), (3, False, len(members)))
+        self.assertEqual((tight["depth"], tight["reached"], tight["found"], tight["limit"]), (stop["depth"], True, stop["found"], 3))
+        self.assertIn("past the limit of 3 rows while the target is reachable", tight["rule"])
         with self.assertRaisesRegex(SystemExit, "--limit must be a positive number of rows"):
             self.plan("--limit", "0")
 

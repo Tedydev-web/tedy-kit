@@ -11,7 +11,7 @@ def main(argv=None):
     args = topic_arguments("List every stage-1 pass of every stratum for stage 2; with --limit, rank the passes of all strata together by facet and stop on the pooled "
                            "recall target over the whole deduplicated standard, recording the stop.",
                            (["--work"], {"required": True, "help": "the topic's working folder"}),
-                           (["--limit"], {"type": int, "help": "the most rows stage 2 can screen across all strata; default every pass"})).parse_args(argv)
+                           (["--limit"], {"type": int, "help": "rows across all strata that orders stage 2 by facet; stage 2 goes past it until the pooled recall target is reached or every pass is screened"})).parse_args(argv)
     try:
         topic = load_topic(args.repo, args.topic)
         whole_topic(topic, "stage 2")
