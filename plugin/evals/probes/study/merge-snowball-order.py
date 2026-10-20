@@ -34,7 +34,7 @@ def merge(work):
 
 
 def main(argv=None):
-    args = topic_arguments("Merge the snowballed rows above the cut into the config screening order as rows 1001 and on; rows merged before keep their ranks.",
+    args = topic_arguments("Merge the snowballed rows above the cut into the config screening order after its last ranked row, from 1001 while the ranked pool holds at most 1,000 rows; rows merged before keep their ranks.",
                            (["--work"], {"required": True, "help": "study working folder"})).parse_args(argv)
     try:
         added = merge(args.work)

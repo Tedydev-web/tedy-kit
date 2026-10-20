@@ -28,7 +28,7 @@ def above_cut(before, after, stop_row):
 
 def main(argv=None):
     args = topic_arguments("List the snowballed repositories that rank above the config cut (the written stop row, else the effort bound) and record the cut used; "
-                           "merge-snowball-order.py adds them to the screening order as rows 1001 and on.",
+                           "merge-snowball-order.py adds them to the screening order after its last ranked row, from 1001 while the ranked pool holds at most 1,000 rows.",
                            (["--work"], {"required": True, "help": "study working folder"}),
                            (["--before"], {"default": "config-ranked.json", "help": "ranking without the snowball"}),
                            (["--after"], {"default": "config-ranked-snowball.json", "help": "ranking with the snowball state merged"}),
