@@ -241,7 +241,7 @@ function configPoolErrors(io, text, topic, strata, passes, pools, memberStrata) 
 }
 
 export function v4Errors(text, { read, files, topic, meta }) {
-  const io = { ...reader(read), read, topic, files, text };
+  const io = { ...reader(read), read, topic, files, text, sessions: meta.sessions ?? {} };
   const sessions = meta.sessions ?? {};
   const strata = CALIBRATED.filter((s) => topic?.strata?.[s]?.channels && typeof topic.strata[s].channels === "object");
   if (!Object.keys(topic?.facets ?? {}).length) return ["a quality criteria v4 record needs a topic config that declares its facets"];

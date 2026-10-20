@@ -4,6 +4,7 @@ import math
 from pathlib import Path
 
 from study_agreement import upper_bound
+from study_calibration_set import all_batches, set_file
 from study_protocol import EMPTY_TABLE, FREEZE_FILE
 from study_screening_core import MechanismTable, derive, read_jsonl
 from study_stage1 import stage1_inputs
@@ -96,10 +97,29 @@ def flagged(folder, stratum, option):
     return audit, sorted(r for r in wanted if derive(table, stratum, {"A": {}, "B": {}}, "A", rows[r])["decision"] == "eligible")
 
 
+def reading_provenance(folder, stratum, option, drawn):
+    folder = Path(folder)
+    name = screener_name(stratum, option)
+    entry = (json.loads((folder / "meta.json").read_text()).get("sessions") or {}).get(name) or {}
+    frozen = json.loads((folder / FREEZE_FILE).read_text())["strata"][stratum]
+    blocks = entry.get("blocks") or []
+    hashes = {int(r): h for b in blocks for r, h in (b.get("row_sha256") or {}).items()}
+    wanted = (frozen["packet_sha256"], frozen["criteria_sha256"], "full")
+    if (entry.get("cli"), entry.get("model")) != (option["cli"], option["model"]) or any((b.get("packet_sha256"), b.get("criteria_sha256"), b.get("shape")) != wanted for b in blocks) \
+            or sorted(hashes) != sorted(drawn):
+        raise TopicError(f"{name}: the stage-1 audit reading is not the stage-2 screener {option['model']} on the full inputs under the frozen packet and criteria, "
+                         "covering exactly the drawn ranks")
+    calibration = {r["order_rank"]: r["inputs_sha256"] for b in all_batches(folder) for r in json.loads((folder / set_file(b)).read_text())["rows"] if r["stratum"] == stratum}
+    wrong = sorted(r for r in hashes if r in calibration and hashes[r] != calibration[r])
+    if wrong:
+        raise TopicError(f"{name}: ranks {wrong[:10]} were read on other inputs than the calibration rows of the same ranks hold")
+
+
 def elusion(topic, folder, stratum, option):
     if read_audit(folder, stratum) != sample(topic, folder, stratum):
         raise TopicError(f"{audit_file(stratum)} is not the sample the stage-1 files give; the stage-1 audit is drawn once, by draw-stage1-audit.py")
     audit, flags = flagged(folder, stratum, option)
+    reading_provenance(folder, stratum, option, audit["near"] + audit["far"])
     path = Path(folder) / checks_file(stratum)
     checks = {int(k): v for k, v in json.loads(path.read_text()).items()} if path.is_file() else {}
     unchecked = [r for r in flags if r not in checks]

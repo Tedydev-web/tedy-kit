@@ -194,6 +194,19 @@ export function stage1AuditErrors(io, topic, strata, passes, rung) {
       errors.push(`${stratum}: the stage-2 screener has not read stage-1 audit ranks ${unread.slice(0, 10).join(", ")}`);
       continue;
     }
+    const key = `${stratum}-stage1-audit-${screener}`;
+    const entry = io.sessions?.[key];
+    const frozen = io.json("protocol-freeze.json")?.strata?.[stratum];
+    const hashes = blockHashes(entry);
+    const session = io.json("protocol-freeze.json")?.session_a;
+    if (entry?.model !== session?.model || entry?.cli !== session?.cli || (entry?.blocks ?? []).some((b) => b.packet_sha256 !== frozen?.packet_sha256
+      || b.criteria_sha256 !== frozen?.criteria_sha256 || b.shape !== "full") || canonical(Object.keys(hashes).map(Number).sort((a, b) => a - b)) !== canonical([...drawn].sort((a, b) => a - b))) {
+      errors.push(`${key}: the stage-1 audit reading is not the stage-2 screener ${session?.model} on the full inputs under the frozen packet and criteria, covering exactly the drawn ranks`);
+    }
+    const calibration = new Map((io.files ?? []).filter((f) => /^(?:calibration|top-up|held-out(?:-\d+)?)-set\.json$/.test(f))
+      .flatMap((f) => io.json(f).rows.filter((r) => r.stratum === stratum).map((r) => [String(r.order_rank), r.inputs_sha256])));
+    const misread = Object.keys(hashes).filter((r) => calibration.has(r) && calibration.get(r) !== hashes[r]);
+    if (misread.length) errors.push(`${key}: ranks ${misread.slice(0, 10).join(", ")} were read on other inputs than the calibration rows of the same ranks hold`);
     const flagged = drawn.filter((r) => derive(EMPTY_TABLE, stratum, { A: {}, B: {} }, "A", rows.get(r)).decision === "eligible");
     const checks = io.json(`${stratum}-stage1-audit-checks.json`);
     if (checks === undefined) {

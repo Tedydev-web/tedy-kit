@@ -358,6 +358,27 @@ test("H-calibration: the gate redraws every calibration batch, binds the labels 
   assert.match(x.errors(), /held-out-set\.json was not drawn after the current stage1-rung\.json/);
 });
 
+test("H-audit-reading: the stage-1 audit reading counts only from the screener on the frozen packet, full shape and the rows it was given", () => {
+  const key = "config-stage1-audit-claude-opus-5-5";
+  const reading = new RegExp(`${key}: the stage-1 audit reading is not the stage-2 screener claude-opus-5-5 on the full inputs under the frozen packet and criteria`);
+  const probe = (edit) => {
+    const s = sweep();
+    const meta = s.json("meta.json");
+    edit(meta.sessions[key]);
+    s.write("meta.json", meta);
+    return s.errors();
+  };
+  assert.match(probe((e) => Object.assign(e, { model: "gemini-3.8-flash-high", cli: "agy" })), reading);
+  assert.match(probe((e) => Object.assign(e.blocks[0], { packet_sha256: "0".repeat(64), criteria_sha256: "0".repeat(64), shape: "thin" })), reading);
+  assert.match(probe((e) => { delete e.blocks[0].row_sha256[String(e.blocks[0].ranks[0])]; }), reading);
+  const s = sweep();
+  const calibration = new Set(s.json("calibration-set.json").rows.filter((r) => r.stratum === "config").map((r) => String(r.order_rank)));
+  assert.match(probe((e) => {
+    const shared = Object.keys(e.blocks[0].row_sha256).find((r) => calibration.has(r));
+    e.blocks[0].row_sha256[shared] = "a".repeat(64);
+  }), new RegExp(`${key}: ranks \\d+ were read on other inputs than the calibration rows of the same ranks hold`));
+});
+
 test("H-rung: stage-1 verdicts count only with their recorded session, frozen packet, examples, template and row hashes", () => {
   const key = "judge-config-stage1-brief-claude-sonnet-5-5-run1";
   const probe = (edit) => {

@@ -189,6 +189,27 @@ class V4RecordTest(unittest.TestCase):
         with self.assertRaisesRegex(TopicError, r"calibration-set.json holds \{'config': 59, 'product': 60\} rows per stratum; the calibration set holds 60 per stratum"):
             self.render(repo)
 
+    def test_the_stage_1_audit_reading_counts_only_from_the_screener_on_the_frozen_packet_and_the_rows_it_was_given(self):
+        key = "config-stage1-audit-claude-opus-5-5"
+        message = f"{key}: the stage-1 audit reading is not the stage-2 screener claude-opus-5-5 on the full inputs under the frozen packet and criteria"
+        for edit in (lambda e: e.update(model="gemini-3.8-flash-high", cli="agy"), lambda e: e["blocks"][0].update(shape="thin"),
+                     lambda e: e["blocks"][0].update(packet_sha256="0" * 64), lambda e: e["blocks"][0].update(criteria_sha256="0" * 64)):
+            repo, folder = self.copy()
+            meta = json.loads((folder / "meta.json").read_text())
+            edit(meta["sessions"][key])
+            (folder / "meta.json").write_text(json.dumps(meta))
+            with self.assertRaisesRegex(TopicError, message):
+                self.render(repo)
+        repo, folder = self.copy()
+        meta = json.loads((folder / "meta.json").read_text())
+        calibration = {str(r["order_rank"]) for r in json.loads((folder / "calibration-set.json").read_text())["rows"] if r["stratum"] == "config"}
+        block = meta["sessions"][key]["blocks"][0]
+        shared = sorted(set(block["row_sha256"]) & calibration)[0]
+        block["row_sha256"][shared] = "a" * 64
+        (folder / "meta.json").write_text(json.dumps(meta))
+        with self.assertRaisesRegex(TopicError, rf"{key}: ranks \[{shared}\] were read on other inputs than the calibration rows of the same ranks hold"):
+            self.render(repo)
+
     def test_a_snowball_with_a_cut_is_refused_under_v4(self):
         repo, folder = self.copy()
         cut = json.loads((folder / "snowball-cut.json").read_text())
