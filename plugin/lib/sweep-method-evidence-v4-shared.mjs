@@ -6,6 +6,7 @@ export const KAPPA_FLOOR = 0.6;
 export const STAGE1_BOUND = 0.95;
 export const POSITIVES_NEEDED = 59;
 export const HELD_OUT_POSITIVES = 10;
+export const EXCLUDE_CODES = ["irrelevant", "below-threshold", "copy", "dead", "aggregator"];
 export const NEAR_ROWS = 200;
 export const FAR_ROWS = 100;
 export const AUDIT_ROWS = 20;
@@ -93,6 +94,12 @@ export function labelledRows({ json }, read, batches) {
       errors.push(`${batch}-labels.json does not hold exactly the rows of ${batch}-set.json`);
     }
     if (labels.complete !== labels.rows?.length) errors.push(`the user labelled ${labels.complete} of ${labels.rows?.length} ${batch} rows`);
+    for (const row of labels.rows ?? []) {
+      const decision = row?.user?.decision;
+      if (decision !== "eligible" && !EXCLUDE_CODES.some((code) => decision === `excluded: ${code}`)) {
+        errors.push(`${batch}-labels.json row ${row?.id} holds the decision ${JSON.stringify(decision)}, not eligible or excluded: <code>`);
+      }
+    }
     rows.push(...(labels.rows ?? []).map((r) => ({ ...r, batch })));
   }
   return { errors, rows };

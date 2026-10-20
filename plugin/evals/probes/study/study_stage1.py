@@ -39,6 +39,20 @@ def held_out_batches(folder):
     return sorted((b for b in found if HELD_OUT.match(b)), key=lambda b: int(b.rsplit("-", 1)[1]) if b[-1].isdigit() else 1)
 
 
+def held_out_labels_sha256(folder):
+    return {b: hashlib.sha256((Path(folder) / f"{b}-labels.json").read_bytes()).hexdigest() for b in held_out_batches(folder)}
+
+
+def held_out_binding(folder, sessions, strata, rung_number):
+    expected, rung = held_out_labels_sha256(folder), ladder_rung(rung_number)
+    for stratum in strata:
+        for model in rung["models"]:
+            key = pool_name(stratum, rung["shape"], model)
+            if any(b.get("held_out_labels_sha256") != expected for b in (sessions.get(key) or {}).get("blocks") or []):
+                raise TopicError(f"{key}: the stage-1 pool run was not made after the current held-out labels ({', '.join(f'{b}-labels.json' for b in expected)}); the rung is "
+                                 "confirmed on the labels as they stood when stage 1 ran on the pool")
+
+
 def held_out_name(stratum, shape, model):
     return f"judge-{stratum}-stage1-{shape}-{model}-held-out"
 

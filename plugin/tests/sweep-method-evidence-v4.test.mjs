@@ -691,6 +691,21 @@ test("the cross-family QGS judgments carry provenance: a recorded run of the top
   }
 });
 
+test("held-out labels are bound to the stage-1 pool runs made after them, and every label decision is one the import accepts", () => {
+  const bound = /^stage1-(config|product)-brief-claude-(opus|sonnet)-5-5: the stage-1 pool run was not made after the current held-out labels \(held-out-labels\.json\); /;
+  const s = sweep(escalated);
+  const labels = s.json("held-out-labels.json");
+  const row = labels.rows.find((r) => r.user.decision === "eligible");
+  row.user = { ...row.user, decision: "excluded: below-threshold" };
+  s.write("held-out-labels.json", labels);
+  failsBothLayers(s, new RegExp(`prior-art-sweep-record: ${bound.source.slice(1)}`), bound, "L5 held-out positive flipped");
+  const t = sweep(escalated);
+  const odd = t.json("held-out-labels.json");
+  odd.rows[0].user = { ...odd.rows[0].user, decision: "eligiblex" };
+  t.write("held-out-labels.json", odd);
+  assert.match(t.errors(), new RegExp(`^held-out-labels\\.json row ${odd.rows[0].id} holds the decision "eligiblex", not eligible or excluded: <code>$`, "m"));
+});
+
 test("the production QGS sessions record the same thin-input hash for every candidate they share, and one for each candidate they judged", () => {
   const split = /^the QGS sessions judged candidates 1 on different thin inputs, or recorded no input hash for them; every QGS judge reads the same candidate inputs$/;
   const probes = [

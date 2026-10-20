@@ -196,6 +196,10 @@ def labelled(folder, batches=("calibration",)):
             raise TopicError(f"{path.name} does not hold exactly the rows of {set_file(batch)}; import the labels again for the drawn set")
         if labels["complete"] != len(labels["rows"]):
             raise TopicError(f"the user labelled {labels['complete']} of {len(labels['rows'])} {batch} rows; every row needs its label")
+        for row in labels["rows"]:
+            decision = (row.get("user") or {}).get("decision")
+            if decision != "eligible" and not (isinstance(decision, str) and decision.startswith("excluded: ") and decision[len("excluded: "):] in EXCLUDE_CODES):
+                raise TopicError(f"{path.name} row {row.get('id')} holds the decision {json.dumps(decision)}, not eligible or excluded: <code>")
         rows += [{**r, "batch": batch} for r in labels["rows"]]
     return rows
 

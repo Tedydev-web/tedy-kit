@@ -124,6 +124,16 @@ export function stage1Errors(io, sessions, strata, rows) {
     const batches = (io.files ?? []).map((f) => f.match(/^(held-out(?:-\d+)?)-labels\.json$/)?.[1]).filter(Boolean);
     const held = labelledRows(io, io.read, batches.length ? batches : ["held-out"]);
     errors.push(...held.errors);
+    const expected = Object.fromEntries(batches.map((b) => [b, sha256(io.read(`${b}-labels.json`) ?? "")]));
+    for (const stratum of strata) {
+      for (const model of rung.models ?? []) {
+        const key = `stage1-${stratum}-${rung.shape}-${model}`;
+        if ((sessions[key]?.blocks ?? []).some((b) => canonical(b.held_out_labels_sha256 ?? null) !== canonical(expected))) {
+          errors.push(`${key}: the stage-1 pool run was not made after the current held-out labels (${batches.map((b) => `${b}-labels.json`).join(", ")}); the rung is confirmed on the labels `
+            + "as they stood when stage 1 ran on the pool");
+        }
+      }
+    }
     const positives = held.rows.filter((r) => r.user?.decision === "eligible").length;
     if (positives < HELD_OUT_POSITIVES) errors.push(`rung ${chosen.rung} is confirmed on held-out batches holding ${positives} positives, fewer than ${HELD_OUT_POSITIVES}`);
     let hits = 0;

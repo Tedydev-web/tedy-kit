@@ -219,7 +219,8 @@ def run_block(job, fetch):
              "prompt_sha256": sha256_bytes(prompt.encode()), "inputs_sha256": canonical_sha256(list(expected.values())),
              "row_sha256": {str(r): canonical_sha256(row) for r, row in expected.items()}, "cli_version": cli_version, "date": job["today"],
              "mechanisms_added": [line.split(":", 1)[0] for line in fresh],
-             **({"served_models": served} if served else {}), **({"fallback_reason": job["fallback_reason"]} if job.get("fallback_reason") else {})}
+             **({"served_models": served} if served else {}), **({"fallback_reason": job["fallback_reason"]} if job.get("fallback_reason") else {}),
+             **({"held_out_labels_sha256": job["held_out_labels_sha256"]} if job.get("held_out_labels_sha256") else {})}
     undo = []
 
     def commit(sessions):

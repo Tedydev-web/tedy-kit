@@ -448,6 +448,24 @@ class QgsWorkflowTest(unittest.TestCase):
 
 
 class V4EscalatedRungRecordTest(unittest.TestCase):
+    def test_held_out_labels_are_bound_to_the_pool_runs_made_after_them_and_label_decisions_are_validated(self):
+        from study_calibration_set import labelled
+        built = v4_sweep(escalate=True)
+        folder = built / "docs/prior-art/sweeps" / SWEEP
+        path = folder / "held-out-labels.json"
+        original = path.read_text()
+        labels = json.loads(original)
+        next(r for r in labels["rows"] if r["user"]["decision"] == "eligible")["user"]["decision"] = "excluded: below-threshold"
+        path.write_text(json.dumps(labels))
+        with self.assertRaisesRegex(TopicError, r"^stage1-(config|product)-brief-claude-(opus|sonnet)-5-5: the stage-1 pool run was not made after the current held-out labels "
+                                                r"\(held-out-labels.json\); "):
+            render(built, load_topic(built, "demo"))
+        labels = json.loads(original)
+        labels["rows"][0]["user"]["decision"] = "eligiblex"
+        path.write_text(json.dumps(labels))
+        with self.assertRaisesRegex(TopicError, rf'^held-out-labels.json row {labels["rows"][0]["id"]} holds the decision "eligiblex", not eligible or excluded: <code>$'):
+            labelled(folder, ("held-out",))
+
     def test_a_rung_above_the_first_is_confirmed_on_the_held_out_batch_and_its_own_bound_is_reported_apart(self):
         built = v4_sweep(escalate=True)
         text = render(built, load_topic(built, "demo"))[0]

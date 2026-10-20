@@ -9,8 +9,8 @@ from study_fetch import Fetch, NetworkRefused
 from study_qgs import whole_topic
 from study_screening_core import read_jsonl
 from study_session import run_block
-from study_stage1 import (BATCH_MAX, LADDER, RUNG_FILE, SHAPES, auto_pass, calibration_name, examples_text, held_out_batches, held_out_check, held_out_name, inputs_name, ladder_rung, option,
-                          pool_name, read_freeze, sha256_text, stage1_inputs)
+from study_stage1 import (BATCH_MAX, LADDER, RUNG_FILE, SHAPES, auto_pass, calibration_name, examples_text, held_out_batches, held_out_check, held_out_labels_sha256, held_out_name,
+                          inputs_name, ladder_rung, option, pool_name, read_freeze, sha256_text, stage1_inputs)
 from study_topic import TopicError, load_topic, require_screened, saigon_today, topic_arguments
 
 
@@ -83,7 +83,8 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
                 "inputs": inputs_name(args.stratum, args.shape), "packet": f"stage1-packet-{args.stratum}.md", "examples": worked, "problems": topic.get("problems") or [],
                 "shape": args.shape, "frozen": {"packet_sha256": frozen["packets"][args.stratum], "examples_sha256": frozen["examples_sha256"],
                                                 "template_sha256": frozen["template_sha256"]},
-                "bare": bool(environ.get("ANTHROPIC_API_KEY")), "today": args.today}
+                "bare": bool(environ.get("ANTHROPIC_API_KEY")), "today": args.today,
+                **({"held_out_labels_sha256": held_out_labels_sha256(args.work)} if args.set == "pool" and chosen_rung(args.work)["rung"] > 1 else {})}
         if frozen["examples_sha256"] != sha256_text(worked):
             raise TopicError("the topic's stage1_examples differ from the freeze; no stage-1 session runs on changed examples")
         written = 0

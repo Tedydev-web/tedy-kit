@@ -11,7 +11,7 @@ from study_method_sessions import checked_entry, row_hashes
 from study_qgs import ADJUDICATED, JUDGE_FILES, PACKET, UPPER_ESTIMATE, candidate_rows, cross_family, cross_name, member_facets, qgs_standard, stratum_members
 from study_screening_core import read_json, read_jsonl
 from study_session import model_family
-from study_stage1 import FREEZE_FILE, RUNG_FILE, choose_rung, held_out_batches, held_out_check, ladder_rung, pool_name, stage1_inputs
+from study_stage1 import FREEZE_FILE, RUNG_FILE, choose_rung, held_out_batches, held_out_binding, held_out_check, ladder_rung, pool_name, stage1_inputs
 from study_stage1_audit import cross_audit_sample, elusion
 from study_stage2 import plan_file, stage1_results, stage2_plan
 from study_topic import SNOWBALL_RANK_BASE, TopicError
@@ -287,6 +287,7 @@ def stage1_lines(folder, strata):
                                                                             for i, r in enumerate(tried["runs"], 1)))
     lines.append(f"- chosen: rung {chosen['rung']} after {len(chosen['tried'])} rungs tried; rule: pooled one-sided 95% Clopper-Pearson lower bound >= 0.95 in both runs")
     if chosen["rung"] > 1:
+        held_out_binding(folder, read_json(folder, "meta.json").get("sessions") or {}, strata, chosen["rung"])
         held = held_out_check(folder, chosen["rung"], labelled(folder, held_out_batches(folder)))
         lines.append(f"- held-out confirmation: rung {chosen['rung']} passed {held['passed']}/{held['positives']} held-out positives, missed none; the batch's own one-sided "
                      f"lower bound {held['lower']:.4f}; the pooled bound above was measured on the set the rung was chosen on")
