@@ -1,6 +1,7 @@
 import hashlib
 import json
 import re
+from collections import Counter
 from pathlib import Path
 
 from study_agreement import RECALL_TARGET, cohen_kappa, interval_text, kappa_text
@@ -23,12 +24,23 @@ AUDIT_KEY = re.compile(r"^[a-z0-9]+-audit-(.+)$")
 CROSS_FILE = re.compile(r"^qgs-cross-(.+)\.jsonl$")
 
 
+def listed(values):
+    return ", ".join(sorted(map(str, values))[:10]) or "none"
+
+
 def run_file_checks(topic, folder, sessions):
     files = sorted(p.name for p in Path(folder).glob("*.jsonl"))
-    missing = [k for k in sessions if f"{file_stem(k)}.jsonl" not in files]
+    rows = {k: read_jsonl(Path(folder), f"{file_stem(k)}.jsonl") if f"{file_stem(k)}.jsonl" in files else [] for k in sessions}
+    missing = [k for k in sessions if not rows[k]]
     if missing:
-        raise TopicError(f"meta.json records sessions {', '.join(missing[:10])} whose output files are not in the sweep folder; a recorded run's rows are never deleted, "
-                         "only dropped with drop-run.py")
+        raise TopicError(f"meta.json records sessions {', '.join(missing[:10])} whose output files are missing or empty in the sweep folder; a recorded run's rows are never "
+                         "deleted, only dropped with drop-run.py")
+    for key, entry in sessions.items():
+        held = Counter(r.get("id" if key.startswith("qgs-") else "order_rank") for r in rows[key])
+        covered = Counter(r for b in entry.get("blocks") or [] for r in b.get("ranks") or [])
+        if held != covered:
+            raise TopicError(f"{file_stem(key)}.jsonl does not hold exactly the rows its recorded blocks cover (rows outside its blocks: {listed((held - covered).elements())}; "
+                             f"rows its blocks cover that it lacks: {listed((covered - held).elements())}); drop or rerun a block with the redo tools, never by editing meta.json")
     for name in files:
         if RUN_FILE.match(name) and re.sub(r"^([a-z0-9]+)-screen-([AB])$", r"\1-\2", name[:-6]) not in sessions:
             raise TopicError(f"{name} has no session in meta.json: its rows count only when a recorded run produced them")
@@ -455,7 +467,6 @@ def audit_lines(topic, folder, strata, sides, sessions, freeze):
 def v4_parts(topic, folder, strata, freeze, sessions, faceted, common, decided_rows):
     calibration_checks(topic, folder)
     drop_checks(folder)
-    run_file_checks(topic, folder, sessions)
     sides = {s: {side: {r["order_rank"]: r for r in read_jsonl(folder, f"{s}-screen-{side}.jsonl")} for side in "AB"} for s in strata}
     for stratum in strata:
         faceted[stratum]["inputs"] = list(stage1_inputs(folder, stratum, stage1_results(folder, stratum)[0]["shape"]).values())

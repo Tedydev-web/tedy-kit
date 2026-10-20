@@ -8,7 +8,6 @@ import {
   CALIBRATED,
   RECALL_TARGET,
   canonical,
-  covered,
   escapeRegex,
   figureLine,
   interval,
@@ -132,9 +131,33 @@ function dropErrors(io, read, meta, dropped) {
     if (!meta.sessions?.[key]) errors.push(`${file} has no session in meta.json: its rows count only when a recorded run produced them`);
   }
   const files = io.files ?? [];
-  const missing = Object.keys(meta.sessions ?? {}).filter((key) => !files.includes(`${key.replace(/^([a-z0-9]+)-([AB])$/, "$1-screen-$2")}.jsonl`));
+  const stem = (key) => key.replace(/^([a-z0-9]+)-([AB])$/, "$1-screen-$2");
+  const rowsOf = Object.fromEntries(Object.keys(meta.sessions ?? {}).map((key) => [key, files.includes(`${stem(key)}.jsonl`) ? io.jsonl(`${stem(key)}.jsonl`) : []]));
+  const missing = Object.keys(rowsOf).filter((key) => !rowsOf[key].length);
   if (missing.length) {
-    errors.push(`meta.json records sessions ${missing.slice(0, 10).join(", ")} whose output files are not in the sweep folder; a recorded run's rows are never deleted, only dropped with drop-run.py`);
+    errors.push(`meta.json records sessions ${missing.slice(0, 10).join(", ")} whose output files are missing or empty in the sweep folder; a recorded run's rows are never deleted, `
+      + "only dropped with drop-run.py");
+  }
+  const listed = (values) => values.map(String).sort().slice(0, 10).join(", ") || "none";
+  const without = (from, take) => {
+    const left = [...take];
+    return from.filter((v) => {
+      const at = left.indexOf(v);
+      if (at < 0) return true;
+      left.splice(at, 1);
+      return false;
+    });
+  };
+  for (const [key, entry] of Object.entries(meta.sessions ?? {})) {
+    if (!rowsOf[key].length) continue;
+    const held = rowsOf[key].map((r) => (key.startsWith("qgs-") ? r.id : r.order_rank));
+    const blocks = (entry?.blocks ?? []).flatMap((b) => b.ranks ?? []);
+    const extra = without(held, blocks);
+    const lacking = without(blocks, held);
+    if (extra.length || lacking.length) {
+      errors.push(`${stem(key)}.jsonl does not hold exactly the rows its recorded blocks cover (rows outside its blocks: ${listed(extra)}; rows its blocks cover that it lacks: `
+        + `${listed(lacking)}); drop or rerun a block with the redo tools, never by editing meta.json`);
+    }
   }
   const audits = Object.keys(meta.sessions ?? {}).filter((key) => AUDIT_KEY.test(key));
   const model = io.topic?.cross_family?.model;
@@ -144,13 +167,6 @@ function dropErrors(io, read, meta, dropped) {
   }
   if (audits.length && !files.includes("audit-sample.json")) {
     errors.push(`meta.json records the cross-family audit sessions ${audits.sort().join(", ")}, but the sweep folder has no audit-sample.json they screened`);
-  }
-  for (const [key, entry] of Object.entries(meta.sessions ?? {})) {
-    const rows = io.jsonl(`${key}.jsonl`);
-    if (!rows.length || /-(?:screen|pilot)-/.test(`${key}.jsonl`) || /^[a-z0-9]+-[AB]$/.test(key)) continue;
-    const blocks = covered(entry);
-    const loose = rows.map((r) => r.order_rank ?? r.id).filter((r) => !blocks.has(r));
-    if (loose.length) errors.push(`${key}.jsonl holds rows ${loose.slice(0, 10).join(", ")} that no recorded block covers; drop or rerun a block with the redo tools, never by editing meta.json`);
   }
   return errors;
 }

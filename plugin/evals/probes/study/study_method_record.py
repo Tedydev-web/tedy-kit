@@ -9,7 +9,7 @@ from study_protocol import FREEZE_FILE
 from study_screening_core import JUDGED, MechanismTable, derive, read_json, read_jsonl
 from study_session import AGY_THREAT, NO_BARE_THREAT, model_family
 from study_topic import TopicError
-from study_v4_record import is_v4, v4_parts, v4_stop
+from study_v4_record import is_v4, run_file_checks, v4_parts, v4_stop
 
 TAG_ONLY = ("tag-only inventory, not screened by two sessions: its rows carry tags, never copied text, so it has no protocol freeze, sessions, kappa, "
             "recall at the cut or stop row")
@@ -24,6 +24,8 @@ def method_stops(topic, folder):
     table, stops, captures, faceted = MechanismTable(read_json(folder, "mechanism-table.json")), {}, {}, {}
     v4 = is_v4(read_json(folder, "meta.json"))
     session_keys(folder, topic["strata"])
+    if v4:
+        run_file_checks(topic, folder, read_json(folder, "meta.json").get("sessions") or {})
     for stratum in topic["strata"]:
         mapping = read_json(folder, f"{stratum}-mechanism-map.json")
         sides = {s: {r["order_rank"]: r for r in read_jsonl(folder, f"{stratum}-screen-{s}.jsonl")} for s in "AB"}

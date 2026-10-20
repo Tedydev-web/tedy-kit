@@ -252,7 +252,7 @@ class V4RecordTest(unittest.TestCase):
         foreign = r"^the sweep folder holds cross-family runs of gemini-3.8-flash-high, but the topic's cross_family is (none|gemini-9-pro); "
         for name, edit, message in (
                 ("audit rows deleted", lambda repo, folder: (folder / "product-audit-gemini-3.8-flash-high.jsonl").unlink(),
-                 r"^meta.json records sessions product-audit-gemini-3.8-flash-high whose output files are not in the sweep folder; "),
+                 r"^meta.json records sessions product-audit-gemini-3.8-flash-high whose output files are missing or empty in the sweep folder; "),
                 ("audit sample deleted", lambda repo, folder: (folder / "audit-sample.json").unlink(),
                  r"^meta.json records the cross-family audit sessions config-audit-gemini-3.8-flash-high, product-audit-gemini-3.8-flash-high, but the sweep folder has no "
                  r"audit-sample.json they screened$"),
@@ -265,6 +265,21 @@ class V4RecordTest(unittest.TestCase):
                 edit(repo, folder)
                 with self.assertRaisesRegex(TopicError, message):
                     self.render(repo)
+
+    def test_a_recorded_session_file_holds_exactly_the_rows_its_blocks_cover_and_an_empty_file_counts_as_missing(self):
+        for key, body in (("product-audit-gemini-3.8-flash-high", ""), ("product-audit-gemini-3.8-flash-high", "\n"), ("config-audit-gemini-3.8-flash-high", ""),
+                          ("qgs-judge-B", ""), ("judge-config-qgs-A-claude-opus-5-5-run1", "\n")):
+            with self.subTest(key=key, body=body):
+                repo, folder = self.copy()
+                (folder / f"{key}.jsonl").write_text(body)
+                with self.assertRaisesRegex(TopicError, rf"^meta.json records sessions {re.escape(key)} whose output files are missing or empty in the sweep folder; "):
+                    self.render(repo)
+        repo, folder = self.copy()
+        path = folder / "qgs-reader.jsonl"
+        path.write_text("".join(path.read_text().splitlines(keepends=True)[1:]))
+        with self.assertRaisesRegex(TopicError, r"^qgs-reader.jsonl does not hold exactly the rows its recorded blocks cover \(rows outside its blocks: none; rows its blocks cover "
+                                                r"that it lacks: \d+\); "):
+            self.render(repo)
 
     def test_the_snowball_rows_equal_the_pool_snowballed_rows_and_the_stage_1_inputs_once_each(self):
         def rows(folder):
@@ -334,7 +349,8 @@ class V4RecordTest(unittest.TestCase):
         def drop_row(folder):
             path = folder / f"{key}.jsonl"
             path.write_text("".join(path.read_text().splitlines(keepends=True)[1:]))
-        for name, edit, message in (("a row deleted", drop_row, outside), ("packet changed", block(lambda b: b.update(packet_sha256="0" * 64)), outside),
+        for name, edit, message in (("a row deleted", drop_row, rf"^{key}.jsonl does not hold exactly the rows its recorded blocks cover "),
+                                    ("packet changed", block(lambda b: b.update(packet_sha256="0" * 64)), outside),
                                     ("shape changed", block(lambda b: b.update(shape="full")), outside)):
             with self.subTest(name=name):
                 repo, folder = self.copy()

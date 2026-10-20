@@ -297,16 +297,16 @@ test("item 10: a drop without its reason or copy, or a block removed by hand, fa
   t.write("meta.json", hand);
   const errors = t.errors();
   assert.match(errors, /the drop of qgs-judge-B ranks 1,5 has no copy of its block in the sweep folder/);
-  assert.match(errors, /judge-config-reader-claude-opus-5-5-run1\.jsonl holds rows .* that no recorded block covers; drop or rerun a block with the redo tools/);
+  assert.match(errors, /judge-config-reader-claude-opus-5-5-run1\.jsonl does not hold exactly the rows its recorded blocks cover \(rows outside its blocks: .*; rows its blocks cover that it lacks: none\); drop or rerun a block with the redo tools/);
 });
 
 test("every recorded session has its output file and every run file its session, so a completed cross-family audit never reads as pending or absent", () => {
-  const unrecorded = /^meta\.json records sessions .* whose output files are not in the sweep folder; /;
+  const unrecorded = /^meta\.json records sessions .* whose output files are missing or empty in the sweep folder; /;
   const foreign = /^the sweep folder holds cross-family runs of gemini-3\.8-flash-high, but the topic's cross_family is (none|gemini-9-pro); /;
   const probes = [
     ["AS2 audit rows deleted", built, (s) => rmSync(join(s.folder, "product-audit-gemini-3.8-flash-high.jsonl")), unrecorded],
     ["a judge validation run deleted", built, (s) => rmSync(join(s.folder, "judge-config-qgs-A-claude-opus-5-5-run1.jsonl")), unrecorded],
-    ["a stage-1 pool run deleted", built, (s) => rmSync(join(s.folder, "stage1-config-brief-claude-sonnet-5-5.jsonl")), unrecorded, /prior-art-sweep-record: config: stage 1 has not screened ranks /],
+    ["a stage-1 pool run deleted", built, (s) => rmSync(join(s.folder, "stage1-config-brief-claude-sonnet-5-5.jsonl")), unrecorded],
     ["AS1 audit sample deleted", built, (s) => rmSync(join(s.folder, "audit-sample.json")), /^meta\.json records the cross-family audit sessions .*, but the sweep folder has no audit-sample\.json they screened$/],
     ["C7 cross_family removed", built, (s) => s.topic(({ cross_family: _, ...t }) => t), foreign],
     ["M7d cross_family renamed", built, (s) => s.topic((t) => ({ ...t, cross_family: { ...t.cross_family, model: "gemini-9-pro" } })), foreign],
@@ -322,6 +322,27 @@ test("every recorded session has its output file and every run file its session,
   writeFileSync(join(t.folder, "judge-config-qgs-A-claude-haiku-4-5-run1.jsonl"), "");
   assert.match(t.errors(), /^judge-config-qgs-A-claude-haiku-4-5-run1\.jsonl has no session in meta\.json: its rows count only when a recorded run produced them$/m);
   assert.match(t.errors(), /^the record renderer refused the sweep files: prior-art-sweep-record: judge-config-qgs-A-claude-haiku-4-5-run1\.jsonl has no session in meta\.json: /m);
+});
+
+test("a recorded session's output file holds exactly the rows its blocks cover, and an empty file counts as missing, for every session kind", () => {
+  const empty = (key) => new RegExp(`^meta\\.json records sessions ${key.replaceAll(".", "\\.")} whose output files are missing or empty in the sweep folder; `);
+  const probes = [
+    ["product audit truncated to 0 bytes", built, "product-audit-gemini-3.8-flash-high", ""],
+    ["product audit truncated to a newline", built, "product-audit-gemini-3.8-flash-high", "\n"],
+    ["config audit truncated", built, "config-audit-gemini-3.8-flash-high", ""],
+    ["product audit truncated, escalated", escalated, "product-audit-gemini-3.8-flash-high", ""],
+    ["product audit truncated, topped up", toppedUp, "product-audit-gemini-3.8-flash-high", "\n"],
+    ["config pilot A emptied", built, "config-pilot-A", ""],
+    ["product pilot B emptied", built, "product-pilot-B-claude-sonnet-5-5", ""],
+  ];
+  for (const [name, source, key, body] of probes) {
+    const s = sweep(source);
+    writeFileSync(join(s.folder, `${key}.jsonl`), body);
+    failsBothLayers(s, /^the record renderer refused the sweep files: prior-art-sweep-record: /, empty(key), name);
+  }
+  const s = sweep();
+  s.writeRows("qgs-reader.jsonl", s.jsonl("qgs-reader.jsonl").slice(1));
+  failsBothLayers(s, /prior-art-sweep-record: /, /^qgs-reader\.jsonl does not hold exactly the rows its recorded blocks cover \(rows outside its blocks: none; rows its blocks cover that it lacks: \d+\); /, "a reader row deleted");
 });
 
 test("the snowball rows equal the pool's snowballed rows and the stage-1 inputs, once each", () => {
@@ -686,9 +707,9 @@ test("the cross-family QGS judgments carry provenance: a recorded run of the top
   const outside = /^qgs-cross-gemini-3\.8-flash-high\.jsonl: its judgments are not all agy gemini-3\.8-flash-high runs on the thin inputs under qgs-packet\.md, covering exactly its rows$/;
   const block = (edit) => (s) => { const meta = s.json("meta.json"); edit(meta.sessions[key].blocks[0]); s.write("meta.json", meta); };
   const probes = [
-    ["QX1 file deleted", (s) => rmSync(join(s.folder, `${key}.jsonl`)), /^meta\.json records sessions qgs-cross-gemini-3\.8-flash-high whose output files are not in the sweep folder; /],
+    ["QX1 file deleted", (s) => rmSync(join(s.folder, `${key}.jsonl`)), /^meta\.json records sessions qgs-cross-gemini-3\.8-flash-high whose output files are missing or empty in the sweep folder; /],
     ["session deleted", (s) => { const meta = s.json("meta.json"); delete meta.sessions[key]; s.write("meta.json", meta); }, /^qgs-cross-gemini-3\.8-flash-high\.jsonl has no session in meta\.json: /],
-    ["a row deleted", (s) => s.writeRows(`${key}.jsonl`, s.jsonl(`${key}.jsonl`).slice(1)), outside],
+    ["a row deleted", (s) => s.writeRows(`${key}.jsonl`, s.jsonl(`${key}.jsonl`).slice(1)), /^qgs-cross-gemini-3\.8-flash-high\.jsonl does not hold exactly the rows its recorded blocks cover /],
     ["packet changed", block((b) => { b.packet_sha256 = "0".repeat(64); }), outside],
     ["shape changed", block((b) => { b.shape = "full"; }), outside],
     ["a row hash changed", block((b) => { b.row_sha256[String(b.ranks[0])] = "0".repeat(64); }), /^the QGS sessions judged candidates \d+ on different thin inputs, /],
