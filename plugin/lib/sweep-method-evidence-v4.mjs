@@ -1,3 +1,4 @@
+import { proseErrors } from "./sweep-method-evidence-v4-prose.mjs";
 import { calibrationErrors } from "./sweep-method-evidence-v4-calibration.mjs";
 import { judgeErrors } from "./sweep-method-evidence-v4-judges.mjs";
 import { stage1AuditErrors, stage1Errors } from "./sweep-method-evidence-v4-stage1.mjs";
@@ -152,6 +153,7 @@ function recallErrors(io, text, topic, strata, members, memberStrata, passes, sc
       + `the files give ${found}/${size}, in-pool ${inPool}/${size}, stage-1 pass ${passed}/${inPool}`);
   }
   const met = size && found / size >= RECALL_TARGET;
+  if (met && /^- recall target not reached: /m.test(text)) errors.push("the record names a recall target threat although pooled topic recall meets the target");
   const missed = members.filter((m) => !done.includes(m)).sort();
   const pooled = ["- pooled topic recall ", ...rate(found, size), ` of the ${size} deduplicated standard members, screened by both stage-2 sessions; in-pool rate `, ...rate(inPool, size),
     "; stage-1 pass rate of in-pool members ", ...rate(passed, inPool), met ? `; meets the ${RECALL_TARGET.toFixed(2)} target` : `; below the ${RECALL_TARGET.toFixed(2)} target; missed: ${missed.join(", ")}`];
@@ -253,6 +255,7 @@ export function v4Errors(text, { read, files, topic, meta }) {
   return [
     ...labelled.errors,
     ...calibrationErrors(io, topic),
+    ...proseErrors(io, topic, strata, sessions),
     ...batchLineErrors(io, topic, strata, text),
     ...qgs.errors,
     ...judgeErrors(io, topic, sessions, strata, labelled.rows, batches),

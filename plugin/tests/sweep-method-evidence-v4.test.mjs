@@ -406,6 +406,44 @@ test("H-cross-audit: the audit is the topic's non-Claude cross_family model, or 
   assert.match(claude.errors(), /the cross_family model claude-haiku-5-5 is a Claude model; the audit needs a model outside the Claude family/);
 });
 
+test("H-prose: the Protocol, screening session and threat lines and the four statement lines are rebuilt from meta.json, the freeze and the topic", () => {
+  const s = sweep();
+  const protocol = /the record's Protocol section is not the one meta\.json and protocol-freeze\.json give/;
+  const sessions = /the record's Screening sessions section is not the one meta\.json and protocol-freeze\.json give/;
+  const threat = (line) => new RegExp(`the record's Threats section lacks the threat "${line.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`);
+  const sameConfig = s.text.match(/^- same model family: config .*$/m)[0];
+  const sameProduct = s.text.match(/^- same model family: product .*$/m)[0];
+  const reader = s.text.match(/^- reader shares the QGS judges' model family: .*$/m)[0];
+  const probes = [
+    ["M1", s.text.replace("- session A: claude claude-opus-5-5;", "- session A: agy gemini-3.8-flash-high;"), protocol],
+    ["M2", s.text.replace(/^- config-B: claude claude-sonnet-5-5,/m, "- config-B: agy gemini-3.8-flash-high,"), sessions],
+    ["M3", s.text.replace(`${sameProduct}\n`, ""), threat(sameProduct)],
+    ["M4", s.text.replace(`${reader}\n`, ""), threat(reader)],
+    ["M5", s.text.replace("session B: claude claude-sonnet-5-5,", "session B: agy gemini-3.8-flash-high,").replace(`${sameProduct}\n`, ""), protocol],
+    ["M8", s.text.replace(sameConfig, sameConfig.replace("B (claude-sonnet-5-5)", "B (claude-haiku-4)")), threat(sameConfig)],
+    ["M9", s.text.replace(/^- isolation: agy --disable-slash-commands/m, "- isolation: agy --bare --disable-slash-commands"), protocol],
+    ["M13", s.text.replace(/^(- prompt template sha256 `)[0-9a-f]{8}/m, "$100000000"), protocol],
+    ["M14", s.text.replace("- session B pilot, information only: claude-sonnet-5-5", "- session B pilot, information only: claude-haiku-5-5"), protocol],
+    ["upper estimate", s.text.replace(/^- QGS recall is an upper estimate: .*\n/m, ""), /the record's Recall section does not state that QGS recall is an upper estimate/],
+    ["invented threat", s.text.replace(reader, `${reader}\n- nothing else threatens this sweep`), /the record's Threats section holds a threat the files do not give: "- nothing else threatens this sweep"/],
+    ["recall threat when met", s.text.replace(reader, `${reader}\n- recall target not reached: pooled topic recall 1/47; outside every pool 0, excluded by stage 1 0, not screened in stage 2 0`),
+      /the record names a recall target threat although pooled topic recall meets the target/],
+    ["unreachable when reachable", s.text.replace(reader, `${reader}\n- pooled recall target unreachable at stage 2: 1 of the 47`), /the record names an unreachable pooled recall target the stage-2 plan does not give/],
+  ];
+  for (const [name, body, error] of probes) {
+    assert.notEqual(body, s.text, name);
+    assert.match(s.errors(body), error, name);
+  }
+  const e = sweep(escalated);
+  assert.match(e.errors(e.text.replace("; the pooled bound above was measured on the set the rung was chosen on", "; nothing else to say")),
+    /the record's held-out confirmation line is not the one the held-out runs give/);
+  const m7 = sweep();
+  const path = join(m7.repo, "docs", "prior-art", "topics", "demo.json");
+  const topic = JSON.parse(readFileSync(path, "utf8"));
+  writeFileSync(path, JSON.stringify({ ...topic, sessions: { ...topic.sessions, B: { cli: "agy", model: "gemini-3.8-flash-high" } } }));
+  assert.match(m7.errors(), /protocol-freeze\.json session B is claude claude-sonnet-5-5, but the topic config names agy gemini-3\.8-flash-high/);
+});
+
 test("H-rung: stage-1 verdicts count only with their recorded session, frozen packet, examples, template and row hashes", () => {
   const key = "judge-config-stage1-brief-claude-sonnet-5-5-run1";
   const probe = (edit) => {

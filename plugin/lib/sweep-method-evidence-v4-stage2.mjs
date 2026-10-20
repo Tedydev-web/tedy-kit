@@ -85,6 +85,9 @@ export function stopTextErrors(text, strata, plans, passes, rung) {
   if (stop && !stop.reachable && !text.includes(`- pooled recall target unreachable at stage 2: ${stop.passed} of the ${stop.members} deduplicated standard members passed stage 1`)) {
     errors.push("the pooled recall target is unreachable at stage 2 and the record names no threat");
   }
+  if ((!stop || stop.reachable) && text.includes("- pooled recall target unreachable at stage 2: ")) {
+    errors.push("the record names an unreachable pooled recall target the stage-2 plan does not give");
+  }
   return errors;
 }
 

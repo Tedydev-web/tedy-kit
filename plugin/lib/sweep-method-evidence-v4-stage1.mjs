@@ -135,8 +135,8 @@ export function stage1Errors(io, sessions, strata, rows) {
       if (missed.length) errors.push(`${stratum}: rung ${chosen.rung} misses held-out positives ${missed.map((r) => r.repo).join(", ")}; it is not confirmed`);
     }
     const line = [`- held-out confirmation: rung ${chosen.rung} passed ${hits}/${positives} held-out positives, missed none; the batch's own one-sided lower bound `,
-      [positives ? lowerBound(hits, positives) : 0, 4], "; "];
-    if (hits === positives && !figureLine(io.text, line, true)) errors.push(`the record's held-out confirmation line is not the one the held-out runs give (${hits}/${positives})`);
+      [positives ? lowerBound(hits, positives) : 0, 4], "; the pooled bound above was measured on the set the rung was chosen on"];
+    if (hits === positives && !figureLine(io.text, line)) errors.push(`the record's held-out confirmation line is not the one the held-out runs give (${hits}/${positives})`);
   }
   const passes = {};
   for (const stratum of strata) {
