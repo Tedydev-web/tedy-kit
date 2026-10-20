@@ -134,9 +134,9 @@ test("item 10: a drop without its reason or copy, or a block removed by hand, fa
 
 test("item 11: PRISMA and recall are recomputed from the files, so an edited count fails the gate", () => {
   const s = sweep();
-  assert.match(s.errors(s.text.replace("| config | stage-1 screened | 99 |", "| config | stage-1 screened | 98 |")), /PRISMA config "stage-1 screened": the record says 98, the files give 99/);
-  assert.match(s.errors(s.text.replace("| product | identified: config-pool | 21 |", "")), /PRISMA product "identified: config-pool": the record says nothing, the files give 21/);
-  assert.match(s.errors(s.text.replace(/^- pooled topic recall \d+\//m, "- pooled topic recall 44/")), /pooled topic recall: the record says 44\/45, the files give \d+\/45/);
+  assert.match(s.errors(s.text.replace("| config | stage-1 screened | 133 |", "| config | stage-1 screened | 132 |")), /PRISMA config "stage-1 screened": the record says 132, the files give 133/);
+  assert.match(s.errors(s.text.replace("| product | identified: config-pool | 23 |", "")), /PRISMA product "identified: config-pool": the record says nothing, the files give 23/);
+  assert.match(s.errors(s.text.replace(/^- pooled topic recall \d+\//m, "- pooled topic recall 1/")), /pooled topic recall: the record says 1\/47, the files give \d+\/47/);
   assert.match(s.errors(s.text.replace(/^- facet beta: recall \d+\//m, "- facet beta: recall 1/")), /facet beta recall: the record says 1\/\d+, the files give/);
   const plan = s.json("config-stage2.json");
   const excluded = s.jsonl("stage1-config-brief-claude-sonnet-5-5.jsonl").find((r) => r.verdict === "no").order_rank;

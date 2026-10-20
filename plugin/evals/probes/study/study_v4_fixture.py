@@ -7,11 +7,12 @@ import re
 import shutil
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 from study_fixtures import HERE, FakeFetch, script, write_json, write_jsonl
 from study_session_prompt import QGS_REPLY_FORMAT, STAGE1_REPLY_FORMAT
-from study_topic import load_topic
+from study_topic import load_topic, terms_digest
 
 KIT = HERE.parents[3]
 CRITERIA = "docs/prior-art/quality-criteria-v4.md"
@@ -71,7 +72,9 @@ def problems_for(repo):
 def description(repo):
     if number(repo) % 10 == 9:
         return ""
-    return f"{repo}: a web kit" if number(repo) % 6 == 0 else f"{repo} guards a tdd loop"
+    if number(repo) % 6 == 0:
+        return f"{repo}: a web kit"
+    return f"{repo}: a claude hook guarding a tdd loop" if number(repo) % 5 == 0 else f"{repo} guards a tdd loop"
 
 
 def v4_repo():
@@ -93,34 +96,71 @@ def v4_repo():
     return repo
 
 
-def order_row(stratum, rank, repo):
-    shape = {"units": ["skills/tdd"]} if stratum == "config" else {"contract_files": ["src/hook.ts"]}
-    channels = ["code"] + (["repo"] if number(repo) % 4 == 0 else []) + (["config-pool"] if stratum == "product" and number(repo) % 5 == 0 else [])
-    return {"order_rank": rank, "repo": repo, "description": description(repo), "pushed": "2026-09-01", "stars": 3, "forced": False, "channels": channels, **shape}
+AGGREGATOR = "l/awesome-claude"
+SNOWBALLED = ["s/snow1", "s/snow2", "s/snow3"]
+NOW = datetime(2026, 10, 20, tzinfo=timezone.utc)
+
+
+def meta_info(repo):
+    about = "awesome claude tdd list" if repo == AGGREGATOR else description(repo)
+    return {"nameWithOwner": repo, "description": about, "createdAt": "2026-01-01T00:00:00Z", "pushedAt": "2026-09-01T00:00:00Z", "stargazerCount": 3,
+            "isArchived": False, "isFork": False, "licenseInfo": {"spdxId": "MIT"}, "defaultBranchRef": {"name": "main", "target": {"oid": "e" * 40}},
+            "issues": {"totalCount": 1}, "pullRequests": {"totalCount": 1}}
+
+
+def state(work, name, hits, terms):
+    write_json(work / name, {"hits": {r.lower(): {"repo": r, "channels": channels} for r, channels in hits.items()}, "log": [], "done": [], "terms_sha256": terms_digest(terms)})
+
+
+def run(repo, name, *args, **kwargs):
+    with contextlib.redirect_stdout(io.StringIO()):
+        script(name).main(["--topic", "demo", "--repo", str(repo), *args], **kwargs)
+
+
+def qgs_candidate_repos():
+    return [r for s in ("config", "product") for f in FACETS for r in facet_repos(s, f)[:16]] + ["o/missing7", OUTSIDE]
+
+
+def aggregator_readme():
+    lines = ["# Kits"] + [f"- [{r.split('/')[1]}](https://github.com/{r}) a claude tdd kit" for r in dict.fromkeys(qgs_candidate_repos())]
+    return "\n".join(lines + [f"- [{r.split('/')[1]}](https://github.com/{r}) a tdd snowball" for r in SNOWBALLED]) + "\n"
 
 
 def v4_work(repo):
     work = Path(tempfile.mkdtemp(prefix="study-v4-work-"))
     atexit.register(shutil.rmtree, work, ignore_errors=True)
+    terms = load_topic(repo, "demo")["terms"]
+    known = [*pool_repos("config"), *pool_repos("product"), *SNOWBALLED, AGGREGATOR]
+    write_json(work / "cache/meta.json", {r.lower(): meta_info(r) for r in known})
+    for r in [*known, OUTSIDE]:
+        write_json(work / "cache/trees" / (r.replace("/", "__") + ".json"), {"oid": "e" * 40, "paths": ["README.md", "skills/tdd/SKILL.md", "src/hook.ts"]})
+    (work / "cache/readmes").mkdir(parents=True, exist_ok=True)
+    (work / "cache/readmes" / (AGGREGATOR.replace("/", "__") + ".md")).write_text(aggregator_readme())
+    code = ['code "tdd" filename:SKILL.md: skills/tdd/SKILL.md']
+    state(work, "config-state.json", {**{r: {"github-code-search": code} for r in pool_repos("config")}, AGGREGATOR: {"repo-search": ['repos "claude tdd"']}}, terms)
+    state(work, "product-state.json", {r: {"repo": ['repos "claude tdd"']} for r in pool_repos("product")}, terms)
+    args = ["--work", str(work)]
+    run(repo, "resolve-pool", *args, "--stratum", "config", "--states", "config", fetch=FakeFetch(), now=NOW)
+    run(repo, "rank-config-pool", *args)
+    run(repo, "snowball-aggregators", *args, fetch=FakeFetch())
+    run(repo, "resolve-pool", *args, "--stratum", "config", "--states", "config,snowball", fetch=FakeFetch(), now=NOW)
+    run(repo, "rank-config-pool", *args, "--out", "config-ranked-snowball.json")
+    run(repo, "snowball-above-cut", *args, "--all")
+    run(repo, "export-screening-order", *args, "--stratum", "config", "--all")
+    run(repo, "merge-snowball-order", *args)
+    run(repo, "discover-product-pool", *args, "--channels", "config-pool", fetch=FakeFetch())
+    run(repo, "resolve-pool", *args, "--stratum", "product", "--states", "product", fetch=FakeFetch(), now=NOW)
+    run(repo, "rank-product-pool", *args)
+    run(repo, "export-screening-order", *args, "--stratum", "product", "--all")
+    run(repo, "extract-qgs-candidates", *args, fetch=FakeFetch())
     for stratum in ("config", "product"):
-        rows = [order_row(stratum, i, r) for i, r in enumerate(pool_repos(stratum), 1)]
-        write_jsonl(work / f"{stratum}-screening-order.jsonl", rows)
-        write_json(work / f"{stratum}-ranked.json", {"terms": ["tdd", "test", "guard", "lint"], "rows": rows, "aggregators": []})
         for facet in FACETS:
             write_json(work / "facets" / facet / f"{stratum}-ranked.json",
                        {"terms": FACETS[facet]["terms"], "rows": [{"order_rank": i, "repo": r} for i, r in enumerate(facet_repos(stratum, facet), 1)], "aggregators": []})
-        for row in rows:
-            write_json(work / "cache/trees" / (row["repo"].replace("/", "__") + ".json"), {"oid": "e" * 40, "paths": ["README.md", "skills/tdd/SKILL.md", "src/hook.ts"]})
         (work / f"stage1-packet-{stratum}.md").write_text(f"stage-1 packet {stratum}: problems X1 X2 X3 X4\n")
         (work / f"screening-packet-{stratum}.md").write_text(f"screening packet {stratum}: score the rows under the criteria\n")
-    (work / "qgs-packet.md").write_text("qgs packet: problems X1 X2 X3 X4\n")
-    write_json(work / "cache/trees" / (OUTSIDE.replace("/", "__") + ".json"), {"oid": "e" * 40, "paths": ["README.md", "skills/tdd/SKILL.md"]})
-    candidates = [r for s in ("config", "product") for f in FACETS for r in facet_repos(s, f)[:16]] + ["o/missing7", OUTSIDE]
-    write_jsonl(work / "qgs-candidates.jsonl", [{"id": i, "repo": r, "list": "l/awesome-claude", "heading": "Kits", "line": f"- {r}: a claude tdd kit" if r.startswith("p/") or r == OUTSIDE else f"- {r}"} for i, r in enumerate(dict.fromkeys(candidates), 1)])
-    write_json(work / "product-state.json", {"hits": {"p/a1": {"repo": "p/a1", "channels": {"config-pool": ["c"]}}, "p/a2": {"repo": "p/a2", "channels": {"config-pool": ["c"], "repo": ["r"]}}},
-                                             "terms_sha256": "x"})
-    for stratum in ("config", "product"):
         quiet(repo, "build-stage1-inputs", "--work", str(work), "--stratum", stratum, "--shape", "brief", fetch=FakeFetch())
+    (work / "qgs-packet.md").write_text("qgs packet: problems X1 X2 X3 X4\n")
     return work
 
 
