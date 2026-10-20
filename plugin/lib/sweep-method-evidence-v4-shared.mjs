@@ -88,6 +88,10 @@ export function labelledRows({ json }, read, batches) {
     }
     if (labels.set_sha256 !== sha256(set)) errors.push(`${batch}-labels.json was imported for another ${batch} set`);
     if (!freeze || labels.stage1_freeze_sha256 !== sha256(freeze)) errors.push(`${batch}-labels.json was not imported under stage1-freeze.json: the ladder is frozen before any label is read`);
+    const bound = (r) => ["id", "stratum", "order_rank", "repo", "inputs_sha256", "qgs_sha256"].map((k) => r?.[k]);
+    if (canonical((labels.rows ?? []).map(bound)) !== canonical((JSON.parse(set).rows ?? []).map(bound))) {
+      errors.push(`${batch}-labels.json does not hold exactly the rows of ${batch}-set.json`);
+    }
     if (labels.complete !== labels.rows?.length) errors.push(`the user labelled ${labels.complete} of ${labels.rows?.length} ${batch} rows`);
     rows.push(...(labels.rows ?? []).map((r) => ({ ...r, batch })));
   }

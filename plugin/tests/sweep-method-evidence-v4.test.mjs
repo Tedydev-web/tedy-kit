@@ -2,6 +2,7 @@ import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { cpSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -226,10 +227,10 @@ test("the standard, snowball and calibration batch lines are recomputed from the
   assert.match(s.errors(s.text.replace("- standard: 47 members from 67 candidates", "- standard: 47 members from 70 candidates")), /the record's standard line is not the one the QGS files give/);
   assert.match(s.errors(s.text.replace("reader queue 1 disputed or unsure", "reader queue 0 disputed or unsure")), /the record's standard line is not the one the QGS files give/);
   assert.match(s.errors(s.text.replace("- snowball: 34 repositories", "- snowball: 40 repositories")), /the record's snowball line does not state the 34 snowballed repositories/);
-  assert.match(s.errors(s.text.replace("the user labelled 35 eligible", "the user labelled 45 eligible")), /the record's calibration config batch line is not the one the label and draw files give/);
-  assert.match(s.errors(s.text.replace("drawn per facet alpha 30, beta 30; likely positives 30; the user labelled 36", "drawn per facet alpha 40, beta 20; likely positives 30; the user labelled 36")),
+  assert.match(s.errors(s.text.replace("the user labelled 31 eligible", "the user labelled 45 eligible")), /the record's calibration config batch line is not the one the label and draw files give/);
+  assert.match(s.errors(s.text.replace("drawn per facet alpha 30, beta 30; likely positives 30; the user labelled 35", "drawn per facet alpha 40, beta 20; likely positives 30; the user labelled 35")),
     /the record's calibration product batch line is not the one/);
-  assert.match(s.errors(s.text.replace("batches the rung was chosen on: 71", "batches the rung was chosen on: 90")), /the record's pooled positives are not the 71 the label files give/);
+  assert.match(s.errors(s.text.replace("batches the rung was chosen on: 66", "batches the rung was chosen on: 90")), /the record's pooled positives are not the 66 the label files give/);
 });
 
 test("the cross-family audit sample is redrawn and the cross-family and QGS judge lines are recomputed", () => {
@@ -305,6 +306,56 @@ test("the pooled stage-2 plan and its stop line are recomputed from the files, s
   const v = sweep();
   assert.match(v.errors(v.text.replace("stopped at pooled depth 42 (limit 150)", "stopped at pooled depth 40 (limit 150)")),
     /config: the record's stage-2 stop line is not the plan the files give \("stopped at pooled depth 42 \(limit 150\); this stratum screens 22 of its 98 passes; pooled recall at the stop 38\/47"\)/);
+});
+
+test("H-calibration: the gate redraws every calibration batch, binds the labels to its rows and keeps worked examples out", () => {
+  const redrawn = /calibration-set\.json is not the set its seed, the pools and the recorded unreadable rows give/;
+  const s = sweep();
+  const labels = s.json("calibration-labels.json");
+  const dropped = labels.rows.find((r) => r.user.decision === "eligible" && r.stratum === "config");
+  s.write("calibration-labels.json", { ...labels, rows: labels.rows.filter((r) => r !== dropped), complete: labels.complete - 1 });
+  for (const run of [1, 2]) {
+    const key = `judge-config-stage1-brief-claude-sonnet-5-5-run${run}`;
+    s.writeRows(`${key}.jsonl`, s.jsonl(`${key}.jsonl`).filter((r) => r.order_rank !== dropped.order_rank));
+  }
+  assert.match(s.errors(), /calibration-labels\.json does not hold exactly the rows of calibration-set\.json/);
+  const t = sweep();
+  const sample = t.json("calibration-set.json");
+  const drawn = new Set(sample.rows.filter((r) => r.stratum === "config").map((r) => r.order_rank));
+  const other = t.jsonl("config-screening-order.jsonl").find((r) => !drawn.has(r.order_rank));
+  const first = sample.rows.findIndex((r) => r.stratum === "config");
+  sample.rows[first] = { ...sample.rows[first], order_rank: other.order_rank, repo: other.repo };
+  const text = `${JSON.stringify(sample, null, 1)}\n`;
+  t.write("calibration-set.json", text);
+  const sha = createHash("sha256").update(text).digest("hex");
+  const rewritten = t.json("calibration-labels.json");
+  rewritten.rows[first] = { ...rewritten.rows[first], order_rank: other.order_rank, repo: other.repo };
+  t.write("calibration-labels.json", { ...rewritten, set_sha256: sha });
+  t.write("calibration-draw.json", { ...t.json("calibration-draw.json"), set_sha256: sha });
+  assert.match(t.errors(), redrawn);
+  const u = sweep();
+  u.write("calibration-draw.json", { ...u.json("calibration-draw.json"), set_sha256: "0".repeat(64) });
+  assert.match(u.errors(), /calibration-draw\.json was written for another calibration set/);
+  const v = sweep();
+  const small = { ...v.json("calibration-set.json"), rows_per_stratum: { config: 59, product: 60 } };
+  const smallText = `${JSON.stringify(small, null, 1)}\n`;
+  v.write("calibration-set.json", smallText);
+  const smallSha = createHash("sha256").update(smallText).digest("hex");
+  for (const name of ["calibration-labels.json", "calibration-draw.json"]) v.write(name, { ...v.json(name), set_sha256: smallSha });
+  assert.match(v.errors(), /calibration-set\.json holds \{"config":59,"product":60\} rows per stratum; the calibration set holds 60 per stratum/);
+  const w = sweep();
+  const path = join(w.repo, "docs", "prior-art", "topics", "demo.json");
+  const topic = JSON.parse(readFileSync(path, "utf8"));
+  const inSet = w.json("calibration-set.json").rows[0].repo;
+  writeFileSync(path, JSON.stringify({ ...topic, stage1_examples: topic.stage1_examples.map((e, i) => (i ? e : { ...e, repo: inSet })) }));
+  const errors = w.errors();
+  assert.match(errors, /stage1-freeze\.json froze other worked examples than the topic config's stage1_examples hold now/);
+  assert.match(errors, new RegExp(`calibration-set\\.json holds stage-1 worked-example repositories ${inSet}`));
+  writeFileSync(path, JSON.stringify({ ...topic, stage1_examples: topic.stage1_examples.map((e) => ({ ...e, why: "rewritten after the freeze" })) }));
+  assert.match(w.errors(), /stage1-freeze\.json froze other worked examples than the topic config's stage1_examples hold now/);
+  const x = sweep(escalated);
+  x.write("stage1-rung.json", { ...x.json("stage1-rung.json"), date: "2026-10-21" });
+  assert.match(x.errors(), /held-out-set\.json was not drawn after the current stage1-rung\.json/);
 });
 
 test("H-rung: stage-1 verdicts count only with their recorded session, frozen packet, examples, template and row hashes", () => {

@@ -1,7 +1,6 @@
 import hashlib
 import html
 import json
-import random
 import re
 from pathlib import Path
 
@@ -11,7 +10,7 @@ from study_screening_core import read_jsonl
 from study_screening_input import fetch_inputs, inputs_file
 from study_session import canonical_sha256, qgs_shape
 from study_session_prompt import date_cell, required_sweep_date
-from study_stage1 import FREEZE_FILE, HELD_OUT, HELD_OUT_POSITIVES, POSITIVES_NEEDED, RUNG_FILE, held_out_batches, inputs_name
+from study_stage1 import FREEZE_FILE, HELD_OUT, HELD_OUT_POSITIVES, POSITIVES_NEEDED, RUNG_FILE, examples_text, held_out_batches, inputs_name
 from study_topic import TopicError, screened_strata
 
 SET_SIZE, LIKELY_TOP, TOP_UP_MIN, TOP_UP_MAX = 60, 10, 30, 40
@@ -57,42 +56,54 @@ def facet_ranks(work, facet, stratum):
     return {r["repo"].lower(): r["order_rank"] for r in json.loads(path.read_text())["rows"]}
 
 
-def take(topic, work, stratum, queue, picked, fetch, want):
-    taken = []
-    while queue and len(taken) < want:
-        row = queue.pop()
-        if row["order_rank"] in picked:
-            continue
+def fetched(topic, work, stratum, fetch, skipped):
+    def readable(row):
         fetch_inputs(topic, work, stratum, 0, fetch, ranks={row["order_rank"]})
         held = {r["order_rank"]: r for r in read_jsonl(Path(work), inputs_file(work, stratum).name)}[row["order_rank"]]
         if held.get("error_kind") == "transient":
             raise TopicError(f"{stratum} rank {row['order_rank']} ({row['repo']}) has a transient fetch error ({held['error']}); draw again, the seed picks the same rows")
         if held.get("error_kind") == "permanent":
+            skipped.append(row["order_rank"])
+            return False
+        return True
+    return readable
+
+
+def take(queue, picked, readable, want):
+    taken = []
+    while queue and len(taken) < want:
+        row = queue.pop(0)
+        if row["order_rank"] in picked or not readable(row):
             continue
         taken.append(row)
     return taken
+
+
+def hash_key(seed, tag):
+    return lambda row: hashlib.sha256(f"{seed}:{tag}:{row['order_rank']}".encode()).hexdigest()
 
 
 def all_batches(work):
     return [b for b in BATCHES[:2] if (Path(work) / set_file(b)).is_file()] + held_out_batches(work)
 
 
-def drawn_before(work):
-    return {(r["stratum"], r["order_rank"]) for batch in all_batches(work) for r in json.loads((Path(work) / set_file(batch)).read_text())["rows"]}
+def drawn_before(work, batch=None):
+    batches = all_batches(work)
+    earlier = batches[:batches.index(batch)] if batch in batches else batches
+    return {(r["stratum"], r["order_rank"]) for b in earlier for r in json.loads((Path(work) / set_file(b)).read_text())["rows"]}
 
 
 def example_repos(topic):
     return {str(e.get("repo", "")).lower() for e in topic.get("stage1_examples") or [] if isinstance(e, dict)}
 
 
-def draw_stratum(topic, work, stratum, size, enriched_only, rng, fetch):
+def draw_stratum(topic, work, batch, stratum, size, enriched_only, readable):
     order = read_jsonl(Path(work), f"{stratum}-screening-order.jsonl")
     if not order:
         raise TopicError(f"no {stratum}-screening-order.jsonl in {work}; export the whole pool first")
-    if not (Path(work) / inputs_name(stratum, "brief")).is_file():
-        raise TopicError(f"no {inputs_name(stratum, 'brief')} in {work}; the calibration set is drawn after the stage-1 inputs exist")
+    seed = f"{topic['sweep']}:{batch}:{stratum}"
     candidates = {r["repo"].lower() for r in read_jsonl(Path(work), candidates_file(work).name)}
-    taken_before = {rank for s, rank in drawn_before(work) if s == stratum}
+    taken_before = {rank for s, rank in drawn_before(work, batch) if s == stratum}
     examples = example_repos(topic)
     order = [r for r in order if r["repo"].lower() not in examples]
     names = list(topic["facets"])
@@ -101,25 +112,69 @@ def draw_stratum(topic, work, stratum, size, enriched_only, rng, fetch):
         share = size // len(names) + (1 if index < size % len(names) else 0)
         ranks = facet_ranks(work, facet, stratum)
         pool = sorted((r for r in order if r["repo"].lower() in ranks and r["order_rank"] not in taken_before), key=lambda r: ranks[r["repo"].lower()])
-        likely = [r for r in pool if r["repo"].lower() in candidates or ranks[r["repo"].lower()] <= LIKELY_TOP]
+        likely = sorted((r for r in pool if r["repo"].lower() in candidates or ranks[r["repo"].lower()] <= LIKELY_TOP), key=hash_key(seed, f"{facet}:likely"))
         others = [r for r in pool if r not in likely]
         random_ranks = set() if enriched_only else {r["order_rank"] for r in others}
-        rng.shuffle(likely)
-        if enriched_only:
-            others.reverse()
-        else:
-            rng.shuffle(others)
-        rows = take(topic, work, stratum, likely, picked, fetch, share if enriched_only else (share + 1) // 2)
-        rows += take(topic, work, stratum, others, picked, fetch, share - len(rows))
-        rows += take(topic, work, stratum, likely, picked, fetch, share - len(rows))
+        if not enriched_only:
+            others.sort(key=hash_key(seed, f"{facet}:random"))
+        rows = take(likely, picked, readable, share if enriched_only else (share + 1) // 2)
+        rows += take(others, picked, readable, share - len(rows))
+        rows += take(likely, picked, readable, share - len(rows))
         if len(rows) < share:
             raise TopicError(f"{stratum} facet {facet}: only {len(rows)} readable rows left to draw, the batch needs {share}")
         for row in rows:
             picked[row["order_rank"]] = row
             kind = "random" if row["order_rank"] in random_ranks else ("qgs candidate" if row["repo"].lower() in candidates else "top-ranked")
             drawn.append({"order_rank": row["order_rank"], "facet": facet, "class": kind, "facet_rank": ranks[row["repo"].lower()]})
-    rng.shuffle(drawn)
+    drawn.sort(key=hash_key(seed, "order"))
     return [picked[d["order_rank"]] for d in drawn], drawn
+
+
+def redraw(topic, folder, batch):
+    sample = json.loads((Path(folder) / set_file(batch)).read_text())
+    skipped = json.loads((Path(folder) / f"{batch}-draw.json").read_text()).get("skipped") or {}
+    rows, provenance = [], []
+    for stratum, count in sample["rows_per_stratum"].items():
+        unreadable = set(skipped.get(stratum) or [])
+        picked, drawn = draw_stratum(topic, folder, batch, stratum, count, batch != "calibration", lambda row, gone=unreadable: row["order_rank"] not in gone)
+        for number, (row, how) in enumerate(zip(picked, drawn), 1):
+            key = f"{batch}-{stratum}-{number}"
+            rows.append({"id": key, "stratum": stratum, "order_rank": row["order_rank"], "repo": row["repo"]})
+            provenance.append({"id": key, **{k: how[k] for k in ("facet", "class", "facet_rank")}})
+    return rows, provenance
+
+
+def batch_sizes(topic, batch, sizes):
+    strata = calibrated(topic)
+    if batch == "calibration":
+        return sizes == {s: SET_SIZE for s in strata}, f"the calibration set holds {SET_SIZE} per stratum"
+    total = sum(sizes.values()) if isinstance(sizes, dict) else 0
+    split = {s: total // len(strata) + (1 if i < total % len(strata) else 0) for i, s in enumerate(strata)}
+    return TOP_UP_MIN <= total <= TOP_UP_MAX and sizes == split, f"a {batch} batch holds {TOP_UP_MIN} to {TOP_UP_MAX} rows split evenly over the strata"
+
+
+def calibration_checks(topic, folder):
+    folder = Path(folder)
+    for batch in all_batches(folder):
+        sample = json.loads((folder / set_file(batch)).read_text())
+        set_sha = hashlib.sha256((folder / set_file(batch)).read_bytes()).hexdigest()
+        if json.loads((folder / f"{batch}-draw.json").read_text()).get("set_sha256") != set_sha:
+            raise TopicError(f"{batch}-draw.json was written for another {batch} set; the draw records the hash of the set it wrote")
+        labelled(folder, (batch,))
+        fits, rule = batch_sizes(topic, batch, sample["rows_per_stratum"])
+        if not fits:
+            raise TopicError(f"{set_file(batch)} holds {sample['rows_per_stratum']} rows per stratum; {rule}")
+        leaked = sorted({r["repo"] for r in sample["rows"]} & example_repos(topic))
+        if leaked:
+            raise TopicError(f"{set_file(batch)} holds stage-1 worked-example repositories {leaked}")
+        if HELD_OUT.match(batch) and sample.get("rung_sha256") != hashlib.sha256((folder / RUNG_FILE).read_bytes()).hexdigest():
+            raise TopicError(f"{set_file(batch)} was not drawn after the current {RUNG_FILE}; a held-out batch is drawn once the rung is chosen")
+        rows, provenance = redraw(topic, folder, batch)
+        if [{k: r[k] for k in ("id", "stratum", "order_rank", "repo")} for r in sample["rows"]] != rows or \
+                json.loads((folder / f"{batch}-draw.json").read_text())["rows"] != provenance:
+            raise TopicError(f"{set_file(batch)} is not the set its seed, the pools and the recorded unreadable rows give; a batch is drawn once, by draw-calibration-set.py")
+    if json.loads((folder / FREEZE_FILE).read_text()).get("examples_sha256") != hashlib.sha256(examples_text(topic).encode()).hexdigest():
+        raise TopicError(f"{FREEZE_FILE} froze other worked examples than the topic config's stage1_examples hold now")
 
 
 def labelled(folder, batches=("calibration",)):
@@ -134,6 +189,10 @@ def labelled(folder, batches=("calibration",)):
         freeze = Path(folder) / FREEZE_FILE
         if not freeze.is_file() or labels.get("stage1_freeze_sha256") != hashlib.sha256(freeze.read_bytes()).hexdigest():
             raise TopicError(f"{path.name} was not imported under the current {FREEZE_FILE}; the ladder is frozen before any label is read")
+        bound = ("id", "stratum", "order_rank", "repo", "inputs_sha256", "qgs_sha256")
+        drawn = json.loads((Path(folder) / set_file(batch)).read_text())["rows"]
+        if [[r.get(k) for k in bound] for r in labels["rows"]] != [[r.get(k) for k in bound] for r in drawn]:
+            raise TopicError(f"{path.name} does not hold exactly the rows of {set_file(batch)}; import the labels again for the drawn set")
         if labels["complete"] != len(labels["rows"]):
             raise TopicError(f"the user labelled {labels['complete']} of {len(labels['rows'])} {batch} rows; every row needs its label")
         rows += [{**r, "batch": batch} for r in labels["rows"]]
@@ -185,10 +244,12 @@ def draw_batch(topic, repo, work, criteria, fetch, top_up=None, today=None):
     if not criteria_path.is_file():
         raise TopicError(f"no criteria file at {criteria_path}")
     anchor = anchors(criteria_path.read_text())
-    rows, provenance, shown = [], [], []
+    rows, provenance, shown, skipped = [], [], [], {}
     for stratum, count in size.items():
-        rng = random.Random(f"{topic['sweep']}:{batch}:{stratum}")
-        picked, drawn = draw_stratum(topic, work, stratum, count, top_up is not None, rng, fetch)
+        if not (work / inputs_name(stratum, "brief")).is_file():
+            raise TopicError(f"no {inputs_name(stratum, 'brief')} in {work}; the calibration set is drawn after the stage-1 inputs exist")
+        skipped[stratum] = []
+        picked, drawn = draw_stratum(topic, work, batch, stratum, count, top_up is not None, fetched(topic, work, stratum, fetch, skipped[stratum]))
         inputs = {r["order_rank"]: r for r in read_jsonl(work, inputs_file(work, stratum).name)}
         for number, (row, how) in enumerate(zip(picked, drawn), 1):
             key = f"{batch}-{stratum}-{number}"
@@ -199,8 +260,12 @@ def draw_batch(topic, repo, work, criteria, fetch, top_up=None, today=None):
             shown.append((key, stratum, held))
     sample = {"sweep": topic["sweep"], "batch": batch, "purpose": purpose, "drawn": today, "criteria": criteria, "criteria_sha256": hashlib.sha256(criteria_path.read_bytes()).hexdigest(),
               "rows_per_stratum": size, "rows": rows}
+    if HELD_OUT.match(batch):
+        sample["rung_sha256"] = hashlib.sha256((work / RUNG_FILE).read_bytes()).hexdigest()
     text = json.dumps(sample, indent=1, ensure_ascii=False) + "\n"
-    return batch, text, {"seed": f"{topic['sweep']}:{batch}:<stratum>", "rows": provenance}, page(topic, batch, hashlib.sha256(text.encode()).hexdigest(), shown, anchor)
+    set_sha = hashlib.sha256(text.encode()).hexdigest()
+    draw = {"seed": f"{topic['sweep']}:{batch}:<stratum>", "set_sha256": set_sha, "skipped": {s: sorted(r) for s, r in skipped.items()}, "rows": provenance}
+    return batch, text, draw, page(topic, batch, set_sha, shown, anchor)
 
 
 def pre(value):

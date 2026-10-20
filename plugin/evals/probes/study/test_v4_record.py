@@ -1,3 +1,4 @@
+import hashlib
 import json
 import shutil
 import tempfile
@@ -74,7 +75,7 @@ class V4RecordTest(unittest.TestCase):
         self.assertIn("- chosen: rung 1 after 1 rungs tried", stage1)
         self.assertRegex(stage1, r"- rung 1 config: run 1 sensitivity \d+/\d+ \(95% CI 0\.\d\d-1\.00\), pass rate 0\.\d{3}; run 2 sensitivity \d+/\d+ \(95% CI .*\), "
                                  r"pass rate 0\.\d{3}\n")
-        self.assertIn("- rung 1: run 1 71/71 positives passed, one-sided 95% lower bound 0.9587", stage1)
+        self.assertIn("- rung 1: run 1 66/66 positives passed, one-sided 95% lower bound 0.9556", stage1)
         self.assertRegex(stage1, r"- config stage-1 audit: 0 model disagreements .*; near excludes \d+ of \d+ read, 0 confirmed eligible, upper elusion bound 0\.\d+, at most \d+ of the \d+ eligible; far excludes .*; the stage-2 screener flagged 1 and the user checked every flagged row")
 
     def test_the_standard_lists_drops_and_the_cross_family_join_and_the_audit_follows_stage_2(self):
@@ -151,6 +152,43 @@ class V4RecordTest(unittest.TestCase):
         with self.assertRaisesRegex(TopicError, "audit-sample.json is not the sample the stage-2 files give; the cross-family audit is drawn once, by draw-audit-sample.py"):
             self.render(repo)
 
+    def test_the_record_redraws_each_calibration_batch_and_binds_the_labels_to_its_rows(self):
+        repo, folder = self.copy()
+        labels = json.loads((folder / "calibration-labels.json").read_text())
+        (folder / "calibration-labels.json").write_text(json.dumps({**labels, "rows": labels["rows"][1:], "complete": labels["complete"] - 1}))
+        with self.assertRaisesRegex(TopicError, "calibration-labels.json does not hold exactly the rows of calibration-set.json"):
+            self.render(repo)
+        repo, folder = self.copy()
+        sample = json.loads((folder / "calibration-set.json").read_text())
+        drawn = {r["order_rank"] for r in sample["rows"] if r["stratum"] == "config"}
+        other = next(json.loads(line) for line in (folder / "config-screening-order.jsonl").read_text().splitlines() if json.loads(line)["order_rank"] not in drawn)
+        first = next(i for i, r in enumerate(sample["rows"]) if r["stratum"] == "config")
+        sample["rows"][first] = {**sample["rows"][first], "order_rank": other["order_rank"], "repo": other["repo"]}
+        text = json.dumps(sample, indent=1, ensure_ascii=False) + "\n"
+        (folder / "calibration-set.json").write_text(text)
+        sha = hashlib.sha256(text.encode()).hexdigest()
+        labels = json.loads((folder / "calibration-labels.json").read_text())
+        labels["rows"][first] = {**labels["rows"][first], "order_rank": other["order_rank"], "repo": other["repo"]}
+        (folder / "calibration-labels.json").write_text(json.dumps({**labels, "set_sha256": sha}))
+        draw = json.loads((folder / "calibration-draw.json").read_text())
+        (folder / "calibration-draw.json").write_text(json.dumps({**draw, "set_sha256": sha}))
+        with self.assertRaisesRegex(TopicError, "calibration-set.json is not the set its seed, the pools and the recorded unreadable rows give"):
+            self.render(repo)
+        repo, folder = self.copy()
+        draw = json.loads((folder / "calibration-draw.json").read_text())
+        (folder / "calibration-draw.json").write_text(json.dumps({**draw, "set_sha256": "0" * 64}))
+        with self.assertRaisesRegex(TopicError, "calibration-draw.json was written for another calibration set"):
+            self.render(repo)
+        repo, folder = self.copy()
+        sample = json.loads((folder / "calibration-set.json").read_text())
+        text = json.dumps({**sample, "rows_per_stratum": {"config": 59, "product": 60}}, indent=1, ensure_ascii=False) + "\n"
+        (folder / "calibration-set.json").write_text(text)
+        sha = hashlib.sha256(text.encode()).hexdigest()
+        for name in ("calibration-labels.json", "calibration-draw.json"):
+            (folder / name).write_text(json.dumps({**json.loads((folder / name).read_text()), "set_sha256": sha}))
+        with self.assertRaisesRegex(TopicError, r"calibration-set.json holds \{'config': 59, 'product': 60\} rows per stratum; the calibration set holds 60 per stratum"):
+            self.render(repo)
+
     def test_a_snowball_with_a_cut_is_refused_under_v4(self):
         repo, folder = self.copy()
         cut = json.loads((folder / "snowball-cut.json").read_text())
@@ -189,6 +227,22 @@ class V4EscalatedRungRecordTest(unittest.TestCase):
         self.assertRegex(stage1, r"- held-out confirmation: rung 2 passed (\d+)/\1 held-out positives, missed none; the batch's own one-sided lower bound 0\.\d{4}; "
                                  r"the pooled bound above was measured on the set the rung was chosen on")
         self.assertRegex(section(text, "Calibration"), r"- held-out config: \d+ rows \(stage-1 rung 2 was chosen above the first: the rows are held out to confirm it\)")
+        folder = built / "docs/prior-art/sweeps" / SWEEP
+        original = (folder / "stage1-rung.json").read_text()
+        rung = json.loads(original)
+        (folder / "stage1-rung.json").write_text(json.dumps({**rung, "date": "2026-10-21"}))
+        with self.assertRaisesRegex(TopicError, "held-out-set.json was not drawn after the current stage1-rung.json"):
+            render(built, load_topic(built, "demo"))
+        path = built / "docs/prior-art/topics/demo.json"
+        topic = json.loads(path.read_text())
+        (folder / "stage1-rung.json").write_text(original)
+        inside = json.loads((folder / "calibration-set.json").read_text())["rows"][0]["repo"]
+        path.write_text(json.dumps({**topic, "stage1_examples": [{**topic["stage1_examples"][0], "repo": inside}] + topic["stage1_examples"][1:]}))
+        with self.assertRaisesRegex(TopicError, rf"calibration-set.json holds stage-1 worked-example repositories \['{inside}'\]"):
+            render(built, load_topic(built, "demo"))
+        path.write_text(json.dumps({**topic, "stage1_examples": [{**topic["stage1_examples"][0], "why": "rewritten after the freeze"}] + topic["stage1_examples"][1:]}))
+        with self.assertRaisesRegex(TopicError, "stage1-freeze.json froze other worked examples than the topic config's stage1_examples hold now"):
+            render(built, load_topic(built, "demo"))
 
 
 if __name__ == "__main__":

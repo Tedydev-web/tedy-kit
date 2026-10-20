@@ -74,6 +74,24 @@ class CalibrationSetTest(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "no stage1-inputs-product-brief.jsonl in .*; the calibration set is drawn after the stage-1 inputs exist"):
             draw(self.repo, early)
 
+    def test_the_draw_orders_rows_by_sha256_under_the_seed_records_unreadable_rows_and_replays_without_fetching(self):
+        from study_calibration_set import redraw
+        from study_topic import load_topic
+        drawn = json.loads((self.work / "calibration-draw.json").read_text())
+        self.assertEqual(drawn["set_sha256"], hashlib.sha256((self.work / "calibration-set.json").read_bytes()).hexdigest())
+        self.assertEqual(set(drawn["skipped"]), {"config", "product"})
+        config = [r["order_rank"] for r in self.sample["rows"] if r["stratum"] == "config"]
+        self.assertEqual(config, sorted(config, key=lambda r: hashlib.sha256(f"261020-demo:calibration:config:order:{r}".encode()).hexdigest()))
+        topic = load_topic(self.repo, "demo")
+        rows, provenance = redraw(topic, self.work, "calibration")
+        self.assertEqual(rows, [{k: r[k] for k in ("id", "stratum", "order_rank", "repo")} for r in self.sample["rows"]])
+        self.assertEqual(provenance, drawn["rows"])
+        copy = Path(tempfile.mkdtemp(prefix="study-redraw-"))
+        self.addCleanup(shutil.rmtree, copy, ignore_errors=True)
+        shutil.copytree(self.work, copy, dirs_exist_ok=True)
+        write_json(copy / "calibration-draw.json", {**drawn, "skipped": {**drawn["skipped"], "config": sorted(drawn["skipped"]["config"] + [config[0]])}})
+        self.assertNotIn(config[0], [r["order_rank"] for r in redraw(topic, copy, "calibration")[0]])
+
     def test_repositories_used_as_stage1_worked_examples_are_never_drawn(self):
         repo = v4_repo()
         path = repo / "docs/prior-art/topics/demo.json"

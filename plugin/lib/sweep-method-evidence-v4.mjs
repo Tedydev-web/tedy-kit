@@ -1,3 +1,4 @@
+import { calibrationErrors } from "./sweep-method-evidence-v4-calibration.mjs";
 import { judgeErrors } from "./sweep-method-evidence-v4-judges.mjs";
 import { stage1AuditErrors, stage1Errors } from "./sweep-method-evidence-v4-stage1.mjs";
 import { agreementErrors, decisionErrors, prismaErrors, stage2Errors } from "./sweep-method-evidence-v4-stage2.mjs";
@@ -251,6 +252,7 @@ export function v4Errors(text, { read, files, topic, meta }) {
   const stage2 = stage2Errors(io, sessions, strata, stage1.passes, qgs.members, stage1.rung?.rung);
   return [
     ...labelled.errors,
+    ...calibrationErrors(io, topic),
     ...batchLineErrors(io, topic, strata, text),
     ...qgs.errors,
     ...judgeErrors(io, topic, sessions, strata, labelled.rows, batches),
