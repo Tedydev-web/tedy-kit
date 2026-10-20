@@ -137,7 +137,7 @@ def threat_lines(topic, strata, sessions, freeze, threats, folder):
     if unbare:
         threats.append(f"- {NO_BARE_THREAT}: {', '.join(unbare)} ran without --bare because no API-key auth source was set; settings, MCP servers, CLAUDE.md, "
                        "tools and session persistence were still excluded, but installed plugin hooks may have run")
-    agy = sorted(k for k, e in sessions.items() if AGY_THREAT in (e.get("threats") or []))
+    agy = sorted(k for k, e in sessions.items() if e.get("cli") == "agy")
     if agy:
         threats.append(f"- {AGY_THREAT}: {', '.join(agy)} ran through agy, which has no flag to exclude its configured MCP servers, hooks or user settings; "
                        "its tools stay offered, so a reply with any tool step, denied action or second turn is refused")

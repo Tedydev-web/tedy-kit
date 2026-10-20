@@ -649,6 +649,20 @@ test("every session names the roster cli as well as the model: production QGS, s
   }
 });
 
+test("the agy threat lists every session that ran through agy, whatever the session's threats field holds", () => {
+  const s = sweep();
+  const meta = s.json("meta.json");
+  delete meta.sessions["config-audit-gemini-3.8-flash-high"].threats;
+  s.write("meta.json", meta);
+  const both = "- agy MCP servers, hooks and user settings not excluded: config-audit-gemini-3.8-flash-high, product-audit-gemini-3.8-flash-high ran through agy";
+  const text = s.rendered();
+  assert.ok(text.includes(both), text.split("\n").find((l) => l.startsWith("- agy")));
+  assert.equal(s.errors(text), "");
+  const errors = s.errors(text.replace(both, both.replace("config-audit-gemini-3.8-flash-high, ", ""))).split("\n");
+  assert.ok(errors.some((l) => l.startsWith("the record renderer refused") || l.startsWith("the record is not the one")));
+  assert.ok(errors.some((l) => /threat/.test(l) && !l.startsWith("the record ")), errors.join("\n"));
+});
+
 test("the cross-family audit carries the frozen packet and criteria and the row hashes of the rows stage 2 screened", () => {
   const key = "config-audit-gemini-3.8-flash-high";
   const probes = [

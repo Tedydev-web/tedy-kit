@@ -67,7 +67,7 @@ function baseThreats(topic, strata, sessions, freeze, papers) {
     threats.push(`- ${NO_BARE_THREAT}: ${unbare.join(", ")} ran without --bare because no API-key auth source was set; settings, MCP servers, CLAUDE.md, `
       + "tools and session persistence were still excluded, but installed plugin hooks may have run");
   }
-  const agy = flagged(AGY_THREAT);
+  const agy = sorted(Object.entries(sessions).filter(([, e]) => e.cli === "agy").map(([k]) => k));
   if (agy.length) {
     threats.push(`- ${AGY_THREAT}: ${agy.join(", ")} ran through agy, which has no flag to exclude its configured MCP servers, hooks or user settings; `
       + "its tools stay offered, so a reply with any tool step, denied action or second turn is refused");

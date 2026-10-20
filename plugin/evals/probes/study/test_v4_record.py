@@ -318,6 +318,14 @@ class V4RecordTest(unittest.TestCase):
         with self.assertRaisesRegex(TopicError, r"^the drop of qgs-judge-B ranks \[1, 5\] records no reason"):
             self.render(repo)
 
+    def test_the_agy_threat_lists_every_session_that_ran_through_agy_whatever_its_threats_field_holds(self):
+        repo, folder = self.copy()
+        meta = json.loads((folder / "meta.json").read_text())
+        meta["sessions"]["config-audit-gemini-3.8-flash-high"]["threats"] = []
+        (folder / "meta.json").write_text(json.dumps(meta))
+        self.assertIn("- agy MCP servers, hooks and user settings not excluded: config-audit-gemini-3.8-flash-high, product-audit-gemini-3.8-flash-high ran through agy",
+                      self.render(repo))
+
     def test_every_session_names_the_roster_cli_as_well_as_the_model(self):
         for key, message in (("qgs-judge-A", r"qgs-judge-A.jsonl: its \d+ judgments are not all claude claude-opus-5-5 runs"),
                              ("judge-config-stage1-brief-claude-sonnet-5-5-run2", r"judge-config-stage1-brief-claude-sonnet-5-5-run2.jsonl has no claude claude-sonnet-5-5 session"),
