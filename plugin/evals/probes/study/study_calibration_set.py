@@ -5,22 +5,31 @@ import random
 import re
 from pathlib import Path
 
-from study_agreement import HARD_CAP
 from study_calibration import CALIBRATED_STRATA
-from study_facets import facet_names
+from study_qgs import candidates_file
 from study_screening_core import read_jsonl
 from study_screening_input import fetch_inputs, inputs_file
-from study_session import canonical_sha256
+from study_session import canonical_sha256, qgs_shape
 from study_session_prompt import date_cell, required_sweep_date
+from study_stage1 import FREEZE_FILE, POSITIVES_NEEDED, RUNG_FILE, inputs_name
 from study_topic import TopicError, screened_strata
 
-SET_FILE, DRAW_FILE, LABELS_FILE, PAGE_FILE = "calibration-set.json", "calibration-draw.json", "calibration-labels.json", "calibration.html"
-SET_SIZE, LIKELY_TOP = 60, 10
+SET_SIZE, LIKELY_TOP, TOP_UP_MIN, TOP_UP_MAX = 60, 10, 30, 40
+BATCHES = ("calibration", "top-up", "held-out")
 LABELLED = ("Authority", "Methodology", "Objectivity", "Position", "Relevance")
-FIELDS = (*LABELLED, "decision")
+FIELDS = (*LABELLED, "problems", "decision")
 EXCLUDE_CODES = {"irrelevant": "không liên quan", "below-threshold": "dưới ngưỡng", "copy": "bản sao của nguồn khác", "dead": "không đọc được: repository hoặc commit đã mất",
                  "aggregator": "danh sách tổng hợp"}
 RATINGS = (1, 0.5, 0)
+SET_FILE, DRAW_FILE, LABELS_FILE, PAGE_FILE = "calibration-set.json", "calibration-draw.json", "calibration-labels.json", "calibration.html"
+
+
+def set_file(batch):
+    return f"{batch}-set.json"
+
+
+def labels_file(batch):
+    return f"{batch}-labels.json"
 
 
 def anchors(text):
@@ -41,9 +50,11 @@ def calibrated(topic):
     return strata
 
 
-def facet_pool(order, facet):
-    rows = [r for r in order if facet in r["facets"] and not r["facets"][facet]["forced"] and r["facets"][facet]["rank"] <= HARD_CAP]
-    return sorted(rows, key=lambda r: r["facets"][facet]["rank"])
+def facet_ranks(work, facet, stratum):
+    path = Path(work) / "facets" / facet / f"{stratum}-ranked.json"
+    if not path.is_file():
+        raise TopicError(f"no {path}; rank every facet before the calibration draw, its best ranks enrich the set")
+    return {r["repo"].lower(): r["order_rank"] for r in json.loads(path.read_text())["rows"]}
 
 
 def take(topic, work, stratum, queue, picked, fetch, want):
@@ -62,67 +73,123 @@ def take(topic, work, stratum, queue, picked, fetch, want):
     return taken
 
 
-def draw_stratum(topic, work, stratum, names, fetch):
+def drawn_before(work):
+    return {(r["stratum"], r["order_rank"]) for batch in BATCHES if (Path(work) / set_file(batch)).is_file() for r in json.loads((Path(work) / set_file(batch)).read_text())["rows"]}
+
+
+def draw_stratum(topic, work, stratum, size, enriched_only, rng, fetch):
     order = read_jsonl(Path(work), f"{stratum}-screening-order.jsonl")
-    if not order or "facets" not in order[0]:
-        raise TopicError(f"no merged {stratum}-screening-order.jsonl in {work}; run merge-facet-orders.py first")
-    listed = Path(work) / f"{stratum}-qgs-candidates.jsonl"
-    if not listed.is_file():
-        raise TopicError(f"no {listed.name} in {work}; the likely positives are drawn from the QGS candidates, so extract them first")
-    candidates = {r["repo"].lower() for r in read_jsonl(listed.parent, listed.name)}
-    rng = random.Random(f"{topic['sweep']}:{stratum}")
+    if not order:
+        raise TopicError(f"no {stratum}-screening-order.jsonl in {work}; export the whole pool first")
+    if not (Path(work) / inputs_name(stratum, "brief")).is_file():
+        raise TopicError(f"no {inputs_name(stratum, 'brief')} in {work}; the calibration set is drawn after the stage-1 inputs exist")
+    candidates = {r["repo"].lower() for r in read_jsonl(Path(work), candidates_file(work).name)}
+    taken_before = {rank for s, rank in drawn_before(work) if s == stratum}
+    names = list(topic["facets"])
     picked, drawn = {}, []
     for index, facet in enumerate(names):
-        share = SET_SIZE // len(names) + (1 if index < SET_SIZE % len(names) else 0)
-        pool = [r for r in facet_pool(order, facet) if r["order_rank"] not in picked]
-        likely = [r for r in pool if r["repo"].lower() in candidates or r["facets"][facet]["rank"] <= LIKELY_TOP]
+        share = size // len(names) + (1 if index < size % len(names) else 0)
+        ranks = facet_ranks(work, facet, stratum)
+        pool = sorted((r for r in order if r["repo"].lower() in ranks and r["order_rank"] not in taken_before), key=lambda r: ranks[r["repo"].lower()])
+        likely = [r for r in pool if r["repo"].lower() in candidates or ranks[r["repo"].lower()] <= LIKELY_TOP]
         others = [r for r in pool if r not in likely]
-        random_ranks = {r["order_rank"] for r in others}
+        random_ranks = set() if enriched_only else {r["order_rank"] for r in others}
         rng.shuffle(likely)
-        rng.shuffle(others)
-        rows = take(topic, work, stratum, likely, picked, fetch, (share + 1) // 2)
+        if enriched_only:
+            others.reverse()
+        else:
+            rng.shuffle(others)
+        rows = take(topic, work, stratum, likely, picked, fetch, share if enriched_only else (share + 1) // 2)
         rows += take(topic, work, stratum, others, picked, fetch, share - len(rows))
         rows += take(topic, work, stratum, likely, picked, fetch, share - len(rows))
         if len(rows) < share:
-            raise TopicError(f"{stratum} facet {facet}: only {len(rows)} readable rows in its top {HARD_CAP}, the set needs {share}")
+            raise TopicError(f"{stratum} facet {facet}: only {len(rows)} readable rows left to draw, the batch needs {share}")
         for row in rows:
             picked[row["order_rank"]] = row
             kind = "random" if row["order_rank"] in random_ranks else ("qgs candidate" if row["repo"].lower() in candidates else "top-ranked")
-            drawn.append({"order_rank": row["order_rank"], "facet": facet, "class": kind, "facet_rank": row["facets"][facet]["rank"]})
+            drawn.append({"order_rank": row["order_rank"], "facet": facet, "class": kind, "facet_rank": ranks[row["repo"].lower()]})
     rng.shuffle(drawn)
     return [picked[d["order_rank"]] for d in drawn], drawn
 
 
-def draw_set(topic, repo, work, criteria, fetch):
-    names = facet_names(topic)
+def labelled(folder, batches=("calibration",)):
+    rows = []
+    for batch in batches:
+        path = Path(folder) / labels_file(batch)
+        if not path.is_file():
+            raise TopicError(f"no {path.name} in {folder}; the user labels the {batch} batch and import-calibration-labels.py keeps the labels")
+        labels = json.loads(path.read_text())
+        if labels.get("set_sha256") != hashlib.sha256((Path(folder) / set_file(batch)).read_bytes()).hexdigest():
+            raise TopicError(f"{path.name} was imported for another {batch} set; import the labels again")
+        freeze = Path(folder) / FREEZE_FILE
+        if not freeze.is_file() or labels.get("stage1_freeze_sha256") != hashlib.sha256(freeze.read_bytes()).hexdigest():
+            raise TopicError(f"{path.name} was not imported under the current {FREEZE_FILE}; the ladder is frozen before any label is read")
+        if labels["complete"] != len(labels["rows"]):
+            raise TopicError(f"the user labelled {labels['complete']} of {len(labels['rows'])} {batch} rows; every row needs its label")
+        rows += [{**r, "batch": batch} for r in labels["rows"]]
+    return rows
+
+
+def batch_purpose(folder, batch):
+    path = Path(folder) / set_file(batch)
+    return json.loads(path.read_text()).get("purpose") if path.is_file() else None
+
+
+def top_up_trigger(folder):
+    rows = labelled(folder, ("calibration",) + (("top-up",) if (Path(folder) / labels_file("top-up")).is_file() else ()))
+    positives = sum(r["user"]["decision"] == "eligible" for r in rows)
+    if positives < POSITIVES_NEEDED:
+        if (Path(folder) / set_file("top-up")).is_file():
+            raise TopicError(f"the set and its top-up batch hold {positives} positives pooled, still fewer than {POSITIVES_NEEDED}; stage 1 cannot be certified on them")
+        return "top-up", f"fewer than {POSITIVES_NEEDED} positives pooled ({positives}): the rows join the pooled bound"
+    rung = json.loads((Path(folder) / RUNG_FILE).read_text())["rung"] if (Path(folder) / RUNG_FILE).is_file() else None
+    if rung and rung > 1:
+        if (Path(folder) / set_file("held-out")).is_file():
+            raise TopicError("the held-out batch is already drawn")
+        return "held-out", f"stage-1 rung {rung} was chosen above the first: the rows are held out to confirm it"
+    raise TopicError(f"no top-up trigger fired: the labels hold {positives} positives pooled (at least {POSITIVES_NEEDED}) and "
+                     + ("rung 1 was chosen" if rung == 1 else "no stage-1 rung is chosen yet"))
+
+
+def draw_batch(topic, repo, work, criteria, fetch, top_up=None):
     work = Path(work)
-    if (work / SET_FILE).exists():
-        raise TopicError(f"{work / SET_FILE} already exists; the user's labels are tied to it, so it is never redrawn")
+    if top_up is None:
+        batch, purpose, size = "calibration", "the calibration set", {s: SET_SIZE for s in calibrated(topic)}
+    else:
+        if not TOP_UP_MIN <= top_up <= TOP_UP_MAX:
+            raise TopicError(f"a top-up batch holds {TOP_UP_MIN} to {TOP_UP_MAX} rows, not {top_up}")
+        batch, purpose = top_up_trigger(work)
+        strata = calibrated(topic)
+        size = {s: top_up // len(strata) + (1 if i < top_up % len(strata) else 0) for i, s in enumerate(strata)}
+    if (work / set_file(batch)).exists():
+        raise TopicError(f"{work / set_file(batch)} already exists; the user's labels are tied to it, so it is never redrawn")
     criteria_path = Path(repo) / criteria
     if not criteria_path.is_file():
         raise TopicError(f"no criteria file at {criteria_path}")
     anchor = anchors(criteria_path.read_text())
     rows, provenance, shown = [], [], []
-    for stratum in calibrated(topic):
-        picked, drawn = draw_stratum(topic, work, stratum, names, fetch)
+    for stratum, count in size.items():
+        rng = random.Random(f"{topic['sweep']}:{batch}:{stratum}")
+        picked, drawn = draw_stratum(topic, work, stratum, count, top_up is not None, rng, fetch)
         inputs = {r["order_rank"]: r for r in read_jsonl(work, inputs_file(work, stratum).name)}
         for number, (row, how) in enumerate(zip(picked, drawn), 1):
-            key = f"{stratum}-{number}"
+            key = f"{batch}-{stratum}-{number}"
             held = inputs[row["order_rank"]]
             rows.append({"id": key, "stratum": stratum, "order_rank": row["order_rank"], "repo": row["repo"], "commit": f"https://github.com/{row['repo']}/commit/{held.get('sha')}",
-                         "inputs_sha256": canonical_sha256(held), "facets": sorted(f for f in row["facets"] if f in names)})
+                         "inputs_sha256": canonical_sha256(held), "qgs_sha256": canonical_sha256(qgs_shape(held))})
             provenance.append({"id": key, **{k: how[k] for k in ("facet", "class", "facet_rank")}})
             shown.append((key, stratum, held))
-    sample = {"sweep": topic["sweep"], "criteria": criteria, "criteria_sha256": hashlib.sha256(criteria_path.read_bytes()).hexdigest(), "size_per_stratum": SET_SIZE, "rows": rows}
+    sample = {"sweep": topic["sweep"], "batch": batch, "purpose": purpose, "criteria": criteria, "criteria_sha256": hashlib.sha256(criteria_path.read_bytes()).hexdigest(),
+              "rows_per_stratum": size, "rows": rows}
     text = json.dumps(sample, indent=1, ensure_ascii=False) + "\n"
-    return text, {"seed": f"{topic['sweep']}:<stratum>", "rows": provenance}, page(topic, hashlib.sha256(text.encode()).hexdigest(), shown, anchor)
+    return batch, text, {"seed": f"{topic['sweep']}:{batch}:<stratum>", "rows": provenance}, page(topic, batch, hashlib.sha256(text.encode()).hexdigest(), shown, anchor)
 
 
 def pre(value):
     return f"<pre>{html.escape(value if isinstance(value, str) else json.dumps(value, indent=1, ensure_ascii=False))}</pre>"
 
 
-def row_section(index, total, key, stratum, held, anchor, when):
+def row_section(index, total, key, stratum, held, anchor, when, problems):
     date = date_cell((held.get("facts") or {}).get("pushed"), when)
     parts = [f'<section class="row" id="{html.escape(key)}" data-id="{html.escape(key)}">',
              f"<h2>{index}/{total} · {html.escape(stratum)} · {html.escape(held['repo'])}</h2>",
@@ -142,6 +209,8 @@ def row_section(index, total, key, stratum, held, anchor, when):
     for criterion in LABELLED:
         options = "".join(f'<label><input type="radio" name="{html.escape(key)}|{criterion}" value="{v}"> <b>{v}</b> {html.escape(anchor[criterion][v])}</label>' for v in ("1", "0.5", "0"))
         parts.append(f'<div class="criterion"><h3>{criterion}</h3>{options}</div>')
+    boxes = "".join(f'<label class="inline"><input type="checkbox" name="{html.escape(key)}|problems" value="{html.escape(p)}"> {html.escape(p)}</label>' for p in problems)
+    parts.append(f'<div class="criterion"><h3>Vấn đề (mã trong danh mục)</h3>{boxes}</div>')
     choices = [("eligible", "Đủ điều kiện")] + [(f"excluded: {code}", f"Loại: {code} ({text})") for code, text in EXCLUDE_CODES.items()]
     options = "".join(f'<label><input type="radio" name="{html.escape(key)}|decision" value="{html.escape(v)}"> {html.escape(t)}</label>' for v, t in choices)
     parts.append(f'<div class="criterion"><h3>Quyết định</h3>{options}</div></fieldset></section>')
@@ -153,21 +222,24 @@ STYLE = ("body{font:15px/1.5 system-ui,sans-serif;margin:0 auto;max-width:1100px
          "section.row{background:#fff;border:1px solid #ddd;border-radius:6px;margin:20px 0;padding:12px 16px}"
          "pre{white-space:pre-wrap;word-break:break-word;background:#f3f3f3;padding:8px;max-height:420px;overflow:auto;font-size:13px}"
          ".criterion{border-top:1px solid #eee;padding:6px 0}.criterion h3{margin:4px 0;font-size:15px}"
-         ".criterion label{display:block;margin:3px 0 3px 8px}.warn{color:#8a4b00}.date{color:#444}button{font-size:15px;padding:4px 12px}")
+         ".criterion label{display:block;margin:3px 0 3px 8px}.criterion label.inline{display:inline-block;margin-right:12px}"
+         ".warn{color:#8a4b00}.date{color:#444}button{font-size:15px;padding:4px 12px}")
 
 SCRIPT = """(() => {
-  const SET = document.body.dataset.set, SWEEP = document.body.dataset.sweep, KEY = "calibration:" + SET;
+  const SET = document.body.dataset.set, SWEEP = document.body.dataset.sweep, BATCH = document.body.dataset.batch, KEY = "calibration:" + SET;
   const FIELDS = %s;
   const ids = Array.from(document.querySelectorAll("section.row")).map((s) => s.dataset.id);
   const status = document.getElementById("progress");
   let labels = {};
   try { labels = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (error) { status.textContent = "Không đọc được tiến độ đã lưu: " + error.message; }
-  const done = () => ids.filter((id) => labels[id] && FIELDS.every((f) => labels[id][f] !== undefined)).length;
-  const show = (extra) => { status.textContent = "Đã gán đủ nhãn " + done() + "/" + ids.length + " dòng" + (extra || ""); };
+  const complete = (label) => Boolean(label) && FIELDS.every((f) => f === "problems" ? label.problems !== undefined || label.Relevance === 0 : label[f] !== undefined);
+  const show = (extra) => { status.textContent = "Đã gán đủ nhãn " + ids.filter((id) => complete(labels[id])).length + "/" + ids.length + " dòng" + (extra || ""); };
   const apply = () => {
-    document.querySelectorAll("input[type=radio]").forEach((input) => {
+    document.querySelectorAll("input").forEach((input) => {
       const [id, field] = input.name.split("|");
-      input.checked = Boolean(labels[id]) && String(labels[id][field]) === input.value;
+      if (!field) return;
+      const label = labels[id];
+      input.checked = input.type === "checkbox" ? Boolean(label && (label.problems || []).includes(input.value)) : Boolean(label) && String(label[field]) === input.value;
     });
     show();
   };
@@ -176,17 +248,21 @@ SCRIPT = """(() => {
   };
   document.addEventListener("change", (event) => {
     const input = event.target;
-    if (input.type !== "radio") return;
-    const [id, field] = input.name.split("|");
+    const [id, field] = (input.name || "").split("|");
+    if (!field) return;
     labels[id] = labels[id] || {};
-    labels[id][field] = field === "decision" ? input.value : Number(input.value);
+    if (input.type === "checkbox") {
+      labels[id].problems = Array.from(document.querySelectorAll("input[type=checkbox]")).filter((box) => box.name === input.name && box.checked).map((box) => box.value);
+    } else {
+      labels[id][field] = field === "decision" ? input.value : Number(input.value);
+    }
     save();
   });
   document.getElementById("download").addEventListener("click", () => {
-    const blob = new Blob([JSON.stringify({ sweep: SWEEP, set_sha256: SET, labels }, null, 1)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ sweep: SWEEP, batch: BATCH, set_sha256: SET, labels }, null, 1)], { type: "application/json" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
-    link.download = "calibration-labels-" + SWEEP + ".json";
+    link.download = BATCH + "-labels-" + SWEEP + ".json";
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -211,27 +287,30 @@ SCRIPT = """(() => {
   apply();
 })();"""
 
+TITLES = {"calibration": "Bộ hiệu chuẩn", "top-up": "Lô bổ sung", "held-out": "Lô kiểm chứng giữ riêng"}
 
-def page(topic, set_sha, shown, anchor):
+
+def page(topic, batch, set_sha, shown, anchor):
     when = required_sweep_date(topic)
-    intro = (f"Bộ hiệu chuẩn có {len(shown)} dòng. Mỗi dòng là một repository kèm đúng dữ liệu đầu vào mà mọi giám khảo chấm. Trang không hiển thị câu trả lời của bất kỳ giám khảo "
-             "hay phiên chấm nào, cũng không cho biết dòng được rút theo cách nào. Với mỗi dòng: đọc dữ liệu, chấm năm tiêu chí theo mô tả bên cạnh từng lựa chọn (1, 0.5 hoặc 0), rồi "
-             "chọn Đủ điều kiện hoặc Loại kèm lý do. Date do công cụ tính sẵn nên chỉ hiển thị. Đủ điều kiện khi Relevance = 1 và Authority + Methodology + Objectivity + Date + "
-             "Position + Novelty ≥ 4.5, với Novelty = 1 khi dòng có ít nhất một cơ chế: khi hiệu chuẩn, mọi cơ chế đều được tính là mới, như cách chấm giám khảo. Tiến độ tự lưu trong trình duyệt; bấm «Tải nhãn về (JSON)» để lưu file, rồi chạy "
-             "import-calibration-labels.py với file đó.")
-    sections = [row_section(i, len(shown), key, stratum, held, anchor, when) for i, (key, stratum, held) in enumerate(shown, 1)]
+    intro = (f"{TITLES[batch]} có {len(shown)} dòng. Mỗi dòng là một repository kèm đúng dữ liệu đầu vào mà mọi giám khảo chấm. Trang không hiển thị câu trả lời của bất kỳ giám khảo "
+             "hay phiên chấm nào, cũng không cho biết dòng được rút theo cách nào. Với mỗi dòng: đọc dữ liệu, chấm năm tiêu chí theo mô tả bên cạnh từng lựa chọn (1, 0.5 hoặc 0), đánh "
+             "dấu các mã vấn đề mà repository có cơ chế xử lý, rồi chọn Đủ điều kiện hoặc Loại kèm lý do. Date do công cụ tính sẵn nên chỉ hiển thị. Đủ điều kiện khi Relevance = 1 "
+             "và Authority + Methodology + Objectivity + Date + Position + Novelty ≥ 4.5, với Novelty = 1 khi dòng có ít nhất một cơ chế: khi hiệu chuẩn, mọi cơ chế đều được tính "
+             "là mới, như cách chấm giám khảo. Tiến độ tự lưu trong trình duyệt; bấm «Tải nhãn về (JSON)» để lưu file, rồi chạy import-calibration-labels.py với file đó.")
+    problems = topic.get("problems") or []
+    sections = [row_section(i, len(shown), key, stratum, held, anchor, when, problems) for i, (key, stratum, held) in enumerate(shown, 1)]
     return "\n".join(['<!DOCTYPE html>', '<html lang="vi">', "<head>", '<meta charset="utf-8">',
                       "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'\">",
-                      f"<title>Bộ hiệu chuẩn {html.escape(topic['sweep'])}</title>", f"<style>{STYLE}</style>", "</head>",
-                      f'<body data-set="{set_sha}" data-sweep="{html.escape(topic["sweep"])}">',
-                      f"<header><h1>Bộ hiệu chuẩn · {html.escape(topic['sweep'])}</h1><p>{html.escape(intro)}</p><p id=\"progress\"></p>",
+                      f"<title>{TITLES[batch]} {html.escape(topic['sweep'])}</title>", f"<style>{STYLE}</style>", "</head>",
+                      f'<body data-set="{set_sha}" data-sweep="{html.escape(topic["sweep"])}" data-batch="{batch}">',
+                      f"<header><h1>{TITLES[batch]} · {html.escape(topic['sweep'])}</h1><p>{html.escape(intro)}</p><p id=\"progress\"></p>",
                       '<button id="download" type="button">Tải nhãn về (JSON)</button> <label>Mở file nhãn đã lưu <input id="restore" type="file" accept="application/json"></label></header>',
                       "<main>", *sections, "</main>", f"<script>{SCRIPT % json.dumps(list(FIELDS))}</script>", "</body>", "</html>", ""])
 
 
-def checked_label(key, label):
+def checked_label(key, label, problems):
     if not isinstance(label, dict):
-        raise TopicError(f"label {key}: must be an object of the five criteria and the decision")
+        raise TopicError(f"label {key}: must be an object of the five criteria, the problem ids and the decision")
     unknown = sorted(set(label) - set(FIELDS))
     if unknown:
         raise TopicError(f"label {key}: unknown fields {unknown}")
@@ -241,28 +320,39 @@ def checked_label(key, label):
     decision = label.get("decision")
     if "decision" in label and not (decision == "eligible" or (isinstance(decision, str) and decision.startswith("excluded: ") and decision[10:] in EXCLUDE_CODES)):
         raise TopicError(f"label {key}: decision {decision!r}; it is eligible or excluded: <code>, the code one of {', '.join(EXCLUDE_CODES)}")
-    return {f: label[f] for f in FIELDS if f in label}
+    ids = label.get("problems", [])
+    if not isinstance(ids, list) or not set(ids) <= set(problems):
+        raise TopicError(f"label {key}: problems {ids!r} are not a list of the topic's problem ids")
+    if decision == "eligible" and label.get("Relevance", 1) != 1:
+        raise TopicError(f"label {key}: eligible needs Relevance 1, the label gives {label['Relevance']}")
+    if label.get("Relevance") == 1 and "problems" in label and not ids:
+        raise TopicError(f"label {key}: Relevance 1 names the problem it carries a mechanism for; tick at least one problem id")
+    kept = {f: label[f] for f in FIELDS if f in label}
+    if "problems" not in kept and label.get("Relevance") == 0:
+        kept["problems"] = []
+    return kept
 
 
-def import_labels(work, saved):
+def import_labels(topic, work, saved, batch="calibration"):
     work = Path(work)
-    set_file = work / SET_FILE
-    if not set_file.is_file():
-        raise TopicError(f"no {SET_FILE} in {work}; draw it with draw-calibration-set.py")
-    set_sha = hashlib.sha256(set_file.read_bytes()).hexdigest()
-    sample = json.loads(set_file.read_text())
+    if not (work / FREEZE_FILE).is_file():
+        raise TopicError(f"no {FREEZE_FILE} in {work}; freeze the stage-1 ladder with freeze-stage1.py before any calibration label is read")
+    path = work / set_file(batch)
+    if not path.is_file():
+        raise TopicError(f"no {path.name} in {work}; draw it with draw-calibration-set.py")
+    set_sha = hashlib.sha256(path.read_bytes()).hexdigest()
+    sample = json.loads(path.read_text())
     if not isinstance(saved, dict) or saved.get("set_sha256") != set_sha or saved.get("sweep") != sample["sweep"]:
         raise TopicError(f"the labels file was saved for another calibration set (set sha256 {str((saved or {}).get('set_sha256'))[:16]}, this set {set_sha[:16]})")
     labels = saved.get("labels")
     if not isinstance(labels, dict):
         raise TopicError("the labels file holds no labels object")
-    ids = {r["id"] for r in sample["rows"]}
-    unknown = sorted(set(labels) - ids)
+    unknown = sorted(set(labels) - {r["id"] for r in sample["rows"]})
     if unknown:
         raise TopicError(f"the labels file names rows the set does not hold: {unknown[:10]}")
-    kept = {key: checked_label(key, value) for key, value in labels.items()}
-    rows = [{**{k: r[k] for k in ("id", "stratum", "order_rank", "repo", "inputs_sha256")}, "user": kept.get(r["id"])} for r in sample["rows"]]
+    kept = {key: checked_label(key, value, topic.get("problems") or []) for key, value in labels.items()}
+    rows = [{**{k: r[k] for k in ("id", "stratum", "order_rank", "repo", "inputs_sha256", "qgs_sha256")}, "user": kept.get(r["id"])} for r in sample["rows"]]
     complete = sum(1 for r in rows if r["user"] and all(f in r["user"] for f in FIELDS))
-    out = {"set_sha256": set_sha, "complete": complete, "rows": rows}
-    (work / LABELS_FILE).write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n")
+    out = {"batch": batch, "set_sha256": set_sha, "stage1_freeze_sha256": hashlib.sha256((work / FREEZE_FILE).read_bytes()).hexdigest(), "complete": complete, "rows": rows}
+    (work / labels_file(batch)).write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n")
     return complete, len(rows)
