@@ -9,8 +9,8 @@ from pathlib import Path
 
 from study_screening_core import read_jsonl
 from study_screening_input import inputs_file, repo_level
-from study_session_prompt import TEMPLATE_SHA256, build_prompt, with_computed_date
-from study_session_reply import parse_reply, reply_text
+from study_session_prompt import QGS_TEMPLATE_SHA256, TEMPLATE_SHA256, build_prompt, build_qgs_prompt, with_computed_date
+from study_session_reply import parse_qgs_reply, parse_reply, reply_text
 from study_topic import TopicError
 
 MAX_PROMPT = 120_000
@@ -122,12 +122,25 @@ def call_isolated(fetch, cmd):
     return out, status
 
 
+def expected_rows(job, work, stratum):
+    inputs = {r["order_rank"]: r for r in read_jsonl(work, job.get("inputs") or inputs_file(work, stratum).name)}
+    wanted = job.get("ranks")
+    if wanted is None:
+        expected = {r: inputs[r] for r in sorted(inputs) if job["first"] <= r <= job["last"]}
+        if not expected:
+            raise TopicError(f"no fetched {stratum} inputs between ranks {job['first']} and {job['last']}; run fetch-screening-inputs.py first")
+        return expected
+    missing = sorted(set(wanted) - set(inputs))
+    if missing or not wanted:
+        raise TopicError(f"{stratum} ranks {missing or 'none'} have no fetched inputs; run fetch-screening-inputs.py first")
+    return {r: inputs[r] for r in sorted(wanted)}
+
+
 def run_block(job, fetch):
     work, stratum, name, option = Path(job["work"]), job["stratum"], job["name"], job["option"]
-    inputs = {r["order_rank"]: r for r in read_jsonl(work, inputs_file(work, stratum).name)}
-    expected = {r: inputs[r] for r in sorted(inputs) if job["first"] <= r <= job["last"]}
-    if not expected:
-        raise TopicError(f"no fetched {stratum} inputs between ranks {job['first']} and {job['last']}; run fetch-screening-inputs.py first")
+    screening = job.get("kind", "screening") == "screening"
+    expected = expected_rows(job, work, stratum)
+    first, last = min(expected), max(expected)
     transient = [r for r, row in expected.items() if "error" in row and row.get("error_kind") != "permanent"]
     if transient:
         error = expected[transient[0]]["error"]
@@ -136,10 +149,11 @@ def run_block(job, fetch):
     done = {r["order_rank"] for r in read_jsonl(work, f"{name}.jsonl")} & set(expected)
     if done:
         raise TopicError(f"{name}.jsonl already holds ranks {sorted(done)}")
-    packet, criteria = work / f"screening-packet-{stratum}.md", Path(job["repo"]) / job["criteria"]
+    packet = work / (job.get("packet") or f"screening-packet-{stratum}.md")
     if not packet.is_file():
         raise TopicError(f"no {packet.name} in {work}")
-    hashes = {"packet_sha256": sha256_bytes(packet.read_bytes()), "criteria_sha256": sha256_bytes(criteria.read_bytes())}
+    criteria = Path(job["repo"]) / job["criteria"] if screening else None
+    hashes = {"packet_sha256": sha256_bytes(packet.read_bytes()), **({"criteria_sha256": sha256_bytes(criteria.read_bytes())} if screening else {})}
     frozen = job.get("frozen")
     if frozen and any(frozen.get(k) != v for k, v in {**hashes, "template_sha256": TEMPLATE_SHA256}.items()):
         raise TopicError(f"{stratum}: the criteria, {packet.name} or the prompt template differ from the freeze; no session runs on a changed protocol")
@@ -155,25 +169,32 @@ def run_block(job, fetch):
             shutil.copyfile(packet, snapshot)
     mech_file = work / f"{name}-mechanisms.md"
     known = mech_file.read_text() if mech_file.is_file() else ""
-    prompt = build_prompt(packet.read_text(), job["criteria"], criteria.read_text(), known, list(expected.values()), job["sweep_date"])
+    if screening:
+        prompt = build_prompt(packet.read_text(), job["criteria"], criteria.read_text(), known, list(expected.values()), job["sweep_date"])
+    else:
+        prompt = build_qgs_prompt(packet.read_text(), list(expected.values()))
     if len(prompt.encode()) > MAX_PROMPT:
-        raise TopicError(f"the prompt for ranks {job['first']}-{job['last']} is {len(prompt.encode())} bytes, over {MAX_PROMPT}; run a smaller block")
+        raise TopicError(f"the prompt for ranks {first}-{last} is {len(prompt.encode())} bytes, over {MAX_PROMPT}; run a smaller block")
     prompts = work / "prompts"
     prompts.mkdir(exist_ok=True)
-    stem = f"{name}-{job['first']}-{job['last']}"
+    stem = f"{name}-{first}-{last}"
     (prompts / f"{stem}.md").write_text(prompt)
     text, served = reply_text(option, *call_isolated(fetch, session_command(option, prompt, job["bare"])))
-    rows, mechanisms, problems = parse_reply(text, expected)
-    rows = [with_computed_date(r, expected[r["order_rank"]], job["sweep_date"]) for r in rows]
+    if screening:
+        rows, mechanisms, problems = parse_reply(text, expected)
+        rows = [with_computed_date(r, expected[r["order_rank"]], job["sweep_date"]) for r in rows]
+    else:
+        (rows, problems), mechanisms = parse_qgs_reply(text, expected), []
     if problems:
         (prompts / f"{stem}.response.txt").write_text(text)
-        raise TopicError(f"{name} ranks {job['first']}-{job['last']}: {'; '.join(problems)}; reply kept in prompts/{stem}.response.txt, nothing written")
+        raise TopicError(f"{name} ranks {first}-{last}: {'; '.join(problems)}; reply kept in prompts/{stem}.response.txt, nothing written")
     names, fresh = {line.split(":", 1)[0] for line in known.splitlines()}, []
     for n, d in mechanisms:
         if n not in names:
             names.add(n)
             fresh.append(f"{n}: {d}\n")
-    block = {"ranks": list(expected), **hashes, "prompt_sha256": sha256_bytes(prompt.encode()), "inputs_sha256": canonical_sha256(list(expected.values())),
+    block = {"ranks": list(expected), **hashes, **({} if screening else {"template_sha256": QGS_TEMPLATE_SHA256}),
+             "prompt_sha256": sha256_bytes(prompt.encode()), "inputs_sha256": canonical_sha256(list(expected.values())),
              "row_sha256": {str(r): canonical_sha256(row) for r, row in expected.items()}, "cli_version": cli_version, "date": job["today"],
              "mechanisms_added": [line.split(":", 1)[0] for line in fresh],
              **({"served_models": served} if served else {}), **({"fallback_reason": job["fallback_reason"]} if job.get("fallback_reason") else {})}
@@ -181,7 +202,8 @@ def run_block(job, fetch):
 
     def commit(sessions):
         add_block(sessions, job["key"], header, block)
-        undo.append(append_lines({work / f"{name}.jsonl": "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), mech_file: "".join(fresh)}))
+        files = {work / f"{name}.jsonl": "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), **({mech_file: "".join(fresh)} if screening else {})}
+        undo.append(append_lines(files))
 
     update_sessions(work, commit, lambda: undo and undo[0]())
     return len(rows)

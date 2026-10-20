@@ -72,6 +72,36 @@ def row_problems(row, expected):
     return problems
 
 
+def parse_qgs_reply(text, expected):
+    rows, problems = {}, []
+    for line in (raw.strip() for raw in text.splitlines()):
+        if not line.startswith("{"):
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            problems.append(f"unparsable row line {line[:80]!r}")
+            continue
+        rank = row.get("order_rank")
+        if type(rank) is not int or rank not in expected:
+            problems.append(f"row {rank!r} was not asked for")
+            continue
+        issues = []
+        if str(row.get("repo", "")).lower() != expected[rank]["repo"].lower():
+            issues.append(f"rank {rank} names {row.get('repo')!r}, not {expected[rank]['repo']}")
+        if row.get("verdict") not in ("yes", "no", "unsure"):
+            issues.append(f"rank {rank} has no yes, no or unsure verdict")
+        if not isinstance(row.get("problems"), list) or not all(isinstance(p, str) for p in row["problems"]):
+            issues.append(f"rank {rank} has no problems list")
+        if rank in rows:
+            issues.append(f"rank {rank} appears twice")
+        problems += issues
+        if not issues:
+            rows[rank] = {"id": rank, "order_rank": rank, "repo": expected[rank]["repo"], "verdict": row["verdict"], "problems": row["problems"], "why": str(row.get("why", ""))}
+    problems += [f"rank {rank} missing from the reply" for rank in expected if rank not in rows and not any(f"rank {rank} " in p for p in problems)]
+    return [rows[r] for r in sorted(rows)], problems
+
+
 def parse_reply(text, expected):
     rows, mechanisms, problems = {}, [], []
     for line in (raw.strip() for raw in text.splitlines()):

@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from study_fetch import Fetch, NetworkRefused
+from study_judges import SCREENING_JUDGES, criteria_version, require_qualified
 from study_protocol import FREEZE_FILE
 from study_session import model_family, run_block
 from study_session_prompt import required_sweep_date
@@ -35,7 +36,7 @@ def pilot_job(topic, stratum, side, model, which):
     return option, f"{stratum}-pilot-B-{option['model']}", reason
 
 
-def screen_job(work, stratum, side, which):
+def screen_job(topic, work, stratum, side, which):
     path = Path(work) / FREEZE_FILE
     if not path.is_file():
         raise TopicError(f"no {FREEZE_FILE} in {work}; screen the pilot block with --pilot, then freeze the protocol with freeze-protocol.py")
@@ -51,6 +52,8 @@ def screen_job(work, stratum, side, which):
         reason = f"{primary['cli']} was not on PATH when this block ran"
     if not which(option["cli"]):
         raise TopicError(f"session {side} runs on {option['cli']}, which is not on PATH")
+    if criteria_version(freeze["criteria"]) >= 4:
+        require_qualified(topic, work, freeze, SCREENING_JUDGES, stratum)
     return freeze["criteria"], freeze["strata"][stratum], option, f"{stratum}-screen-{side}", reason
 
 
@@ -78,7 +81,7 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
         else:
             if args.model:
                 raise TopicError("--model is for the pilot; after the freeze the freeze names both sessions")
-            criteria, frozen, option, name, reason = screen_job(args.work, args.stratum, args.side, which)
+            criteria, frozen, option, name, reason = screen_job(topic, args.work, args.stratum, args.side, which)
             key = f"{args.stratum}-{args.side}"
         job = {"work": args.work, "repo": args.repo, "stratum": args.stratum, "name": name, "key": key, "option": option, "criteria": criteria, "frozen": frozen,
                "pilot": args.pilot, "fallback_reason": reason, "bare": bool(environ.get("ANTHROPIC_API_KEY")), "first": int(first), "last": int(last), "today": args.today,

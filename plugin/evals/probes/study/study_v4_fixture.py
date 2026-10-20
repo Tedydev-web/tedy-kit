@@ -1,4 +1,5 @@
 import atexit
+import hashlib
 import json
 import re
 import shutil
@@ -6,6 +7,9 @@ import tempfile
 from pathlib import Path
 
 from study_fixtures import HERE, FakeFetch, script, write_json, write_jsonl
+from study_screening_input import fetch_inputs
+from study_session_prompt import QGS_REPLY_FORMAT
+from study_topic import load_topic
 
 KIT = HERE.parents[3]
 CRITERIA = "docs/prior-art/quality-criteria-v4.md"
@@ -92,7 +96,7 @@ def v4_work(repo):
 
 
 def inputs_fetch():
-    return FakeFetch([("contents/README.md", README), ("/releases", "[]"), ("/tags", "[]"), ("/repos?per_page", "[]"), ("users/", json.dumps({"public_repos": 3})),
+    return FakeFetch([("repos/o/missing7/commits/HEAD", ("", "exit 1: HTTP 404")), ("repos/p/missing7/commits/HEAD", ("", "exit 1: HTTP 404")), ("contents/README.md", README), ("/releases", "[]"), ("/tags", "[]"), ("/repos?per_page", "[]"), ("users/", json.dumps({"public_repos": 3})),
                       ("contents/skills/", "skill text"), ("contents/src/hook.ts", "hook source")])
 
 
@@ -123,7 +127,7 @@ class ScriptedJudges(FakeFetch):
         self.prompts.append(prompt)
         model = cmd[cmd.index("--model") + 1]
         rows = [json.loads(block) for block in re.findall(r"```json\n(.+?)\n```", prompt)]
-        kind = "qgs" if '"verdict"' in prompt else "screening"
+        kind = "qgs" if QGS_REPLY_FORMAT in prompt else "screening"
         build = qgs_row if kind == "qgs" else screening_row
         text = "\n".join(json.dumps(build(r, r["repo"] in self.flip)) for r in rows) + ("\nmechanism: gate: blocks edits until a test fails\n" if kind == "screening" else "\n")
         if cmd[0] == "claude":
@@ -131,6 +135,42 @@ class ScriptedJudges(FakeFetch):
         events = [{"event": "step_update", "step_update": {"step_type": "user_input"}}, {"event": "step_update", "step_update": {"step_type": "agent_response"}},
                   {"event": "result", "result": {"status": "SUCCESS", "num_turns": 1, "response": text}}]
         return "".join(json.dumps(e) + "\n" for e in events), "ok", 0
+
+
+def call(repo, name, *args, fetch=None):
+    kwargs = {"fetch": fetch} if fetch is not None else {}
+    if name in ("run-screening-session", "run-judge"):
+        kwargs.update(which=lambda cli: True, environ={"ANTHROPIC_API_KEY": "fixture"})
+    script(name).main(["--topic", "demo", "--repo", str(repo), *args], **kwargs)
+
+
+def labelled(repo, work, labels=None):
+    call(repo, "draw-calibration-set", "--work", str(work), "--criteria", CRITERIA, fetch=inputs_fetch())
+    sample = json.loads((work / "calibration-set.json").read_text())
+    saved = work / "saved-labels.json"
+    saved.write_text(json.dumps({"sweep": SWEEP, "set_sha256": hashlib.sha256((work / "calibration-set.json").read_bytes()).hexdigest(), "labels": labels or user_labels(sample)}))
+    call(repo, "import-calibration-labels", "--work", str(work), "--labels", str(saved))
+    saved.unlink()
+    return sample
+
+
+def frozen(repo, work, judges):
+    topic = load_topic(repo, "demo")
+    for stratum in ("config", "product"):
+        (work / f"screening-packet-{stratum}.md").write_text(f"screening packet {stratum}: score the rows under the criteria\n")
+        (work / f"qgs-packet-{stratum}.md").write_text(f"qgs packet {stratum}: problems X1 X2 X3 X4\n")
+        fetch_inputs(topic, work, stratum, 200, inputs_fetch())
+        for side in "AB":
+            call(repo, "run-screening-session", "--work", str(work), "--stratum", stratum, "--side", side, "--ranks", "1-2", "--pilot", "--criteria", CRITERIA,
+                 "--today", "2026-10-20", fetch=judges)
+    call(repo, "freeze-protocol", "--work", str(work), "--criteria", CRITERIA, "--today", "2026-10-20")
+
+
+def judged(repo, work, judges, names=("screening-A", "screening-B", "qgs-A", "qgs-B", "reader"), strata=("config", "product")):
+    for stratum in strata:
+        for name in names:
+            for run in ("1", "2"):
+                call(repo, "run-judge", "--work", str(work), "--stratum", stratum, "--judge", name, "--set", "calibration", "--run", run, "--today", "2026-10-20", fetch=judges)
 
 
 def user_labels(sample):

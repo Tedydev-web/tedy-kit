@@ -2,7 +2,7 @@ import json
 import sys
 from pathlib import Path
 
-from study_screening_input import inputs_file
+from study_screening_input import holds_inputs, inputs_file
 from study_session import update_sessions
 from study_topic import TopicError, load_topic, require_screened, topic_arguments
 
@@ -43,7 +43,7 @@ def drop_block(work, stratum, key, file_stem, first, last):
         if added and mech_file.is_file():
             rewrite(mech_file, [line for line in mech_file.read_text().splitlines(keepends=True) if line.split(":", 1)[0] not in added])
         entry["blocks"] = [b for b in entry["blocks"] if b is not block]
-        still = {r for k, e in sessions.items() if k.startswith(f"{stratum}-") for b in e.get("blocks", []) for r in b["ranks"]}
+        still = {r for k, e in sessions.items() if holds_inputs(k, stratum) for b in e.get("blocks", []) for r in b["ranks"]}
         free = ranks - still
         if free and inputs.is_file():
             held = inputs.read_text().splitlines(keepends=True)

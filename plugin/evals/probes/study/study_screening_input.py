@@ -127,10 +127,28 @@ def row_inputs(fetch, work, row):
     return {**out, "error": "; ".join(problems["errors"]), "error_kind": "transient"} if problems["errors"] else out
 
 
-def scored_ranks(work, stratum):
+def qgs_inputs_file(work, stratum):
+    return Path(work) / f"{stratum}-qgs-inputs.jsonl"
+
+
+def holds_inputs(key, stratum, candidates=False):
+    if candidates:
+        return key.startswith(f"{stratum}-qgs-")
+    return (key.startswith(f"{stratum}-") and not key.startswith(f"{stratum}-qgs-")) or key.startswith(f"judge-{stratum}-")
+
+
+def scored_ranks(work, stratum, candidates=False):
     meta = Path(work) / "meta.json"
     sessions = json.loads(meta.read_text()).get("sessions", {}) if meta.is_file() else {}
-    return {r for key, entry in sessions.items() if key.startswith(f"{stratum}-") for block in entry.get("blocks", []) for r in block.get("ranks", [])}
+    return {r for key, entry in sessions.items() if holds_inputs(key, stratum, candidates) for block in entry.get("blocks", []) for r in block.get("ranks", [])}
+
+
+def candidate_rows(work, stratum):
+    listed = read_jsonl(Path(work), f"{stratum}-qgs-candidates.jsonl")
+    if not listed:
+        raise TopicError(f"no {stratum}-qgs-candidates.jsonl in {work}; extract the candidates first")
+    order = {r["repo"].lower(): r for r in read_jsonl(Path(work), f"{stratum}-screening-order.jsonl")}
+    return [{**{k: v for k, v in order.get(c["repo"].lower(), {}).items() if k != "order_rank"}, "repo": c["repo"], "order_rank": c["id"]} for c in listed]
 
 
 def write_rows(target, held):
@@ -159,13 +177,13 @@ def wanted(row, through):
     return row["order_rank"] <= through or row.get("forced") or row["order_rank"] > SNOWBALL_RANK_BASE
 
 
-def fetch_inputs(topic, work, stratum, through, fetch, mark_permanent=(), ranks=None):
-    order = read_jsonl(Path(work), f"{stratum}-screening-order.jsonl")
+def fetch_inputs(topic, work, stratum, through, fetch, mark_permanent=(), ranks=None, candidates=False):
+    order = candidate_rows(work, stratum) if candidates else read_jsonl(Path(work), f"{stratum}-screening-order.jsonl")
     if not order:
         raise TopicError(f"no {stratum}-screening-order.jsonl in {work}")
-    target = inputs_file(work, stratum)
+    target = qgs_inputs_file(work, stratum) if candidates else inputs_file(work, stratum)
     held = {r["order_rank"]: r for r in read_jsonl(Path(work), target.name)}
-    scored, fetched = scored_ranks(work, stratum), 0
+    scored, fetched = scored_ranks(work, stratum, candidates), 0
     mark_gone(held, scored, stratum, mark_permanent)
     if mark_permanent:
         write_rows(target, held)
@@ -173,7 +191,7 @@ def fetch_inputs(topic, work, stratum, through, fetch, mark_permanent=(), ranks=
         rank = row["order_rank"]
         if rank in scored or (rank in held and held[rank].get("error_kind") != "transient"):
             continue
-        if not (rank in ranks if ranks is not None else wanted(row, through)):
+        if not (rank in ranks if ranks is not None else candidates or wanted(row, through)):
             continue
         held[rank] = row_inputs(fetch, work, row)
         write_rows(target, held)
