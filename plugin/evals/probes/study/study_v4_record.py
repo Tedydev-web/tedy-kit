@@ -215,12 +215,20 @@ def snowball_lines(folder, strata, faceted):
     if cut_row is not None:
         raise TopicError(f"snowball-cut.json cuts the snowball at row {cut_row}; quality criteria v4 refuses a snowball cut: every snowballed repository joins the pool, "
                          "so run snowball-above-cut.py --all and merge-snowball-order.py again")
-    if not snow:
-        return []
     pool = {r["repo"].lower() for r in faceted["config"]["inputs"]} if "config" in faceted else set()
     outside = sorted(r["repo"] for r in snow if r["repo"].lower() not in pool)
     if outside:
         raise TopicError(f"snowballed repositories {outside[:10]} are not in the config stage-1 pool; merge them with merge-snowball-order.py and build the stage-1 inputs again")
+    if "config" in faceted:
+        def above(rows):
+            return {(r["order_rank"], r["repo"].lower()) for r in rows if r["order_rank"] > SNOWBALL_RANK_BASE}
+        rows = {(r["order_rank"], r["repo"].lower()) for r in snow}
+        order, inputs = above(read_jsonl(folder, "config-screening-order.jsonl")), above(faceted["config"]["inputs"])
+        if len(rows) != len(snow) or rows != order or order != inputs:
+            raise TopicError(f"snowball-screening-order.jsonl holds {len(snow)} rows ({len(rows)} distinct), but the config pool holds {len(order)} and the stage-1 inputs "
+                             f"{len(inputs)} snowballed rows above rank {SNOWBALL_RANK_BASE}; the snowball rows are the pool's own, once each")
+    if not snow:
+        return []
     cut = read_json(folder, "snowball-cut.json")
     return [f"- snowball: {len(snow)} repositories from the aggregators joined the config pool from rank {SNOWBALL_RANK_BASE + 1} on (cut: {cut['source']}); stage 1 read every one"]
 

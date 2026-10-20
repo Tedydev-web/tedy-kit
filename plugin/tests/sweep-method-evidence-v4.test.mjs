@@ -296,6 +296,21 @@ test("every recorded session has its output file and every run file its session,
   assert.match(t.errors(), /^the record renderer refused the sweep files: prior-art-sweep-record: judge-config-qgs-A-claude-haiku-4-5-run1\.jsonl has no session in meta\.json: /m);
 });
 
+test("the snowball rows equal the pool's snowballed rows and the stage-1 inputs, once each", () => {
+  const snowball = /^snowball-screening-order\.jsonl holds (33 rows \(33|35 rows \(34|0 rows \(0) distinct\), but the config pool holds 34 and the stage-1 inputs 34 snowballed rows above rank 1000; /;
+  const probes = [
+    ["a row deleted", (s) => s.writeRows("snowball-screening-order.jsonl", s.jsonl("snowball-screening-order.jsonl").filter((_, i) => i !== 4))],
+    ["a row duplicated", (s) => { const rows = s.jsonl("snowball-screening-order.jsonl"); s.writeRows("snowball-screening-order.jsonl", [...rows, rows[0]]); }],
+    ["the file deleted", (s) => rmSync(join(s.folder, "snowball-screening-order.jsonl"))],
+  ];
+  for (const [name, edit] of probes) {
+    const s = sweep();
+    assert.equal(s.jsonl("snowball-screening-order.jsonl").length, 34);
+    edit(s);
+    failsBothLayers(s, new RegExp(`prior-art-sweep-record: ${snowball.source.slice(1)}`), snowball, name);
+  }
+});
+
 test("meta.drops matches the copies under dropped/ in both directions", () => {
   const s = sweep();
   s.write("meta.json", { ...s.json("meta.json"), drops: [] });

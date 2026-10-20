@@ -266,6 +266,19 @@ class V4RecordTest(unittest.TestCase):
                 with self.assertRaisesRegex(TopicError, message):
                     self.render(repo)
 
+    def test_the_snowball_rows_equal_the_pool_snowballed_rows_and_the_stage_1_inputs_once_each(self):
+        def rows(folder):
+            return (folder / "snowball-screening-order.jsonl").read_text().splitlines(keepends=True)
+        for name, edit, held in (("a row deleted", lambda folder: (folder / "snowball-screening-order.jsonl").write_text("".join(rows(folder)[:4] + rows(folder)[5:])), "33 rows (33"),
+                                 ("a row duplicated", lambda folder: (folder / "snowball-screening-order.jsonl").write_text("".join(rows(folder) + rows(folder)[:1])), "35 rows (34"),
+                                 ("the file deleted", lambda folder: (folder / "snowball-screening-order.jsonl").unlink(), "0 rows (0")):
+            with self.subTest(name=name):
+                repo, folder = self.copy()
+                edit(folder)
+                with self.assertRaisesRegex(TopicError, rf"^snowball-screening-order.jsonl holds {re.escape(held)} distinct\), but the config pool holds 34 and the stage-1 inputs 34 "
+                                                        r"snowballed rows above rank 1000; "):
+                    self.render(repo)
+
     def test_meta_drops_matches_the_copies_under_dropped_in_both_directions(self):
         repo, folder = self.copy()
         meta = json.loads((folder / "meta.json").read_text())
