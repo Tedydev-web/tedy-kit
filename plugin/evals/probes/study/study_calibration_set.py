@@ -175,6 +175,7 @@ def calibration_checks(topic, folder):
             raise TopicError(f"{set_file(batch)} is not the set its seed, the pools and the recorded unreadable rows give; a batch is drawn once, by draw-calibration-set.py")
     if json.loads((folder / FREEZE_FILE).read_text()).get("examples_sha256") != hashlib.sha256(examples_text(topic).encode()).hexdigest():
         raise TopicError(f"{FREEZE_FILE} froze other worked examples than the topic config's stage1_examples hold now")
+    trigger_checks(folder)
 
 
 def labelled(folder, batches=("calibration",)):
@@ -204,25 +205,47 @@ def batch_purpose(folder, batch):
     return json.loads(path.read_text()).get("purpose") if path.is_file() else None
 
 
-def top_up_trigger(folder):
-    rows = labelled(folder, ("calibration",) + (("top-up",) if (Path(folder) / labels_file("top-up")).is_file() else ()))
-    positives = sum(r["user"]["decision"] == "eligible" for r in rows)
+def trigger_for(folder, earlier):
+    folder = Path(folder)
+    pooled = ("calibration",) + (("top-up",) if "top-up" in earlier and (folder / labels_file("top-up")).is_file() else ())
+    positives = sum(r["user"]["decision"] == "eligible" for r in labelled(folder, pooled))
+    trigger = {"positives": positives, "labels_sha256": {b: hashlib.sha256((folder / labels_file(b)).read_bytes()).hexdigest() for b in pooled}}
     if positives < POSITIVES_NEEDED:
-        if (Path(folder) / set_file("top-up")).is_file():
+        if "top-up" in earlier:
             raise TopicError(f"the set and its top-up batch hold {positives} positives pooled, still fewer than {POSITIVES_NEEDED}; stage 1 cannot be certified on them")
-        return "top-up", f"fewer than {POSITIVES_NEEDED} positives pooled ({positives}): the rows join the pooled bound"
-    rung = json.loads((Path(folder) / RUNG_FILE).read_text())["rung"] if (Path(folder) / RUNG_FILE).is_file() else None
+        return "top-up", f"fewer than {POSITIVES_NEEDED} positives pooled ({positives}): the rows join the pooled bound", trigger
+    rung = json.loads((folder / RUNG_FILE).read_text())["rung"] if (folder / RUNG_FILE).is_file() else None
     if rung and rung > 1:
-        held = held_out_batches(folder)
+        held = [b for b in earlier if HELD_OUT.match(b)]
+        trigger["rung"] = rung
         if not held:
-            return "held-out", f"stage-1 rung {rung} was chosen above the first: the rows are held out to confirm it"
+            return "held-out", f"stage-1 rung {rung} was chosen above the first: the rows are held out to confirm it", trigger
         found = sum(r["user"]["decision"] == "eligible" for r in labelled(folder, held))
         if found >= HELD_OUT_POSITIVES:
             raise TopicError(f"the held-out batches hold {found} positives, at least {HELD_OUT_POSITIVES}; no further held-out batch is drawn")
+        trigger["held_out_positives"] = found
+        trigger["labels_sha256"].update({b: hashlib.sha256((folder / labels_file(b)).read_bytes()).hexdigest() for b in held})
         return f"held-out-{len(held) + 1}", (f"the held-out batches hold {found} positives, fewer than {HELD_OUT_POSITIVES}: more enriched rows are held out to confirm "
-                                             f"stage-1 rung {rung}")
+                                             f"stage-1 rung {rung}"), trigger
     raise TopicError(f"no top-up trigger fired: the labels hold {positives} positives pooled (at least {POSITIVES_NEEDED}) and "
                      + ("rung 1 was chosen" if rung == 1 else "no stage-1 rung is chosen yet"))
+
+
+def top_up_trigger(folder):
+    return trigger_for(folder, all_batches(folder))[:2]
+
+
+def trigger_checks(folder):
+    batches = all_batches(folder)
+    for position, batch in enumerate(batches[1:], 1):
+        sample = json.loads((Path(folder) / set_file(batch)).read_text())
+        try:
+            expected = trigger_for(folder, batches[:position])
+        except TopicError as error:
+            raise TopicError(f"{set_file(batch)} was drawn when no trigger held: {error}") from error
+        if (batch, sample.get("purpose"), sample.get("trigger")) != expected:
+            raise TopicError(f"{set_file(batch)} records another trigger than the labelled batches before it give ({expected[0]}: {expected[1]}); a later batch is drawn only "
+                             f"while fewer than {POSITIVES_NEEDED} positives are pooled or a rung above the first is chosen, and its labels stay as they were at the draw")
 
 
 def draw_batch(topic, repo, work, criteria, fetch, top_up=None, today=None):
@@ -231,11 +254,11 @@ def draw_batch(topic, repo, work, criteria, fetch, top_up=None, today=None):
         if today is None or required_sweep_date(topic).isoformat() != today:
             raise TopicError(f"the sweep {topic['sweep']} is not named for the draw date {today}; name the v4 sweep <yymmdd>-<topic> at the calibration draw, "
                              "so no earlier work folder is mistaken for it")
-        batch, purpose, size = "calibration", "the calibration set", {s: SET_SIZE for s in calibrated(topic)}
+        batch, purpose, size, trigger = "calibration", "the calibration set", {s: SET_SIZE for s in calibrated(topic)}, None
     else:
         if not TOP_UP_MIN <= top_up <= TOP_UP_MAX:
             raise TopicError(f"a top-up batch holds {TOP_UP_MIN} to {TOP_UP_MAX} rows, not {top_up}")
-        batch, purpose = top_up_trigger(work)
+        batch, purpose, trigger = trigger_for(work, all_batches(work))
         strata = calibrated(topic)
         size = {s: top_up // len(strata) + (1 if i < top_up % len(strata) else 0) for i, s in enumerate(strata)}
     if (work / set_file(batch)).exists():
@@ -262,6 +285,8 @@ def draw_batch(topic, repo, work, criteria, fetch, top_up=None, today=None):
               "rows_per_stratum": size, "rows": rows}
     if HELD_OUT.match(batch):
         sample["rung_sha256"] = hashlib.sha256((work / RUNG_FILE).read_bytes()).hexdigest()
+    if trigger:
+        sample["trigger"] = trigger
     text = json.dumps(sample, indent=1, ensure_ascii=False) + "\n"
     set_sha = hashlib.sha256(text.encode()).hexdigest()
     draw = {"seed": f"{topic['sweep']}:{batch}:<stratum>", "set_sha256": set_sha, "skipped": {s: sorted(r) for s, r in skipped.items()}, "rows": provenance}

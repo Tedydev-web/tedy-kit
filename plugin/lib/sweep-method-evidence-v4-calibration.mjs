@@ -1,4 +1,4 @@
-import { CALIBRATED, canonical, lower, sha256 } from "./sweep-method-evidence-v4-shared.mjs";
+import { CALIBRATED, HELD_OUT_POSITIVES, POSITIVES_NEEDED, canonical, lower, sha256 } from "./sweep-method-evidence-v4-shared.mjs";
 
 const SET_SIZE = 60;
 const LIKELY_TOP = 10;
@@ -61,6 +61,35 @@ function drawStratum(io, topic, batch, earlier, stratum, size, readable) {
   return drawn.sort(byKey("order")).map((d) => ({ row: picked.get(d.order_rank), how: d }));
 }
 
+function expectedTrigger(io, earlier) {
+  const positivesOf = (batches) => batches.flatMap((b) => io.json(`${b}-labels.json`)?.rows ?? []).filter((r) => r.user?.decision === "eligible").length;
+  const hashes = (batches) => Object.fromEntries(batches.map((b) => [b, sha256(io.read(`${b}-labels.json`) ?? "")]));
+  const pooled = ["calibration", ...(earlier.includes("top-up") && io.read("top-up-labels.json") !== undefined ? ["top-up"] : [])];
+  const positives = positivesOf(pooled);
+  const trigger = { positives, labels_sha256: hashes(pooled) };
+  if (positives < POSITIVES_NEEDED) {
+    return earlier.includes("top-up") ? null : ["top-up", `fewer than ${POSITIVES_NEEDED} positives pooled (${positives}): the rows join the pooled bound`, trigger];
+  }
+  const rung = io.json("stage1-rung.json")?.rung;
+  if (!(rung > 1)) return null;
+  const held = earlier.filter((b) => HELD_OUT.test(b));
+  if (!held.length) return ["held-out", `stage-1 rung ${rung} was chosen above the first: the rows are held out to confirm it`, { ...trigger, rung }];
+  const found = positivesOf(held);
+  if (found >= HELD_OUT_POSITIVES) return null;
+  return [`held-out-${held.length + 1}`, `the held-out batches hold ${found} positives, fewer than ${HELD_OUT_POSITIVES}: more enriched rows are held out to confirm stage-1 rung ${rung}`,
+    { ...trigger, rung, held_out_positives: found, labels_sha256: { ...trigger.labels_sha256, ...hashes(held) } }];
+}
+
+function triggerErrors(io, batches) {
+  return batches.slice(1).flatMap((batch, i) => {
+    const expected = expectedTrigger(io, batches.slice(0, i + 1));
+    const sample = io.json(`${batch}-set.json`) ?? {};
+    return expected && canonical([batch, sample.purpose, sample.trigger]) === canonical(expected) ? []
+      : [`${batch}-set.json was drawn when no trigger held, or records another trigger than the labelled batches before it give; a later batch is drawn only while fewer than `
+        + `${POSITIVES_NEEDED} positives are pooled or a rung above the first is chosen, and its labels stay as they were at the draw`];
+  });
+}
+
 export function calibrationErrors(io, topic) {
   const errors = [];
   const strata = CALIBRATED.filter((s) => topic?.strata?.[s]?.channels && typeof topic.strata[s].channels === "object");
@@ -105,5 +134,5 @@ export function calibrationErrors(io, topic) {
       errors.push(`${batch}-set.json is not the set its seed, the pools and the recorded unreadable rows give; a batch is drawn once, by draw-calibration-set.py`);
     }
   }
-  return errors;
+  return [...errors, ...triggerErrors(io, batches)];
 }

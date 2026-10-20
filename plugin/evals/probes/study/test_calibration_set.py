@@ -204,6 +204,21 @@ class CalibrationSetTest(unittest.TestCase):
         from study_calibration_set import labelled
         self.assertEqual(len(labelled(work, ("calibration", "top-up"))), 150)
 
+    def test_the_top_up_trigger_is_recorded_at_the_draw_and_an_untriggered_top_up_is_refused(self):
+        from study_calibration_set import calibration_checks
+        from study_topic import TopicError, load_topic
+        work = self.fresh()
+        labels = user_labels(drawn_and_labelled(self.repo, work))
+        few = {k: v if n < 40 or v["decision"] != "eligible" else {**v, "decision": "excluded: below-threshold"} for n, (k, v) in enumerate(labels.items())}
+        quiet(self.repo, "import-calibration-labels", "--work", str(work), "--labels", str(self.labels_into(work, few)))
+        top = drawn_and_labelled(self.repo, work, top_up=30)
+        self.assertEqual(top["trigger"], {"positives": self.positives(few),
+                                          "labels_sha256": {"calibration": hashlib.sha256((work / "calibration-labels.json").read_bytes()).hexdigest()}})
+        calibration_checks(load_topic(self.repo, "demo"), work)
+        quiet(self.repo, "import-calibration-labels", "--work", str(work), "--labels", str(self.labels_into(work, labels)))
+        with self.assertRaisesRegex(TopicError, r"^top-up-set.json was drawn when no trigger held: no top-up trigger fired: the labels hold \d+ positives pooled \(at least 59\)"):
+            calibration_checks(load_topic(self.repo, "demo"), work)
+
     def test_a_rung_above_the_first_fires_the_held_out_draw_and_no_trigger_refuses_any_top_up(self):
         work = self.fresh()
         drawn_and_labelled(self.repo, work)
@@ -215,6 +230,7 @@ class CalibrationSetTest(unittest.TestCase):
         write_json(work / "stage1-rung.json", {"rung": 3})
         held = drawn_and_labelled(self.repo, work, top_up=40)
         self.assertEqual((held["batch"], held["purpose"], len(held["rows"])), ("held-out", "stage-1 rung 3 was chosen above the first: the rows are held out to confirm it", 40))
+        self.assertEqual((held["trigger"]["rung"], set(held["trigger"]["labels_sha256"])), (3, {"calibration"}))
         self.assertIn("Lô kiểm chứng giữ riêng", (work / "held-out.html").read_text())
 
     def labels_into(self, work, labels):

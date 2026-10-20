@@ -449,6 +449,24 @@ test("the pooled stage-2 plan and its stop line are recomputed from the files, s
     /config: the record's stage-2 stop line is not the plan the files give \("stopped at pooled depth 42 \(limit 150\); this stratum screens 22 of its 98 passes; pooled recall at the stop 38\/47"\)/);
 });
 
+test("a later calibration batch counts only when its trigger held at the draw, so an untriggered top-up fails the renderer and the gate", () => {
+  const s = sweep();
+  const labels = createHash("sha256").update(readFileSync(join(s.folder, "calibration-labels.json"))).digest("hex");
+  s.write("top-up-set.json", {
+    sweep: SWEEP, batch: "top-up", purpose: "fewer than 59 positives pooled (41): the rows join the pooled bound",
+    rows_per_stratum: { config: 15, product: 15 }, rows: [], trigger: { positives: 41, labels_sha256: { calibration: labels } },
+  });
+  const errors = s.errors();
+  assert.match(errors, /^the record renderer refused the sweep files: /m);
+  assert.match(errors, /^top-up-set\.json was drawn when no trigger held, or records another trigger than the labelled batches before it give; /m);
+  const held = sweep(escalated);
+  assert.equal(held.errors(), "");
+  const set = held.json("held-out-set.json");
+  assert.deepEqual(Object.keys(set.trigger.labels_sha256), ["calibration"]);
+  held.write("held-out-set.json", `${JSON.stringify({ ...set, trigger: { ...set.trigger, rung: 3 } }, null, 1)}\n`);
+  assert.match(held.errors(), /^held-out-set\.json was drawn when no trigger held, or records another trigger than the labelled batches before it give; /m);
+});
+
 test("H-calibration: the gate redraws every calibration batch, binds the labels to its rows and keeps worked examples out", () => {
   const redrawn = /calibration-set\.json is not the set its seed, the pools and the recorded unreadable rows give/;
   const s = sweep();
