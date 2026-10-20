@@ -6,7 +6,7 @@ from pathlib import Path
 
 from study_agreement import RECALL_TARGET, cohen_kappa, interval_text, kappa_text
 from study_calibration_set import all_batches, calibration_checks, labelled, labels_file, set_file
-from study_drop import drop_checks, file_stem
+from study_drop import RETIRABLE, drop_checks, file_stem
 from study_judges import AUDIT_FILE, AUDIT_ROWS, SHAPES, criteria_version, decided, judged_batches, reader_shares_family, roster, validate
 from study_method_sessions import checked_entry, row_hashes
 from study_qgs import ADJUDICATED, JUDGE_FILES, PACKET, UPPER_ESTIMATE, candidate_rows, cross_family, cross_name, member_facets, qgs_standard, stratum_members
@@ -29,10 +29,24 @@ def listed(values):
     return ", ".join(sorted(map(str, values))[:10]) or "none"
 
 
+def retired_lines(folder):
+    return [f"- retired: {r['key']}: {r['reason']} ({r['date']}); its blocks were dropped and it was not run again" for r in read_json(folder, "meta.json").get("retired") or []]
+
+
 def run_file_checks(topic, folder, sessions):
     files = sorted(p.name for p in Path(folder).glob("*.jsonl"))
     rows = {k: read_jsonl(Path(folder), f"{file_stem(k)}.jsonl") if f"{file_stem(k)}.jsonl" in files else [] for k in sessions}
-    missing = [k for k in sessions if not rows[k]]
+    meta = read_json(folder, "meta.json")
+    retired = set()
+    for record in meta.get("retired") or []:
+        key = str(record.get("key"))
+        if not RETIRABLE.match(key):
+            raise TopicError(f"{key} is a roster session and is recorded as retired; production judges are run again after a drop, never retired")
+        if key not in sessions or (sessions[key] or {}).get("blocks") or rows[key] or not str(record.get("reason") or "").strip() or key in retired or \
+                not any(d.get("key") == key for d in meta.get("drops") or []):
+            raise TopicError(f"{key} is recorded as retired, but it is not a session whose every block drop-run.py dropped, once, with a reason; retire it with retire-run.py")
+        retired.add(key)
+    missing = [k for k in sessions if not rows[k] and k not in retired]
     if missing:
         raise TopicError(f"meta.json records sessions {', '.join(missing[:10])} whose output files are missing or empty in the sweep folder; a recorded run's rows are never "
                          "deleted, only dropped with drop-run.py")
@@ -491,4 +505,4 @@ def v4_parts(topic, folder, strata, freeze, sessions, faceted, common, decided_r
     return {"recall": recall, "prisma": ["| stratum | stage | count |", "|---|---|---|"] + [f"| {s} | {k} | {v} |" for s, k, v in prisma],
             "facets": facet_lines(topic, folder, strata, decided_rows) + snowball_lines(folder, strata, faceted),
             "calibration": batch_lines(topic, folder, strata), "stage1": stage1 + stage1_audit_lines(topic, folder, strata, freeze),
-            "judges": judges + standard_lines(out) + audits, "threats": recall_threats + judge_threats + audit_threats + stops}
+            "judges": judges + standard_lines(out) + audits, "threats": recall_threats + judge_threats + audit_threats + retired_lines(folder) + stops}

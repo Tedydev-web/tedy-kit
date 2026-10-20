@@ -57,5 +57,52 @@ class DropRunTest(unittest.TestCase):
         self.assertNotIn("drops", json.loads((self.work / "meta.json").read_text()))
 
 
+class RetireRunTest(unittest.TestCase):
+    AUDIT = "config-audit-gemini-3.8-flash-high"
+
+    def setUp(self):
+        self.repo = topic_repo()
+        self.work = Path(tempfile.mkdtemp(prefix="study-retire-"))
+        for folder in (self.repo, self.work):
+            self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        blocks = [{"ranks": [3, 4], "row_sha256": {"3": "a" * 64, "4": "b" * 64}}]
+        write_json(self.work / "meta.json", {"title": "t", "sessions": {self.AUDIT: {"cli": "agy", "model": "gemini-3.8-flash-high", "blocks": blocks},
+                                                                         KEY: {"model": "claude-opus-5-5", "blocks": [{"ranks": [1], "row_sha256": {"1": "c" * 64}}]}}})
+        write_jsonl(self.work / f"{self.AUDIT}.jsonl", [{"order_rank": r, "verdict": "yes"} for r in (3, 4)])
+        write_jsonl(self.work / f"{KEY}.jsonl", [{"order_rank": 1, "verdict": "yes"}])
+
+    def run_tool(self, name, key, *extra):
+        script(name).main(["--topic", "demo", "--repo", str(self.repo), "--work", str(self.work), "--key", key, "--today", "2026-10-20", *extra])
+
+    def test_a_cross_family_run_is_retired_only_once_every_block_was_dropped_and_its_file_holds_no_row(self):
+        with self.assertRaisesRegex(SystemExit, f"{self.AUDIT} still records blocks; drop each with drop-run.py before it is retired"):
+            self.run_tool("retire-run", self.AUDIT, "--reason", "Gemini unreachable")
+        self.run_tool("drop-run", self.AUDIT, "--ranks", "3-4", "--reason", "agy quota ran out mid-run")
+        with self.assertRaisesRegex(SystemExit, "a retired run needs a reason"):
+            self.run_tool("retire-run", self.AUDIT, "--reason", " ")
+        self.run_tool("retire-run", self.AUDIT, "--reason", "Gemini unreachable until the quota resets")
+        meta = json.loads((self.work / "meta.json").read_text())
+        self.assertEqual(meta["retired"], [{"key": self.AUDIT, "reason": "Gemini unreachable until the quota resets", "date": "2026-10-20"}])
+        self.assertEqual(meta["sessions"][self.AUDIT]["blocks"], [])
+        self.assertFalse((self.work / f"{self.AUDIT}.jsonl").exists())
+        with self.assertRaisesRegex(SystemExit, f"{self.AUDIT} is already retired"):
+            self.run_tool("retire-run", self.AUDIT, "--reason", "again")
+
+    def test_a_roster_session_is_never_retired(self):
+        self.run_tool("drop-run", KEY, "--ranks", "1-1", "--reason", "packet fix")
+        with self.assertRaisesRegex(SystemExit, f"{KEY} is a roster session: production judges are run again after a drop, never retired; only a cross-family audit "
+                                                "or QGS run is retired"):
+            self.run_tool("retire-run", KEY, "--reason", "no time")
+        self.assertNotIn("retired", json.loads((self.work / "meta.json").read_text()))
+
+    def test_a_session_with_no_recorded_drop_is_not_retired(self):
+        meta = json.loads((self.work / "meta.json").read_text())
+        meta["sessions"][self.AUDIT]["blocks"] = []
+        write_json(self.work / "meta.json", meta)
+        (self.work / f"{self.AUDIT}.jsonl").write_text("")
+        with self.assertRaisesRegex(SystemExit, f"meta.json records no drop of {self.AUDIT}; a run is retired only after drop-run.py dropped its blocks"):
+            self.run_tool("retire-run", self.AUDIT, "--reason", "Gemini unreachable")
+
+
 if __name__ == "__main__":
     unittest.main()

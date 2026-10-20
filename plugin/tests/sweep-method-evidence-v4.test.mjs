@@ -345,6 +345,40 @@ test("a recorded session's output file holds exactly the rows its blocks cover, 
   failsBothLayers(s, /prior-art-sweep-record: /, /^qgs-reader\.jsonl does not hold exactly the rows its recorded blocks cover \(rows outside its blocks: none; rows its blocks cover that it lacks: \d+\); /, "a reader row deleted");
 });
 
+test("a cross-family run whose blocks were all dropped is retired with retire-run.py and reads as pending with its reason; a roster session cannot be retired", () => {
+  const tool = (s, script, key, ...args) => {
+    const run = spawnSync("python3", ["-B", join(STUDY, script), "--topic", "demo", "--repo", s.repo, "--work", s.folder, "--key", key, "--today", "2026-10-20", ...args],
+      { encoding: "utf8", env: { ...process.env, STUDY_NO_NETWORK: "1" } });
+    assert.equal(run.status, 0, run.stderr);
+  };
+  const dropAll = (s, key) => {
+    for (const block of s.json("meta.json").sessions[key].blocks) tool(s, "drop-run.py", key, "--ranks", `${block.ranks[0]}-${block.ranks.at(-1)}`, "--reason", "agy quota ran out mid-run");
+  };
+  const key = "product-audit-gemini-3.8-flash-high";
+  const s = sweep();
+  dropAll(s, key);
+  tool(s, "retire-run.py", key, "--reason", "Gemini unreachable until the quota resets");
+  const text = s.rendered();
+  const retired = "- retired: product-audit-gemini-3.8-flash-high: Gemini unreachable until the quota resets (2026-10-20); its blocks were dropped and it was not run again";
+  assert.ok(text.includes(retired), text.split("\n").filter((l) => l.startsWith("- cross-family") || l.startsWith("- retired")).join("\n"));
+  assert.match(text, /^- cross-family audit pending: product: 0 of 19 audit rows screened by gemini-3\.8-flash-high; /m);
+  assert.equal(s.errors(text), "");
+  const errors = s.errors(text.replace(`${retired}\n`, "")).split("\n");
+  assert.ok(errors.some((l) => !l.startsWith("the record renderer") && !l.startsWith("the record is not the one") && l.includes(retired)), errors.join("\n"));
+  const cross = sweep();
+  dropAll(cross, "qgs-cross-gemini-3.8-flash-high");
+  tool(cross, "retire-run.py", "qgs-cross-gemini-3.8-flash-high", "--reason", "Gemini unreachable until the quota resets");
+  const crossText = cross.rendered();
+  assert.match(crossText, /^- cross-family QGS judge gemini-3\.8-flash-high: no judgment kept$/m);
+  assert.match(crossText, /^- retired: qgs-cross-gemini-3\.8-flash-high: Gemini unreachable until the quota resets \(2026-10-20\); /m);
+  assert.equal(cross.errors(crossText), "");
+  const t = sweep();
+  dropAll(t, "qgs-reader");
+  t.write("meta.json", { ...t.json("meta.json"), retired: [{ key: "qgs-reader", reason: "no time", date: "2026-10-20" }] });
+  const roster = /^qgs-reader is a roster session and is recorded as retired; production judges are run again after a drop, never retired$/;
+  failsBothLayers(t, new RegExp(`prior-art-sweep-record: ${roster.source.slice(1)}`), roster, "a retired reader");
+});
+
 test("the pilot sessions run the roster's session A and session B options, cli and model", () => {
   const probes = [
     ["config-pilot-B-claude-sonnet-5-5", { cli: "claudex" }],

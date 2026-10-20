@@ -9,6 +9,7 @@ from study_topic import TopicError
 SCREEN_KEY = re.compile(r"^([a-z0-9]+)-([AB])$")
 PILOT_KEY = re.compile(r"^([a-z0-9]+)-pilot-")
 DROP_SUFFIX = re.compile(r"\.(?:block\.json|rows\.jsonl|inputs\.jsonl)$")
+RETIRABLE = re.compile(r"^(?:[a-z0-9]+-audit-.+|qgs-cross-.+)$")
 
 
 def free_name(folder, stem):
@@ -37,6 +38,32 @@ def drop_checks(folder):
     loose = sorted({f"dropped/{re.sub(DROP_SUFFIX, '', p.name)}" for p in (folder / "dropped").glob("*")} - copies) if (folder / "dropped").is_dir() else []
     if loose:
         raise TopicError(f"{', '.join(loose)}: a dropped copy without its meta.json drops entry; a run is dropped only by drop-run.py, which records both")
+
+
+def retire_run(work, key, reason, today):
+    work = Path(work)
+    if not isinstance(reason, str) or not reason.strip():
+        raise TopicError("a retired run needs a reason, recorded in meta.json")
+    if not RETIRABLE.match(key):
+        raise TopicError(f"{key} is a roster session: production judges are run again after a drop, never retired; only a cross-family audit or QGS run is retired")
+    rows_file = work / f"{file_stem(key)}.jsonl"
+
+    def change(meta):
+        entry = (meta.get("sessions") or {}).get(key)
+        if entry is None:
+            raise TopicError(f"meta.json records no session {key}")
+        if any(r.get("key") == key for r in meta.get("retired") or []):
+            raise TopicError(f"{key} is already retired")
+        if entry.get("blocks"):
+            raise TopicError(f"{key} still records blocks; drop each with drop-run.py before it is retired")
+        if not any(d.get("key") == key for d in meta.get("drops") or []):
+            raise TopicError(f"meta.json records no drop of {key}; a run is retired only after drop-run.py dropped its blocks")
+        if rows_file.is_file() and rows_file.read_text().strip():
+            raise TopicError(f"{rows_file.name} still holds rows; drop them with drop-run.py first")
+        meta.setdefault("retired", []).append({"key": key, "reason": reason.strip(), "date": today})
+
+    update_meta(work, change)
+    rows_file.unlink(missing_ok=True)
 
 
 def file_stem(key):

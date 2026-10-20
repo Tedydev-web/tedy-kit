@@ -130,7 +130,8 @@ export function proseErrors(io, topic, strata, sessions, meta = {}) {
   const base = baseThreats(topic, strata, sessions, freeze, io.jsonl("papers.jsonl"));
   const reader = topic?.reader?.model;
   const judges = [topic?.qgs_judges?.A?.model, topic?.qgs_judges?.B?.model];
-  const expected = [...base, ...(judges.every((m) => family(m) === family(reader))
+  const retired = (meta?.retired ?? []).map((r) => `- retired: ${r?.key}: ${r?.reason} (${r?.date}); its blocks were dropped and it was not run again`);
+  const expected = [...base, ...retired, ...(judges.every((m) => family(m) === family(reader))
     ? [`- reader shares the QGS judges' model family: the reader ${reader} and the QGS judges ${judges[0]} and ${judges[1]} are all ${family(reader)} models, so an error they `
       + "share passes the adjudication; the cross-family judge's yes is the counter-check"] : [])];
   const missing = expected.filter((line) => !threats.includes(line));

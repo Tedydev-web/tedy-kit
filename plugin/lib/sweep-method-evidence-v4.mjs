@@ -133,7 +133,21 @@ function dropErrors(io, read, meta, dropped) {
   const files = io.files ?? [];
   const stem = (key) => key.replace(/^([a-z0-9]+)-([AB])$/, "$1-screen-$2");
   const rowsOf = Object.fromEntries(Object.keys(meta.sessions ?? {}).map((key) => [key, files.includes(`${stem(key)}.jsonl`) ? io.jsonl(`${stem(key)}.jsonl`) : []]));
-  const missing = Object.keys(rowsOf).filter((key) => !rowsOf[key].length);
+  const retired = new Set();
+  for (const record of meta.retired ?? []) {
+    const key = String(record?.key);
+    if (!/^(?:[a-z0-9]+-audit-.+|qgs-cross-.+)$/.test(key)) {
+      errors.push(`${key} is a roster session and is recorded as retired; production judges are run again after a drop, never retired`);
+      continue;
+    }
+    if (!(key in rowsOf) || (meta.sessions[key]?.blocks ?? []).length || rowsOf[key].length || !String(record?.reason ?? "").trim() || retired.has(key)
+      || !(meta.drops ?? []).some((d) => d?.key === key)) {
+      errors.push(`${key} is recorded as retired, but it is not a session whose every block drop-run.py dropped, once, with a reason; retire it with retire-run.py`);
+      continue;
+    }
+    retired.add(key);
+  }
+  const missing = Object.keys(rowsOf).filter((key) => !rowsOf[key].length && !retired.has(key));
   if (missing.length) {
     errors.push(`meta.json records sessions ${missing.slice(0, 10).join(", ")} whose output files are missing or empty in the sweep folder; a recorded run's rows are never deleted, `
       + "only dropped with drop-run.py");

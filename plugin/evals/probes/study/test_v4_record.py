@@ -281,6 +281,38 @@ class V4RecordTest(unittest.TestCase):
                                                 r"that it lacks: \d+\); "):
             self.render(repo)
 
+    def retire(self, repo, folder, key, reason="Gemini unreachable until the quota resets"):
+        from study_fixtures import script
+        common = ["--topic", "demo", "--repo", str(repo), "--work", str(folder), "--key", key, "--today", "2026-10-20"]
+        for block in json.loads((folder / "meta.json").read_text())["sessions"][key]["blocks"]:
+            script("drop-run").main([*common, "--ranks", f"{block['ranks'][0]}-{block['ranks'][-1]}", "--reason", "agy quota ran out mid-run"])
+        if reason:
+            script("retire-run").main([*common, "--reason", reason])
+
+    def test_a_retired_cross_family_audit_reads_as_pending_with_its_reason_and_a_roster_session_cannot_be_retired(self):
+        repo, folder = self.copy()
+        self.retire(repo, folder, "product-audit-gemini-3.8-flash-high")
+        text = self.render(repo)
+        self.assertIn("- cross-family audit pending: product: 0 of 19 audit rows screened by gemini-3.8-flash-high; ", text)
+        self.assertIn("- retired: product-audit-gemini-3.8-flash-high: Gemini unreachable until the quota resets (2026-10-20); its blocks were dropped and it was not "
+                      "run again", text)
+        self.assertNotIn("- product audit: ", text)
+        repo, folder = self.copy()
+        self.retire(repo, folder, "qgs-cross-gemini-3.8-flash-high")
+        text = self.render(repo)
+        self.assertIn("- cross-family QGS judge gemini-3.8-flash-high: no judgment kept", text)
+        self.assertIn("- retired: qgs-cross-gemini-3.8-flash-high: Gemini unreachable until the quota resets (2026-10-20); ", text)
+        repo, folder = self.copy()
+        self.retire(repo, folder, "product-audit-gemini-3.8-flash-high", reason=None)
+        with self.assertRaisesRegex(TopicError, "^meta.json records sessions product-audit-gemini-3.8-flash-high whose output files are missing or empty"):
+            self.render(repo)
+        repo, folder = self.copy()
+        self.retire(repo, folder, "qgs-reader", reason=None)
+        meta = json.loads((folder / "meta.json").read_text())
+        (folder / "meta.json").write_text(json.dumps({**meta, "retired": [{"key": "qgs-reader", "reason": "no time", "date": "2026-10-20"}]}))
+        with self.assertRaisesRegex(TopicError, "^qgs-reader is a roster session and is recorded as retired; production judges are run again after a drop, never retired$"):
+            self.render(repo)
+
     def test_the_pilot_sessions_run_the_roster_session_a_and_session_b_options(self):
         for key, change in (("config-pilot-B-claude-sonnet-5-5", {"cli": "claudex"}), ("config-pilot-A", {"model": "claude-haiku-4-5"}), ("product-pilot-A", {"cli": "agy"})):
             with self.subTest(key=key):
