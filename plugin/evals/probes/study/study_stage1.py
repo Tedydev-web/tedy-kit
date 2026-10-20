@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from study_agreement import clopper_pearson, lower_bound
@@ -15,7 +16,8 @@ LADDER = ({"rung": 1, "models": [SONNET], "shape": "brief"}, {"rung": 2, "models
 SHAPES = ("brief", "paths", "readme")
 BATCH_MAX = STAGE1_BATCH_MAX
 PATHS_MAX, README_LINES, README_CHARS = 40, 20, 1500
-POSITIVES_NEEDED, SENSITIVITY_BOUND = 59, 0.95
+POSITIVES_NEEDED, SENSITIVITY_BOUND, HELD_OUT_POSITIVES = 59, 0.95, 10
+HELD_OUT = re.compile(r"^held-out(?:-\d+)?$")
 FREEZE_FILE, RUNG_FILE = "stage1-freeze.json", "stage1-rung.json"
 VERDICT_KEYS = ("repo", "description", "verdict", "problems", "why")
 
@@ -30,6 +32,11 @@ def pool_name(stratum, shape, model):
 
 def calibration_name(stratum, shape, model, run):
     return f"judge-{stratum}-stage1-{shape}-{model}-run{run}"
+
+
+def held_out_batches(folder):
+    found = [p.name[:-len("-set.json")] for p in Path(folder).glob("held-out*-set.json")]
+    return sorted((b for b in found if HELD_OUT.match(b)), key=lambda b: int(b.rsplit("-", 1)[1]) if b[-1].isdigit() else 1)
 
 
 def held_out_name(stratum, shape, model):
@@ -203,6 +210,9 @@ def held_out_check(folder, rung_number, rows):
     result = rung_run(folder, rung, None, rows, held_out=True)
     if result is None:
         raise TopicError(f"the held-out batch is not judged by every model of rung {rung_number}; run run-stage1.py --set held-out for {', '.join(rung['models'])}")
+    if result["positives"] < HELD_OUT_POSITIVES:
+        raise TopicError(f"the held-out batches hold {result['positives']} positives, fewer than {HELD_OUT_POSITIVES}; draw more enriched rows with "
+                         "draw-calibration-set.py --top-up before the rung is confirmed")
     if result["missed"]:
         raise TopicError(f"rung {rung_number} missed {len(result['missed'])} held-out positives ({', '.join(result['missed'])}); it is not confirmed, so stage 1 cannot run on the pool")
     return result

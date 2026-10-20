@@ -5,6 +5,7 @@ const SENSITIVITY_FLOOR = 0.9;
 const KAPPA_FLOOR = 0.6;
 const STAGE1_BOUND = 0.95;
 const POSITIVES_NEEDED = 59;
+const HELD_OUT_POSITIVES = 10;
 const CALIBRATED = ["config", "product"];
 const DROP_COPY = /^dropped\/[\w.-]+$/;
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
@@ -212,8 +213,11 @@ function stage1Errors(io, sessions, strata, rows) {
   const rung = (freeze.ladder ?? []).find((r) => r.rung === chosen.rung);
   if (!rung) return { errors: [...errors, `stage1-rung.json names rung ${chosen.rung}, which the frozen ladder does not hold`], passes: {} };
   if (chosen.rung > 1) {
-    const held = labelledRows(io, io.read, ["held-out"]);
+    const batches = (io.files ?? []).map((f) => f.match(/^(held-out(?:-\d+)?)-labels\.json$/)?.[1]).filter(Boolean);
+    const held = labelledRows(io, io.read, batches.length ? batches : ["held-out"]);
     errors.push(...held.errors);
+    const positives = held.rows.filter((r) => r.user?.decision === "eligible").length;
+    if (positives < HELD_OUT_POSITIVES) errors.push(`rung ${chosen.rung} is confirmed on held-out batches holding ${positives} positives, fewer than ${HELD_OUT_POSITIVES}`);
     for (const stratum of strata) {
       const passed = pass(rung, stratum, (m) => `judge-${stratum}-stage1-${rung.shape}-${m}-held-out`);
       const missed = held.rows.filter((r) => r.stratum === stratum && r.user?.decision === "eligible" && passed(r.order_rank) !== true);
@@ -376,8 +380,8 @@ function recallErrors(io, text, topic, strata, members, passes, screened) {
   return errors;
 }
 
-export function v4Errors(text, { read, topic, meta }) {
-  const io = { ...reader(read), read, topic };
+export function v4Errors(text, { read, files, topic, meta }) {
+  const io = { ...reader(read), read, topic, files };
   const sessions = meta.sessions ?? {};
   const strata = CALIBRATED.filter((s) => topic?.strata?.[s]?.channels && typeof topic.strata[s].channels === "object");
   if (!Object.keys(topic?.facets ?? {}).length) return ["a quality criteria v4 record needs a topic config that declares its facets"];

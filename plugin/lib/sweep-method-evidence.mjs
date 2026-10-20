@@ -156,7 +156,7 @@ export function checkMethodEvidence(text, { files, read, criteriaText, topic }) 
     if (!stop) errors.push(`${stratum}: no stop line derived from the screening data`);
     else if (topic && Number(stop[1]) !== written) errors.push(`${stratum}: the topic config's stop_row is ${written}, the record stops at row ${stop[1]}; write it with compare-screening-sessions.py --write-stop`);
   }
-  if (v4) return [...errors, ...v4Errors(text, { read, topic, meta: JSON.parse(read("meta.json") ?? "{}") })];
+  if (v4) return [...errors, ...v4Errors(text, { read, files, topic, meta: JSON.parse(read("meta.json") ?? "{}") })];
   if (topic?.clusters) errors.push(`the record pins quality criteria v${criteriaVersion(text)}, but its topic holds a facet of more than one problem, a cluster that quality criteria v4 introduced; screen it under v4`);
   if (!/^- user vs session A: /m.test(part(text, "Calibration")) && !/^- LLM-only screening: /m.test(threats)) errors.push("no user calibration agreement and no LLM-only screening threat");
   return errors;

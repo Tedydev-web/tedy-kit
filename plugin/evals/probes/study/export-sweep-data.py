@@ -141,6 +141,8 @@ def export(topic, repo, work):
     for name in SHARED_JSONL:
         if (work / name).exists():
             jsonl(name)
+    for path in sorted(work.glob("held-out-*-*.json")):
+        data(path.name)
     for path in sorted(work.glob("qgs-cross-*.jsonl")):
         jsonl(path.name)
     for path in sorted(work.glob("dropped/*")):

@@ -11,7 +11,7 @@ from study_screening_core import read_jsonl
 from study_screening_input import fetch_inputs, inputs_file
 from study_session import canonical_sha256, qgs_shape
 from study_session_prompt import date_cell, required_sweep_date
-from study_stage1 import FREEZE_FILE, POSITIVES_NEEDED, RUNG_FILE, inputs_name
+from study_stage1 import FREEZE_FILE, HELD_OUT, HELD_OUT_POSITIVES, POSITIVES_NEEDED, RUNG_FILE, held_out_batches, inputs_name
 from study_topic import TopicError, screened_strata
 
 SET_SIZE, LIKELY_TOP, TOP_UP_MIN, TOP_UP_MAX = 60, 10, 30, 40
@@ -73,8 +73,16 @@ def take(topic, work, stratum, queue, picked, fetch, want):
     return taken
 
 
+def all_batches(work):
+    return [b for b in BATCHES[:2] if (Path(work) / set_file(b)).is_file()] + held_out_batches(work)
+
+
 def drawn_before(work):
-    return {(r["stratum"], r["order_rank"]) for batch in BATCHES if (Path(work) / set_file(batch)).is_file() for r in json.loads((Path(work) / set_file(batch)).read_text())["rows"]}
+    return {(r["stratum"], r["order_rank"]) for batch in all_batches(work) for r in json.loads((Path(work) / set_file(batch)).read_text())["rows"]}
+
+
+def example_repos(topic):
+    return {str(e.get("repo", "")).lower() for e in topic.get("stage1_examples") or [] if isinstance(e, dict)}
 
 
 def draw_stratum(topic, work, stratum, size, enriched_only, rng, fetch):
@@ -85,6 +93,8 @@ def draw_stratum(topic, work, stratum, size, enriched_only, rng, fetch):
         raise TopicError(f"no {inputs_name(stratum, 'brief')} in {work}; the calibration set is drawn after the stage-1 inputs exist")
     candidates = {r["repo"].lower() for r in read_jsonl(Path(work), candidates_file(work).name)}
     taken_before = {rank for s, rank in drawn_before(work) if s == stratum}
+    examples = example_repos(topic)
+    order = [r for r in order if r["repo"].lower() not in examples]
     names = list(topic["facets"])
     picked, drawn = {}, []
     for index, facet in enumerate(names):
@@ -144,9 +154,14 @@ def top_up_trigger(folder):
         return "top-up", f"fewer than {POSITIVES_NEEDED} positives pooled ({positives}): the rows join the pooled bound"
     rung = json.loads((Path(folder) / RUNG_FILE).read_text())["rung"] if (Path(folder) / RUNG_FILE).is_file() else None
     if rung and rung > 1:
-        if (Path(folder) / set_file("held-out")).is_file():
-            raise TopicError("the held-out batch is already drawn")
-        return "held-out", f"stage-1 rung {rung} was chosen above the first: the rows are held out to confirm it"
+        held = held_out_batches(folder)
+        if not held:
+            return "held-out", f"stage-1 rung {rung} was chosen above the first: the rows are held out to confirm it"
+        found = sum(r["user"]["decision"] == "eligible" for r in labelled(folder, held))
+        if found >= HELD_OUT_POSITIVES:
+            raise TopicError(f"the held-out batches hold {found} positives, at least {HELD_OUT_POSITIVES}; no further held-out batch is drawn")
+        return f"held-out-{len(held) + 1}", (f"the held-out batches hold {found} positives, fewer than {HELD_OUT_POSITIVES}: more enriched rows are held out to confirm "
+                                             f"stage-1 rung {rung}")
     raise TopicError(f"no top-up trigger fired: the labels hold {positives} positives pooled (at least {POSITIVES_NEEDED}) and "
                      + ("rung 1 was chosen" if rung == 1 else "no stage-1 rung is chosen yet"))
 
@@ -295,6 +310,7 @@ TITLES = {"calibration": "Bộ hiệu chuẩn", "top-up": "Lô bổ sung", "held
 
 def page(topic, batch, set_sha, shown, anchor):
     when = required_sweep_date(topic)
+    batch = "held-out" if HELD_OUT.match(batch) else batch
     intro = (f"{TITLES[batch]} có {len(shown)} dòng. Mỗi dòng là một repository kèm đúng dữ liệu đầu vào mà mọi giám khảo chấm. Trang không hiển thị câu trả lời của bất kỳ giám khảo "
              "hay phiên chấm nào, cũng không cho biết dòng được rút theo cách nào. Với mỗi dòng: đọc dữ liệu, chấm năm tiêu chí theo mô tả bên cạnh từng lựa chọn (1, 0.5 hoặc 0), đánh "
              "dấu các mã vấn đề mà repository có cơ chế xử lý, rồi chọn Đủ điều kiện hoặc Loại kèm lý do. Date do công cụ tính sẵn nên chỉ hiển thị. Đủ điều kiện khi Relevance = 1 "
@@ -338,6 +354,8 @@ def checked_label(key, label, problems):
 
 def import_labels(topic, work, saved, batch="calibration"):
     work = Path(work)
+    if batch not in BATCHES[:2] and not HELD_OUT.match(batch):
+        raise TopicError(f"batch {batch!r} is not calibration, top-up or a held-out batch")
     if not (work / FREEZE_FILE).is_file():
         raise TopicError(f"no {FREEZE_FILE} in {work}; freeze the stage-1 ladder with freeze-stage1.py before any calibration label is read")
     path = work / set_file(batch)

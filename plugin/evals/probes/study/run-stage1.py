@@ -9,7 +9,7 @@ from study_fetch import Fetch, NetworkRefused
 from study_qgs import whole_topic
 from study_screening_core import read_jsonl
 from study_session import run_block
-from study_stage1 import (BATCH_MAX, LADDER, RUNG_FILE, SHAPES, auto_pass, calibration_name, examples_text, held_out_check, held_out_name, inputs_name, ladder_rung, option,
+from study_stage1 import (BATCH_MAX, LADDER, RUNG_FILE, SHAPES, auto_pass, calibration_name, examples_text, held_out_batches, held_out_check, held_out_name, inputs_name, ladder_rung, option,
                           pool_name, read_freeze, sha256_text, stage1_inputs)
 from study_topic import TopicError, load_topic, require_screened, saigon_today, topic_arguments
 
@@ -45,9 +45,9 @@ def plan(work, stratum, shape, model, which, run):
     if which == "held-out":
         if rung["rung"] == 1:
             raise TopicError("rung 1 was chosen, so no held-out batch confirms it")
-        return held_out_name(stratum, shape, model), set_ranks(work, stratum, ("held-out",))
+        return held_out_name(stratum, shape, model), set_ranks(work, stratum, held_out_batches(work))
     if rung["rung"] > 1:
-        held_out_check(work, rung["rung"], labelled(work, ("held-out",)))
+        held_out_check(work, rung["rung"], labelled(work, held_out_batches(work)))
     return pool_name(stratum, shape, model), sorted(stage1_inputs(work, stratum, shape))
 
 

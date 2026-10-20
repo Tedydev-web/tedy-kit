@@ -74,6 +74,20 @@ class CalibrationSetTest(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "no stage1-inputs-product-brief.jsonl in .*; the calibration set is drawn after the stage-1 inputs exist"):
             draw(self.repo, early)
 
+    def test_repositories_used_as_stage1_worked_examples_are_never_drawn(self):
+        repo = v4_repo()
+        path = repo / "docs/prior-art/topics/demo.json"
+        topic = json.loads(path.read_text())
+        drawn = {r["repo"] for r in self.sample["rows"]}
+        used = sorted(drawn)[:6]
+        topic["stage1_examples"] = [{**e, "repo": r} for e, r in zip(topic["stage1_examples"], used)]
+        write_json(path, topic)
+        work = v4_work(repo)
+        draw(repo, work)
+        again = {r["repo"] for r in json.loads((work / "calibration-set.json").read_text())["rows"]}
+        self.assertFalse(again & set(used))
+        self.assertEqual(len(again), 120)
+
     def test_the_page_is_self_contained_vietnamese_and_shows_inputs_anchors_and_problem_ids_only(self):
         self.assertIn("<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'\">", self.page)
         self.assertIsNone(re.search(r"<(?:script|link|img|iframe|object|embed|audio|video|source)\b[^>]*\b(?:src|href)=", self.page))

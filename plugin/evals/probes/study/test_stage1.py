@@ -234,8 +234,32 @@ class Stage1Test(unittest.TestCase):
             held_out_check(self.work, 2, labelled(self.work, ("held-out",)))
         with self.assertRaisesRegex(SystemExit, "rung 2 missed 1 held-out positives"):
             self.call("run-stage1", "--stratum", "config", "--shape", "brief", "--model", OPUS, "--set", "pool", fetch=replies)
-        with self.assertRaisesRegex(TopicError, "the held-out batch is already drawn"):
+        with self.assertRaisesRegex(TopicError, "the held-out batches hold 20 positives, at least 10; no further held-out batch is drawn"):
             top_up_trigger(self.work)
+
+    def test_a_held_out_batch_with_fewer_than_10_positives_never_confirms_a_rung_and_more_enriched_rows_are_drawn(self):
+        from study_calibration_set import labelled, top_up_trigger
+        from study_stage1 import held_out_batches, held_out_check
+        self.inputs(60)
+        self.frozen()
+        self.batch("calibration", self.labelled_rows("calibration", 59, 1))
+        write_json(self.work / "stage1-rung.json", {"rung": 2})
+        self.batch("held-out", self.labelled_rows("held-out", 0, 10, first=31))
+        replies = Stage1Replies({})
+        for model in (OPUS, SONNET):
+            for stratum in STRATA:
+                self.call("run-stage1", "--stratum", stratum, "--shape", "brief", "--model", model, "--set", "held-out", "--today", "2026-10-20", fetch=replies)
+        with self.assertRaisesRegex(TopicError, "the held-out batches hold 0 positives, fewer than 10; draw more enriched rows"):
+            held_out_check(self.work, 2, labelled(self.work, held_out_batches(self.work)))
+        with self.assertRaisesRegex(SystemExit, "the held-out batches hold 0 positives, fewer than 10"):
+            self.call("run-stage1", "--stratum", "config", "--shape", "brief", "--model", OPUS, "--set", "pool", fetch=replies)
+        self.assertEqual(top_up_trigger(self.work), ("held-out-2", "the held-out batches hold 0 positives, fewer than 10: more enriched rows are held out to confirm stage-1 rung 2"))
+        self.batch("held-out-2", self.labelled_rows("held-out-2", 12, 0, first=41))
+        self.assertEqual(held_out_batches(self.work), ["held-out", "held-out-2"])
+        for model in (OPUS, SONNET):
+            for stratum in STRATA:
+                self.call("run-stage1", "--stratum", stratum, "--shape", "brief", "--model", model, "--set", "held-out", "--today", "2026-10-20", fetch=replies)
+        self.assertEqual(held_out_check(self.work, 2, labelled(self.work, held_out_batches(self.work)))["positives"], 12)
 
 
 if __name__ == "__main__":

@@ -2,7 +2,7 @@ import json
 import sys
 from pathlib import Path
 
-from study_calibration_set import BATCHES, import_labels, labels_file
+from study_calibration_set import import_labels, labels_file
 from study_topic import TopicError, load_topic, topic_arguments
 
 
@@ -10,7 +10,7 @@ def main(argv=None):
     args = topic_arguments("Import the labels a calibration page saved: check they belong to this batch, that the stage-1 ladder was frozen first, and that every value is a "
                            "rating, a problem id or a decision, then keep them.",
                            (["--work"], {"required": True, "help": "the topic's working folder holding the batch's set file"}),
-                           (["--batch"], {"default": "calibration", "choices": list(BATCHES), "help": "which batch the labels belong to"}),
+                           (["--batch"], {"default": "calibration", "help": "which batch the labels belong to: calibration, top-up, held-out or held-out-<n>"}),
                            (["--labels"], {"required": True, "help": "the JSON file the calibration page saved"})).parse_args(argv)
     try:
         topic = load_topic(args.repo, args.topic)

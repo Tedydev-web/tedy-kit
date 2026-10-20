@@ -2,12 +2,12 @@ import hashlib
 import json
 
 from study_agreement import RECALL_TARGET, cohen_kappa, interval_text, kappa_text
-from study_calibration_set import BATCHES, labelled, labels_file, set_file
+from study_calibration_set import all_batches, labelled, labels_file, set_file
 from study_judges import AUDIT_FILE, SHAPES, criteria_version, decided, judged_batches, reader_shares_family, roster, validate
 from study_qgs import ADJUDICATED, JUDGE_FILES, PACKET, UPPER_ESTIMATE, candidate_rows, cross_family, member_facets, qgs_standard, stratum_members
 from study_screening_core import read_json, read_jsonl
 from study_session import model_family
-from study_stage1 import FREEZE_FILE, RUNG_FILE, held_out_check, ladder_rung, pool_name, stage1_inputs
+from study_stage1 import FREEZE_FILE, RUNG_FILE, held_out_batches, held_out_check, ladder_rung, pool_name, stage1_inputs
 from study_stage1_audit import elusion
 from study_stage2 import plan_file, stage1_results, stage2_plan
 from study_topic import SNOWBALL_RANK_BASE, TopicError
@@ -162,7 +162,7 @@ def snowball_lines(folder, strata, faceted):
 
 def batch_lines(topic, folder, strata):
     lines, pooled = [], 0
-    for batch in BATCHES:
+    for batch in all_batches(folder):
         if not (folder / labels_file(batch)).is_file():
             continue
         sample = read_json(folder, set_file(batch))
@@ -175,7 +175,7 @@ def batch_lines(topic, folder, strata):
         for stratum in strata:
             rows = [r for r in labels["rows"] if r["stratum"] == stratum]
             eligible = sum(r["user"]["decision"] == "eligible" for r in rows)
-            pooled += eligible if batch != "held-out" else 0
+            pooled += eligible if not batch.startswith("held-out") else 0
             facets = {f: sum(drawn[r["id"]]["facet"] == f for r in rows) for f in facet_names(topic)}
             lines.append(f"- {batch} {stratum}: {len(rows)} rows ({sample['purpose']}), drawn per facet " + ", ".join(f"{f} {n}" for f, n in facets.items())
                          + f"; likely positives {sum(drawn[r['id']]['class'] != 'random' for r in rows)}; the user labelled {eligible} eligible")
@@ -197,7 +197,7 @@ def stage1_lines(folder, strata):
                 lines.append(f"- rung {tried['rung']} {stratum}: sensitivity {s['passed']}/{s['positives']} (95% CI {low:.2f}-{high:.2f}), pass rate {s['pass_rate']:.3f}")
     lines.append(f"- chosen: rung {chosen['rung']} after {len(chosen['tried'])} rungs tried; rule: pooled one-sided 95% Clopper-Pearson lower bound >= 0.95 in both runs")
     if chosen["rung"] > 1:
-        held = held_out_check(folder, chosen["rung"], labelled(folder, ("held-out",)))
+        held = held_out_check(folder, chosen["rung"], labelled(folder, held_out_batches(folder)))
         lines.append(f"- held-out confirmation: rung {chosen['rung']} passed {held['passed']}/{held['positives']} held-out positives, missed none; the batch's own one-sided "
                      f"lower bound {held['lower']:.4f}; the pooled bound above was measured on the set the rung was chosen on")
     return lines, chosen

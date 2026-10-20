@@ -171,6 +171,11 @@ test("a rung above the first passes the gate only with its held-out confirmation
   s.writeRows("judge-config-stage1-brief-claude-sonnet-5-5-held-out.jsonl",
     s.jsonl("judge-config-stage1-brief-claude-sonnet-5-5-held-out.jsonl").map((r) => (r.order_rank === positive.order_rank ? { ...r, verdict: "no" } : r)));
   assert.match(s.errors(), new RegExp(`config: rung 2 misses held-out positives ${positive.repo}; it is not confirmed`));
+  const z = sweep(escalated);
+  const labelled = z.json("held-out-labels.json");
+  const none = { ...labelled, rows: labelled.rows.map((r) => ({ ...r, user: { ...r.user, decision: "excluded: irrelevant", Relevance: 0 } })) };
+  z.write("held-out-labels.json", none);
+  assert.match(z.errors(), /rung 2 is confirmed on held-out batches holding 0 positives, fewer than 10/);
 });
 
 test("item 8: a facet ranking made with other terms than the facet's own fails the gate", () => {
