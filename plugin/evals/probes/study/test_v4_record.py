@@ -52,6 +52,8 @@ class V4RecordTest(unittest.TestCase):
                        "- recall is an upper estimate: "):
             self.assertIn(threat, threats)
         self.assertNotIn("cross-family audit pending", threats)
+        self.assertIn("## Tag-only strata\n\n- local: tag-only inventory, not screened by two sessions", self.text)
+        self.assertNotIn("## Stratum: local", self.text)
 
     def test_a_repository_ranked_in_both_facets_is_one_screened_row_counted_for_both(self):
         rows = [line for line in section(self.text, "Stratum: config").splitlines() if line.startswith("| ") and "o/shared" in line]

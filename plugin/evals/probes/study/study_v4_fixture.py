@@ -65,7 +65,7 @@ def v4_repo():
     (repo / "docs/prior-art").mkdir(parents=True)
     shutil.copyfile(KIT / CRITERIA, repo / CRITERIA)
     strata = {"config": {"stop_row": None, "forced_repos": [], "channels": {"code_queries": ['"tdd" filename:SKILL.md', '"guard" filename:SKILL.md']}},
-              "product": {"stop_row": None, "forced_repos": [], "channels": {"harness": "claude", "config_pool": True}}}
+              "product": {"stop_row": None, "forced_repos": [], "channels": {"harness": "claude", "config_pool": True}}, "local": {"stop_row": None, "forced_repos": []}}
     write_json(repo / "docs/prior-art/topics/demo.json", {"registry": "docs/prior-art/problems-demo.md", "sweep": SWEEP, "problems": ["X1", "X2", "X3", "X4"],
                                                           "terms": ["tdd", "test", "guard", "lint"], "qgs_list_topic": "claude", "pilot_rows": 2,
                                                           "sessions": {"A": OPUS, "B": SONNET}, "qgs_judges": {"A": OPUS, "B": SONNET}, "reader": OPUS, "cross_family": GEMINI,
