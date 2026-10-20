@@ -369,7 +369,7 @@ function recallErrors(io, text, topic, strata, members, passes, screened) {
 export function v4Errors(text, { read, topic, meta }) {
   const io = { ...reader(read), read, topic };
   const sessions = meta.sessions ?? {};
-  const strata = CALIBRATED.filter((s) => new RegExp(`^## Stratum: ${s}$`, "m").test(text));
+  const strata = CALIBRATED.filter((s) => topic?.strata?.[s]?.channels && typeof topic.strata[s].channels === "object");
   if (!Object.keys(topic?.facets ?? {}).length) return ["a quality criteria v4 record needs a topic config that declares its facets"];
   const batches = ["calibration", ...(read("top-up-labels.json") !== undefined ? ["top-up"] : [])];
   const labelled = labelledRows(io, read, batches);

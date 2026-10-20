@@ -83,7 +83,8 @@ def resolved_standard(members, names):
 
 def binomial_tail(k, n, p, upper):
     terms = range(k, n + 1) if upper else range(0, k + 1)
-    return sum(math.comb(n, i) * p ** i * (1 - p) ** (n - i) for i in terms)
+    log_p, log_q, log_n = math.log(p), math.log1p(-p), math.lgamma(n + 1)
+    return sum(math.exp(log_n - math.lgamma(i + 1) - math.lgamma(n - i + 1) + i * log_p + (n - i) * log_q) for i in terms)
 
 
 def solve_bound(k, n, upper, target):

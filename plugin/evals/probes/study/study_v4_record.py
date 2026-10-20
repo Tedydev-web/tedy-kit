@@ -230,6 +230,9 @@ def qgs_workflow(topic, folder, sessions, found):
     for judge, name in JUDGE_FILES.items():
         ids = {r["id"] for r in read_jsonl(folder, f"{name}.jsonl")}
         entry = sessions.get(name) or {}
+        if judge == "reader" and not ids and not entry:
+            lines.append("- QGS reader: no candidate was queued for the reader")
+            continue
         blocks = entry.get("blocks") or []
         covered = {r for b in blocks for r in b["ranks"]}
         validated = {p for s in found[judge]["strata"].values() for r in s["runs"] for p in r["packets"]}

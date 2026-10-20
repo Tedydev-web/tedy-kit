@@ -28,6 +28,11 @@ class ClopperPearsonTest(unittest.TestCase):
         with self.assertRaises(TopicError):
             clopper_pearson(1, 0)
 
+    def test_the_bounds_hold_for_large_member_sets(self):
+        from study_agreement import clopper_pearson, lower_bound
+        self.assertEqual(round(lower_bound(600, 1200), 3), 0.476)
+        self.assertEqual(tuple(round(v, 3) for v in clopper_pearson(2500, 5000)), (0.486, 0.514))
+
 
 class TopicQgsTest(unittest.TestCase):
     def setUp(self):

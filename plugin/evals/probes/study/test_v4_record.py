@@ -91,6 +91,26 @@ class V4RecordTest(unittest.TestCase):
             self.render(repo)
 
 
+class QgsWorkflowTest(unittest.TestCase):
+    def test_an_empty_reader_queue_needs_no_reader_session(self):
+        from study_fixtures import topic_repo, write_json, write_jsonl
+        from study_v4_record import qgs_workflow
+        repo = topic_repo()
+        path = repo / "docs/prior-art/topics/demo.json"
+        opus, sonnet = {"cli": "claude", "model": "claude-opus-5-5"}, {"cli": "claude", "model": "claude-sonnet-5-5"}
+        write_json(path, {**json.loads(path.read_text()), "qgs_judges": {"A": opus, "B": sonnet}, "reader": opus})
+        folder = Path(tempfile.mkdtemp(prefix="study-reader-"))
+        self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
+        write_jsonl(folder / "qgs-candidates.jsonl", [{"id": 1, "repo": "o/a"}])
+        block = {"ranks": [1], "shape": "thin", "packet_sha256": "p" * 64}
+        for name in ("qgs-judge-A", "qgs-judge-B"):
+            write_jsonl(folder / f"{name}.jsonl", [{"id": 1, "repo": "o/a", "verdict": "yes", "problems": ["X1"], "why": "w"}])
+        sessions = {"qgs-judge-A": {"model": opus["model"], "blocks": [block]}, "qgs-judge-B": {"model": sonnet["model"], "blocks": [block]}}
+        found = {j: {"strata": {"config": {"runs": [{"packets": ["p" * 64]}]}}} for j in ("qgs-A", "qgs-B", "reader")}
+        lines = qgs_workflow(load_topic(repo, "demo"), folder, sessions, found)
+        self.assertEqual(lines[-1], "- QGS reader: no candidate was queued for the reader")
+
+
 class V4EscalatedRungRecordTest(unittest.TestCase):
     def test_a_rung_above_the_first_is_confirmed_on_the_held_out_batch_and_its_own_bound_is_reported_apart(self):
         built = v4_sweep(escalate=True)

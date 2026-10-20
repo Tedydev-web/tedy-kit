@@ -192,6 +192,12 @@ test("a v4 record whose labels were imported before the ladder was frozen fails 
   assert.match(s.errors(), /calibration-labels\.json was not imported under stage1-freeze\.json: the ladder is frozen before any label is read/);
 });
 
+test("a record without a stratum heading fails the gate with an error, not a throw", () => {
+  const s = sweep();
+  const errors = s.errors(s.text.replace("## Stratum: product\n", "## Stratum product\n"));
+  assert.match(errors, /product: the topic screens this stratum but the record has no ## Stratum: product/);
+});
+
 test("a record pinning criteria before v4 may not screen a facet that clusters several problems", () => {
   const s = sweep();
   const v3 = s.text.replace("docs/prior-art/quality-criteria-v4.md", "docs/prior-art/quality-criteria-v3.md");
