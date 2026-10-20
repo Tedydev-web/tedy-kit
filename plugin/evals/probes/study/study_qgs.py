@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 from study_agreement import cohen_kappa, rounded
@@ -5,8 +6,11 @@ from study_screening_core import read_jsonl
 from study_topic import TopicError, session_option
 
 VERDICTS = ("yes", "no", "unsure")
-STANDARD_RULE = ("a member is a candidate both Claude judges answered yes, or the reader's yes on a queued candidate: one the judges disagree on or call unsure, "
-                 "or one both Claude judges reject and the cross-family judge accepts; its problem labels are the union of the yes judges' labels, or the reader's")
+CANDIDATES = "qgs-candidates.jsonl"
+STANDARD_RULE = ("every candidate is judged by both Claude judges, or dropped with a recorded reason; a member is a candidate both answered yes, or the reader's yes on a "
+                 "queued candidate: one the judges disagree on or call unsure, or one both reject and the cross-family judge accepts; its problem labels are the union "
+                 "of the yes judges' labels, or the reader's")
+UPPER_ESTIMATE = ("QGS recall is an upper estimate: the QGS judges are the stage-1 models, and the candidates come from curated lists filtered by the topic's terms")
 
 
 def whole_topic(topic, step):
@@ -19,7 +23,38 @@ def cross_family(topic):
     return session_option(topic, "cross_family", option) if option is not None else None
 
 
-def read_verdicts(folder, name, problems, required=True):
+def candidates_file(folder):
+    return Path(folder) / CANDIDATES
+
+
+def candidates(folder):
+    rows = read_jsonl(Path(folder), CANDIDATES)
+    if not rows:
+        raise TopicError(f"no {CANDIDATES} in {folder}; extract the topic's candidates with extract-qgs-candidates.py --topic <topic>")
+    return {r["id"]: r["repo"] for r in rows}
+
+
+def dropped(folder, stratum):
+    path = Path(folder) / f"{stratum}-qgs-dropped.json"
+    return {int(k): v for k, v in json.loads(path.read_text()).items()} if path.is_file() else {}
+
+
+def checked_row(name, row, problems):
+    where = f"{name} id {row.get('id')}"
+    if row.get("verdict") not in VERDICTS:
+        raise TopicError(f"{where}: verdict must be yes, no or unsure, not {row.get('verdict')!r}")
+    labels = row.get("problems", [])
+    if not isinstance(labels, list) or not all(isinstance(p, str) for p in labels):
+        raise TopicError(f"{where}: problems must be a list of problem ids")
+    outside = sorted(set(labels) - set(problems))
+    if outside:
+        raise TopicError(f"{where}: problems {outside} are not topic problems")
+    if row["verdict"] == "yes" and not labels:
+        raise TopicError(f"{where}: a yes verdict needs at least one problem id")
+    return row
+
+
+def read_verdicts(folder, name, problems, listed, required=True):
     path = Path(folder) / name
     if not path.is_file():
         if required:
@@ -27,18 +62,27 @@ def read_verdicts(folder, name, problems, required=True):
         return {}
     rows = {}
     for row in read_jsonl(path.parent, path.name):
-        where = f"{name} id {row.get('id')}"
-        if row.get("verdict") not in VERDICTS:
-            raise TopicError(f"{where}: verdict must be yes, no or unsure, not {row.get('verdict')!r}")
-        labels = row.get("problems", [])
-        if not isinstance(labels, list) or not all(isinstance(p, str) for p in labels):
-            raise TopicError(f"{where}: problems must be a list of problem ids")
-        outside = sorted(set(labels) - set(problems))
-        if outside:
-            raise TopicError(f"{where}: problems {outside} are not topic problems")
-        if row["verdict"] == "yes" and not labels:
-            raise TopicError(f"{where}: a yes verdict needs at least one problem id")
+        checked_row(name, row, problems)
+        if listed.get(row.get("id"), "").lower() != str(row.get("repo", "")).lower():
+            raise TopicError(f"{name} id {row.get('id')} names {row.get('repo')!r}, but candidate {row.get('id')} is {listed.get(row.get('id'))!r}")
         rows[row["id"]] = row
+    return rows
+
+
+def read_cross(folder, name, problems, listed):
+    path = Path(folder) / name
+    if not path.is_file():
+        return {}
+    by_repo = {repo.lower(): i for i, repo in listed.items()}
+    rows = {}
+    for row in read_jsonl(path.parent, path.name):
+        checked_row(name, row, problems)
+        joined = by_repo.get(str(row.get("repo", "")).lower())
+        if joined is None:
+            raise TopicError(f"{name} names {row.get('repo')!r}, which is not a candidate; the cross-family judgments join the candidates by repository name")
+        if "id" in row and row["id"] != joined:
+            raise TopicError(f"{name} row id {row['id']} names {row['repo']}, which is candidate {joined}; the join is by repository name and the two disagree")
+        rows[joined] = {**row, "id": joined}
     return rows
 
 
@@ -49,19 +93,28 @@ def reader_queue(a, b, cross):
     return both, {"disputed": disputed, "cross_family_only": rejected}
 
 
+def judging_gaps(listed, a, b, drops):
+    return {i: [side for side, rows in (("A", a), ("B", b)) if i not in rows] for i in sorted(listed) if i not in drops and not (i in a and i in b)}
+
+
 def qgs_standard(topic, folder, stratum):
     whole_topic(topic, "the quasi-gold standard")
     problems = topic.get("problems") or []
-    a, b = (read_verdicts(folder, f"{stratum}-qgs-judge-{side}.jsonl", problems) for side in "AB")
+    listed = candidates(folder)
+    a, b = (read_verdicts(folder, f"{stratum}-qgs-judge-{side}.jsonl", problems, listed) for side in "AB")
+    drops = dropped(folder, stratum)
+    gaps = judging_gaps(listed, a, b, drops)
+    if gaps:
+        shown = "; ".join(f"{i} {listed[i]} (missing judge {', '.join(sides)})" for i, sides in list(gaps.items())[:10])
+        raise TopicError(f"{stratum}: {len(gaps)} candidates are not judged by both judges: {shown}; judge them, or drop them with drop-qgs-candidates.py and a reason")
     option = cross_family(topic)
-    cross_name = f"{stratum}-qgs-cross-{option['model']}.jsonl" if option else None
-    cross = read_verdicts(folder, cross_name, problems, required=False) if option else {}
-    reader = read_verdicts(folder, f"{stratum}-qgs-reader.jsonl", problems, required=False)
+    cross = read_cross(folder, f"{stratum}-qgs-cross-{option['model']}.jsonl", problems, listed) if option else {}
+    reader = read_verdicts(folder, f"{stratum}-qgs-reader.jsonl", problems, listed, required=False)
     both, queue = reader_queue(a, b, cross)
     queued = queue["disputed"] + queue["cross_family_only"]
     unread = sorted(i for i in queued if i not in reader)
     if unread:
-        raise TopicError(f"the reader has not judged queued candidates {unread}; write {stratum}-qgs-reader.jsonl first")
+        raise TopicError(f"the reader has not judged queued candidates {unread}; run run-judge.py --judge reader --set qgs")
     final, labels = [], {}
     for i in both:
         if a[i]["verdict"] == b[i]["verdict"] == "yes":
@@ -71,7 +124,8 @@ def qgs_standard(topic, folder, stratum):
         if reader[i]["verdict"] == "yes":
             final.append(reader[i]["repo"])
             labels[reader[i]["repo"]] = sorted(reader[i]["problems"])
-    out = {"final": final, "labels": labels, "queue": queue, "rule": STANDARD_RULE, "judged_by_both": len(both)}
+    out = {"final": final, "labels": labels, "queue": queue, "rule": STANDARD_RULE, "candidates": len(listed), "judged_by_both": len(both),
+           "dropped": {str(i): drops[i] for i in sorted(drops)}}
     if option:
         overlap = sorted(set(cross) & set(both))
         pairs = {side: [(rows[i]["verdict"] == "yes", cross[i]["verdict"] == "yes") for i in overlap] for side, rows in (("A", a), ("B", b))}

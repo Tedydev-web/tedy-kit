@@ -25,6 +25,12 @@ QGS_REPLY_FORMAT = ("## Reply format\n\nReply with nothing but these lines. One 
                     "verdict (\"yes\", \"no\" or \"unsure\"), problems (the ids of the problems the repository carries a mechanism for; at least one for a yes, none otherwise) "
                     "and why (one sentence).")
 QGS_TEMPLATE_SHA256 = hashlib.sha256((QGS_ROWS_NOTE + "\n\n" + QGS_REPLY_FORMAT).encode()).hexdigest()
+STAGE1_ROWS_NOTE = ("Each row below is one repository: its name and description and, when given, its agent-asset paths or the first lines of its README. Answer yes when it "
+                    "plausibly carries a mechanism for a listed problem; unsure when the text is empty, vague or could plausibly address a listed problem; no only when it clearly "
+                    "addresses none of them. When in doubt, include: only no excludes a row. You have no tools.")
+STAGE1_REPLY_FORMAT = ("## Reply format\n\nReply with nothing but these lines. One JSON object per row, on one line, in order_rank order, with the fields order_rank, repo, "
+                       "verdict (\"yes\", \"unsure\" or \"no\"), problems (the ids of the problems it may address; at least one for a yes) and why (one short sentence).")
+STAGE1_TEMPLATE_SHA256 = hashlib.sha256((STAGE1_ROWS_NOTE + "\n\n" + STAGE1_REPLY_FORMAT).encode()).hexdigest()
 
 
 def sweep_date(topic):
@@ -63,6 +69,11 @@ def build_prompt(packet, criteria_path, criteria_text, mechanisms_text, rows, wh
     parts = [packet.rstrip(), f"## Criteria ({criteria_path})", criteria_text.rstrip(), "## Your mechanism names so far", mechanisms_text.strip() or "none yet",
              "## Rows", ROWS_NOTE.format(sweep_date=when.isoformat()), *blocks, REPLY_FORMAT]
     return "\n\n".join(parts) + "\n"
+
+
+def build_stage1_prompt(packet, worked, rows):
+    blocks = ["```json\n" + json.dumps(r, ensure_ascii=False) + "\n```" for r in rows]
+    return "\n\n".join([packet.rstrip(), "## Worked examples", worked, "## Rows", STAGE1_ROWS_NOTE, *blocks, STAGE1_REPLY_FORMAT]) + "\n"
 
 
 def build_qgs_prompt(packet, rows):

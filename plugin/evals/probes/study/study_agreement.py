@@ -86,22 +86,36 @@ def binomial_tail(k, n, p, upper):
     return sum(math.comb(n, i) * p ** i * (1 - p) ** (n - i) for i in terms)
 
 
-def clopper_pearson(k, n, confidence=0.95):
+def solve_bound(k, n, upper, target):
+    low, high = 0.0, 1.0
+    for _ in range(100):
+        mid = (low + high) / 2
+        if (binomial_tail(k, n, mid, upper) < target) == upper:
+            low = mid
+        else:
+            high = mid
+    return (low + high) / 2
+
+
+def checked_counts(k, n):
     if n < 1 or not 0 <= k <= n:
         raise TopicError(f"an interval needs 0 <= hits <= members and at least one member, got {k}/{n}")
+
+
+def clopper_pearson(k, n, confidence=0.95):
+    checked_counts(k, n)
     alpha = (1 - confidence) / 2
+    return (0.0 if k == 0 else solve_bound(k, n, True, alpha), 1.0 if k == n else solve_bound(k, n, False, alpha))
 
-    def solve(upper, target):
-        low, high = 0.0, 1.0
-        for _ in range(100):
-            mid = (low + high) / 2
-            if (binomial_tail(k, n, mid, upper) < target) == upper:
-                low = mid
-            else:
-                high = mid
-        return (low + high) / 2
 
-    return (0.0 if k == 0 else solve(True, alpha), 1.0 if k == n else solve(False, alpha))
+def lower_bound(k, n, alpha=0.05):
+    checked_counts(k, n)
+    return 0.0 if k == 0 else solve_bound(k, n, True, alpha)
+
+
+def upper_bound(k, n, alpha=0.05):
+    checked_counts(k, n)
+    return 1.0 if k == n else solve_bound(k, n, False, alpha)
 
 
 def interval_text(k, n):

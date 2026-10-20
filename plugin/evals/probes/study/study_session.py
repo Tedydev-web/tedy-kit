@@ -9,11 +9,12 @@ from pathlib import Path
 
 from study_screening_core import read_jsonl
 from study_screening_input import inputs_file, repo_level
-from study_session_prompt import QGS_TEMPLATE_SHA256, TEMPLATE_SHA256, build_prompt, build_qgs_prompt, with_computed_date
+from study_session_prompt import QGS_TEMPLATE_SHA256, STAGE1_TEMPLATE_SHA256, TEMPLATE_SHA256, build_prompt, build_qgs_prompt, build_stage1_prompt, with_computed_date
 from study_session_reply import parse_qgs_reply, parse_reply, reply_text
 from study_topic import TopicError
 
 MAX_PROMPT = 120_000
+STAGE1_BATCH_MAX = 100
 AGY_TIMEOUT = "600s"
 NO_BARE_THREAT = "plugin hooks not excluded (no --bare)"
 AGY_THREAT = "agy MCP servers, hooks and user settings not excluded"
@@ -56,12 +57,16 @@ def session_header(option, bare):
 
 
 def update_sessions(work, change, undo=None):
+    return update_meta(work, lambda meta: change(meta.setdefault("sessions", {})), undo)
+
+
+def update_meta(work, change, undo=None):
     meta_file = Path(work) / "meta.json"
     with open(Path(work) / "meta.json.lock", "w") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         try:
             meta = json.loads(meta_file.read_text()) if meta_file.is_file() else {}
-            result = change(meta.setdefault("sessions", {}))
+            result = change(meta)
             temporary = meta_file.with_name(f"meta.json.{os.getpid()}.tmp")
             temporary.write_text(json.dumps(meta, indent=1, ensure_ascii=False) + "\n")
             os.replace(temporary, meta_file)
@@ -136,11 +141,22 @@ def expected_rows(job, work, stratum):
     return {r: inputs[r] for r in sorted(wanted)}
 
 
+def qgs_shape(row):
+    return {k: v for k, v in row.items() if k not in ("files", "facts")}
+
+
+def shaped(kind, row):
+    return qgs_shape(row) if kind == "qgs" else row
+
+
 def run_block(job, fetch):
     work, stratum, name, option = Path(job["work"]), job["stratum"], job["name"], job["option"]
-    screening = job.get("kind", "screening") == "screening"
-    expected = expected_rows(job, work, stratum)
+    kind = job.get("kind", "screening")
+    screening = kind == "screening"
+    expected = {r: shaped(kind, row) for r, row in expected_rows(job, work, stratum).items()}
     first, last = min(expected), max(expected)
+    if kind == "stage1" and len(expected) > STAGE1_BATCH_MAX:
+        raise TopicError(f"a stage-1 batch holds at most {STAGE1_BATCH_MAX} rows; this one holds {len(expected)}")
     transient = [r for r, row in expected.items() if "error" in row and row.get("error_kind") != "permanent"]
     if transient:
         error = expected[transient[0]]["error"]
@@ -153,10 +169,13 @@ def run_block(job, fetch):
     if not packet.is_file():
         raise TopicError(f"no {packet.name} in {work}")
     criteria = Path(job["repo"]) / job["criteria"] if screening else None
-    hashes = {"packet_sha256": sha256_bytes(packet.read_bytes()), **({"criteria_sha256": sha256_bytes(criteria.read_bytes())} if screening else {})}
+    template = {"screening": TEMPLATE_SHA256, "qgs": QGS_TEMPLATE_SHA256, "stage1": STAGE1_TEMPLATE_SHA256}[kind]
+    hashes = {"packet_sha256": sha256_bytes(packet.read_bytes()), **({"criteria_sha256": sha256_bytes(criteria.read_bytes())} if screening else {}),
+              **({"examples_sha256": sha256_bytes(job["examples"].encode())} if kind == "stage1" else {})}
     frozen = job.get("frozen")
-    if frozen and any(frozen.get(k) != v for k, v in {**hashes, "template_sha256": TEMPLATE_SHA256}.items()):
-        raise TopicError(f"{stratum}: the criteria, {packet.name} or the prompt template differ from the freeze; no session runs on a changed protocol")
+    if frozen and any(frozen.get(k) != v for k, v in {**hashes, "template_sha256": template}.items() if k in frozen):
+        changed = f"{packet.name}, the worked examples or the prompt template" if kind == "stage1" else f"the criteria, {packet.name} or the prompt template"
+        raise TopicError(f"{stratum}: {changed} differ from the freeze; no session runs on a changed protocol")
     version, status, _ = fetch.run([option["cli"], "--version"], timeout=60)
     if status != "ok":
         raise TopicError(f"{option['cli']} --version: {status}")
@@ -171,6 +190,8 @@ def run_block(job, fetch):
     known = mech_file.read_text() if mech_file.is_file() else ""
     if screening:
         prompt = build_prompt(packet.read_text(), job["criteria"], criteria.read_text(), known, list(expected.values()), job["sweep_date"])
+    elif kind == "stage1":
+        prompt = build_stage1_prompt(packet.read_text(), job["examples"], list(expected.values()))
     else:
         prompt = build_qgs_prompt(packet.read_text(), list(expected.values()))
     if len(prompt.encode()) > MAX_PROMPT:
@@ -184,7 +205,7 @@ def run_block(job, fetch):
         rows, mechanisms, problems = parse_reply(text, expected)
         rows = [with_computed_date(r, expected[r["order_rank"]], job["sweep_date"]) for r in rows]
     else:
-        (rows, problems), mechanisms = parse_qgs_reply(text, expected), []
+        (rows, problems), mechanisms = parse_qgs_reply(text, expected, job["problems"], ("yes", "unsure", "no")), []
     if problems:
         (prompts / f"{stem}.response.txt").write_text(text)
         raise TopicError(f"{name} ranks {first}-{last}: {'; '.join(problems)}; reply kept in prompts/{stem}.response.txt, nothing written")
@@ -193,7 +214,7 @@ def run_block(job, fetch):
         if n not in names:
             names.add(n)
             fresh.append(f"{n}: {d}\n")
-    block = {"ranks": list(expected), **hashes, **({} if screening else {"template_sha256": QGS_TEMPLATE_SHA256}),
+    block = {"ranks": list(expected), **hashes, **({} if screening else {"template_sha256": template}), **({"shape": job["shape"]} if job.get("shape") else {}),
              "prompt_sha256": sha256_bytes(prompt.encode()), "inputs_sha256": canonical_sha256(list(expected.values())),
              "row_sha256": {str(r): canonical_sha256(row) for r, row in expected.items()}, "cli_version": cli_version, "date": job["today"],
              "mechanisms_added": [line.split(":", 1)[0] for line in fresh],

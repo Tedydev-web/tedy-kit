@@ -72,7 +72,7 @@ def row_problems(row, expected):
     return problems
 
 
-def parse_qgs_reply(text, expected):
+def parse_qgs_reply(text, expected, topic_problems, allowed=("yes", "no", "unsure")):
     rows, problems = {}, []
     for line in (raw.strip() for raw in text.splitlines()):
         if not line.startswith("{"):
@@ -89,10 +89,16 @@ def parse_qgs_reply(text, expected):
         issues = []
         if str(row.get("repo", "")).lower() != expected[rank]["repo"].lower():
             issues.append(f"rank {rank} names {row.get('repo')!r}, not {expected[rank]['repo']}")
-        if row.get("verdict") not in ("yes", "no", "unsure"):
-            issues.append(f"rank {rank} has no yes, no or unsure verdict")
+        if row.get("verdict") not in allowed:
+            issues.append(f"rank {rank} has no {', '.join(allowed)} verdict")
         if not isinstance(row.get("problems"), list) or not all(isinstance(p, str) for p in row["problems"]):
             issues.append(f"rank {rank} has no problems list")
+        else:
+            outside = sorted(set(row["problems"]) - set(topic_problems))
+            if outside:
+                issues.append(f"rank {rank} names problems {outside} outside the topic")
+            if row.get("verdict") == "yes" and not row["problems"]:
+                issues.append(f"rank {rank} answers yes without a problem id")
         if rank in rows:
             issues.append(f"rank {rank} appears twice")
         problems += issues
