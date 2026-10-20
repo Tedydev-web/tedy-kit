@@ -67,8 +67,8 @@ export function stage1Errors(io, sessions, strata, rows) {
     if (checked.has(name) || !rows.length) return;
     checked.add(name);
     const entry = sessions[name];
-    if (entry?.model !== model) {
-      errors.push(`${name}.jsonl has no ${model} session in meta.json; only verdicts run-stage1.py recorded count`);
+    if (entry?.model !== model || entry?.cli !== "claude") {
+      errors.push(`${name}.jsonl has no claude ${model} session in meta.json; only verdicts run-stage1.py recorded count`);
       return;
     }
     const bad = (entry.blocks ?? []).some((b) => b.shape !== shape || b.packet_sha256 !== freeze.packets?.[stratum] || b.examples_sha256 !== freeze.examples_sha256 ||

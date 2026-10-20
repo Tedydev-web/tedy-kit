@@ -633,6 +633,22 @@ test("H-cross-audit: the audit is the topic's non-Claude cross_family model, or 
   assert.match(claude.errors(), /the cross_family model claude-haiku-5-5 is a Claude model; the audit needs a model outside the Claude family/);
 });
 
+test("every session names the roster cli as well as the model: production QGS, stage-1 validation and pool runs, and the screening sessions", () => {
+  const probes = [
+    ["qgs-judge-A", /qgs-judge-A\.jsonl: its .*judgments .*not all claude claude-opus-5-5 runs/],
+    ["judge-config-stage1-brief-claude-sonnet-5-5-run2", /judge-config-stage1-brief-claude-sonnet-5-5-run2\.jsonl has no claude claude-sonnet-5-5 session in meta\.json/],
+    ["stage1-config-brief-claude-sonnet-5-5", /stage1-config-brief-claude-sonnet-5-5(\.jsonl has no claude claude-sonnet-5-5 session|: the stage-1 pool run is not claude claude-sonnet-5-5)/],
+    ["config-A", /config-A (did not run the validated screening-A claude claude-opus-5-5|ran claudex claude-opus-5-5)/],
+  ];
+  for (const [key, message] of probes) {
+    const s = sweep();
+    const meta = s.json("meta.json");
+    meta.sessions[key].cli = "claudex";
+    s.write("meta.json", meta);
+    failsBothLayers(s, message, message, key);
+  }
+});
+
 test("the cross-family audit carries the frozen packet and criteria and the row hashes of the rows stage 2 screened", () => {
   const key = "config-audit-gemini-3.8-flash-high";
   const probes = [
@@ -810,7 +826,7 @@ test("H-rung: stage-1 verdicts count only with their recorded session, frozen pa
   assert.match(probe((m, s) => {
     delete m.sessions[key];
     s.writeRows(`${key}.jsonl`, s.jsonl(`${key}.jsonl`).map((r) => ({ ...r, verdict: "yes" })));
-  }), new RegExp(`${key}\\.jsonl has no claude-sonnet-5-5 session in meta\\.json`));
+  }), new RegExp(`${key}\\.jsonl has no claude claude-sonnet-5-5 session in meta\\.json`));
   assert.match(probe((m) => { m.sessions[key].blocks[0].packet_sha256 = "0".repeat(64); }), new RegExp(`${key}: a block ran on another shape, packet, worked examples or prompt template`));
   const pool = "stage1-product-brief-claude-sonnet-5-5";
   assert.match(probe((m) => { m.sessions[pool].blocks[0].examples_sha256 = "f".repeat(64); }), new RegExp(`${pool}: a block ran on another shape, packet, worked examples`));

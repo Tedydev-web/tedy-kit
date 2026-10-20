@@ -142,8 +142,8 @@ def row_hash(row):
 def provenance(folder, name, model, shape, stratum, inputs, ranks):
     frozen = read_freeze(folder)
     entry = sessions(folder).get(name)
-    if not entry or entry.get("model") != model:
-        raise TopicError(f"{name}.jsonl has no {model} session in meta.json; only verdicts run-stage1.py recorded count")
+    if not entry or (entry.get("cli"), entry.get("model")) != ("claude", model):
+        raise TopicError(f"{name}.jsonl has no claude {model} session in meta.json; only verdicts run-stage1.py recorded count")
     blocks = entry.get("blocks") or []
     expected = (shape, frozen["packets"][stratum], frozen["examples_sha256"], frozen["template_sha256"])
     if any((b.get("shape"), b.get("packet_sha256"), b.get("examples_sha256"), b.get("template_sha256")) != expected or len(b["ranks"]) > frozen["batch_max"] for b in blocks):

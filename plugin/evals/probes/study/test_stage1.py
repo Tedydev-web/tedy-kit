@@ -278,7 +278,7 @@ class Stage1Test(unittest.TestCase):
         self.assertEqual(choose_rung(self.work, labelled(self.work))["rung"], 1)
         meta = json.loads((self.work / "meta.json").read_text())
         key = f"judge-config-stage1-brief-{SONNET}-run1"
-        for change, message in ((lambda m: m["sessions"].pop(key), f"{key}.jsonl has no {SONNET} session in meta.json"),
+        for change, message in ((lambda m: m["sessions"].pop(key), f"{key}.jsonl has no claude {SONNET} session in meta.json"),
                                 (lambda m: m["sessions"][key]["blocks"][0].update(packet_sha256="0" * 64), f"{key}: a block ran on another shape, packet, worked examples"),
                                 (lambda m: m["sessions"][key]["blocks"][0].update(examples_sha256="0" * 64), f"{key}: a block ran on another shape, packet, worked examples")):
             edited = json.loads(json.dumps(meta))

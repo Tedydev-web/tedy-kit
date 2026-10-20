@@ -302,8 +302,8 @@ def stage1_workflow(folder, sessions, strata, chosen):
             entry = sessions.get(key) or {}
             bad = [b for b in entry.get("blocks", []) if (b.get("shape"), b.get("packet_sha256"), b.get("examples_sha256")) !=
                    (rung["shape"], freeze["packets"][stratum], freeze["examples_sha256"]) or len(b["ranks"]) > freeze["batch_max"]]
-            if entry.get("model") != model or bad:
-                raise TopicError(f"{key}: the stage-1 pool run is not {model} on the {rung['shape']} shape under the frozen packet and examples in batches of at most "
+            if (entry.get("cli"), entry.get("model")) != ("claude", model) or bad:
+                raise TopicError(f"{key}: the stage-1 pool run is not claude {model} on the {rung['shape']} shape under the frozen packet and examples in batches of at most "
                                  f"{freeze['batch_max']}")
 
 
@@ -327,8 +327,8 @@ def qgs_workflow(topic, folder, sessions, found):
         covered = {r for b in blocks for r in b["ranks"]}
         validated = {p for s in found[judge]["strata"].values() for r in s["runs"] for p in r["packets"]}
         packets = {b.get("packet_sha256") for b in blocks}
-        if entry.get("model") != judges[judge]["model"] or ids != covered or {b.get("shape") for b in blocks} != {"thin"} or not packets <= validated or not ids <= listed:
-            raise TopicError(f"{name}.jsonl: its {len(ids)} judgments are not all {judges[judge]['model']} runs on the thin QGS inputs under the validated {PACKET}; "
+        if (entry.get("cli"), entry.get("model")) != (judges[judge]["cli"], judges[judge]["model"]) or ids != covered or {b.get("shape") for b in blocks} != {"thin"} or not packets <= validated or not ids <= listed:
+            raise TopicError(f"{name}.jsonl: its {len(ids)} judgments are not all {judges[judge]['cli']} {judges[judge]['model']} runs on the thin QGS inputs under the validated {PACKET}; "
                              "only a validated judge in the validated workflow counts")
         lines.append(f"- QGS {judge}: {judges[judge]['model']} judged {len(ids)} candidates on the thin inputs it was validated on, under the validated packet")
     return lines

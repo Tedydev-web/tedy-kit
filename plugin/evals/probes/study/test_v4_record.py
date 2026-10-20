@@ -141,7 +141,7 @@ class V4RecordTest(unittest.TestCase):
         meta = json.loads((folder / "meta.json").read_text())
         meta["sessions"]["qgs-judge-A"]["blocks"][0]["shape"] = "full"
         (folder / "meta.json").write_text(json.dumps(meta))
-        with self.assertRaisesRegex(TopicError, "qgs-judge-A.jsonl: its 66 judgments are not all claude-opus-5-5 runs on the thin QGS inputs"):
+        with self.assertRaisesRegex(TopicError, "qgs-judge-A.jsonl: its 66 judgments are not all claude claude-opus-5-5 runs on the thin QGS inputs"):
             self.render(repo)
         repo, folder = self.copy()
         (folder / "snowball-screening-order.jsonl").write_text(json.dumps({"order_rank": 1001, "repo": "s/elsewhere"}) + "\n")
@@ -318,6 +318,19 @@ class V4RecordTest(unittest.TestCase):
         with self.assertRaisesRegex(TopicError, r"^the drop of qgs-judge-B ranks \[1, 5\] records no reason"):
             self.render(repo)
 
+    def test_every_session_names_the_roster_cli_as_well_as_the_model(self):
+        for key, message in (("qgs-judge-A", r"qgs-judge-A.jsonl: its \d+ judgments are not all claude claude-opus-5-5 runs"),
+                             ("judge-config-stage1-brief-claude-sonnet-5-5-run2", r"judge-config-stage1-brief-claude-sonnet-5-5-run2.jsonl has no claude claude-sonnet-5-5 session"),
+                             ("stage1-config-brief-claude-sonnet-5-5", r"stage1-config-brief-claude-sonnet-5-5(.jsonl has no claude claude-sonnet-5-5 session|: the stage-1 pool run is not claude)"),
+                             ("config-A", r"config-A ran claudex claude-opus-5-5, the freeze names claude claude-opus-5-5")):
+            with self.subTest(key=key):
+                repo, folder = self.copy()
+                meta = json.loads((folder / "meta.json").read_text())
+                meta["sessions"][key]["cli"] = "claudex"
+                (folder / "meta.json").write_text(json.dumps(meta))
+                with self.assertRaisesRegex(TopicError, message):
+                    self.render(repo)
+
     def test_the_cross_family_audit_carries_the_frozen_packet_and_criteria_and_the_row_hashes_stage_2_screened(self):
         key = "config-audit-gemini-3.8-flash-high"
         frozen = "a block ran under a packet or criteria other than the frozen ones"
@@ -380,7 +393,7 @@ class QgsWorkflowTest(unittest.TestCase):
         block = {"ranks": [1], "shape": "thin", "packet_sha256": "p" * 64}
         for name in ("qgs-judge-A", "qgs-judge-B"):
             write_jsonl(folder / f"{name}.jsonl", [{"id": 1, "repo": "o/a", "verdict": "yes", "problems": ["X1"], "why": "w"}])
-        sessions = {"qgs-judge-A": {"model": opus["model"], "blocks": [block]}, "qgs-judge-B": {"model": sonnet["model"], "blocks": [block]}}
+        sessions = {"qgs-judge-A": {**opus, "blocks": [block]}, "qgs-judge-B": {**sonnet, "blocks": [block]}}
         found = {j: {"strata": {"config": {"runs": [{"packets": ["p" * 64]}]}}} for j in ("qgs-A", "qgs-B", "reader")}
         lines = qgs_workflow(load_topic(repo, "demo"), folder, sessions, found)
         self.assertEqual(lines[-1], "- QGS reader: no candidate was queued for the reader")

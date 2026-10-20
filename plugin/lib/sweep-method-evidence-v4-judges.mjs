@@ -100,14 +100,15 @@ export function judgeErrors(io, topic, sessions, strata, rows, batches) {
       }
     }
   }
-  for (const [judge, file, model] of [["qgs-A", "qgs-judge-A", topic?.qgs_judges?.A?.model], ["qgs-B", "qgs-judge-B", topic?.qgs_judges?.B?.model], ["reader", "qgs-reader", topic?.reader?.model]]) {
+  for (const [judge, file, option] of [["qgs-A", "qgs-judge-A", topic?.qgs_judges?.A], ["qgs-B", "qgs-judge-B", topic?.qgs_judges?.B], ["reader", "qgs-reader", topic?.reader]]) {
+    const model = option?.model;
     const entry = sessions[file];
     const ids = io.jsonl(`${file}.jsonl`).map((r) => r.id);
     const blocks = entry?.blocks ?? [];
-    const outside = entry?.model !== model || blocks.some((b) => b.shape !== "thin" || !validated[judge]?.has(b.packet_sha256));
+    const outside = entry?.model !== model || entry?.cli !== option?.cli || blocks.some((b) => b.shape !== "thin" || !validated[judge]?.has(b.packet_sha256));
     const coveredIds = covered(entry);
     if (ids.length && (outside || ids.some((id) => !coveredIds.has(id)))) {
-      errors.push(`${file}.jsonl: its judgments come from outside the validated workflow (not all ${model} runs on the thin inputs under a validated packet)`);
+      errors.push(`${file}.jsonl: its judgments come from outside the validated workflow (not all ${option?.cli} ${model} runs on the thin inputs under a validated packet)`);
     }
     const line = ids.length || entry ? `- QGS ${judge}: ${model} judged ${new Set(ids).size} candidates on the thin inputs it was validated on, under the validated packet`
       : "- QGS reader: no candidate was queued for the reader";
