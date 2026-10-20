@@ -136,11 +136,29 @@ export function stage2Errors(io, sessions, strata, passes, members, rung) {
       errors.push(`${stratum}: the record does not state the ${beyond} rows screened beyond the stop or outside both sessions`);
     }
     const last = ["A", "B"].flatMap((side) => (sessions[`${stratum}-${side}`]?.blocks ?? []).map((b) => b.date)).sort().at(-1);
-    const model = io.topic?.cross_family?.model;
+    const option = io.topic?.cross_family;
+    const model = option?.model;
     const audit = sessions[`${stratum}-audit-${model}`];
+    const lines = io.text.split("\n");
+    const auditLine = lines.some((l) => l.startsWith(`- ${stratum} audit: `));
+    if (!option) {
+      if (!lines.includes("- no cross-family audit: the topic config names no cross_family model, so no model of another family checks the screening") || auditLine) {
+        errors.push(`${stratum}: the topic names no cross_family model and the record does not state the missing audit as a threat`);
+      }
+      continue;
+    }
+    if (/^claude[-.]/i.test(model)) errors.push(`the cross_family model ${model} is a Claude model; the audit needs a model outside the Claude family`);
+    if (audit && (audit.model !== model || audit.cli !== option.cli)) errors.push(`${stratum}-audit-${model}: the audit session ran ${audit.cli} ${audit.model}, not the topic's cross_family ${option.cli} ${model}`);
     const drawn = io.json("audit-sample.json");
     const sample = drawn?.[stratum] ?? [];
+    const read = new Set(io.jsonl(`${stratum}-audit-${model}.jsonl`).map((r) => r.order_rank));
+    const done = sample.length > 0 && sample.every((r) => read.has(r)) && Boolean(audit);
     if (drawn) errors.push(...crossAuditErrors(io, stratum, sample, model));
+    const pending = `- cross-family audit pending: ${stratum}: ${sample.filter((r) => read.has(r)).length} of ${sample.length} audit rows screened by ${model}; `
+      + "the same-family screening has no cross-family check until it runs";
+    if (done ? lines.includes(pending) || !auditLine : !lines.includes(pending) || auditLine) {
+      errors.push(`${stratum}: the record's cross-family audit state is not the one the audit files give (${done ? "an audit line and no pending threat" : `the threat "${pending}" and no audit line`})`);
+    }
     if ((audit?.blocks ?? []).some((b) => b.date < last)) errors.push(`${stratum}: the cross-family audit ran before stage 2 ended on ${last}; the audit sample is drawn after stage 2 ends`);
   }
   return { errors, screened };

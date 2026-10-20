@@ -379,6 +379,33 @@ test("H-audit-reading: the stage-1 audit reading counts only from the screener o
   }), new RegExp(`${key}: ranks \\d+ were read on other inputs than the calibration rows of the same ranks hold`));
 });
 
+test("H-cross-audit: the audit is the topic's non-Claude cross_family model, or the record states it pending", () => {
+  const state = /config: the record's cross-family audit state is not the one the audit files give/;
+  const x3 = sweep();
+  const meta = x3.json("meta.json");
+  Object.assign(meta.sessions["config-audit-gemini-3.8-flash-high"], { cli: "claude", model: "claude-opus-5-5" });
+  x3.write("meta.json", meta);
+  assert.match(x3.errors(), /config-audit-gemini-3\.8-flash-high: the audit session ran claude claude-opus-5-5, not the topic's cross_family agy gemini-3\.8-flash-high/);
+  const x2 = sweep();
+  rmSync(join(x2.folder, "audit-sample.json"));
+  assert.match(x2.errors(), state);
+  const z2 = sweep();
+  rmSync(join(z2.folder, "audit-sample.json"));
+  for (const stratum of ["config", "product"]) rmSync(join(z2.folder, `${stratum}-audit-gemini-3.8-flash-high.jsonl`));
+  const trimmed = z2.text.split("\n").filter((l) => !/^- (config|product) audit: /.test(l)).join("\n");
+  const sessions = z2.json("meta.json");
+  for (const stratum of ["config", "product"]) delete sessions.sessions[`${stratum}-audit-gemini-3.8-flash-high`];
+  z2.write("meta.json", sessions);
+  assert.match(z2.errors(trimmed), state);
+  const z3 = sweep(pending);
+  assert.equal(z3.errors(), "");
+  assert.match(z3.errors(z3.text.split("\n").filter((l) => !l.startsWith("- cross-family audit pending: config")).join("\n")), state);
+  const claude = sweep();
+  const path = join(claude.repo, "docs", "prior-art", "topics", "demo.json");
+  writeFileSync(path, JSON.stringify({ ...JSON.parse(readFileSync(path, "utf8")), cross_family: { cli: "claude", model: "claude-haiku-5-5" } }));
+  assert.match(claude.errors(), /the cross_family model claude-haiku-5-5 is a Claude model; the audit needs a model outside the Claude family/);
+});
+
 test("H-rung: stage-1 verdicts count only with their recorded session, frozen packet, examples, template and row hashes", () => {
   const key = "judge-config-stage1-brief-claude-sonnet-5-5-run1";
   const probe = (edit) => {

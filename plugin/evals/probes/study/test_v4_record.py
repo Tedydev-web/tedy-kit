@@ -210,6 +210,19 @@ class V4RecordTest(unittest.TestCase):
         with self.assertRaisesRegex(TopicError, rf"{key}: ranks \[{shared}\] were read on other inputs than the calibration rows of the same ranks hold"):
             self.render(repo)
 
+    def test_the_cross_family_audit_must_be_the_topic_cross_family_model_outside_the_claude_family(self):
+        repo, folder = self.copy()
+        meta = json.loads((folder / "meta.json").read_text())
+        meta["sessions"]["config-audit-gemini-3.8-flash-high"].update(cli="claude", model="claude-opus-5-5")
+        (folder / "meta.json").write_text(json.dumps(meta))
+        with self.assertRaisesRegex(TopicError, "config-audit-gemini-3.8-flash-high: the audit session ran claude claude-opus-5-5, not the topic's cross_family agy gemini-3.8-flash-high"):
+            self.render(repo)
+        repo, folder = self.copy()
+        path = repo / "docs/prior-art/topics/demo.json"
+        path.write_text(json.dumps({**json.loads(path.read_text()), "cross_family": {"cli": "claude", "model": "claude-haiku-5-5"}}))
+        with self.assertRaisesRegex(TopicError, "the cross_family model claude-haiku-5-5 is a Claude model; the audit needs a model outside the Claude family"):
+            self.render(repo)
+
     def test_a_snowball_with_a_cut_is_refused_under_v4(self):
         repo, folder = self.copy()
         cut = json.loads((folder / "snowball-cut.json").read_text())

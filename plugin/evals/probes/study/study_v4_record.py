@@ -335,6 +335,13 @@ def audit_lines(topic, folder, strata, sides, sessions):
     option = cross_family(topic)
     if option is None:
         return [], ["- no cross-family audit: the topic config names no cross_family model, so no model of another family checks the screening"]
+    if model_family(option["model"]) == "claude":
+        raise TopicError(f"the cross_family model {option['model']} is a Claude model; the audit needs a model outside the Claude family")
+    for stratum in strata:
+        entry = sessions.get(f"{stratum}-audit-{option['model']}")
+        if entry and (entry.get("cli"), entry.get("model")) != (option["cli"], option["model"]):
+            raise TopicError(f"{stratum}-audit-{option['model']}: the audit session ran {entry.get('cli')} {entry.get('model')}, not the topic's cross_family "
+                             f"{option['cli']} {option['model']}")
     sample = read_json(folder, AUDIT_FILE) if (folder / AUDIT_FILE).is_file() else {}
     if sample and sample != cross_audit_sample(topic, folder, AUDIT_ROWS):
         raise TopicError(f"{AUDIT_FILE} is not the sample the stage-2 files give; the cross-family audit is drawn once, by draw-audit-sample.py")
