@@ -320,5 +320,28 @@ class Stage1Test(unittest.TestCase):
         self.assertEqual((draw(self.topic(), self.work, "config")["disagreements"], draw(self.topic(), self.work, "config")["excluded"]), ([2], 1))
 
 
+class CanonTopicTest(unittest.TestCase):
+    def test_the_canon_topic_carries_real_worked_examples_kept_out_of_the_draw_and_freezes_stage_1_offline(self):
+        from study_calibration_set import calibrated, example_repos
+        from study_fixtures import HERE
+        from study_stage1 import examples, examples_text
+        kit = HERE.parents[3]
+        topic = load_topic(kit, "canon")
+        listed = examples(topic)
+        counts = {v: sum(e["verdict"] == v for e in listed) for v in ("yes", "unsure", "no")}
+        self.assertTrue(all(2 <= n <= 3 for n in counts.values()), counts)
+        self.assertTrue(all(re.fullmatch(r"[\w.-]+/[\w.-]+", e["repo"]) and e["description"].strip() and e["why"].strip() and "\n" not in e["why"] for e in listed))
+        self.assertEqual(example_repos(topic), {e["repo"].lower() for e in listed})
+        self.assertEqual(topic["sweep"], "261019-canon")
+        work = Path(tempfile.mkdtemp(prefix="study-canon-freeze-"))
+        self.addCleanup(shutil.rmtree, work, ignore_errors=True)
+        for stratum in calibrated(topic):
+            (work / f"stage1-packet-{stratum}.md").write_text(f"stage-1 packet {stratum}\n")
+        script("freeze-stage1").main(["--topic", "canon", "--repo", str(kit), "--work", str(work), "--today", "2026-10-20"])
+        frozen = json.loads((work / "stage1-freeze.json").read_text())
+        self.assertEqual(frozen["examples_sha256"], hashlib.sha256(examples_text(topic).encode()).hexdigest())
+        self.assertEqual(sorted(frozen["packets"]), ["config", "product"])
+
+
 if __name__ == "__main__":
     unittest.main()
