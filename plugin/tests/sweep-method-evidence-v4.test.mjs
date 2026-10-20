@@ -167,8 +167,15 @@ test("item 11: PRISMA and recall are recomputed from the files, so an edited cou
   const s = sweep();
   assert.match(s.errors(s.text.replace("| config | stage-1 screened | 133 |", "| config | stage-1 screened | 132 |")), /PRISMA config "stage-1 screened": the record says 132, the files give 133/);
   assert.match(s.errors(s.text.replace("| product | identified: config-pool | 23 |", "")), /PRISMA product "identified: config-pool": the record says nothing, the files give 23/);
-  assert.match(s.errors(s.text.replace(/^- pooled topic recall \d+\//m, "- pooled topic recall 1/")), /pooled topic recall: the record says 1\/47, the files give \d+\/47/);
-  assert.match(s.errors(s.text.replace(/^- facet beta: recall \d+\//m, "- facet beta: recall 1/")), /facet beta recall: the record says 1\/\d+, the files give/);
+  assert.match(s.errors(s.text.replace(/^- pooled topic recall \d+\//m, "- pooled topic recall 1/")), /pooled topic recall: the record says 1\/47, in-pool .*, the files give \d+\/47/);
+  assert.match(s.errors(s.text.replace("in-pool rate 46/47", "in-pool rate 47/47")), /pooled topic recall: the record says 38\/47, in-pool 47\/47, stage-1 pass 46\/46, the files give 38\/47, in-pool 46\/47/);
+  assert.match(s.errors(s.text.replace(/^- facet beta: recall \d+\//m, "- facet beta: recall 1/")), /facet beta recall: the record says 1\/\d+ \(in-pool and stage-1 pass rates included\), the files give/);
+  assert.match(s.errors(s.text.replace(/^(- facet alpha: .*?; stage-1 pass rate )\d+\//m, "$10/")), /facet alpha recall: the record says 20\/26 \(in-pool and stage-1 pass rates included\)/);
+  const q = sweep();
+  const extra = Array.from({ length: 40 }, (_, i) => ({ id: 9000 + i, repo: `x/absent${i}` }));
+  q.writeRows("qgs-candidates.jsonl", [...q.jsonl("qgs-candidates.jsonl"), ...extra]);
+  for (const side of ["A", "B"]) q.writeRows(`qgs-judge-${side}.jsonl`, [...q.jsonl(`qgs-judge-${side}.jsonl`), ...extra.map((c) => ({ ...c, verdict: "yes", problems: ["X1"], strata: ["config"], why: "w" }))]);
+  assert.match(q.errors(), /pooled topic recall is below the target and the record does not name the recall target threat with the losses the files give/);
   const plan = s.json("config-stage2.json");
   const excluded = s.jsonl("stage1-config-brief-claude-sonnet-5-5.jsonl").find((r) => r.verdict === "no").order_rank;
   s.write("config-stage2.json", { ...plan, passes: [...plan.passes, excluded] });

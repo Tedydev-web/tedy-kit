@@ -107,18 +107,27 @@ function recallErrors(io, text, topic, strata, members, memberStrata, passes, sc
     const inPool = list.filter((m) => strata.some((s) => pools[s].has(m)));
     const passed = inPool.filter((m) => strata.some((s) => pools[s].has(m) && passes[s].passed.has(pools[s].get(m))));
     const done = passed.filter((m) => strata.some((s) => pools[s].has(m) && screened[s]?.both.has(pools[s].get(m))));
-    return [done.length, list.length];
+    return [done.length, list.length, inPool.length, passed.length];
   };
-  const [found, size] = count(members);
-  const line = text.match(/^- pooled topic recall (\d+)\/(\d+) /m);
-  if (!line || Number(line[1]) !== found || Number(line[2]) !== size) errors.push(`pooled topic recall: the record says ${line ? `${line[1]}/${line[2]}` : "nothing"}, the files give ${found}/${size}`);
-  if (size && found / size < RECALL_TARGET && !/^- recall target not reached: /m.test(text)) errors.push("pooled topic recall is below the target and the record names no recall target threat");
+  const rates = (line) => (line ? line.slice(1).map(Number) : null);
+  const [found, size, inPool, passed] = count(members);
+  const line = rates(text.match(/^- pooled topic recall (\d+)\/(\d+) .*?; in-pool rate (\d+)\/(\d+) .*?; stage-1 pass rate of in-pool members (\d+)\/(\d+) /m));
+  if (canonical(line) !== canonical([found, size, inPool, size, passed, inPool])) {
+    errors.push(`pooled topic recall: the record says ${line ? `${line[0]}/${line[1]}, in-pool ${line[2]}/${line[3]}, stage-1 pass ${line[4]}/${line[5]}` : "nothing"}, `
+      + `the files give ${found}/${size}, in-pool ${inPool}/${size}, stage-1 pass ${passed}/${inPool}`);
+  }
+  const threat = text.match(/^- recall target not reached: pooled topic recall (\d+)\/(\d+); outside every pool (\d+), excluded by stage 1 (\d+), not screened in stage 2 (\d+)$/m);
+  if (size && found / size < RECALL_TARGET && canonical(rates(threat)) !== canonical([found, size, size - inPool, inPool - passed, passed - found])) {
+    errors.push("pooled topic recall is below the target and the record does not name the recall target threat with the losses the files give");
+  }
   const labels = Object.fromEntries(Object.entries(io.json("qgs-adjudicated.json")?.labels ?? {}).map(([m, p]) => [lower(m), p]));
   for (const [facet, rule] of Object.entries(topic?.facets ?? {})) {
     const mine = members.filter((m) => (labels[m] ?? []).some((p) => rule.problems.includes(p)));
-    const [k, n] = count(mine);
-    const written = text.match(new RegExp(`^- facet ${facet}: recall (\\d+)/(\\d+) `, "m"));
-    if (!written || Number(written[1]) !== k || Number(written[2]) !== n) errors.push(`facet ${facet} recall: the record says ${written ? `${written[1]}/${written[2]}` : "nothing"}, the files give ${k}/${n}`);
+    const [k, n, a, b] = count(mine);
+    const written = rates(text.match(new RegExp(`^- facet ${facet}: recall (\\d+)/(\\d+) .*?; in-pool rate (\\d+)/(\\d+) .*?; stage-1 pass rate (\\d+)/(\\d+) `, "m")));
+    if (canonical(written) !== canonical([k, n, a, n, b, a])) {
+      errors.push(`facet ${facet} recall: the record says ${written ? `${written[0]}/${written[1]}` : "nothing"} (in-pool and stage-1 pass rates included), the files give ${k}/${n}, in-pool ${a}/${n}, stage-1 pass ${b}/${a}`);
+    }
   }
   const snow = io.jsonl("snowball-screening-order.jsonl").filter((r) => !pools.config?.has(lower(r.repo)));
   if (snow.length) errors.push(`snowballed repositories ${snow.map((r) => r.repo).join(", ")} are not in the config stage-1 pool`);
