@@ -256,6 +256,27 @@ function stage2Errors(io, sessions, strata, passes) {
   return { errors, screened };
 }
 
+function stage1AuditErrors(io, strata, passes) {
+  const errors = [];
+  const screener = io.json("protocol-freeze.json")?.session_a?.model;
+  for (const stratum of strata) {
+    const audit = io.json(`${stratum}-stage1-audit.json`);
+    if (!audit) {
+      errors.push(`no ${stratum}-stage1-audit.json in the sweep folder: the stage-1 excludes are audited before stage 2`);
+      continue;
+    }
+    const drawn = [...(audit.near ?? []), ...(audit.far ?? [])];
+    const passed = passes[stratum]?.passed ?? new Set();
+    const wrong = drawn.filter((r) => passed.has(r) || !passes[stratum]?.pool.has(r));
+    if (wrong.length) errors.push(`${stratum}-stage1-audit.json draws ranks ${wrong.slice(0, 10).join(", ")} that stage 1 did not exclude`);
+    const read = new Set(io.jsonl(`${stratum}-stage1-audit-${screener}.jsonl`).map((r) => r.order_rank));
+    const unread = drawn.filter((r) => !read.has(r));
+    if (unread.length) errors.push(`${stratum}: the stage-2 screener has not read stage-1 audit ranks ${unread.slice(0, 10).join(", ")}`);
+    if (io.json(`${stratum}-stage1-audit-checks.json`) === undefined) errors.push(`no ${stratum}-stage1-audit-checks.json: the user checks every row the screener flagged`);
+  }
+  return errors;
+}
+
 function dropErrors(io, read, meta) {
   const errors = [];
   for (const drop of meta.drops ?? []) {
@@ -347,6 +368,7 @@ export function v4Errors(text, { read, topic, meta }) {
     ...qgs.errors,
     ...judgeErrors(io, topic, sessions, strata, labelled.rows),
     ...stage1.errors,
+    ...stage1AuditErrors(io, strata, stage1.passes),
     ...stage2.errors,
     ...dropErrors(io, read, meta),
     ...prismaErrors(io, text, strata, stage1.passes, stage2.screened),

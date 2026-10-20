@@ -2,7 +2,7 @@ import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { cpSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sweepMethodErrors } from "../lib/sweep-method-evidence.mjs";
@@ -148,6 +148,19 @@ test("stage 1 and stage 2 are checked against the files: unscreened pool rows an
   const u = sweep();
   u.writeRows("snowball-screening-order.jsonl", [{ order_rank: 1001, repo: "s/elsewhere" }]);
   assert.match(u.errors(), /snowballed repositories s\/elsewhere are not in the config stage-1 pool/);
+});
+
+test("the stage-1 audit draws only stage-1 excludes, read by the stage-2 screener and checked by the user", () => {
+  const s = sweep();
+  const audit = s.json("product-stage1-audit.json");
+  const passed = s.json("product-stage2.json").passes[0];
+  s.write("product-stage1-audit.json", { ...audit, far: [...audit.far, passed] });
+  const errors = s.errors();
+  assert.match(errors, new RegExp(`product-stage1-audit\\.json draws ranks ${passed} that stage 1 did not exclude`));
+  assert.match(errors, new RegExp(`product: the stage-2 screener has not read stage-1 audit ranks ${passed}`));
+  const t = sweep();
+  rmSync(join(t.folder, "config-stage1-audit-checks.json"));
+  assert.match(t.errors(), /no config-stage1-audit-checks\.json: the user checks every row the screener flagged/);
 });
 
 test("a v4 record whose labels were imported before the ladder was frozen fails the gate", () => {
