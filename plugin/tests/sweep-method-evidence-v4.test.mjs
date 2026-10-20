@@ -199,6 +199,21 @@ test("PRISMA stage-2 decisions, the per-row decisions and the facet inclusion ar
   assert.match(u.errors(), /PRISMA config stage 2: the record says/);
 });
 
+test("the config-pool channel must have run on the final config pool, and its recover and outside counts are recomputed", () => {
+  const s = sweep();
+  const line = s.text.match(/^- product channel from the config pool: .*$/m)[0];
+  assert.match(s.errors(s.text.replace(line, line.replace(/they recover (\d+)/, (_, n) => `they recover ${Number(n) + 7}`))), /the record's config-pool channel line is not the one the files give/);
+  assert.match(s.errors(s.text.replace(line, line.replace(/; (\d+) of those members remain/, "; 0 of those members remain"))), /the record's config-pool channel line is not the one the files give/);
+  assert.match(s.errors(s.text.replace("are in no pool: o/outside1", "are in no pool: o/elsewhere")), /the record's discovery gap does not name the 1 product members the files leave outside every pool/);
+  const t = sweep();
+  const channel = t.json("config-pool-channel.json");
+  t.write("config-pool-channel.json", { ...channel, joined: [] });
+  const empty = t.text.replace(line, line.replace(/: \d+ repositories joined/, ": 0 repositories joined").replace(/they recover \d+/, "they recover 0"));
+  const errors = t.errors(empty);
+  assert.match(errors, /the config-pool channel did not run on the final config pool: .* pass the product filter but did not join the product pool before stage 1/);
+  assert.match(errors, /product-screening-order\.jsonl credits the config-pool channel with .*, which config-pool-channel\.json does not list/);
+});
+
 test("stage 1 and stage 2 are checked against the files: unscreened pool rows and stage-2 rows that passed no model fail", () => {
   const s = sweep();
   const rows = s.jsonl("stage1-product-brief-claude-sonnet-5-5.jsonl");

@@ -4,7 +4,9 @@ import { decisionErrors, prismaErrors, stage2Errors } from "./sweep-method-evide
 import {
   CALIBRATED,
   RECALL_TARGET,
+  canonical,
   covered,
+  escapeRegex,
   labelledRows,
   lower,
   reader,
@@ -98,7 +100,7 @@ function dropErrors(io, read, meta) {
   return errors;
 }
 
-function recallErrors(io, text, topic, strata, members, passes, screened) {
+function recallErrors(io, text, topic, strata, members, memberStrata, passes, screened) {
   const errors = [];
   const pools = Object.fromEntries(strata.map((s) => [s, new Map([...(passes[s]?.pool ?? new Map()).values()].map((r) => [lower(r.repo), r.order_rank]))]));
   const count = (list) => {
@@ -122,10 +124,39 @@ function recallErrors(io, text, topic, strata, members, passes, screened) {
   if (snow.length) errors.push(`snowballed repositories ${snow.map((r) => r.repo).join(", ")} are not in the config stage-1 pool`);
   const cut = io.json("snowball-cut.json")?.cut_row;
   if (cut !== undefined && cut !== null) errors.push(`snowball-cut.json cuts the snowball at row ${cut}; quality criteria v4 refuses a snowball cut, every snowballed repository joins the pool`);
-  if (topic?.strata?.product?.channels?.config_pool === true && strata.includes("product")) {
-    const joined = io.json("config-pool-channel.json")?.joined;
-    const written = text.match(/^- product channel from the config pool: (\d+) repositories joined/m);
-    if (!Array.isArray(joined) || !written || Number(written[1]) !== joined.length) errors.push("the config-pool channel count is not the one config-pool-channel.json gives");
+  if (topic?.strata?.product?.channels?.config_pool === true && strata.includes("product")) errors.push(...configPoolErrors(io, text, topic, strata, passes, pools, memberStrata));
+  return errors;
+}
+
+function productFilter(topic) {
+  const channels = topic.strata.product.channels;
+  const term = new RegExp(`(?<![a-z0-9])(${(topic.terms ?? []).map(escapeRegex).join("|")})(?![a-z0-9])`, "i");
+  const harness = new RegExp(channels.harness ?? "(?!)", "i");
+  const extra = channels.extra_text ? new RegExp(channels.extra_text, "i") : null;
+  return (text) => harness.test(text) && (term.test(text) || Boolean(extra?.test(text)));
+}
+
+function configPoolErrors(io, text, topic, strata, passes, pools, memberStrata) {
+  const errors = [];
+  const joined = io.json("config-pool-channel.json")?.joined;
+  if (!Array.isArray(joined)) return ["no config-pool-channel.json with its joined list: the topic draws the product channel from the config pool"];
+  const names = new Set(joined.map(lower));
+  const relevant = productFilter(topic);
+  const product = new Set(io.jsonl("product-screening-order.jsonl").filter((r) => r.channels?.includes("config-pool")).map((r) => lower(r.repo)));
+  const missed = [...(passes.config?.pool.values() ?? [])].filter((r) => relevant(`${r.repo} ${r.description ?? ""}`) && !(names.has(lower(r.repo)) && product.has(lower(r.repo))))
+    .map((r) => r.repo);
+  if (missed.length) errors.push(`the config-pool channel did not run on the final config pool: ${missed.slice(0, 10).join(", ")} pass the product filter but did not join the product pool before stage 1`);
+  const stray = [...product].filter((repo) => !names.has(repo));
+  if (stray.length) errors.push(`product-screening-order.jsonl credits the config-pool channel with ${stray.slice(0, 10).join(", ")}, which config-pool-channel.json does not list`);
+  const labelled = Object.entries(memberStrata).filter(([, s]) => s.includes("product")).map(([m]) => m);
+  const outside = labelled.filter((m) => !strata.some((s) => pools[s].has(m)));
+  const line = `- product channel from the config pool: ${joined.length} repositories joined the product pool before stage 1; they recover ${labelled.filter((m) => names.has(m)).length} of `
+    + `the ${labelled.length} standard members the QGS judges labelled product; ${outside.length} of those members remain outside every pool`;
+  if (!text.split("\n").includes(line)) errors.push(`the record's config-pool channel line is not the one the files give ("${line}")`);
+  const gap = text.match(/^- discovery gap: (\d+) standard members labelled product are in no pool: (.*)$/m);
+  const listed = gap ? gap[2].split(", ").map(lower).sort() : [];
+  if (outside.length ? Number(gap?.[1]) !== outside.length || canonical(listed) !== canonical([...outside].sort()) : gap) {
+    errors.push(`the record's discovery gap does not name the ${outside.length} product members the files leave outside every pool`);
   }
   return errors;
 }
@@ -151,6 +182,6 @@ export function v4Errors(text, { read, files, topic, meta }) {
     ...dropErrors(io, read, meta),
     ...prismaErrors(io, text, strata, stage1.passes, stage2.screened),
     ...decisionErrors(io, text, topic, strata, stage1.passes, stage2.screened),
-    ...recallErrors(io, text, topic, strata, qgs.members, stage1.passes, stage2.screened),
+    ...recallErrors(io, text, topic, strata, qgs.members, qgs.strata ?? {}, stage1.passes, stage2.screened),
   ];
 }
