@@ -81,10 +81,10 @@ class Stage1Test(unittest.TestCase):
         return rows
 
     def runs(self, rows, shape, model, run, missed=()):
+        replies = Stage1Replies({(model, repo): "no" for repo in missed})
         for stratum in STRATA:
-            write_jsonl(self.work / f"judge-{stratum}-stage1-{shape}-{model}-run{run}.jsonl",
-                        [{"order_rank": r["order_rank"], "repo": r["repo"], "verdict": "no" if r["repo"] in missed else "yes", "problems": [], "why": "w"}
-                         for r in rows if r["stratum"] == stratum])
+            self.call("run-stage1", "--stratum", stratum, "--shape", shape, "--model", model, "--set", "calibration", "--run", str(run), "--today", "2026-10-20",
+                      fetch=replies)
 
     def inputs(self, count):
         for stratum in STRATA:
@@ -260,6 +260,64 @@ class Stage1Test(unittest.TestCase):
             for stratum in STRATA:
                 self.call("run-stage1", "--stratum", stratum, "--shape", "brief", "--model", model, "--set", "held-out", "--today", "2026-10-20", fetch=replies)
         self.assertEqual(held_out_check(self.work, 2, labelled(self.work, held_out_batches(self.work)))["positives"], 12)
+
+
+    def calibrated(self):
+        self.inputs(50)
+        self.frozen()
+        rows = self.labelled_rows("calibration", 59, 1)
+        self.batch("calibration", rows)
+        return rows
+
+    def test_stage1_calibration_verdicts_count_only_with_their_recorded_session_freeze_and_row_hashes(self):
+        from study_calibration_set import labelled
+        from study_stage1 import choose_rung
+        rows = self.calibrated()
+        for run in (1, 2):
+            self.runs(rows, "brief", SONNET, run)
+        self.assertEqual(choose_rung(self.work, labelled(self.work))["rung"], 1)
+        meta = json.loads((self.work / "meta.json").read_text())
+        key = f"judge-config-stage1-brief-{SONNET}-run1"
+        for change, message in ((lambda m: m["sessions"].pop(key), f"{key}.jsonl has no {SONNET} session in meta.json"),
+                                (lambda m: m["sessions"][key]["blocks"][0].update(packet_sha256="0" * 64), f"{key}: a block ran on another shape, packet, worked examples"),
+                                (lambda m: m["sessions"][key]["blocks"][0].update(examples_sha256="0" * 64), f"{key}: a block ran on another shape, packet, worked examples")):
+            edited = json.loads(json.dumps(meta))
+            change(edited)
+            write_json(self.work / "meta.json", edited)
+            with self.assertRaisesRegex(TopicError, message):
+                choose_rung(self.work, labelled(self.work))
+        write_json(self.work / "meta.json", meta)
+        inputs = [json.loads(line) for line in (self.work / "stage1-inputs-config-brief.jsonl").read_text().splitlines()]
+        inputs[0]["description"] = "rewritten after the calibration runs"
+        write_jsonl(self.work / "stage1-inputs-config-brief.jsonl", inputs)
+        with self.assertRaisesRegex(TopicError, f"{key}: ranks \\[1\\] were not judged on the rows stage1-inputs-config-brief.jsonl holds now"):
+            choose_rung(self.work, labelled(self.work))
+
+    def test_stage1_inputs_must_be_the_final_pool_after_the_config_pool_channel_and_the_snowball(self):
+        from study_stage1 import stage1_inputs
+        self.inputs(10)
+        order = [json.loads(line) for line in (self.work / "product-screening-order.jsonl").read_text().splitlines()]
+        write_jsonl(self.work / "product-screening-order.jsonl", order + [{"order_rank": 11, "repo": "o/joined-late", "description": "claude tdd hook", "channels": ["config-pool"]}])
+        with self.assertRaisesRegex(TopicError, r"stage1-inputs-product-brief.jsonl is not the final product pool of product-screening-order.jsonl \(differs on \['o/joined-late'\]\)"):
+            stage1_inputs(self.work, "product", "brief")
+
+    def test_the_union_passes_a_row_only_one_model_excludes_and_the_audit_lists_the_disagreement(self):
+        from study_stage2 import stage1_results
+        self.inputs(5)
+        self.frozen()
+        write_json(self.work / "stage1-rung.json", {"rung": 2})
+        self.batch("held-out", self.labelled_rows("held-out", 10, 0))
+        for model in (OPUS, SONNET):
+            for stratum in STRATA:
+                self.call("run-stage1", "--stratum", stratum, "--shape", "brief", "--model", model, "--set", "held-out", "--today", "2026-10-20", fetch=Stage1Replies({}))
+        replies = Stage1Replies({(SONNET, "c/r2"): "no", (OPUS, "c/r3"): "no", (SONNET, "c/r3"): "no"})
+        for model in (OPUS, SONNET):
+            self.call("run-stage1", "--stratum", "config", "--shape", "brief", "--model", model, "--set", "pool", "--today", "2026-10-20", fetch=replies)
+        results = stage1_results(self.work, "config")[1]
+        self.assertEqual((results[2]["pass"], results[2]["verdicts"]), (True, {OPUS: "yes", SONNET: "no"}))
+        self.assertFalse(results[3]["pass"])
+        from study_stage1_audit import draw
+        self.assertEqual((draw(self.topic(), self.work, "config")["disagreements"], draw(self.topic(), self.work, "config")["excluded"]), ([2], 1))
 
 
 if __name__ == "__main__":

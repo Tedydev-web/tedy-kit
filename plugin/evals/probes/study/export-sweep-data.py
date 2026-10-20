@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from study_pool import DISCOVERY_STATES, work_file
+from study_session import canonical_sha256
 from study_topic import TopicError, load_topic, sweep_folder, topic_arguments
 
 HEX40 = re.compile(r"[0-9a-f]{40}")
@@ -53,6 +54,7 @@ def paper_rows(work):
 
 
 def stage1_row(row):
+    row = {**row, "row_sha256": canonical_sha256(row)}
     lead = row.pop("readme_lead", None)
     if lead:
         row["readme_lead_sha256"] = hashlib.sha256(lead.encode()).hexdigest()

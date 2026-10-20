@@ -5,7 +5,7 @@ from pathlib import Path
 from study_agreement import RECALL_TARGET, clopper_pearson
 from study_calibration_set import facet_ranks
 from study_qgs import ADJUDICATED
-from study_stage1 import RUNG_FILE, auto_pass, ladder_rung, pool_name, stage1_inputs, verdicts
+from study_stage1 import RUNG_FILE, auto_pass, ladder_rung, pool_name, provenance, stage1_inputs, verdicts
 from study_topic import TopicError
 
 
@@ -24,6 +24,9 @@ def stage1_results(folder, stratum):
     rung = chosen_rung(folder)
     inputs = stage1_inputs(folder, stratum, rung["shape"])
     answers = {m: verdicts(folder, pool_name(stratum, rung["shape"], m)) for m in rung["models"]}
+    for m, found in answers.items():
+        if found:
+            provenance(folder, pool_name(stratum, rung["shape"], m), m, rung["shape"], stratum, inputs, list(found))
     out, missing = {}, []
     for rank, row in sorted(inputs.items()):
         if auto_pass(row):

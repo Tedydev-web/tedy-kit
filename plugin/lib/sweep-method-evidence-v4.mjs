@@ -55,6 +55,19 @@ function reader(read) {
   return { json, jsonl };
 }
 
+const LADDER = [
+  { rung: 1, models: ["claude-sonnet-5-5"], shape: "brief" },
+  { rung: 2, models: ["claude-opus-5-5", "claude-sonnet-5-5"], shape: "brief" },
+  { rung: 3, models: ["claude-opus-5-5", "claude-sonnet-5-5"], shape: "paths" },
+  { rung: 4, models: ["claude-opus-5-5", "claude-sonnet-5-5"], shape: "readme" },
+];
+
+export function canonical(value) {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value && typeof value === "object") return `{${Object.keys(value).sort().map((k) => `${JSON.stringify(k)}:${canonical(value[k])}`).join(",")}}`;
+  return JSON.stringify(value);
+}
+
 const covered = (entry) => new Set((entry?.blocks ?? []).flatMap((b) => b.ranks ?? []));
 const blockHashes = (entry) => Object.assign({}, ...(entry?.blocks ?? []).map((b) => b.row_sha256 ?? {}));
 const autoPass = (row) => !(row.description || row.asset_paths?.length || row.readme_lead || row.readme_lead_sha256);
@@ -182,10 +195,44 @@ function stage1Errors(io, sessions, strata, rows) {
   const freeze = io.json("stage1-freeze.json");
   const chosen = io.json("stage1-rung.json");
   if (!freeze || !chosen) return { errors: ["no stage1-freeze.json and stage1-rung.json in the sweep folder"], passes: {} };
+  if (canonical(freeze.ladder) !== canonical(LADDER)) errors.push("stage1-freeze.json froze another ladder than the toolchain's");
   const inputs = {};
+  const checked = new Set();
+  const loadInputs = (stratum, shape) => {
+    const key = `${stratum}-${shape}`;
+    if (inputs[key]) return inputs[key];
+    const file = `stage1-inputs-${stratum}-${shape}.jsonl`;
+    inputs[key] = new Map(io.jsonl(file).map((r) => [r.order_rank, r]));
+    const pool = io.jsonl(`${stratum}-screening-order.jsonl`).map((r) => `${r.order_rank} ${lower(r.repo)}`).sort();
+    const held = [...inputs[key].values()].map((r) => `${r.order_rank} ${lower(r.repo)}`).sort();
+    if (pool.join("\n") !== held.join("\n")) errors.push(`${file} is not the final ${stratum} pool of ${stratum}-screening-order.jsonl: stage 1 must read every row the config-pool channel and the snowball added`);
+    const forged = [...inputs[key].values()].filter((r) => !r.readme_lead_sha256 && sha256(canonical(Object.fromEntries(Object.entries(r).filter(([k]) => k !== "row_sha256")))) !== r.row_sha256);
+    if (forged.length) errors.push(`${file}: rows ${forged.slice(0, 10).map((r) => r.order_rank).join(", ")} do not hash to their recorded row_sha256`);
+    return inputs[key];
+  };
+  const provenance = (name, model, shape, stratum, rows) => {
+    if (checked.has(name) || !rows.length) return;
+    checked.add(name);
+    const entry = sessions[name];
+    if (entry?.model !== model) {
+      errors.push(`${name}.jsonl has no ${model} session in meta.json; only verdicts run-stage1.py recorded count`);
+      return;
+    }
+    const bad = (entry.blocks ?? []).some((b) => b.shape !== shape || b.packet_sha256 !== freeze.packets?.[stratum] || b.examples_sha256 !== freeze.examples_sha256 ||
+      b.template_sha256 !== freeze.template_sha256 || b.ranks.length > freeze.batch_max);
+    if (bad) errors.push(`${name}: a block ran on another shape, packet, worked examples or prompt template than the stage-1 freeze, or over ${freeze.batch_max} rows`);
+    const hashes = blockHashes(entry);
+    const pool = loadInputs(stratum, shape);
+    const wrong = rows.filter((r) => hashes[String(r.order_rank)] === undefined || hashes[String(r.order_rank)] !== pool.get(r.order_rank)?.row_sha256);
+    if (wrong.length) errors.push(`${name}: ranks ${wrong.slice(0, 10).map((r) => r.order_rank).join(", ")} were not judged on the rows the stage-1 inputs hold`);
+  };
   const pass = (rung, stratum, names) => {
-    const shapeRows = inputs[`${stratum}-${rung.shape}`] ??= new Map(io.jsonl(`stage1-inputs-${stratum}-${rung.shape}.jsonl`).map((r) => [r.order_rank, r]));
-    const answers = rung.models.map((m) => new Map(io.jsonl(`${names(m)}.jsonl`).map((r) => [r.order_rank, r.verdict])));
+    const shapeRows = loadInputs(stratum, rung.shape);
+    const answers = rung.models.map((m) => {
+      const rows = io.jsonl(`${names(m)}.jsonl`);
+      provenance(names(m), m, rung.shape, stratum, rows);
+      return new Map(rows.map((r) => [r.order_rank, r.verdict]));
+    });
     return (rank) => {
       const row = shapeRows.get(rank);
       if (row && autoPass(row)) return true;
@@ -233,10 +280,6 @@ function stage1Errors(io, sessions, strata, rows) {
     passes[stratum] = { pool, passed: new Set([...pool.keys()].filter((rank) => passed(rank) === true)), excluded: {} };
     for (const model of rung.models) {
       const key = `stage1-${stratum}-${rung.shape}-${model}`;
-      const entry = sessions[key];
-      if (entry?.model !== model || (entry?.blocks ?? []).some((b) => b.shape !== rung.shape || b.ranks.length > freeze.batch_max || b.packet_sha256 !== freeze.packets?.[stratum])) {
-        errors.push(`${key}: the stage-1 pool run is not ${model} on the ${rung.shape} shape under the frozen packet in batches of at most ${freeze.batch_max}`);
-      }
       passes[stratum].excluded[model] = io.jsonl(`${key}.jsonl`).filter((r) => r.verdict === "no").length;
     }
   }
@@ -309,6 +352,12 @@ function dropErrors(io, read, meta) {
   for (const drop of meta.drops ?? []) {
     if (!String(drop?.reason ?? "").trim()) errors.push(`a drop of ${drop?.key} ranks ${drop?.ranks} records no reason`);
     if (!DROP_COPY.test(String(drop?.copy ?? "")) || read(`${drop.copy}.block.json`) === undefined) errors.push(`the drop of ${drop?.key} ranks ${drop?.ranks} has no copy of its block in the sweep folder`);
+  }
+  const runLike = /^(?:judge-.+|stage1-(?!inputs-).+|qgs-judge-[AB]|qgs-reader|[a-z0-9]+-(?:stage1-)?audit-.+|[a-z0-9]+-screen-[AB]|[a-z0-9]+-pilot-.+)\.jsonl$/;
+  for (const file of io.files ?? []) {
+    if (!runLike.test(file)) continue;
+    const key = file.slice(0, -6).replace(/^([a-z0-9]+)-screen-([AB])$/, "$1-$2");
+    if (!meta.sessions?.[key]) errors.push(`${file} has no session in meta.json: its rows count only when a recorded run produced them`);
   }
   for (const [key, entry] of Object.entries(meta.sessions ?? {})) {
     const rows = io.jsonl(`${key}.jsonl`);

@@ -159,6 +159,44 @@ test("stage 1 and stage 2 are checked against the files: unscreened pool rows an
   assert.match(u.errors(), /snowballed repositories s\/elsewhere are not in the config stage-1 pool/);
 });
 
+test("H-rung: stage-1 verdicts count only with their recorded session, frozen packet, examples, template and row hashes", () => {
+  const key = "judge-config-stage1-brief-claude-sonnet-5-5-run1";
+  const probe = (edit) => {
+    const s = sweep();
+    const meta = s.json("meta.json");
+    edit(meta, s);
+    s.write("meta.json", meta);
+    return s.errors();
+  };
+  assert.match(probe((m, s) => {
+    delete m.sessions[key];
+    s.writeRows(`${key}.jsonl`, s.jsonl(`${key}.jsonl`).map((r) => ({ ...r, verdict: "yes" })));
+  }), new RegExp(`${key}\\.jsonl has no claude-sonnet-5-5 session in meta\\.json`));
+  assert.match(probe((m) => { m.sessions[key].blocks[0].packet_sha256 = "0".repeat(64); }), new RegExp(`${key}: a block ran on another shape, packet, worked examples or prompt template`));
+  const pool = "stage1-product-brief-claude-sonnet-5-5";
+  assert.match(probe((m) => { m.sessions[pool].blocks[0].examples_sha256 = "f".repeat(64); }), new RegExp(`${pool}: a block ran on another shape, packet, worked examples`));
+  assert.match(probe((m) => { m.sessions[pool].blocks[0].template_sha256 = "f".repeat(64); }), new RegExp(`${pool}: a block ran on another shape, packet, worked examples`));
+  assert.match(probe((m) => { const b = m.sessions[key].blocks[0]; b.row_sha256[String(b.ranks[0])] = "a".repeat(64); }), new RegExp(`${key}: ranks \\d+ were not judged on the rows the stage-1 inputs hold`));
+  const t = sweep();
+  const rows = t.jsonl("stage1-inputs-config-brief.jsonl");
+  t.writeRows("stage1-inputs-config-brief.jsonl", rows.map((r, i) => (i === 0 ? { ...r, description: "rewritten" } : r)));
+  assert.match(t.errors(), /stage1-inputs-config-brief\.jsonl: rows \d+ do not hash to their recorded row_sha256/);
+  const u = sweep();
+  u.writeRows("judge-config-stage1-brief-claude-opus-5-5-run9.jsonl", [{ order_rank: 1, repo: "x/y", verdict: "yes" }]);
+  assert.match(u.errors(), /judge-config-stage1-brief-claude-opus-5-5-run9\.jsonl has no session in meta\.json/);
+  const v = sweep();
+  v.write("stage1-freeze.json", { ...v.json("stage1-freeze.json"), ladder: v.json("stage1-freeze.json").ladder.slice(0, 1) });
+  assert.match(v.errors(), /stage1-freeze\.json froze another ladder than the toolchain's/);
+});
+
+test("H-inputs: stage-1 inputs must be the final pool after the config-pool channel and the snowball", () => {
+  const s = sweep();
+  const order = s.jsonl("product-screening-order.jsonl");
+  s.writeRows("product-screening-order.jsonl", [...order, { ...order[0], order_rank: 9999, repo: "o/joined-late", channels: ["config-pool"] }]);
+  const text = s.text.replace(/\| product \| identified: config-pool \| (\d+) \|/, (_, n) => `| product | identified: config-pool | ${Number(n) + 1} |`);
+  assert.match(s.errors(text), /stage1-inputs-product-brief\.jsonl is not the final product pool of product-screening-order\.jsonl/);
+});
+
 test("a rung above the first passes the gate only with its held-out confirmation", () => {
   const s = sweep(escalated);
   assert.equal(s.errors(), "");

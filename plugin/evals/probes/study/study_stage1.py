@@ -6,7 +6,7 @@ from pathlib import Path
 from study_agreement import clopper_pearson, lower_bound
 from study_pool import ASSET, cache_name, read_json, work_file
 from study_screening_core import read_jsonl
-from study_session import STAGE1_BATCH_MAX
+from study_session import STAGE1_BATCH_MAX, canonical_sha256
 from study_session_prompt import STAGE1_TEMPLATE_SHA256
 from study_topic import TopicError
 
@@ -118,7 +118,40 @@ def stage1_inputs(folder, stratum, shape):
     rows = {r["order_rank"]: r for r in read_jsonl(Path(folder), inputs_name(stratum, shape))}
     if not rows:
         raise TopicError(f"no {inputs_name(stratum, shape)} in {folder}; build it with build-stage1-inputs.py")
+    pool = {(r["order_rank"], r["repo"].lower()) for r in read_jsonl(Path(folder), f"{stratum}-screening-order.jsonl")}
+    held = {(rank, r["repo"].lower()) for rank, r in rows.items()}
+    if pool != held:
+        shown = sorted(r for _, r in pool ^ held)[:10]
+        raise TopicError(f"{inputs_name(stratum, shape)} is not the final {stratum} pool of {stratum}-screening-order.jsonl (differs on {shown}); build it again after "
+                         "the config-pool channel and the snowball joined, before stage 1 runs")
     return rows
+
+
+def sessions(folder):
+    path = Path(folder) / "meta.json"
+    return (json.loads(path.read_text()).get("sessions") or {}) if path.is_file() else {}
+
+
+def row_hash(row):
+    plain = {k: v for k, v in row.items() if k != "row_sha256"}
+    if "row_sha256" in row and "readme_lead_sha256" not in row and canonical_sha256(plain) != row["row_sha256"]:
+        raise TopicError(f"stage-1 inputs row {row['order_rank']} does not hash to its recorded row_sha256")
+    return row.get("row_sha256") or canonical_sha256(plain)
+
+
+def provenance(folder, name, model, shape, stratum, inputs, ranks):
+    frozen = read_freeze(folder)
+    entry = sessions(folder).get(name)
+    if not entry or entry.get("model") != model:
+        raise TopicError(f"{name}.jsonl has no {model} session in meta.json; only verdicts run-stage1.py recorded count")
+    blocks = entry.get("blocks") or []
+    expected = (shape, frozen["packets"][stratum], frozen["examples_sha256"], frozen["template_sha256"])
+    if any((b.get("shape"), b.get("packet_sha256"), b.get("examples_sha256"), b.get("template_sha256")) != expected or len(b["ranks"]) > frozen["batch_max"] for b in blocks):
+        raise TopicError(f"{name}: a block ran on another shape, packet, worked examples or prompt template than the stage-1 freeze, or over {frozen['batch_max']} rows")
+    hashes = {int(r): h for b in blocks for r, h in b["row_sha256"].items()}
+    wrong = sorted(r for r in ranks if r not in inputs or hashes.get(r) != row_hash(inputs[r]))
+    if wrong:
+        raise TopicError(f"{name}: ranks {wrong[:10]} were not judged on the rows {inputs_name(stratum, shape)} holds now")
 
 
 def freeze(topic, work, strata, today):
@@ -157,7 +190,11 @@ def rung_run(folder, rung, run, labelled, held_out=False):
     for stratum in sorted({r["stratum"] for r in labelled}):
         rows = [r for r in labelled if r["stratum"] == stratum]
         inputs = stage1_inputs(folder, stratum, rung["shape"])
-        answers = {m: verdicts(folder, held_out_name(stratum, rung["shape"], m) if held_out else calibration_name(stratum, rung["shape"], m, run)) for m in rung["models"]}
+        names = {m: held_out_name(stratum, rung["shape"], m) if held_out else calibration_name(stratum, rung["shape"], m, run) for m in rung["models"]}
+        answers = {m: verdicts(folder, names[m]) for m in rung["models"]}
+        for m, found in answers.items():
+            if found:
+                provenance(folder, names[m], m, rung["shape"], stratum, inputs, list(found))
         for r in rows:
             row = inputs.get(r["order_rank"])
             if row is None or row["repo"].lower() != r["repo"].lower():
