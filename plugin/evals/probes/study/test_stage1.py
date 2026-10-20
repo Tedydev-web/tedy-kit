@@ -155,6 +155,7 @@ class Stage1Test(unittest.TestCase):
         chosen = json.loads((self.work / "stage1-rung.json").read_text())
         self.assertEqual((chosen["rung"], [t["rung"] for t in chosen["tried"]], [t["meets"] for t in chosen["tried"]], chosen["batches"]), (2, [1, 2], [False, True], ["calibration"]))
         self.assertEqual((chosen["tried"][0]["runs"][0]["missed"], chosen["tried"][1]["runs"][0]["passed"]), (["c/r1"], 59))
+        self.assertEqual((chosen["tried"][0]["differ"], chosen["tried"][0]["rows"], chosen["tried"][1]["differ"]), (1, 60, 0))
         self.assertEqual(chosen["tried"][1]["runs"][0]["strata"]["config"]["positives"], 30)
         with self.assertRaisesRegex(SystemExit, "already exists; the rung is chosen once"):
             self.call("choose-stage1-rung")

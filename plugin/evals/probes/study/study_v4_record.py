@@ -190,7 +190,7 @@ def stage1_lines(folder, strata):
              + "; ".join(f"rung {r['rung']} {' + '.join(r['models'])} on {r['shape']}" for r in freeze["ladder"])]
     for tried in chosen["tried"]:
         runs = "; ".join(f"run {i} {r['passed']}/{r['positives']} positives passed, one-sided 95% lower bound {r['lower']:.4f}" for i, r in enumerate(tried["runs"], 1))
-        lines.append(f"- rung {tried['rung']}: {runs}; " + ("meets the rule" if tried["meets"] else "fails the rule"))
+        lines.append(f"- rung {tried['rung']}: {runs}; the runs differ on {tried['differ']} of {tried['rows']} rows; " + ("meets the rule" if tried["meets"] else "fails the rule"))
         if tried["meets"]:
             for stratum, s in tried["runs"][0]["strata"].items():
                 low, high = s["interval"] or (0, 0)

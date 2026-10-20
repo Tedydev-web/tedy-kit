@@ -21,6 +21,7 @@ function build(...flags) {
 
 const built = build();
 const pending = build("--no-audit");
+const escalated = build("--escalate");
 
 function sweep(source = built) {
   const repo = tempDir("v4-copy-");
@@ -148,6 +149,27 @@ test("stage 1 and stage 2 are checked against the files: unscreened pool rows an
   const u = sweep();
   u.writeRows("snowball-screening-order.jsonl", [{ order_rank: 1001, repo: "s/elsewhere" }]);
   assert.match(u.errors(), /snowballed repositories s\/elsewhere are not in the config stage-1 pool/);
+});
+
+test("a rung above the first passes the gate only with its held-out confirmation", () => {
+  const s = sweep(escalated);
+  assert.equal(s.errors(), "");
+  assert.match(s.text, /^- held-out confirmation: rung 2 passed /m);
+  const held = s.jsonl("judge-config-stage1-brief-claude-opus-5-5-held-out.jsonl");
+  const labels = s.json("held-out-labels.json").rows;
+  const described = new Set(s.jsonl("stage1-inputs-config-brief.jsonl").filter((r) => r.description).map((r) => r.order_rank));
+  const positive = labels.find((r) => r.stratum === "config" && r.user.decision === "eligible" && described.has(r.order_rank));
+  s.writeRows("judge-config-stage1-brief-claude-opus-5-5-held-out.jsonl", held.map((r) => (r.order_rank === positive.order_rank ? { ...r, verdict: "no" } : r)));
+  s.writeRows("judge-config-stage1-brief-claude-sonnet-5-5-held-out.jsonl",
+    s.jsonl("judge-config-stage1-brief-claude-sonnet-5-5-held-out.jsonl").map((r) => (r.order_rank === positive.order_rank ? { ...r, verdict: "no" } : r)));
+  assert.match(s.errors(), new RegExp(`config: rung 2 misses held-out positives ${positive.repo}; it is not confirmed`));
+});
+
+test("item 8: a facet ranking made with other terms than the facet's own fails the gate", () => {
+  const s = sweep();
+  const ranked = s.json("facets/alpha/product-ranked.json");
+  s.write("facets/alpha/product-ranked.json", { ...ranked, terms: ["tdd", "test", "guard"] });
+  assert.match(s.errors(), /facets\/alpha\/product-ranked\.json was ranked with the terms \["tdd","test","guard"\], not the facet's own \["tdd","test"\]/);
 });
 
 test("the stage-1 audit draws only stage-1 excludes, read by the stage-2 screener and checked by the user", () => {

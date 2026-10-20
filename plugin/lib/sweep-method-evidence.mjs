@@ -183,7 +183,7 @@ export function sweepMethodErrors(repo, file, text) {
   if (GRANDFATHERED.get(sweep)?.sha256 === sha256(text)) return [];
   const folder = join(repo, "docs", "prior-art", "sweeps", sweep);
   const files = existsSync(folder) ? readdirSync(folder).sort() : [];
-  const read = (name) => (files.includes(name) || (/^dropped\/[\w.-]+$/.test(name) && existsSync(join(folder, name))) ? readFileSync(join(folder, name), "utf8") : undefined);
+  const read = (name) => (files.includes(name) || (/^(?:dropped\/[\w.-]+|facets\/[\w-]+\/[\w-]+-ranked\.json)$/.test(name) && existsSync(join(folder, name))) ? readFileSync(join(folder, name), "utf8") : undefined);
   const criteriaText = (path) => (existsSync(join(repo, path)) ? readFileSync(join(repo, path), "utf8") : "");
   const topic = topicForSweep(repo, sweep);
   const role = text.match(/^- Role: (\S+)$/m)?.[1];

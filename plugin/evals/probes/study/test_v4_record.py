@@ -91,5 +91,17 @@ class V4RecordTest(unittest.TestCase):
             self.render(repo)
 
 
+class V4EscalatedRungRecordTest(unittest.TestCase):
+    def test_a_rung_above_the_first_is_confirmed_on_the_held_out_batch_and_its_own_bound_is_reported_apart(self):
+        built = v4_sweep(escalate=True)
+        text = render(built, load_topic(built, "demo"))[0]
+        stage1 = section(text, "Stage 1")
+        self.assertRegex(stage1, r"- rung 1: run 1 \d+/\d+ positives passed, .*; the runs differ on 1 of 120 rows; fails the rule")
+        self.assertIn("- chosen: rung 2 after 2 rungs tried", stage1)
+        self.assertRegex(stage1, r"- held-out confirmation: rung 2 passed (\d+)/\1 held-out positives, missed none; the batch's own one-sided lower bound 0\.\d{4}; "
+                                 r"the pooled bound above was measured on the set the rung was chosen on")
+        self.assertRegex(section(text, "Calibration"), r"- held-out config: \d+ rows \(stage-1 rung 2 was chosen above the first: the rows are held out to confirm it\)")
+
+
 if __name__ == "__main__":
     unittest.main()

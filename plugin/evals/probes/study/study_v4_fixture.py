@@ -323,11 +323,31 @@ def swept_work(limits=None):
     return repo, work, judges
 
 
-def v4_sweep(audit=True):
+def stage1_escalated(repo, work, judges):
+    sample = json.loads((work / "calibration-set.json").read_text())
+    missed = next(r["repo"] for r in sample["rows"] if r["stratum"] == "config" and eligible(r["repo"]) and description(r["repo"]))
+    for stratum in STRATA:
+        for model in ("claude-sonnet-5-5", "claude-opus-5-5"):
+            for run in ("1", "2"):
+                judges.flip = {missed} if (model, run) == ("claude-sonnet-5-5", "1") else set()
+                quiet(repo, "run-stage1", "--work", str(work), "--stratum", stratum, "--shape", "brief", "--model", model, "--set", "calibration", "--run", run,
+                      "--today", TODAY, fetch=judges)
+    judges.flip = set()
+    quiet(repo, "choose-stage1-rung", "--work", str(work), "--today", TODAY)
+    drawn_and_labelled(repo, work, top_up=30)
+    for stratum in STRATA:
+        for model in ("claude-opus-5-5", "claude-sonnet-5-5"):
+            quiet(repo, "run-stage1", "--work", str(work), "--stratum", stratum, "--shape", "brief", "--model", model, "--set", "held-out", "--today", TODAY, fetch=judges)
+
+
+def v4_sweep(audit=True, escalate=False):
     judges = ScriptedJudges()
     repo, work = calibrated_work(judges)
     judged(repo, work, judges)
-    stage1_calibrated(repo, work, judges)
+    if escalate:
+        stage1_escalated(repo, work, judges)
+    else:
+        stage1_calibrated(repo, work, judges)
     topic_qgs(repo, work, judges)
     stage1_pooled(repo, work, judges)
     stage1_audited(repo, work, judges)
@@ -341,5 +361,5 @@ def v4_sweep(audit=True):
 
 
 if __name__ == "__main__":
-    built = v4_sweep(audit="--no-audit" not in sys.argv)
+    built = v4_sweep(audit="--no-audit" not in sys.argv, escalate="--escalate" in sys.argv)
     shutil.copytree(built, Path(sys.argv[1]), dirs_exist_ok=True)

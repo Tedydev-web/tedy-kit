@@ -277,6 +277,19 @@ function stage1AuditErrors(io, strata, passes) {
   return errors;
 }
 
+function facetRankingErrors(io, topic, strata) {
+  const errors = [];
+  const same = (a, b) => JSON.stringify([...(a ?? [])].map(lower).sort()) === JSON.stringify([...(b ?? [])].map(lower).sort());
+  for (const [facet, rule] of Object.entries(topic?.facets ?? {})) {
+    for (const stratum of strata) {
+      const ranked = io.json(`facets/${facet}/${stratum}-ranked.json`);
+      if (!ranked) errors.push(`no facets/${facet}/${stratum}-ranked.json in the sweep folder: a facet's ranking orders stage 2 when it must stop`);
+      else if (!same(ranked.terms, rule.terms)) errors.push(`facets/${facet}/${stratum}-ranked.json was ranked with the terms ${JSON.stringify(ranked.terms)}, not the facet's own ${JSON.stringify(rule.terms)}`);
+    }
+  }
+  return errors;
+}
+
 function dropErrors(io, read, meta) {
   const errors = [];
   for (const drop of meta.drops ?? []) {
@@ -369,6 +382,7 @@ export function v4Errors(text, { read, topic, meta }) {
     ...judgeErrors(io, topic, sessions, strata, labelled.rows),
     ...stage1.errors,
     ...stage1AuditErrors(io, strata, stage1.passes),
+    ...facetRankingErrors(io, topic, strata),
     ...stage2.errors,
     ...dropErrors(io, read, meta),
     ...prismaErrors(io, text, strata, stage1.passes, stage2.screened),

@@ -169,7 +169,7 @@ def rung_run(folder, rung, run, labelled, held_out=False):
     positives = [r for r in labelled if r["user"]["decision"] == "eligible"]
     hits = sum(passed[r["id"]] for r in positives)
     return {"positives": len(positives), "passed": hits, "missed": sorted(r["repo"] for r in positives if not passed[r["id"]]),
-            "lower": lower_bound(hits, len(positives)) if positives else 0.0, "strata": per_stratum}
+            "lower": lower_bound(hits, len(positives)) if positives else 0.0, "strata": per_stratum, "rows": passed}
 
 
 def choose_rung(folder, labelled):
@@ -184,7 +184,9 @@ def choose_rung(folder, labelled):
         if None in runs:
             break
         meets = all(r["lower"] >= SENSITIVITY_BOUND for r in runs)
-        tried.append({"rung": rung["rung"], "runs": runs, "meets": meets})
+        differ = sum(runs[0]["rows"][i] != runs[1]["rows"][i] for i in runs[0]["rows"])
+        tried.append({"rung": rung["rung"], "runs": [{k: v for k, v in r.items() if k != "rows"} for r in runs], "differ": differ, "rows": len(runs[0]["rows"]),
+                      "meets": meets})
         if meets:
             return {"rung": rung["rung"], "tried": tried}
     detail = "; ".join(f"rung {t['rung']} lower bounds {[round(r['lower'], 3) for r in t['runs']]}" for t in tried) or "no rung was run twice on the calibration set"
