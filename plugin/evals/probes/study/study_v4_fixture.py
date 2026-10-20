@@ -311,10 +311,9 @@ def topic_qgs(repo, work, judges):
     judges.flip = {next(c["repo"] for c in listed if relevant(c["repo"]) and "missing" not in c["repo"])}
     quiet(repo, "run-judge", "--work", str(work), "--judge", "qgs-B", "--set", "qgs", "--today", TODAY, fetch=judges)
     judges.flip = set()
-    outsider = next(c for c in listed if not relevant(c["repo"]))
-    cross = [{"repo": c["repo"], "verdict": "yes" if relevant(c["repo"]) or c is outsider else "no",
-              "problems": problems_for(c["repo"]) if relevant(c["repo"]) or c is outsider else [], "why": "gemini"} for c in listed[:12]]
-    write_jsonl(work / f"qgs-cross-{GEMINI['model']}.jsonl", cross)
+    judges.flip = {next(c["repo"] for c in listed if not relevant(c["repo"]))}
+    quiet(repo, "run-judge", "--work", str(work), "--judge", "audit", "--set", "qgs", "--rows", "1-12", "--today", TODAY, fetch=judges)
+    judges.flip = set()
     quiet(repo, "run-judge", "--work", str(work), "--judge", "reader", "--set", "qgs", "--today", TODAY, fetch=judges)
     quiet(repo, "qgs-standard", "--work", str(work), "--write")
 

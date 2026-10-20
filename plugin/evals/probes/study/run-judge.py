@@ -79,6 +79,10 @@ def stratum_job(topic, work, stratum, judge, which_set, run):
 
 def qgs_job(topic, work, judge):
     whole_topic(topic, "QGS judging")
+    if judge == "audit":
+        option, drops = audit_option(topic), dropped(work)
+        return {"kind": "qgs", "freeze": None, "option": option, "ranks": [i for i in sorted(candidates(work)) if i not in drops], "name": cross_name(option)[:-len(".jsonl")],
+                "inputs": INPUTS, "packet": PACKET, "shape": "thin"}
     if judge not in QGS_JUDGES:
         raise TopicError(f"{judge} does not judge the QGS candidates; --set qgs runs qgs-A, qgs-B or the reader")
     strata = calibrated(topic)
@@ -94,7 +98,8 @@ def qgs_job(topic, work, judge):
 
 def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
     args = topic_arguments("Run one judge, isolated, on the calibration rows (twice, --run 1 and 2, on the input shape its production runs read), on the topic's QGS "
-                           "candidates or the reader's queue (--set qgs, once it qualified), on the stage-1 audit rows (--judge screening-A --set stage1-audit), or the "
+                           "candidates or the reader's queue (--set qgs, once it qualified), the cross-family model on them (--judge audit --set qgs, any --rows block), "
+                           "on the stage-1 audit rows (--judge screening-A --set stage1-audit), or the "
                            "cross-family model on the audit sample (--judge audit --set audit), and record every block in meta.json.",
                            (["--work"], {"required": True, "help": "the topic's working folder"}),
                            (["--stratum"], {"help": "stratum to judge; not used with --set qgs"}),

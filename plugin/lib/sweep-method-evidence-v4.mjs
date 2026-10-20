@@ -125,7 +125,7 @@ function dropErrors(io, read, meta, dropped) {
   const copies = new Set((meta.drops ?? []).map((d) => d?.copy));
   const loose = [...new Set(dropped.map((name) => `dropped/${name.replace(/\.(?:block\.json|rows\.jsonl|inputs\.jsonl)$/, "")}`))].filter((copy) => !copies.has(copy)).sort();
   if (loose.length) errors.push(`${loose.join(", ")}: a dropped copy without its meta.json drops entry; a run is dropped only by drop-run.py, which records both`);
-  const runLike = /^(?:judge-.+|stage1-(?!inputs-).+|qgs-judge-[AB]|qgs-reader|[a-z0-9]+-(?:stage1-)?audit-.+|[a-z0-9]+-screen-[AB]|[a-z0-9]+-pilot-.+)\.jsonl$/;
+  const runLike = /^(?:judge-.+|stage1-(?!inputs-).+|qgs-judge-[AB]|qgs-reader|qgs-cross-.+|[a-z0-9]+-(?:stage1-)?audit-.+|[a-z0-9]+-screen-[AB]|[a-z0-9]+-pilot-.+)\.jsonl$/;
   for (const file of io.files ?? []) {
     if (!runLike.test(file)) continue;
     const key = file.slice(0, -6).replace(/^([a-z0-9]+)-screen-([AB])$/, "$1-$2");

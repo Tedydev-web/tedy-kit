@@ -670,6 +670,27 @@ test("every session names the roster cli as well as the model: production QGS, s
   }
 });
 
+test("the cross-family QGS judgments carry provenance: a recorded run of the topic's cross_family on the thin inputs under the QGS packet", () => {
+  const key = "qgs-cross-gemini-3.8-flash-high";
+  const entry = sweep().json("meta.json").sessions[key];
+  assert.deepEqual([entry?.cli, entry?.model, entry?.blocks?.[0]?.shape], ["agy", "gemini-3.8-flash-high", "thin"]);
+  const outside = /^qgs-cross-gemini-3\.8-flash-high\.jsonl: its judgments are not all agy gemini-3\.8-flash-high runs on the thin inputs under qgs-packet\.md, covering exactly its rows$/;
+  const block = (edit) => (s) => { const meta = s.json("meta.json"); edit(meta.sessions[key].blocks[0]); s.write("meta.json", meta); };
+  const probes = [
+    ["QX1 file deleted", (s) => rmSync(join(s.folder, `${key}.jsonl`)), /^meta\.json records sessions qgs-cross-gemini-3\.8-flash-high whose output files are not in the sweep folder; /],
+    ["session deleted", (s) => { const meta = s.json("meta.json"); delete meta.sessions[key]; s.write("meta.json", meta); }, /^qgs-cross-gemini-3\.8-flash-high\.jsonl has no session in meta\.json: /],
+    ["a row deleted", (s) => s.writeRows(`${key}.jsonl`, s.jsonl(`${key}.jsonl`).slice(1)), outside],
+    ["packet changed", block((b) => { b.packet_sha256 = "0".repeat(64); }), outside],
+    ["shape changed", block((b) => { b.shape = "full"; }), outside],
+    ["a row hash changed", block((b) => { b.row_sha256[String(b.ranks[0])] = "0".repeat(64); }), /^the QGS sessions judged candidates \d+ on different thin inputs, /],
+  ];
+  for (const [name, edit, message] of probes) {
+    const s = sweep();
+    edit(s);
+    failsBothLayers(s, new RegExp(`prior-art-sweep-record: ${message.source.slice(1)}`), message, name);
+  }
+});
+
 test("the production QGS sessions record the same thin-input hash for every candidate they share, and one for each candidate they judged", () => {
   const split = /^the QGS sessions judged candidates 1 on different thin inputs, or recorded no input hash for them; every QGS judge reads the same candidate inputs$/;
   const probes = [
@@ -691,7 +712,7 @@ test("the agy threat lists every session that ran through agy, whatever the sess
   const meta = s.json("meta.json");
   delete meta.sessions["config-audit-gemini-3.8-flash-high"].threats;
   s.write("meta.json", meta);
-  const both = "- agy MCP servers, hooks and user settings not excluded: config-audit-gemini-3.8-flash-high, product-audit-gemini-3.8-flash-high ran through agy";
+  const both = "- agy MCP servers, hooks and user settings not excluded: config-audit-gemini-3.8-flash-high, product-audit-gemini-3.8-flash-high, qgs-cross-gemini-3.8-flash-high ran through agy";
   const text = s.rendered();
   assert.ok(text.includes(both), text.split("\n").find((l) => l.startsWith("- agy")));
   assert.equal(s.errors(text), "");

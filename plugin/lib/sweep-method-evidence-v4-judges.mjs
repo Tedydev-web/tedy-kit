@@ -1,5 +1,5 @@
 import { EMPTY_TABLE, derive } from "./sweep-screening-derive.mjs";
-import { KAPPA_FLOOR, SENSITIVITY_FLOOR, blockHashes, covered, figureLine, interval, kappa } from "./sweep-method-evidence-v4-shared.mjs";
+import { KAPPA_FLOOR, SENSITIVITY_FLOOR, blockHashes, covered, figureLine, interval, kappa, sha256 } from "./sweep-method-evidence-v4-shared.mjs";
 
 const LABELLED = ["Authority", "Methodology", "Objectivity", "Position", "Relevance"];
 
@@ -114,7 +114,20 @@ export function judgeErrors(io, topic, sessions, strata, rows, batches) {
       : "- QGS reader: no candidate was queued for the reader";
     if (!io.text.split("\n").includes(line)) errors.push(`the record's QGS ${judge} line is not the one ${file}.jsonl gives ("${line}")`);
   }
-  return [...errors, ...qgsHashErrors(sessions, ["qgs-judge-A", "qgs-judge-B", "qgs-reader"])];
+  const cross = topic?.cross_family;
+  const crossKey = cross?.model ? `qgs-cross-${cross.model}` : null;
+  if (crossKey && io.files?.includes(`${crossKey}.jsonl`)) {
+    const entry = sessions[crossKey];
+    const blocks = entry?.blocks ?? [];
+    const ids = new Set(io.jsonl(`${crossKey}.jsonl`).map((r) => r.id));
+    const ranks = covered(entry);
+    const packet = sha256(io.read("qgs-packet.md") ?? "");
+    if (entry?.cli !== cross.cli || entry?.model !== cross.model || !blocks.length || blocks.some((b) => b.shape !== "thin" || b.packet_sha256 !== packet)
+      || ids.size !== ranks.size || [...ids].some((id) => !ranks.has(id))) {
+      errors.push(`${crossKey}.jsonl: its judgments are not all ${cross.cli} ${cross.model} runs on the thin inputs under qgs-packet.md, covering exactly its rows`);
+    }
+  }
+  return [...errors, ...qgsHashErrors(sessions, ["qgs-judge-A", "qgs-judge-B", "qgs-reader", ...(crossKey ? [crossKey] : [])])];
 }
 
 export function qgsHashErrors(sessions, names) {

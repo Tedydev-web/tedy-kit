@@ -318,6 +318,30 @@ class V4RecordTest(unittest.TestCase):
         with self.assertRaisesRegex(TopicError, r"^the drop of qgs-judge-B ranks \[1, 5\] records no reason"):
             self.render(repo)
 
+    def test_the_cross_family_qgs_judgments_carry_the_provenance_of_a_recorded_run(self):
+        key = "qgs-cross-gemini-3.8-flash-high"
+        entry = json.loads((self.built / "docs/prior-art/sweeps" / SWEEP / "meta.json").read_text())["sessions"][key]
+        self.assertEqual((entry["cli"], entry["model"], entry["blocks"][0]["shape"]), ("agy", "gemini-3.8-flash-high", "thin"))
+        outside = rf"^{key}.jsonl: its judgments are not all agy gemini-3.8-flash-high runs on the thin inputs under qgs-packet.md, covering exactly its rows$"
+
+        def block(edit):
+            def apply(folder):
+                meta = json.loads((folder / "meta.json").read_text())
+                edit(meta["sessions"][key]["blocks"][0])
+                (folder / "meta.json").write_text(json.dumps(meta))
+            return apply
+
+        def drop_row(folder):
+            path = folder / f"{key}.jsonl"
+            path.write_text("".join(path.read_text().splitlines(keepends=True)[1:]))
+        for name, edit, message in (("a row deleted", drop_row, outside), ("packet changed", block(lambda b: b.update(packet_sha256="0" * 64)), outside),
+                                    ("shape changed", block(lambda b: b.update(shape="full")), outside)):
+            with self.subTest(name=name):
+                repo, folder = self.copy()
+                edit(folder)
+                with self.assertRaisesRegex(TopicError, message):
+                    self.render(repo)
+
     def test_the_production_qgs_sessions_record_the_same_thin_input_hash_for_every_candidate_they_share(self):
         def change(key, edit):
             def apply(folder):
@@ -339,7 +363,7 @@ class V4RecordTest(unittest.TestCase):
         meta = json.loads((folder / "meta.json").read_text())
         meta["sessions"]["config-audit-gemini-3.8-flash-high"]["threats"] = []
         (folder / "meta.json").write_text(json.dumps(meta))
-        self.assertIn("- agy MCP servers, hooks and user settings not excluded: config-audit-gemini-3.8-flash-high, product-audit-gemini-3.8-flash-high ran through agy",
+        self.assertIn("- agy MCP servers, hooks and user settings not excluded: config-audit-gemini-3.8-flash-high, product-audit-gemini-3.8-flash-high, qgs-cross-gemini-3.8-flash-high ran through agy",
                       self.render(repo))
 
     def test_every_session_names_the_roster_cli_as_well_as_the_model(self):

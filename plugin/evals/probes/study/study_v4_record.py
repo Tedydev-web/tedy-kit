@@ -8,7 +8,7 @@ from study_calibration_set import all_batches, calibration_checks, labelled, lab
 from study_drop import drop_checks, file_stem
 from study_judges import AUDIT_FILE, AUDIT_ROWS, SHAPES, criteria_version, decided, judged_batches, reader_shares_family, roster, validate
 from study_method_sessions import checked_entry, row_hashes
-from study_qgs import ADJUDICATED, JUDGE_FILES, PACKET, UPPER_ESTIMATE, candidate_rows, cross_family, member_facets, qgs_standard, stratum_members
+from study_qgs import ADJUDICATED, JUDGE_FILES, PACKET, UPPER_ESTIMATE, candidate_rows, cross_family, cross_name, member_facets, qgs_standard, stratum_members
 from study_screening_core import read_json, read_jsonl
 from study_session import model_family
 from study_stage1 import FREEZE_FILE, RUNG_FILE, choose_rung, held_out_batches, held_out_check, ladder_rung, pool_name, stage1_inputs
@@ -18,7 +18,7 @@ from study_topic import SNOWBALL_RANK_BASE, TopicError
 
 STAGE2_THREAT = "- stage 2 stopped before every stage-1 pass: "
 STAGE2_UNREACHABLE = "- pooled recall target unreachable at stage 2: "
-RUN_FILE = re.compile(r"^(?:judge-.+|stage1-(?!inputs-).+|qgs-judge-[AB]|qgs-reader|[a-z0-9]+-(?:stage1-)?audit-.+|[a-z0-9]+-screen-[AB]|[a-z0-9]+-pilot-.+)\.jsonl$")
+RUN_FILE = re.compile(r"^(?:judge-.+|stage1-(?!inputs-).+|qgs-judge-[AB]|qgs-reader|qgs-cross-.+|[a-z0-9]+-(?:stage1-)?audit-.+|[a-z0-9]+-screen-[AB]|[a-z0-9]+-pilot-.+)\.jsonl$")
 AUDIT_KEY = re.compile(r"^[a-z0-9]+-audit-(.+)$")
 CROSS_FILE = re.compile(r"^qgs-cross-(.+)\.jsonl$")
 
@@ -331,7 +331,17 @@ def qgs_workflow(topic, folder, sessions, found):
             raise TopicError(f"{name}.jsonl: its {len(ids)} judgments are not all {judges[judge]['cli']} {judges[judge]['model']} runs on the thin QGS inputs under the validated {PACKET}; "
                              "only a validated judge in the validated workflow counts")
         lines.append(f"- QGS {judge}: {judges[judge]['model']} judged {len(ids)} candidates on the thin inputs it was validated on, under the validated packet")
-    qgs_hash_checks(sessions, list(JUDGE_FILES.values()))
+    option = cross_family(topic)
+    cross = cross_name(option)[:-len(".jsonl")] if option else None
+    if cross and (Path(folder) / f"{cross}.jsonl").is_file():
+        entry = sessions.get(cross) or {}
+        blocks = entry.get("blocks") or []
+        ids = {r.get("id") for r in read_jsonl(folder, f"{cross}.jsonl")}
+        packet = hashlib.sha256((Path(folder) / PACKET).read_bytes()).hexdigest()
+        if (entry.get("cli"), entry.get("model")) != (option["cli"], option["model"]) or ids != {r for b in blocks for r in b.get("ranks") or []} or \
+                {b.get("shape") for b in blocks} != {"thin"} or {b.get("packet_sha256") for b in blocks} != {packet}:
+            raise TopicError(f"{cross}.jsonl: its judgments are not all {option['cli']} {option['model']} runs on the thin inputs under {PACKET}, covering exactly its rows")
+    qgs_hash_checks(sessions, list(JUDGE_FILES.values()) + ([cross] if cross else []))
     return lines
 
 
