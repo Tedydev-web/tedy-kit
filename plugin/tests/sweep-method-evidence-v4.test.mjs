@@ -157,6 +157,9 @@ test("stage 1 and stage 2 are checked against the files: unscreened pool rows an
   const u = sweep();
   u.writeRows("snowball-screening-order.jsonl", [{ order_rank: 1001, repo: "s/elsewhere" }]);
   assert.match(u.errors(), /snowballed repositories s\/elsewhere are not in the config stage-1 pool/);
+  const v = sweep();
+  v.write("snowball-cut.json", { ...v.json("snowball-cut.json"), cut_row: 200 });
+  assert.match(v.errors(), /snowball-cut\.json cuts the snowball at row 200; quality criteria v4 refuses a snowball cut/);
 });
 
 test("the pooled stage-2 plan and its stop line are recomputed from the files, so a hand-edited stop fails the gate", () => {

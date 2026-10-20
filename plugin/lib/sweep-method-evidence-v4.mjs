@@ -540,6 +540,8 @@ function recallErrors(io, text, topic, strata, members, passes, screened) {
   }
   const snow = io.jsonl("snowball-screening-order.jsonl").filter((r) => !pools.config?.has(lower(r.repo)));
   if (snow.length) errors.push(`snowballed repositories ${snow.map((r) => r.repo).join(", ")} are not in the config stage-1 pool`);
+  const cut = io.json("snowball-cut.json")?.cut_row;
+  if (cut !== undefined && cut !== null) errors.push(`snowball-cut.json cuts the snowball at row ${cut}; quality criteria v4 refuses a snowball cut, every snowballed repository joins the pool`);
   if (topic?.strata?.product?.channels?.config_pool === true && strata.includes("product")) {
     const joined = io.json("config-pool-channel.json")?.joined;
     const written = text.match(/^- product channel from the config pool: (\d+) repositories joined/m);

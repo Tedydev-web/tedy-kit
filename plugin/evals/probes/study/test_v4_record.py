@@ -125,6 +125,13 @@ class V4RecordTest(unittest.TestCase):
         with self.assertRaisesRegex(TopicError, r"snowballed repositories \['s/elsewhere'\] are not in the config stage-1 pool"):
             self.render(repo)
 
+    def test_a_snowball_with_a_cut_is_refused_under_v4(self):
+        repo, folder = self.copy()
+        cut = json.loads((folder / "snowball-cut.json").read_text())
+        (folder / "snowball-cut.json").write_text(json.dumps({**cut, "cut_row": 200, "source": "the effort bound 200"}))
+        with self.assertRaisesRegex(TopicError, "snowball-cut.json cuts the snowball at row 200; quality criteria v4 refuses a snowball cut"):
+            self.render(repo)
+
 
 class QgsWorkflowTest(unittest.TestCase):
     def test_an_empty_reader_queue_needs_no_reader_session(self):
