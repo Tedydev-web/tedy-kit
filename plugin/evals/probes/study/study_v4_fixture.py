@@ -1,6 +1,9 @@
 import atexit
+import contextlib
 import hashlib
+import io
 import json
+import sys
 import re
 import shutil
 import tempfile
@@ -173,6 +176,60 @@ def judged(repo, work, judges, names=("screening-A", "screening-B", "qgs-A", "qg
                 call(repo, "run-judge", "--work", str(work), "--stratum", stratum, "--judge", name, "--set", "calibration", "--run", run, "--today", "2026-10-20", fetch=judges)
 
 
+def quiet(repo, name, *args, fetch=None):
+    with contextlib.redirect_stdout(io.StringIO()):
+        call(repo, name, *args, fetch=fetch)
+
+
+def topic_qgs(repo, work, judges, stratum):
+    listed = [json.loads(line) for line in (work / f"{stratum}-qgs-candidates.jsonl").read_text().splitlines()]
+    canonical = json.loads((work / "cache/canonical.json").read_text()) if (work / "cache/canonical.json").is_file() else {}
+    write_json(work / "cache/canonical.json", {**canonical, **{c["repo"].lower(): (None if "missing" in c["repo"] else c["repo"]) for c in listed}})
+    quiet(repo, "fetch-screening-inputs", "--work", str(work), "--stratum", stratum, "--set", "qgs", fetch=inputs_fetch())
+    call(repo, "run-judge", "--work", str(work), "--stratum", stratum, "--judge", "qgs-A", "--set", "qgs", "--today", "2026-10-20", fetch=judges)
+    judges.flip = {next(c["repo"] for c in listed if relevant(c["repo"]))}
+    call(repo, "run-judge", "--work", str(work), "--stratum", stratum, "--judge", "qgs-B", "--set", "qgs", "--today", "2026-10-20", fetch=judges)
+    judges.flip = set()
+    outsider = next(c for c in listed if not relevant(c["repo"]))
+    cross = [{"id": c["id"], "repo": c["repo"], "verdict": "yes" if relevant(c["repo"]) or c is outsider else "no",
+              "problems": problems_for(c["repo"]) if relevant(c["repo"]) or c is outsider else [], "why": "gemini"} for c in listed[:12]]
+    write_jsonl(work / f"{stratum}-qgs-cross-{GEMINI['model']}.jsonl", cross)
+    call(repo, "run-judge", "--work", str(work), "--stratum", stratum, "--judge", "reader", "--set", "qgs", "--today", "2026-10-20", fetch=judges)
+    quiet(repo, "qgs-standard", "--work", str(work), "--stratum", stratum, "--write")
+    quiet(repo, "qgs-recall", "--work", str(work), "--stratum", stratum, "--states", "product", "--write", fetch=FakeFetch())
+
+
+def screened(repo, work, judges, stratum):
+    order = [json.loads(line) for line in (work / f"{stratum}-screening-order.jsonl").read_text().splitlines()]
+    for side in "AB":
+        call(repo, "run-screening-session", "--work", str(work), "--stratum", stratum, "--side", side, "--ranks", f"1-{len(order)}", "--today", "2026-10-20", fetch=judges)
+    quiet(repo, "facet-depth", "--work", str(work), "--stratum", stratum, "--write-stop")
+
+
+def v4_sweep(audit=True):
+    repo = v4_repo()
+    work = v4_work(repo)
+    shutil.copytree(repo / "docs/prior-art/sweeps" / SWEEP, work, dirs_exist_ok=True)
+    write_json(work / "mechanism-table.json", {"aliases": {}, "class": {}, "default": "new"})
+    for stratum in ("config", "product"):
+        write_json(work / f"{stratum}-mechanism-map.json", {"A": {}, "B": {}})
+        write_json(work / f"{stratum}-adjudication.json", {"rows": {}, "capture_recapture": {"union": 1}})
+    judges = ScriptedJudges()
+    labelled(repo, work)
+    frozen(repo, work, judges)
+    judged(repo, work, judges)
+    for stratum in ("config", "product"):
+        topic_qgs(repo, work, judges, stratum)
+        screened(repo, work, judges, stratum)
+    if audit:
+        quiet(repo, "draw-audit-sample", "--work", str(work))
+        for stratum in ("config", "product"):
+            call(repo, "run-judge", "--work", str(work), "--stratum", stratum, "--judge", "audit", "--set", "audit", "--today", "2026-10-20", fetch=judges)
+    quiet(repo, "export-sweep-data", "--work", str(work))
+    shutil.rmtree(work)
+    return repo
+
+
 def user_labels(sample):
     labels = {}
     for row in sample["rows"]:
@@ -181,3 +238,12 @@ def user_labels(sample):
         labels[row["id"]] = {"Authority": 1 if yes else 0, "Methodology": 1 if yes else 0.5, "Objectivity": 1 if yes else 0, "Position": 1 if yes else 0,
                              "Relevance": 1 if rel else 0, "decision": "eligible" if yes else "excluded: irrelevant" if not rel else "excluded: below-threshold"}
     return labels
+
+
+if __name__ == "__main__":
+    from study_sweep_record import write_record
+    from study_topic import load_topic
+    built = v4_sweep(audit="--no-audit" not in sys.argv)
+    write_record(built, load_topic(built, "demo"))
+    shutil.copytree(built, Path(sys.argv[1]), dirs_exist_ok=True)
+    shutil.rmtree(built)

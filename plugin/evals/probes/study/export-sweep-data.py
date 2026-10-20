@@ -10,8 +10,11 @@ HEX40 = re.compile(r"[0-9a-f]{40}")
 LONGHEX = re.compile(r"\b[0-9a-fA-F]{32,}\b")
 DIGEST = re.compile(r"[0-9a-f]{64}")
 HOME_PATH = re.compile(r"/(?:home|Users)/[^/\s]+/")
-ORDER_FIELDS = ("order_rank", "repo", "order", "units", "contract_files", "stars", "pushed", "created", "channels", "archived", "forced", "closed_issues", "merged_prs", "license")
-SHARED_JSON = ("meta.json", "study.json", "surface-map.json", "mechanism-table.json", "qgs-adjudicated.json", "protocol-freeze.json", "calibration-sample.json", "snowball-cut.json")
+ORDER_FIELDS = ("order_rank", "repo", "order", "units", "contract_files", "stars", "pushed", "created", "channels", "archived", "forced", "closed_issues", "merged_prs", "license",
+                "facets")
+SHARED_JSON = ("meta.json", "study.json", "surface-map.json", "mechanism-table.json", "qgs-adjudicated.json", "protocol-freeze.json", "calibration-sample.json", "snowball-cut.json",
+               "calibration-set.json", "calibration-labels.json", "calibration-draw.json", "facet-orders.json", "audit-sample.json")
+FETCHED_TEXT = re.compile(r"-(?:screening|qgs)-inputs\.jsonl$")
 SHARED_JSONL = ("qgs-candidates.jsonl", "qgs-judge-A.jsonl", "qgs-judge-B.jsonl", "snowball-screening-order.jsonl")
 
 
@@ -91,8 +94,9 @@ def export(topic, repo, work):
             if (work / f"{stratum}-screen-{side}-mechanisms.md").exists():
                 text(f"{stratum}-screen-{side}-mechanisms.md")
         for path in sorted(work.glob(f"{stratum}-reader-C-*.jsonl")) + sorted(work.glob(f"{stratum}-qgs-*.jsonl")):
-            jsonl(path.name)
-        for path in sorted(work.glob(f"{stratum}-pilot-*.jsonl")):
+            if not FETCHED_TEXT.search(path.name):
+                jsonl(path.name)
+        for path in sorted(work.glob(f"{stratum}-pilot-*.jsonl")) + sorted(work.glob(f"judge-{stratum}-*.jsonl")) + sorted(work.glob(f"{stratum}-audit-*.jsonl")):
             jsonl(path.name, pin)
         for path in sorted(work.glob(f"{stratum}-pilot-*-mechanisms.md")):
             text(path.name)

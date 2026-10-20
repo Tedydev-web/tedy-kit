@@ -3,12 +3,13 @@ import json
 
 from study_agreement import CHAPMAN_NOTE, KAPPA_CRITERIA, RECALL_FIX, RECALL_TARGET, chapman, effort_stop, kappa_text, recall_at_cut, session_kappas
 from study_calibration import CALIBRATED_STRATA, SAMPLE_FILE, calibration_agreement
-from study_method_notes import method_notes
+from study_method_notes import date_line, method_notes, template_line
 from study_method_sessions import session_keys, session_lines
 from study_protocol import FREEZE_FILE
 from study_screening_core import JUDGED, MechanismTable, derive, read_json, read_jsonl
 from study_session import AGY_THREAT, NO_BARE_THREAT, model_family
 from study_topic import TopicError
+from study_v4_record import is_v4, v4_parts, v4_stop
 
 TAG_ONLY = ("tag-only inventory, not screened by two sessions: its rows carry tags, never copied text, so it has no protocol freeze, sessions, kappa, "
             "recall at the cut or stop row")
@@ -20,7 +21,8 @@ def is_method_sweep(folder):
 
 
 def method_stops(topic, folder):
-    table, stops, captures = MechanismTable(read_json(folder, "mechanism-table.json")), {}, {}
+    table, stops, captures, faceted = MechanismTable(read_json(folder, "mechanism-table.json")), {}, {}, {}
+    v4 = is_v4(read_json(folder, "meta.json"))
     session_keys(folder, topic["strata"])
     for stratum in topic["strata"]:
         mapping = read_json(folder, f"{stratum}-mechanism-map.json")
@@ -29,17 +31,20 @@ def method_stops(topic, folder):
         common = sorted(set(sides["A"]) & set(sides["B"]))
         derived = {r: {s: derive(table, stratum, mapping, s, sides[s][r]) for s in "AB"} for r in common}
         mechs = {r: {s: d[s]["mechs"] for s in "AB"} for r, d in derived.items()}
-        row, rule = effort_stop(common, {r: m["A"] | m["B"] for r, m in mechs.items()}, {r["order_rank"] for r in order if r.get("forced")}, [r["order_rank"] for r in order])
-        if row is None:
-            raise TopicError(f"{stratum}: the screening data reach no stop ({rule}); screen on before writing the record")
-        written = topic["strata"][stratum].get("stop_row")
-        if written != row:
-            raise TopicError(f"{topic['path']}: strata.{stratum}.stop_row is {written}, the screening data stop at row {row} ({rule}); "
-                             f"a hand-typed stop row is refused: run compare-screening-sessions.py --stratum {stratum} --write-stop")
-        stops[stratum] = f"stop: {rule} at row {row}"
+        if v4:
+            stops[stratum], faceted[stratum] = v4_stop(topic, folder, stratum, common)
+        else:
+            row, rule = effort_stop(common, {r: m["A"] | m["B"] for r, m in mechs.items()}, {r["order_rank"] for r in order if r.get("forced")}, [r["order_rank"] for r in order])
+            if row is None:
+                raise TopicError(f"{stratum}: the screening data reach no stop ({rule}); screen on before writing the record")
+            written = topic["strata"][stratum].get("stop_row")
+            if written != row:
+                raise TopicError(f"{topic['path']}: strata.{stratum}.stop_row is {written}, the screening data stop at row {row} ({rule}); "
+                                 f"a hand-typed stop row is refused: run compare-screening-sessions.py --stratum {stratum} --write-stop")
+            stops[stratum] = f"stop: {rule} at row {row}"
         captures[stratum] = {**chapman(set().union(*(m["A"] for m in mechs.values())), set().union(*(m["B"] for m in mechs.values()))),
                              "pairs": {r: (d["A"], d["B"]) for r, d in derived.items()}, "common": set(common)}
-    return stops, captures
+    return stops, captures, faceted
 
 
 def sha256(data):
@@ -151,17 +156,20 @@ def threat_lines(topic, strata, sessions, freeze, threats, folder):
     return threats
 
 
-def method_parts(repo, topic, s, meta, captures):
+def method_parts(repo, topic, s, meta, captures, faceted):
     folder, strata = s["folder"], s["strata"]
     protocol, freeze = protocol_lines(repo, folder, strata, meta)
     sessions_out, sessions = session_lines(folder, meta, strata, freeze)
     agreement = [line for stratum in strata
                  for line in agreement_lines(stratum, captures[stratum]["pairs"], freeze["strata"][stratum]["frozen_after_rank"], captures[stratum], s["capture"][stratum])]
-    calibration, threats = calibration_lines(folder)
-    threats = threat_lines(topic, strata, sessions, freeze, threats, folder)
-    sections = ["## Protocol", ""] + protocol + method_notes(topic, folder, freeze, strata) + session_summary_lines(sessions) + ["", "## Screening sessions", ""] + sessions_out + ["", "## Calibration", ""] + calibration
+    v4 = v4_parts(topic, folder, strata, freeze, meta.get("sessions") or {}, faceted, {k: c["common"] for k, c in captures.items()}) if faceted else None
+    calibration, threats = (v4["calibration"], []) if v4 else calibration_lines(folder)
+    threats = threat_lines(topic, strata, sessions, freeze, threats, folder) + (v4["threats"] if v4 else [])
+    notes = method_notes(topic, folder, freeze, strata) if not v4 else [template_line(freeze, strata), date_line(topic)]
+    sections = ["## Protocol", ""] + protocol + notes + session_summary_lines(sessions) + ["", "## Screening sessions", ""] + sessions_out
+    sections += (["", "## Facets", ""] + v4["facets"] if v4 else []) + ["", "## Calibration", ""] + calibration + (["", "## Judges", ""] + v4["judges"] if v4 else [])
     sections += ["", "## Threats", ""] + threats + [""]
     tag_only = [t for t in topic["strata"] if t not in strata]
     if tag_only:
         sections += ["## Tag-only strata", ""] + [f"- {t}: {TAG_ONLY}" for t in tag_only] + [""]
-    return {"recall": recall_lines(folder, topic, strata, captures) + [""], "agreement": agreement + [""], "sections": sections}
+    return {"recall": (v4["recall"] if v4 else recall_lines(folder, topic, strata, captures)) + [""], "agreement": agreement + [""], "sections": sections}
