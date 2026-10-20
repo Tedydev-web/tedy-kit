@@ -37,6 +37,10 @@ def main(argv=None):
     work = Path(args.work)
     try:
         topic = load_topic(args.repo, args.topic)
+        clustered = next(((name, rule) for name, rule in (topic.get("facets") or {}).items() if len(rule.get("problems") or []) > 1), None)
+        if clustered and not args.all:
+            raise TopicError(f"facet {clustered[0]} clusters the problems {', '.join(clustered[1]['problems'])}, a quality criteria v4 topic; a snowball cut is refused, "
+                             "run snowball-above-cut.py --all")
         files = [work / args.before, work / args.after]
         missing = [str(f) for f in files if not f.exists()]
         if missing:

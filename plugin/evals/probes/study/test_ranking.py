@@ -178,6 +178,19 @@ class OrderAndSnowballTest(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "--limit must be between 1 and 200"):
             script("export-screening-order").main([*args, "--stratum", "config", "--limit", "250"])
 
+    def test_a_snowball_cut_is_refused_when_a_facet_of_the_topic_clusters_several_problems(self):
+        from study_v4_fixture import v4_repo
+        repo = v4_repo()
+        work = Path(tempfile.mkdtemp(prefix="study-snow-cut-"))
+        self.addCleanup(shutil.rmtree, work, ignore_errors=True)
+        write_json(work / "config-ranked.json", self.ranked(250))
+        write_json(work / "config-ranked-snowball.json", {"rows": [{"repo": "s/high", "order": 9, "pushed": "2026-01-01", "channels": ["snowball"], "units": [], "stars": 0, "via": []}]})
+        args = ["--topic", "demo", "--repo", str(repo), "--work", str(work)]
+        with self.assertRaisesRegex(SystemExit, "facet alpha clusters the problems X1, X2, a quality criteria v4 topic; a snowball cut is refused, run snowball-above-cut.py --all"):
+            script("snowball-above-cut").main(args)
+        script("snowball-above-cut").main([*args, "--all"])
+        self.assertIsNone(json.loads((work / "snowball-cut.json").read_text())["cut_row"])
+
     def test_snowballed_rows_merge_into_the_order_without_renumbering(self):
         write_jsonl(self.work / "config-screening-order.jsonl", [{"order_rank": 1, "repo": "o/r1"}, {"order_rank": 1001, "repo": "s/old"}])
         write_jsonl(self.work / "snowball-screening-order.jsonl", [{"order_rank": 1001, "repo": "s/new"}, {"order_rank": 1002, "repo": "S/Old"}])
