@@ -5,7 +5,7 @@ const ELIGIBLE_TOTAL = 4.5;
 
 const capitalize = (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
 
-function normal(decision) {
+export function normal(decision) {
   const text = String(decision ?? "");
   const code = text.includes(":") ? text.slice(text.indexOf(":") + 1).trim().split(" ")[0].split("(")[0] : "";
   return text.startsWith("eligible") ? "eligible" : `excluded: ${code}`;

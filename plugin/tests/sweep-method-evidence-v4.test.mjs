@@ -175,6 +175,30 @@ test("item 11: PRISMA and recall are recomputed from the files, so an edited cou
   assert.match(s.errors(), /config-stage2\.json does not list the stage-1 passes the stage-1 files give/);
 });
 
+test("PRISMA stage-2 decisions, the per-row decisions and the facet inclusion are recomputed from the screening files", () => {
+  const s = sweep();
+  const counts = Object.fromEntries([...s.text.matchAll(/^\| config \| stage 2: ([^|]+?) \| (\d+) \|$/gm)].map((m) => [m[1], m[2]]));
+  const [first, second] = Object.keys(counts);
+  assert.ok(first && second && counts[first] !== counts[second]);
+  const swapped = s.text.replace(`| config | stage 2: ${first} | ${counts[first]} |`, `| config | stage 2: ${first} | ${counts[second]} |`)
+    .replace(`| config | stage 2: ${second} | ${counts[second]} |`, `| config | stage 2: ${second} | ${counts[first]} |`);
+  assert.match(s.errors(swapped), /PRISMA config stage 2: the record says/);
+  const facet = s.text.match(/^- product: (\d+) repositories included once each;.*$/m);
+  assert.match(s.errors(s.text.replace(facet[0], facet[0].replace(/counted per facet alpha (\d+)/, (_, n) => `counted per facet alpha ${Number(n) + 1}`))),
+    /product: the record's facet line is not the inclusion the files give/);
+  const row = s.text.match(/^\| (\d+) \| o\/\S+ \| [^|]+ \| [^|]+ \| eligible \| .*$/m);
+  assert.match(s.errors(s.text.replace(row[0], row[0].replace("| eligible |", "| excluded: irrelevant |"))),
+    new RegExp(`config: the record's stage-2 rows ${row[1]} do not hold the decision and facets the screening files give`));
+  const t = sweep();
+  const b = t.jsonl("config-screen-B.jsonl");
+  const eligible = b.find((r) => r.decision === "eligible");
+  t.writeRows("config-screen-B.jsonl", b.map((r) => (r === eligible ? { ...r, mechanisms: [], decision: "excluded: irrelevant" } : r)));
+  assert.match(t.errors(), new RegExp(`config: stage-2 rank ${eligible.order_rank} needs an adjudication row in config-adjudication\\.json: one session says eligible`));
+  const u = sweep();
+  u.write("study.json", { ...u.json("study.json"), study: { [eligible.repo]: "kept for study" } });
+  assert.match(u.errors(), /PRISMA config stage 2: the record says/);
+});
+
 test("stage 1 and stage 2 are checked against the files: unscreened pool rows and stage-2 rows that passed no model fail", () => {
   const s = sweep();
   const rows = s.jsonl("stage1-product-brief-claude-sonnet-5-5.jsonl");

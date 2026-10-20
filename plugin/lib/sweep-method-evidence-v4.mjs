@@ -1,6 +1,6 @@
 import { judgeErrors } from "./sweep-method-evidence-v4-judges.mjs";
 import { stage1AuditErrors, stage1Errors } from "./sweep-method-evidence-v4-stage1.mjs";
-import { prismaErrors, stage2Errors } from "./sweep-method-evidence-v4-stage2.mjs";
+import { decisionErrors, prismaErrors, stage2Errors } from "./sweep-method-evidence-v4-stage2.mjs";
 import {
   CALIBRATED,
   RECALL_TARGET,
@@ -150,6 +150,7 @@ export function v4Errors(text, { read, files, topic, meta }) {
     ...stage2.errors,
     ...dropErrors(io, read, meta),
     ...prismaErrors(io, text, strata, stage1.passes, stage2.screened),
+    ...decisionErrors(io, text, topic, strata, stage1.passes, stage2.screened),
     ...recallErrors(io, text, topic, strata, qgs.members, stage1.passes, stage2.screened),
   ];
 }

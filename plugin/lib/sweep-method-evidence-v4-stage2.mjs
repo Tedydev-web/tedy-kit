@@ -1,3 +1,4 @@
+import { EMPTY_TABLE, derive, normal } from "./sweep-screening-derive.mjs";
 import {
   RECALL_TARGET,
   autoPass,
@@ -121,8 +122,66 @@ export function prismaErrors(io, text, strata, passes, screened) {
       const written = table.get(`${stratum}|${stage}`);
       if (written !== count) errors.push(`PRISMA ${stratum} "${stage}": the record says ${written ?? "nothing"}, the files give ${count}`);
     }
-    const decided = [...table].filter(([k]) => k.startsWith(`${stratum}|stage 2: `)).reduce((a, [, n]) => a + n, 0);
-    if (decided !== s.both.size) errors.push(`PRISMA ${stratum}: the stage-2 decisions add up to ${decided}, the files give ${s.both.size} assessed rows`);
+  }
+  return errors;
+}
+
+function stage2Rows(io, stratum, ranks) {
+  const errors = [];
+  const table = io.json("mechanism-table.json") ?? EMPTY_TABLE;
+  const mapping = io.json(`${stratum}-mechanism-map.json`) ?? { A: {}, B: {} };
+  const adjudicated = io.json(`${stratum}-adjudication.json`)?.rows ?? {};
+  const studied = new Set(Object.keys(io.json("study.json")?.study ?? {}).map(lower));
+  const sides = Object.fromEntries(["A", "B"].map((side) => [side, new Map(io.jsonl(`${stratum}-screen-${side}.jsonl`).map((r) => [r.order_rank, r]))]));
+  const rows = [];
+  for (const rank of ranks) {
+    const a = derive(table, stratum, mapping, "A", sides.A.get(rank));
+    const b = derive(table, stratum, mapping, "B", sides.B.get(rank));
+    const adj = adjudicated[String(rank)];
+    let decision;
+    if (!adj && (a.decision === b.decision || ![a.decision, b.decision].includes("eligible"))) decision = a.decision;
+    else if (adj) decision = normal(adj.decision);
+    else {
+      errors.push(`${stratum}: stage-2 rank ${rank} needs an adjudication row in ${stratum}-adjudication.json: one session says eligible, the other ${a.decision === "eligible" ? b.decision : a.decision}`);
+      continue;
+    }
+    const repo = sides.A.get(rank).repo;
+    if (studied.has(lower(repo))) decision = decision === "eligible" ? "study" : `study (below-threshold: ${a.total})`;
+    rows.push({ rank, repo, decision });
+  }
+  return { errors, rows };
+}
+
+export function decisionErrors(io, text, topic, strata, passes, screened) {
+  const errors = [];
+  const table = new Map([...text.matchAll(/^\| (\S+) \| ([^|]+?) \| (\d+) \|$/gm)].map((m) => [`${m[1]}|${m[2]}`, Number(m[3])]));
+  const facets = Object.keys(topic?.facets ?? {});
+  for (const stratum of strata) {
+    const s = screened[stratum];
+    const p = passes[stratum];
+    if (!s || !p) continue;
+    const found = stage2Rows(io, stratum, [...s.both].sort((x, y) => x - y));
+    errors.push(...found.errors);
+    const counts = {};
+    for (const row of found.rows) counts[row.decision] = (counts[row.decision] ?? 0) + 1;
+    const written = Object.fromEntries([...table].filter(([k]) => k.startsWith(`${stratum}|stage 2: `)).map(([k, n]) => [k.slice(`${stratum}|stage 2: `.length), n]));
+    if (canonical(written) !== canonical(counts)) errors.push(`PRISMA ${stratum} stage 2: the record says ${canonical(written)}, the files give ${canonical(counts)}`);
+    const held = (rank) => facets.filter((f) => [...(p.problems.get(rank) ?? [])].some((problem) => topic.facets[f].problems.includes(problem)));
+    const section = text.split(`## Stratum: ${stratum}\n\n`)[1]?.split("\n## ")[0] ?? "";
+    const cells = new Map(section.split("\n").filter((l) => /^\| \d+ \| /.test(l)).map((l) => l.split(" | ")).map((c) => [Number(c[0].slice(2)), c]));
+    const wrong = found.rows.filter((r) => cells.get(r.rank)?.[1] !== r.repo || cells.get(r.rank)?.[4] !== r.decision || cells.get(r.rank)?.at(-1) !== `${held(r.rank).join(", ") || "-"} |`);
+    if (wrong.length) errors.push(`${stratum}: the record's stage-2 rows ${wrong.slice(0, 10).map((r) => r.rank).join(", ")} do not hold the decision and facets the screening files give`);
+    const included = found.rows.filter((r) => r.decision === "eligible" || r.decision === "study");
+    const pairs = {};
+    for (const r of included) {
+      const mine = held(r.rank);
+      mine.forEach((f, i) => mine.slice(i + 1).forEach((g) => { pairs[`${f}+${g}`] = (pairs[`${f}+${g}`] ?? 0) + 1; }));
+    }
+    const per = facets.map((f) => `${f} ${included.filter((r) => held(r.rank).includes(f)).length}`).join(", ");
+    const unread = included.filter((r) => autoPass(p.pool.get(r.rank))).length;
+    const line = `- ${stratum}: ${included.length} repositories included once each; counted per facet ${per}; overlap ${Object.entries(pairs).map(([k, v]) => `${k} ${v}`).join(", ") || "none"}; `
+      + `facets come from the stage-1 problem labels; ${unread} of them passed stage 1 unread and carry no facet label`;
+    if (!text.split("\n").includes(line)) errors.push(`${stratum}: the record's facet line is not the inclusion the files give ("${line}")`);
   }
   return errors;
 }

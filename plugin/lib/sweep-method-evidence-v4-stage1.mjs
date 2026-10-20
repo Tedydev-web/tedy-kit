@@ -104,10 +104,13 @@ export function stage1Errors(io, sessions, strata, rows) {
     const pool = inputs[`${stratum}-${rung.shape}`];
     const open = [...pool.keys()].filter((rank) => passed(rank) === undefined);
     if (open.length) errors.push(`${stratum}: stage 1 has not screened ranks ${open.slice(0, 10).join(", ")} with every model of rung ${rung.rung}`);
-    passes[stratum] = { pool, passed: new Set([...pool.keys()].filter((rank) => passed(rank) === true)), excluded: {} };
+    passes[stratum] = { pool, passed: new Set([...pool.keys()].filter((rank) => passed(rank) === true)), excluded: {}, problems: new Map() };
     for (const model of rung.models) {
-      const key = `stage1-${stratum}-${rung.shape}-${model}`;
-      passes[stratum].excluded[model] = io.jsonl(`${key}.jsonl`).filter((r) => r.verdict === "no").length;
+      const rows = io.jsonl(`stage1-${stratum}-${rung.shape}-${model}.jsonl`);
+      passes[stratum].excluded[model] = rows.filter((r) => r.verdict === "no").length;
+      for (const row of rows.filter((r) => r.verdict !== "no" && pool.has(r.order_rank) && !autoPass(pool.get(r.order_rank)))) {
+        passes[stratum].problems.set(row.order_rank, new Set([...(passes[stratum].problems.get(row.order_rank) ?? []), ...(row.problems ?? [])]));
+      }
     }
   }
   return { errors, passes, rung };
