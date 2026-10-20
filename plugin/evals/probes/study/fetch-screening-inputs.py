@@ -10,7 +10,7 @@ def main(argv=None, fetch=None):
     args = topic_arguments("Pin each screening row's commit and fetch its README, listing, asset files and the evidence the anchors score on, so both sessions score the same inputs.",
                            (["--work"], {"required": True, "help": "study working folder holding <stratum>-screening-order.jsonl and the tree cache"}),
                            (["--stratum"], {"required": True, "help": "stratum to fetch"}),
-                           (["--through"], {"type": int, "default": HARD_CAP, "help": f"fetch rows up to this rank, plus forced and snowballed rows; default {HARD_CAP}"}),
+                           (["--through"], {"type": int, "default": HARD_CAP, "help": f"fetch rows up to this rank, plus forced and snowballed rows; in a merged facet order, rows up to this rank in any facet; default {HARD_CAP}"}),
                            (["--mark-permanent"], {"type": int, "action": "append", "default": [], "metavar": "RANK",
                                                    "help": "mark a rank's commit: or tree: error permanent when a check by hand finds the repository or commit gone, so a block holding it can run"})).parse_args(argv)
     try:

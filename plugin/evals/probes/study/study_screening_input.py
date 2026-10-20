@@ -153,7 +153,13 @@ def mark_gone(held, scored, stratum, ranks):
         held[rank] = {**held[rank], "error_kind": "permanent", "error": held[rank]["error"] + "; marked permanent by the operator: repository or commit gone"}
 
 
-def fetch_inputs(topic, work, stratum, through, fetch, mark_permanent=()):
+def wanted(row, through):
+    if "facets" in row:
+        return any(e["forced"] or e["rank"] > SNOWBALL_RANK_BASE or e["rank"] <= through for e in row["facets"].values())
+    return row["order_rank"] <= through or row.get("forced") or row["order_rank"] > SNOWBALL_RANK_BASE
+
+
+def fetch_inputs(topic, work, stratum, through, fetch, mark_permanent=(), ranks=None):
     order = read_jsonl(Path(work), f"{stratum}-screening-order.jsonl")
     if not order:
         raise TopicError(f"no {stratum}-screening-order.jsonl in {work}")
@@ -167,7 +173,7 @@ def fetch_inputs(topic, work, stratum, through, fetch, mark_permanent=()):
         rank = row["order_rank"]
         if rank in scored or (rank in held and held[rank].get("error_kind") != "transient"):
             continue
-        if not (rank <= through or row.get("forced") or rank > SNOWBALL_RANK_BASE):
+        if not (rank in ranks if ranks is not None else wanted(row, through)):
             continue
         held[rank] = row_inputs(fetch, work, row)
         write_rows(target, held)
