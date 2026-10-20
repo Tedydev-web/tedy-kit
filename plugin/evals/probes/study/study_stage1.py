@@ -92,7 +92,7 @@ def stage1_row(work, stratum, row, shape, fetch=None):
 
 
 def auto_pass(row):
-    return not (row["description"] or row.get("asset_paths") or row.get("readme_lead"))
+    return not (row["description"] or row.get("asset_paths") or row.get("readme_lead") or row.get("readme_lead_sha256"))
 
 
 def build_inputs(work, stratum, shape, fetch):

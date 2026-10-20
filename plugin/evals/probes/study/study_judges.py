@@ -1,10 +1,9 @@
-import hashlib
 import json
 import re
 from pathlib import Path
 
-from study_agreement import clopper_pearson, cohen_kappa, rounded
-from study_calibration_set import LABELS_FILE, SET_FILE
+from study_agreement import clopper_pearson, cohen_kappa
+from study_calibration_set import LABELLED, labelled, labels_file
 from study_protocol import EMPTY_TABLE
 from study_qgs import cross_family
 from study_screening_core import MechanismTable, derive, read_jsonl
@@ -13,6 +12,8 @@ from study_topic import TopicError, session_option
 
 SENSITIVITY_FLOOR, KAPPA_FLOOR, RUNS = 0.90, 0.60, (1, 2)
 SCREENING_JUDGES, QGS_JUDGES = ("screening-A", "screening-B"), ("qgs-A", "qgs-B", "reader")
+SHAPES = {"screening": "full", "qgs": "thin"}
+HASHES = {"screening": "inputs_sha256", "qgs": "qgs_sha256"}
 AUDIT_FILE, AUDIT_ROWS = "audit-sample.json", 20
 
 
@@ -37,15 +38,8 @@ def run_name(stratum, judge, option, run):
     return f"judge-{stratum}-{judge}-{option['model']}-run{run}"
 
 
-def labelled_set(folder):
-    folder = Path(folder)
-    for name in (SET_FILE, LABELS_FILE):
-        if not (folder / name).is_file():
-            raise TopicError(f"no {name} in {folder}; draw the calibration set and import the user's labels first")
-    labels = json.loads((folder / LABELS_FILE).read_text())
-    if labels.get("set_sha256") != hashlib.sha256((folder / SET_FILE).read_bytes()).hexdigest():
-        raise TopicError(f"{LABELS_FILE} was imported for another calibration set; import the labels again")
-    return labels
+def judged_batches(folder):
+    return ("calibration",) + (("top-up",) if (Path(folder) / labels_file("top-up")).is_file() else ())
 
 
 def decided(kind, stratum, row):
@@ -58,15 +52,27 @@ def truth(kind, user):
     return user["Relevance"] == 1 if kind == "qgs" else user["decision"] == "eligible"
 
 
+def share(k, n):
+    return {"agree": k, "rows": n, "interval": clopper_pearson(k, n) if n else None}
+
+
 def metrics(pairs):
     tp = sum(t and d for t, d in pairs)
     fn = sum(t and not d for t, d in pairs)
     fp = sum(d and not t for t, d in pairs)
     tn = len(pairs) - tp - fn - fp
     sensitivity = tp / (tp + fn) if tp + fn else None
-    kappa = rounded(cohen_kappa(pairs)[1])
+    kappa = cohen_kappa(pairs)[1]
     passed = sensitivity is not None and sensitivity >= SENSITIVITY_FLOOR and kappa is not None and kappa >= KAPPA_FLOOR
-    return {"tp": tp, "fn": fn, "fp": fp, "tn": tn, "sensitivity": rounded(sensitivity), "interval": clopper_pearson(tp, tp + fn) if tp + fn else None, "kappa": kappa, "passed": passed}
+    return {"tp": tp, "fn": fn, "fp": fp, "tn": tn, "sensitivity": sensitivity, "interval": clopper_pearson(tp, tp + fn) if tp + fn else None,
+            "specificity": tn / (tn + fp) if tn + fp else None, "kappa": kappa, "passed": passed}
+
+
+def label_agreement(kind, rows, answers):
+    if kind == "qgs":
+        both = [r for r in rows if r["user"]["Relevance"] == 1 and answers[r["order_rank"]]["verdict"] == "yes"]
+        return {"problems": share(sum(set(r["user"]["problems"]) == set(answers[r["order_rank"]]["problems"]) for r in both), len(both))}
+    return {c: share(sum(answers[r["order_rank"]]["scores"][c]["v"] == r["user"][c] for r in rows), len(rows)) for c in LABELLED}
 
 
 def judge_run(folder, sessions, stratum, rows, name, kind, frozen):
@@ -75,38 +81,39 @@ def judge_run(folder, sessions, stratum, rows, name, kind, frozen):
         return None
     answers = {r["order_rank"]: r for r in read_jsonl(path.parent, path.name)}
     if set(answers) != {r["order_rank"] for r in rows}:
-        raise TopicError(f"{name}.jsonl covers ranks {sorted(set(answers) ^ {r['order_rank'] for r in rows})[:10]} that the {stratum} calibration set does not, or the reverse")
+        raise TopicError(f"{name}.jsonl covers ranks {sorted(set(answers) ^ {r['order_rank'] for r in rows})[:10]} that the {stratum} calibration rows do not, or the reverse")
     blocks = (sessions.get(name) or {}).get("blocks") or []
     hashes = {r: h for b in blocks for r, h in (b.get("row_sha256") or {}).items()}
-    wrong = sorted(r["order_rank"] for r in rows if hashes.get(str(r["order_rank"])) != r["inputs_sha256"])
+    wrong = sorted(r["order_rank"] for r in rows if hashes.get(str(r["order_rank"])) != r[HASHES[kind]])
     if wrong:
-        raise TopicError(f"{name}: ranks {wrong[:10]} were judged on other inputs than the calibration set holds")
+        raise TopicError(f"{name}: ranks {wrong[:10]} were judged on other inputs than the calibration rows hold in the {SHAPES[kind]} shape its production runs read")
+    shapes = sorted({b.get("shape") for b in blocks} - {SHAPES[kind]}, key=str)
+    if shapes:
+        raise TopicError(f"{name}: blocks ran on the input shape {shapes}, not the {SHAPES[kind]} shape its production runs read")
     if frozen and any((b.get("packet_sha256"), b.get("criteria_sha256")) != (frozen["packet_sha256"], frozen["criteria_sha256"]) for b in blocks):
         raise TopicError(f"{name}: a block ran under a packet or criteria other than the frozen ones")
     pairs = [(truth(kind, r["user"]), decided(kind, stratum, answers[r["order_rank"]])) for r in rows]
-    packets = sorted({b.get("packet_sha256") for b in blocks})
-    return {"name": name, "decisions": [d for _, d in pairs], "packets": packets, **metrics(pairs)}
+    return {"name": name, "decisions": [d for _, d in pairs], "packets": sorted({b.get("packet_sha256") for b in blocks}), "labels": label_agreement(kind, rows, answers),
+            **metrics(pairs)}
 
 
 def validate(topic, folder, freeze=None, strata=("config", "product")):
     folder = Path(folder)
-    labels = labelled_set(folder)
-    if labels["complete"] != len(labels["rows"]):
-        raise TopicError(f"the user labelled {labels['complete']} of {len(labels['rows'])} calibration rows; every row needs its label before a judge is validated")
+    rows_all = labelled(folder, judged_batches(folder))
     meta = folder / "meta.json"
     sessions = (json.loads(meta.read_text()).get("sessions") or {}) if meta.is_file() else {}
     out = {}
     for judge, option in roster(topic, freeze).items():
-        entry = {"cli": option["cli"], "model": option["model"], "kind": option["kind"], "strata": {}}
+        entry = {"cli": option["cli"], "model": option["model"], "kind": option["kind"], "shape": SHAPES[option["kind"]], "strata": {}}
         for stratum in strata:
-            rows = [r for r in labels["rows"] if r["stratum"] == stratum]
+            rows = [r for r in rows_all if r["stratum"] == stratum]
             if not rows:
                 continue
             frozen = freeze["strata"][stratum] if option["kind"] == "screening" and freeze else None
             runs = [judge_run(folder, sessions, stratum, rows, run_name(stratum, judge, option, n), option["kind"], frozen) for n in RUNS]
             both = None not in runs
             differ = sum(a != b for a, b in zip(runs[0]["decisions"], runs[1]["decisions"])) if both else None
-            run_kappa = rounded(cohen_kappa(list(zip(runs[0]["decisions"], runs[1]["decisions"])))[1]) if both else None
+            run_kappa = cohen_kappa(list(zip(runs[0]["decisions"], runs[1]["decisions"])))[1] if both else None
             entry["strata"][stratum] = {"rows": len(rows), "positives": sum(truth(option["kind"], r["user"]) for r in rows), "runs": runs, "differ": differ,
                                         "run_kappa": run_kappa, "qualified": both and all(r["passed"] for r in runs)}
         entry["qualified"] = bool(entry["strata"]) and all(s["qualified"] for s in entry["strata"].values())
@@ -114,12 +121,12 @@ def validate(topic, folder, freeze=None, strata=("config", "product")):
     return out
 
 
-def require_qualified(topic, folder, freeze, judges, stratum):
-    found = validate(topic, folder, freeze, (stratum,))
-    failed = [f"{j} ({found[j]['model']})" for j in judges if not found[j]["strata"].get(stratum, {}).get("qualified")]
+def require_qualified(topic, folder, freeze, judges, strata):
+    found = validate(topic, folder, freeze, tuple(strata))
+    failed = [f"{j} ({found[j]['model']}) on {s}" for j in judges for s in strata if not found[j]["strata"].get(s, {}).get("qualified")]
     if failed:
-        raise TopicError(f"{', '.join(failed)} did not qualify as judges on the {stratum} calibration set (sensitivity >= {SENSITIVITY_FLOOR:.2f} and kappa >= {KAPPA_FLOOR:.2f} in both runs); "
-                         "run validate-judges.py, and replace a judge that fails before it screens")
+        raise TopicError(f"{', '.join(failed)} did not qualify on the calibration rows (sensitivity >= {SENSITIVITY_FLOOR:.2f} and kappa >= {KAPPA_FLOOR:.2f} in both runs); "
+                         "run validate-judges.py, and replace a judge that fails before it judges")
     return found
 
 

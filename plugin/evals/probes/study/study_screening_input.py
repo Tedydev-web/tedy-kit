@@ -6,7 +6,7 @@ from pathlib import Path
 from study_pool import cache_name, read_json, work_file
 from study_screening_core import read_jsonl
 from study_screening_evidence import file_gone, repo_evidence, tree_error_kind
-from study_topic import SNOWBALL_RANK_BASE, TopicError
+from study_topic import SNOWBALL_RANK_BASE, TopicError, screened_strata
 
 HEX40 = re.compile(r"[0-9a-f]{40}")
 README = re.compile(r"^readme(\.[a-z]+)?$", re.I)
@@ -127,14 +127,14 @@ def row_inputs(fetch, work, row):
     return {**out, "error": "; ".join(problems["errors"]), "error_kind": "transient"} if problems["errors"] else out
 
 
-def qgs_inputs_file(work, stratum):
-    return Path(work) / f"{stratum}-qgs-inputs.jsonl"
+def qgs_inputs_file(work):
+    return Path(work) / "qgs-inputs.jsonl"
 
 
 def holds_inputs(key, stratum, candidates=False):
     if candidates:
-        return key.startswith(f"{stratum}-qgs-")
-    return (key.startswith(f"{stratum}-") and not key.startswith(f"{stratum}-qgs-")) or key.startswith(f"judge-{stratum}-")
+        return key.startswith("qgs-")
+    return ((key.startswith(f"{stratum}-") and not key.startswith(f"{stratum}-qgs-")) or key.startswith(f"judge-{stratum}-")) and "-stage1-" not in key
 
 
 def scored_ranks(work, stratum, candidates=False):
@@ -143,11 +143,14 @@ def scored_ranks(work, stratum, candidates=False):
     return {r for key, entry in sessions.items() if holds_inputs(key, stratum, candidates) for block in entry.get("blocks", []) for r in block.get("ranks", [])}
 
 
-def candidate_rows(work, stratum):
-    listed = read_jsonl(Path(work), f"{stratum}-qgs-candidates.jsonl")
+def candidate_rows(work, strata):
+    listed = read_jsonl(Path(work), "qgs-candidates.jsonl")
     if not listed:
-        raise TopicError(f"no {stratum}-qgs-candidates.jsonl in {work}; extract the candidates first")
-    order = {r["repo"].lower(): r for r in read_jsonl(Path(work), f"{stratum}-screening-order.jsonl")}
+        raise TopicError(f"no qgs-candidates.jsonl in {work}; extract the candidates first")
+    order = {}
+    for stratum in strata:
+        for row in read_jsonl(Path(work), f"{stratum}-screening-order.jsonl"):
+            order.setdefault(row["repo"].lower(), row)
     return [{**{k: v for k, v in order.get(c["repo"].lower(), {}).items() if k != "order_rank"}, "repo": c["repo"], "order_rank": c["id"]} for c in listed]
 
 
@@ -172,16 +175,14 @@ def mark_gone(held, scored, stratum, ranks):
 
 
 def wanted(row, through):
-    if "facets" in row:
-        return any(e["forced"] or e["rank"] > SNOWBALL_RANK_BASE or e["rank"] <= through for e in row["facets"].values())
     return row["order_rank"] <= through or row.get("forced") or row["order_rank"] > SNOWBALL_RANK_BASE
 
 
 def fetch_inputs(topic, work, stratum, through, fetch, mark_permanent=(), ranks=None, candidates=False):
-    order = candidate_rows(work, stratum) if candidates else read_jsonl(Path(work), f"{stratum}-screening-order.jsonl")
+    order = candidate_rows(work, screened_strata(topic)) if candidates else read_jsonl(Path(work), f"{stratum}-screening-order.jsonl")
     if not order:
         raise TopicError(f"no {stratum}-screening-order.jsonl in {work}")
-    target = qgs_inputs_file(work, stratum) if candidates else inputs_file(work, stratum)
+    target = qgs_inputs_file(work) if candidates else inputs_file(work, stratum)
     held = {r["order_rank"]: r for r in read_jsonl(Path(work), target.name)}
     scored, fetched = scored_ranks(work, stratum, candidates), 0
     mark_gone(held, scored, stratum, mark_permanent)

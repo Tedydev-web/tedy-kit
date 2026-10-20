@@ -7,7 +7,7 @@ from pathlib import Path
 from study_academic import run_academic
 from study_fetch import Fetch
 from study_pool import CONFIG_DIR_MARKER, GH_LINK, Pool, cache_name, code_search, parse_json, product_code_queries, read_json, run_social
-from study_topic import TopicError, load_topic, term_regex, topic_arguments
+from study_topic import TopicError, load_topic, product_filter, term_regex, topic_arguments
 
 CHANNELS = ("npm", "social", "reverse", "code", "repo", "academic", "config-pool")
 COMMAND = re.compile(r"\b(npx|bunx|uvx|pipx run|pnpm dlx|yarn dlx)\s+(?:-y\s+|--yes\s+|--from\s+\S+\s+)?(@?[a-z0-9][\w.-]*(?:/[\w.-]+)?)", re.I)
@@ -17,17 +17,10 @@ UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chr
 
 class Product:
     def __init__(self, topic, work, fetch):
-        channels = topic["strata"].get("product", {}).get("channels")
-        if not isinstance(channels, dict) or not isinstance(channels.get("harness"), str):
-            raise TopicError(f"{topic['path']}: strata.product.channels needs a harness pattern")
-        self.channels, self.work, self.fetch = channels, Path(work), fetch
+        self.relevant = product_filter(topic)
+        self.channels, self.work, self.fetch = topic["strata"]["product"]["channels"], Path(work), fetch
         self.term = term_regex(topic["terms"])
-        self.harness = re.compile(channels["harness"], re.I)
-        self.extra = re.compile(channels["extra_text"], re.I) if channels.get("extra_text") else None
         self.pool = Pool(self.work / "product-state.json", topic["terms"])
-
-    def relevant(self, text):
-        return bool(self.harness.search(text) and (self.term.search(text) or (self.extra and self.extra.search(text))))
 
     def npm(self):
         for query in self.channels.get("npm_queries", []):

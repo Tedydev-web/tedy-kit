@@ -4,8 +4,8 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from study_sweep_record import render, write_record
-from study_topic import TopicError, load_topic, topic_for_sweep
+from study_sweep_record import render
+from study_topic import TopicError, load_topic
 from study_v4_fixture import SWEEP, v4_sweep
 
 
@@ -19,101 +19,76 @@ class V4RecordTest(unittest.TestCase):
         cls.built = v4_sweep()
         cls.text = render(cls.built, load_topic(cls.built, "demo"))[0]
 
-    def copy(self, audit=True):
+    def copy(self):
         repo = Path(tempfile.mkdtemp(prefix="study-v4-copy-"))
         self.addCleanup(shutil.rmtree, repo, ignore_errors=True)
-        shutil.copytree(self.built if audit else v4_sweep(audit=False), repo, dirs_exist_ok=True)
+        shutil.copytree(self.built, repo, dirs_exist_ok=True)
         return repo, repo / "docs/prior-art/sweeps" / SWEEP
 
-    def test_topic_qgs_facet_labels_calibration_judges_and_faceted_screening_reach_the_record(self):
+    def render(self, repo):
+        return render(repo, load_topic(repo, "demo"))[0]
+
+    def test_prisma_is_computed_from_the_files_and_no_typed_recall_text_is_printed(self):
+        prisma = section(self.text, "PRISMA")
+        for row in ("| config | identified: code | 99 |", "| config | identified: repo | 25 |", "| config | duplicates across channels | 25 |", "| config | stage-1 screened | 99 |",
+                    "| config | stage-1 no from claude-sonnet-5-5 | 27 |", "| config | excluded by automation (union rule) | 27 |", "| config | stage-2 assessed | 72 |",
+                    "| product | identified: config-pool | 21 |", "| product | stage-1 passes not assessed (stage-2 stop) | 52 |"):
+            self.assertIn(row, prisma)
+        self.assertRegex(prisma, r"\| config \| stage 2: eligible \| \d+ \|")
+        meta = json.loads((self.built / "docs/prior-art/sweeps" / SWEEP / "meta.json").read_text())
+        self.assertNotIn("recall", meta)
+        self.assertNotIn("prisma", meta)
+
+    def test_recall_is_pooled_over_the_deduplicated_standard_and_per_facet_split_into_in_pool_and_stage_1_pass_rates(self):
         recall = section(self.text, "Recall")
-        self.assertIn("- config: pooled recall at the stop 22/23 (0.957, 95% CI 0.78-1.00) of the deduplicated config standard, counting rows both sessions screened within a "
-                      "facet's depth; meets the 0.80 target", recall)
-        self.assertIn("- config facet alpha: 12/13 (0.923, 95% CI 0.64-1.00) of the members labelled for it, within its own depth; reported, no pass or fail", recall)
-        self.assertIn("- product channel from the config pool: 2 repositories joined the product pool; they hold 2 of the 23 product standard members, 1 of them found by no other "
-                      "product channel", recall)
-        self.assertIn("stop: pooled recall reached the 0.80 target at depth 60; facet stop rows alpha 40 (pool exhausted), beta 40 (pool exhausted)", self.text)
+        self.assertRegex(recall, r"- pooled topic recall 40/45 \(0\.889, 95% CI 0\.76-0\.96\) of the 45 deduplicated standard members, screened by both stage-2 sessions; "
+                                 r"in-pool rate 44/45 \(0\.978, 95% CI 0\.88-1\.00\); stage-1 pass rate of in-pool members 44/44 .*; meets the 0\.80 target")
+        self.assertRegex(recall, r"- facet alpha: recall \d+/24 .* of the 24 members labelled for it; in-pool rate .*; stage-1 pass rate .*; reported, no pass or fail")
+        self.assertIn("- QGS recall is an upper estimate: the QGS judges are the stage-1 models", recall)
+
+    def test_the_config_pool_channel_and_the_members_outside_every_pool_are_counted(self):
+        self.assertIn("- product channel from the config pool: 2 repositories joined the product pool before stage 1; they recover 2 of the 23 standard members that pass "
+                      "the product filter; 1 of those members remain outside every pool", section(self.text, "Recall"))
+        self.assertIn("- discovery gap: 1 standard members that pass the product filter are in no pool: o/outside1", section(self.text, "Threats"))
+
+    def test_facets_count_included_rows_per_facet_with_their_overlap_from_the_stage_1_labels(self):
         facets = section(self.text, "Facets")
-        self.assertIn("- config: 79 repositories screened once, counted per facet alpha 40, beta 40; overlap alpha+beta 1; each repository counts once in pooled recall and PRISMA", facets)
-        self.assertIn('- alpha ranking: problems X1, X2; terms tdd, test; counted code-search queries config ["\\"tdd\\" filename:SKILL.md"]', facets)
-        calibration = section(self.text, "Calibration")
-        self.assertRegex(calibration, r"- config: calibration set of 60 rows, drawn per facet alpha 30, beta 30; likely positives 30 of 60; the user labelled \d+ eligible and \d+ relevant")
+        self.assertRegex(facets, r"- config: \d+ repositories included once each; counted per facet alpha \d+, beta \d+; overlap alpha\+beta 1; facets come from the stage-1 "
+                                 r"problem labels")
+        self.assertIn("| facets |", self.text)
+
+    def test_stage_1_states_the_frozen_ladder_the_rung_used_the_rungs_tried_and_the_audit_bounds(self):
+        stage1 = section(self.text, "Stage 1")
+        self.assertIn("- chosen: rung 1 after 1 rungs tried", stage1)
+        self.assertIn("- rung 1: run 1 71/71 positives passed, one-sided 95% lower bound 0.9587", stage1)
+        self.assertRegex(stage1, r"- config stage-1 audit: 0 model disagreements .*; near excludes \d+ of \d+ read, 0 confirmed eligible, upper elusion bound 0\.\d+; far excludes")
+        self.assertIn("stop: stage 2 ranked the 72 stage-1 passes by facet and stopped at depth 20 (limit 60)", self.text)
+        self.assertIn("- stage 2 stopped before every stage-1 pass: product screened 20 of 72 passes", section(self.text, "Threats"))
+
+    def test_the_standard_lists_drops_and_the_cross_family_join_and_the_audit_follows_stage_2(self):
         judges = section(self.text, "Judges")
-        for judge in ("screening-A claude claude-opus-5-5", "screening-B claude claude-sonnet-5-5", "qgs-A claude claude-opus-5-5", "qgs-B claude claude-sonnet-5-5", "reader claude claude-opus-5-5"):
-            for stratum in ("config", "product"):
-                self.assertRegex(judges, rf"- {judge}, {stratum}: run 1 sensitivity 1\.000 \(95% CI [\d.]+-1\.00\), kappa 1\.000, .*; run 2 .*; runs differ on 0 of 60 rows .*; qualified\n")
-        self.assertIn("- config QGS qgs-B: claude-sonnet-5-5 judged 32 candidates through the toolchain on their pre-fetched inputs", judges)
-        self.assertIn("- config cross-family QGS judge gemini-3.8-flash-high: 12 candidates judged, 12 also judged by both Claude judges; agreement with qgs-A 11/12 (kappa 0.750)", judges)
-        self.assertIn("1 candidates both Claude judges rejected and it accepted went to the reader, which accepted 0", judges)
-        self.assertIn("- config standard: 23 members from 32 candidates both Claude judges judged; reader queue 1 disputed or unsure, 1 cross-family only", judges)
-        self.assertRegex(judges, r"- config audit: 20 rows screened again by gemini-3\.8-flash-high: eligibility agreement with A 20/20 \(kappa 1\.000\), with B 20/20")
-        threats = section(self.text, "Threats")
-        for threat in ("- same model family: config sessions A (claude-opus-5-5) and B (claude-sonnet-5-5)", "- reader shares the QGS judges' model family: the reader claude-opus-5-5",
-                       "- recall is an upper estimate: "):
-            self.assertIn(threat, threats)
-        self.assertNotIn("cross-family audit pending", threats)
-        self.assertIn("## Tag-only strata\n\n- local: tag-only inventory, not screened by two sessions", self.text)
-        self.assertNotIn("## Stratum: local", self.text)
+        self.assertIn("dropped 1; dropped 63 o/missing7 (the repository is gone (HTTP 404), 2026-10-20)", judges)
+        self.assertIn("- cross-family QGS judge gemini-3.8-flash-high: 12 candidates judged, joined by repository name", judges)
+        self.assertRegex(judges, r"- config audit: 20 rows drawn after stage 2 ended and screened again by gemini-3\.8-flash-high")
+        self.assertIn("- QGS qgs-B: claude-sonnet-5-5 judged 63 candidates on the thin inputs it was validated on", judges)
 
-    def test_a_repository_ranked_in_both_facets_is_one_screened_row_counted_for_both(self):
-        rows = [line for line in section(self.text, "Stratum: config").splitlines() if line.startswith("| ") and "o/shared" in line]
-        self.assertEqual(len(rows), 1)
-        self.assertTrue(rows[0].endswith("| alpha, beta |"))
-        self.assertIn("| rank | repo | commit | scores | decision | mechanisms | reason | facets |", self.text)
-
-    def test_the_record_regenerates_byte_identically_from_the_sweep_folder(self):
-        repo, _ = self.copy()
-        write_record(repo, topic_for_sweep(repo, SWEEP))
-        first = (repo / f"docs/prior-art/sweeps/{SWEEP}.md").read_text()
-        write_record(repo, load_topic(repo, "demo"))
-        self.assertEqual((repo / f"docs/prior-art/sweeps/{SWEEP}.md").read_text(), first)
-        self.assertEqual(first, self.text)
-
-    def test_a_hand_typed_facet_stop_row_is_refused(self):
-        repo, _ = self.copy()
-        path = repo / "docs/prior-art/topics/demo.json"
-        topic = json.loads(path.read_text())
-        topic["facets"]["beta"]["strata"]["product"]["stop_row"] = 30
-        path.write_text(json.dumps(topic))
-        with self.assertRaisesRegex(TopicError, r"the facets' product stop rows are \{'alpha': 40, 'beta': 30\}, the facet orders and the standard give \{'alpha': 40, 'beta': 40\}"):
-            render(repo, load_topic(repo, "demo"))
-
-    def test_a_standard_that_its_judge_files_do_not_give_is_refused(self):
+    def test_the_record_refuses_a_hand_edited_plan_an_unvalidated_qgs_run_or_a_snowball_row_outside_the_pool(self):
         repo, folder = self.copy()
-        adjudicated = json.loads((folder / "config-qgs-adjudicated.json").read_text())
-        member = adjudicated["final"].pop()
-        adjudicated["labels"].pop(member)
-        adjudicated["resolved"] = {**adjudicated["resolved"], "of": adjudicated["final"], "final": adjudicated["final"]}
-        (folder / "config-qgs-adjudicated.json").write_text(json.dumps(adjudicated))
-        with self.assertRaisesRegex(TopicError, "config-qgs-adjudicated.json is not the standard its judge files give; rebuild it with qgs-standard.py"):
-            render(repo, load_topic(repo, "demo"))
-
-    def test_a_judge_run_that_is_missing_or_ran_on_other_inputs_is_refused(self):
-        repo, folder = self.copy()
-        (folder / "judge-product-reader-claude-opus-5-5-run2.jsonl").unlink()
-        with self.assertRaisesRegex(TopicError, "reader claude-opus-5-5 did not qualify on the product calibration set"):
-            render(repo, load_topic(repo, "demo"))
+        plan = json.loads((folder / "config-stage2.json").read_text())
+        (folder / "config-stage2.json").write_text(json.dumps({**plan, "order": plan["order"][:-1]}))
+        with self.assertRaisesRegex(TopicError, "config-stage2.json is not the plan the stage-1 files give"):
+            self.render(repo)
         repo, folder = self.copy()
         meta = json.loads((folder / "meta.json").read_text())
-        block = meta["sessions"]["judge-config-screening-A-claude-opus-5-5-run1"]["blocks"][0]
-        block["row_sha256"][str(block["ranks"][0])] = "0" * 64
+        meta["sessions"]["qgs-judge-A"]["blocks"][0]["shape"] = "full"
         (folder / "meta.json").write_text(json.dumps(meta))
-        with self.assertRaisesRegex(TopicError, "judge-config-screening-A-claude-opus-5-5-run1: ranks .* were judged on other inputs"):
-            render(repo, load_topic(repo, "demo"))
-
-    def test_labels_of_another_calibration_set_are_refused(self):
+        with self.assertRaisesRegex(TopicError, "qgs-judge-A.jsonl: its 63 judgments are not all claude-opus-5-5 runs on the thin QGS inputs"):
+            self.render(repo)
         repo, folder = self.copy()
-        (folder / "calibration-set.json").write_text((folder / "calibration-set.json").read_text() + " ")
-        with self.assertRaisesRegex(TopicError, "calibration-labels.json was imported for another calibration set"):
-            render(repo, load_topic(repo, "demo"))
-
-    def test_an_audit_not_yet_run_is_a_threat(self):
-        repo, _ = self.copy(audit=False)
-        text = render(repo, load_topic(repo, "demo"))[0]
-        threats = section(text, "Threats")
-        self.assertIn("- cross-family audit pending: config: 0 of 0 audit rows screened by gemini-3.8-flash-high", threats)
-        self.assertIn("- cross-family audit pending: product: ", threats)
-        self.assertNotIn("audit: 20 rows", text)
+        (folder / "snowball-screening-order.jsonl").write_text(json.dumps({"order_rank": 1001, "repo": "s/elsewhere"}) + "\n")
+        (folder / "snowball-cut.json").write_text(json.dumps({"stratum": "config", "cut_row": None, "source": "none"}))
+        with self.assertRaisesRegex(TopicError, r"snowballed repositories \['s/elsewhere'\] are not in the config stage-1 pool"):
+            self.render(repo)
 
 
 if __name__ == "__main__":

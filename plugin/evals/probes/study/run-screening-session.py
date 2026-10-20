@@ -9,6 +9,7 @@ from study_judges import SCREENING_JUDGES, criteria_version, require_qualified
 from study_protocol import FREEZE_FILE
 from study_session import model_family, run_block
 from study_session_prompt import required_sweep_date
+from study_stage2 import plan_file
 from study_topic import TopicError, load_topic, require_screened, saigon_today, session_a, session_b, topic_arguments
 
 
@@ -52,9 +53,14 @@ def screen_job(topic, work, stratum, side, which):
         reason = f"{primary['cli']} was not on PATH when this block ran"
     if not which(option["cli"]):
         raise TopicError(f"session {side} runs on {option['cli']}, which is not on PATH")
+    ranks = None
     if criteria_version(freeze["criteria"]) >= 4:
-        require_qualified(topic, work, freeze, SCREENING_JUDGES, stratum)
-    return freeze["criteria"], freeze["strata"][stratum], option, f"{stratum}-screen-{side}", reason
+        require_qualified(topic, work, freeze, SCREENING_JUDGES, [stratum])
+        plan = Path(work) / plan_file(stratum)
+        if not plan.is_file():
+            raise TopicError(f"no {plan.name} in {work}; stage 2 screens the stage-1 passes plan-stage2.py lists")
+        ranks = json.loads(plan.read_text())["order"]
+    return freeze["criteria"], freeze["strata"][stratum], option, f"{stratum}-screen-{side}", reason, ranks
 
 
 def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
@@ -77,13 +83,17 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
             if not args.criteria:
                 raise TopicError("--pilot needs --criteria")
             option, name, reason = pilot_job(topic, args.stratum, args.side, args.model, which)
-            criteria, frozen, key = args.criteria, None, name
+            criteria, frozen, key, planned = args.criteria, None, name, None
         else:
             if args.model:
                 raise TopicError("--model is for the pilot; after the freeze the freeze names both sessions")
-            criteria, frozen, option, name, reason = screen_job(topic, args.work, args.stratum, args.side, which)
+            criteria, frozen, option, name, reason, planned = screen_job(topic, args.work, args.stratum, args.side, which)
             key = f"{args.stratum}-{args.side}"
+        ranks = None if planned is None else [r for r in planned if int(first) <= r <= int(last)]
+        if ranks == []:
+            raise TopicError(f"no stage-2 row of {args.stratum} lies between ranks {first} and {last}")
         job = {"work": args.work, "repo": args.repo, "stratum": args.stratum, "name": name, "key": key, "option": option, "criteria": criteria, "frozen": frozen,
+               **({"ranks": ranks} if ranks else {}),
                "pilot": args.pilot, "fallback_reason": reason, "bare": bool(environ.get("ANTHROPIC_API_KEY")), "first": int(first), "last": int(last), "today": args.today,
                "sweep_date": required_sweep_date(topic)}
         rows = run_block(job, fetch or Fetch())

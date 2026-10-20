@@ -162,14 +162,16 @@ def method_parts(repo, topic, s, meta, captures, faceted):
     sessions_out, sessions = session_lines(folder, meta, strata, freeze)
     agreement = [line for stratum in strata
                  for line in agreement_lines(stratum, captures[stratum]["pairs"], freeze["strata"][stratum]["frozen_after_rank"], captures[stratum], s["capture"][stratum])]
-    v4 = v4_parts(topic, folder, strata, freeze, meta.get("sessions") or {}, faceted, {k: c["common"] for k, c in captures.items()}) if faceted else None
+    v4 = v4_parts(topic, folder, strata, freeze, meta.get("sessions") or {}, faceted, {k: c["common"] for k, c in captures.items()}, s["decided"]) if faceted else None
     calibration, threats = (v4["calibration"], []) if v4 else calibration_lines(folder)
     threats = threat_lines(topic, strata, sessions, freeze, threats, folder) + (v4["threats"] if v4 else [])
     notes = method_notes(topic, folder, freeze, strata) if not v4 else [template_line(freeze, strata), date_line(topic)]
     sections = ["## Protocol", ""] + protocol + notes + session_summary_lines(sessions) + ["", "## Screening sessions", ""] + sessions_out
-    sections += (["", "## Facets", ""] + v4["facets"] if v4 else []) + ["", "## Calibration", ""] + calibration + (["", "## Judges", ""] + v4["judges"] if v4 else [])
+    sections += (["", "## Facets", ""] + v4["facets"] if v4 else []) + ["", "## Calibration", ""] + calibration
+    sections += (["", "## Stage 1", ""] + v4["stage1"] + ["", "## Judges", ""] + v4["judges"] if v4 else [])
     sections += ["", "## Threats", ""] + threats + [""]
     tag_only = [t for t in topic["strata"] if t not in strata]
     if tag_only:
         sections += ["## Tag-only strata", ""] + [f"- {t}: {TAG_ONLY}" for t in tag_only] + [""]
-    return {"recall": (v4["recall"] if v4 else recall_lines(folder, topic, strata, captures)) + [""], "agreement": agreement + [""], "sections": sections}
+    return {"recall": (v4["recall"] if v4 else recall_lines(folder, topic, strata, captures)) + [""], "agreement": agreement + [""], "sections": sections,
+            **({"prisma": v4["prisma"]} if v4 else {})}

@@ -1,3 +1,4 @@
+import hashlib
 import json
 import re
 import sys
@@ -13,9 +14,10 @@ HOME_PATH = re.compile(r"/(?:home|Users)/[^/\s]+/")
 ORDER_FIELDS = ("order_rank", "repo", "order", "units", "contract_files", "stars", "pushed", "created", "channels", "archived", "forced", "closed_issues", "merged_prs", "license",
                 "facets")
 SHARED_JSON = ("meta.json", "study.json", "surface-map.json", "mechanism-table.json", "qgs-adjudicated.json", "protocol-freeze.json", "calibration-sample.json", "snowball-cut.json",
-               "calibration-set.json", "calibration-labels.json", "calibration-draw.json", "facet-orders.json", "audit-sample.json")
+               "calibration-set.json", "calibration-labels.json", "calibration-draw.json", "audit-sample.json", "stage1-freeze.json", "stage1-rung.json", "qgs-dropped.json",
+               "top-up-set.json", "top-up-labels.json", "top-up-draw.json", "held-out-set.json", "held-out-labels.json", "held-out-draw.json")
 FETCHED_TEXT = re.compile(r"-(?:screening|qgs)-inputs\.jsonl$")
-SHARED_JSONL = ("qgs-candidates.jsonl", "qgs-judge-A.jsonl", "qgs-judge-B.jsonl", "snowball-screening-order.jsonl")
+SHARED_JSONL = ("qgs-candidates.jsonl", "qgs-judge-A.jsonl", "qgs-judge-B.jsonl", "qgs-reader.jsonl", "snowball-screening-order.jsonl")
 
 
 def pin(row):
@@ -50,6 +52,13 @@ def paper_rows(work):
     return [{**paper, "linked_repos": sorted(repo for repo, evidence in hits.items() if paper["key"] in evidence)} for paper in papers.values()]
 
 
+def stage1_row(row):
+    lead = row.pop("readme_lead", None)
+    if lead:
+        row["readme_lead_sha256"] = hashlib.sha256(lead.encode()).hexdigest()
+    return row
+
+
 def config_pool_channel(work):
     state = work_file(work, "product-state.json")
     hits = json.loads(state.read_text())["hits"] if state.exists() else {}
@@ -78,6 +87,11 @@ def export(topic, repo, work):
         (out / name).write_text(body)
         counts[name] = "copied"
 
+    def data(name):
+        (out / name).parent.mkdir(parents=True, exist_ok=True)
+        (out / name).write_text(json.dumps(clean(json.loads((work / name).read_text())), indent=1, ensure_ascii=False) + "\n")
+        counts[name] = "copied"
+
     def packet(name):
         data = (work / name).read_bytes()
         body = data.decode("utf-8", errors="replace")
@@ -100,6 +114,21 @@ def export(topic, repo, work):
             jsonl(path.name, pin)
         for path in sorted(work.glob(f"{stratum}-pilot-*-mechanisms.md")):
             text(path.name)
+        for path in sorted(work.glob(f"stage1-{stratum}-*.jsonl")) + sorted(work.glob(f"{stratum}-stage1-audit-*.jsonl")):
+            jsonl(path.name, pin)
+        for path in sorted(work.glob(f"stage1-inputs-{stratum}-*.jsonl")):
+            jsonl(path.name, stage1_row)
+        for name in (f"{stratum}-stage2.json", f"{stratum}-stage1-audit.json", f"{stratum}-stage1-audit-checks.json"):
+            if (work / name).exists():
+                data(name)
+        for facet in topic.get("facets") or {}:
+            name = f"facets/{facet}/{stratum}-ranked.json"
+            if (work / name).exists():
+                ranked = json.loads((work / name).read_text())
+                (out / name).parent.mkdir(parents=True, exist_ok=True)
+                (out / name).write_text(json.dumps({"terms": ranked.get("terms"), "rows": [{"order_rank": r["order_rank"], "repo": r["repo"]} for r in ranked["rows"]]},
+                                                   indent=1) + "\n")
+                counts[name] = "ranks only"
         if (work / f"{stratum}-qgs-adjudicated.json").exists():
             (out / f"{stratum}-qgs-adjudicated.json").write_text(json.dumps(clean(json.loads((work / f"{stratum}-qgs-adjudicated.json").read_text())), indent=1, ensure_ascii=False) + "\n")
             counts[f"{stratum}-qgs-adjudicated.json"] = "copied"
@@ -112,6 +141,15 @@ def export(topic, repo, work):
     for name in SHARED_JSONL:
         if (work / name).exists():
             jsonl(name)
+    for path in sorted(work.glob("qgs-cross-*.jsonl")):
+        jsonl(path.name)
+    for path in sorted(work.glob("dropped/*")):
+        name = f"dropped/{path.name}"
+        (out / "dropped").mkdir(exist_ok=True)
+        if path.name.endswith(".rows.jsonl"):
+            jsonl(name, pin)
+        elif path.name.endswith(".block.json"):
+            data(name)
     for name in SHARED_JSON:
         if (work / name).exists():
             (out / name).write_text(json.dumps(clean(json.loads((work / name).read_text())), indent=1, ensure_ascii=False) + "\n")

@@ -6,6 +6,7 @@ from pathlib import Path
 from study_judges import AUDIT_FILE, AUDIT_ROWS, audit_option
 from study_protocol import FREEZE_FILE
 from study_screening_core import read_jsonl
+from study_stage2 import plan_file
 from study_topic import TopicError, load_topic, screened_strata, topic_arguments
 
 
@@ -20,7 +21,13 @@ def draw(topic, work):
     frozen = json.loads(freeze_file.read_text())["strata"]
     out = {}
     for stratum in screened_strata(topic):
+        plan = work / plan_file(stratum)
+        if not plan.is_file():
+            raise TopicError(f"no {plan.name} in {work}; the audit sample is drawn after stage 2 ends")
         sides = [{r["order_rank"] for r in read_jsonl(work, f"{stratum}-screen-{s}.jsonl")} for s in "AB"]
+        open_rows = sorted(set(json.loads(plan.read_text())["order"]) - (sides[0] & sides[1]))
+        if open_rows:
+            raise TopicError(f"{stratum}: stage 2 has not ended; ranks {open_rows[:10]} are not screened by both sessions")
         ranks = sorted(r for r in sides[0] & sides[1] if r > frozen[stratum]["frozen_after_rank"])
         if not ranks:
             raise TopicError(f"{stratum}: no row both sessions screened after the pilot block")
@@ -29,7 +36,7 @@ def draw(topic, work):
 
 
 def main(argv=None):
-    args = topic_arguments("Draw the cross-family audit sample: 20 random rows per stratum, seeded by the sweep name, from the rows both sessions screened after the pilot block.",
+    args = topic_arguments("Draw the cross-family audit sample: 20 random rows per stratum, seeded by the sweep name, from the rows both sessions screened after the pilot block, once stage 2 ended.",
                            (["--work"], {"required": True, "help": "the topic's working folder"})).parse_args(argv)
     try:
         out = draw(load_topic(args.repo, args.topic), args.work)

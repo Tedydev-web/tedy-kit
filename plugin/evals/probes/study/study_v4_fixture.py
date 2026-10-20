@@ -5,11 +5,13 @@ import io
 import json
 import re
 import shutil
+import sys
 import tempfile
 from pathlib import Path
 
 from study_fixtures import HERE, FakeFetch, script, write_json, write_jsonl
 from study_session_prompt import QGS_REPLY_FORMAT, STAGE1_REPLY_FORMAT
+from study_topic import load_topic
 
 KIT = HERE.parents[3]
 CRITERIA = "docs/prior-art/quality-criteria-v4.md"
@@ -57,7 +59,7 @@ def relevant(repo):
 
 
 def eligible(repo):
-    return relevant(repo) and number(repo) % 7 != 0
+    return relevant(repo) and (repo.endswith("shared") or number(repo) % 7 != 0)
 
 
 def problems_for(repo):
@@ -67,7 +69,9 @@ def problems_for(repo):
 
 
 def description(repo):
-    return "" if number(repo) % 10 == 9 else f"{repo} guards a tdd loop"
+    if number(repo) % 10 == 9:
+        return ""
+    return f"{repo}: a web kit" if number(repo) % 6 == 0 else f"{repo} guards a tdd loop"
 
 
 def v4_repo():
@@ -91,7 +95,8 @@ def v4_repo():
 
 def order_row(stratum, rank, repo):
     shape = {"units": ["skills/tdd"]} if stratum == "config" else {"contract_files": ["src/hook.ts"]}
-    return {"order_rank": rank, "repo": repo, "description": description(repo), "pushed": "2026-09-01", "stars": 3, "forced": False, **shape}
+    channels = ["code"] + (["repo"] if number(repo) % 4 == 0 else []) + (["config-pool"] if stratum == "product" and number(repo) % 5 == 0 else [])
+    return {"order_rank": rank, "repo": repo, "description": description(repo), "pushed": "2026-09-01", "stars": 3, "forced": False, "channels": channels, **shape}
 
 
 def v4_work(repo):
@@ -107,10 +112,11 @@ def v4_work(repo):
         for row in rows:
             write_json(work / "cache/trees" / (row["repo"].replace("/", "__") + ".json"), {"oid": "e" * 40, "paths": ["README.md", "skills/tdd/SKILL.md", "src/hook.ts"]})
         (work / f"stage1-packet-{stratum}.md").write_text(f"stage-1 packet {stratum}: problems X1 X2 X3 X4\n")
-        (work / f"qgs-packet-{stratum}.md").write_text(f"qgs packet {stratum}: problems X1 X2 X3 X4\n")
         (work / f"screening-packet-{stratum}.md").write_text(f"screening packet {stratum}: score the rows under the criteria\n")
+    (work / "qgs-packet.md").write_text("qgs packet: problems X1 X2 X3 X4\n")
+    write_json(work / "cache/trees" / (OUTSIDE.replace("/", "__") + ".json"), {"oid": "e" * 40, "paths": ["README.md", "skills/tdd/SKILL.md"]})
     candidates = [r for s in ("config", "product") for f in FACETS for r in facet_repos(s, f)[:16]] + ["o/missing7", OUTSIDE]
-    write_jsonl(work / "qgs-candidates.jsonl", [{"id": i, "repo": r, "list": "l/awesome-claude", "heading": "Kits", "line": f"- {r}"} for i, r in enumerate(dict.fromkeys(candidates), 1)])
+    write_jsonl(work / "qgs-candidates.jsonl", [{"id": i, "repo": r, "list": "l/awesome-claude", "heading": "Kits", "line": f"- {r}: a claude tdd kit" if r.startswith("p/") or r == OUTSIDE else f"- {r}"} for i, r in enumerate(dict.fromkeys(candidates), 1)])
     write_json(work / "product-state.json", {"hits": {"p/a1": {"repo": "p/a1", "channels": {"config-pool": ["c"]}}, "p/a2": {"repo": "p/a2", "channels": {"config-pool": ["c"], "repo": ["r"]}}},
                                              "terms_sha256": "x"})
     for stratum in ("config", "product"):
@@ -199,3 +205,141 @@ def drawn_and_labelled(repo, work, top_up=None, labels=None):
     quiet(repo, "import-calibration-labels", "--work", str(work), "--batch", batch, "--labels", str(path))
     path.unlink()
     return json.loads((work / f"{batch}-set.json").read_text())
+
+
+STRATA = ("config", "product")
+QGS_JUDGE_NAMES = ("qgs-A", "qgs-B", "reader")
+SCREENING_JUDGE_NAMES = ("screening-A", "screening-B")
+
+
+def stage1_frozen(repo, work):
+    quiet(repo, "freeze-stage1", "--work", str(work), "--today", TODAY)
+
+
+def protocol_frozen(repo, work, judges):
+    for stratum in STRATA:
+        quiet(repo, "fetch-screening-inputs", "--work", str(work), "--stratum", stratum, "--through", "2", fetch=inputs_fetch())
+        for side in "AB":
+            quiet(repo, "run-screening-session", "--work", str(work), "--stratum", stratum, "--side", side, "--ranks", "1-2", "--pilot", "--criteria", CRITERIA,
+                  "--today", TODAY, fetch=judges)
+    quiet(repo, "freeze-protocol", "--work", str(work), "--criteria", CRITERIA, "--today", TODAY)
+
+
+def calibrated_work(judges):
+    repo = v4_repo()
+    work = v4_work(repo)
+    shutil.copytree(repo / "docs/prior-art/sweeps" / SWEEP, work, dirs_exist_ok=True)
+    write_json(work / "mechanism-table.json", {"aliases": {}, "class": {}, "default": "new"})
+    for stratum in STRATA:
+        write_json(work / f"{stratum}-mechanism-map.json", {"A": {}, "B": {}})
+        write_json(work / f"{stratum}-adjudication.json", {"rows": {}, "capture_recapture": {"union": 1}})
+    stage1_frozen(repo, work)
+    drawn_and_labelled(repo, work)
+    protocol_frozen(repo, work, judges)
+    return repo, work
+
+
+def judged(repo, work, judges, names=SCREENING_JUDGE_NAMES + QGS_JUDGE_NAMES, strata=STRATA):
+    for stratum in strata:
+        for name in names:
+            for run in ("1", "2"):
+                quiet(repo, "run-judge", "--work", str(work), "--stratum", stratum, "--judge", name, "--set", "calibration", "--run", run, "--today", TODAY, fetch=judges)
+
+
+def stage1_calibrated(repo, work, judges, models=("claude-sonnet-5-5",)):
+    for stratum in STRATA:
+        for model in models:
+            for run in ("1", "2"):
+                quiet(repo, "run-stage1", "--work", str(work), "--stratum", stratum, "--shape", "brief", "--model", model, "--set", "calibration", "--run", run,
+                      "--today", TODAY, fetch=judges)
+    quiet(repo, "choose-stage1-rung", "--work", str(work), "--today", TODAY)
+
+
+def topic_qgs(repo, work, judges):
+    listed = [json.loads(line) for line in (work / "qgs-candidates.jsonl").read_text().splitlines()]
+    quiet(repo, "fetch-screening-inputs", "--work", str(work), "--set", "qgs", fetch=inputs_fetch())
+    gone = [str(c["id"]) for c in listed if "missing" in c["repo"]]
+    quiet(repo, "drop-qgs-candidates", "--work", str(work), "--ids", ",".join(gone), "--reason", "the repository is gone (HTTP 404)", "--today", TODAY)
+    quiet(repo, "run-judge", "--work", str(work), "--judge", "qgs-A", "--set", "qgs", "--today", TODAY, fetch=judges)
+    quiet(repo, "run-judge", "--work", str(work), "--judge", "qgs-B", "--set", "qgs", "--rows", "1-5", "--today", TODAY, fetch=judges)
+    quiet(repo, "drop-run", "--work", str(work), "--key", "qgs-judge-B", "--ranks", "1-5", "--reason", "run before the packet fix", "--today", TODAY)
+    judges.flip = {next(c["repo"] for c in listed if relevant(c["repo"]) and "missing" not in c["repo"])}
+    quiet(repo, "run-judge", "--work", str(work), "--judge", "qgs-B", "--set", "qgs", "--today", TODAY, fetch=judges)
+    judges.flip = set()
+    outsider = next(c for c in listed if not relevant(c["repo"]))
+    cross = [{"repo": c["repo"], "verdict": "yes" if relevant(c["repo"]) or c is outsider else "no",
+              "problems": problems_for(c["repo"]) if relevant(c["repo"]) or c is outsider else [], "why": "gemini"} for c in listed[:12]]
+    write_jsonl(work / f"qgs-cross-{GEMINI['model']}.jsonl", cross)
+    quiet(repo, "run-judge", "--work", str(work), "--judge", "reader", "--set", "qgs", "--today", TODAY, fetch=judges)
+    quiet(repo, "qgs-standard", "--work", str(work), "--write")
+
+
+def stage1_pooled(repo, work, judges):
+    rung = json.loads((work / "stage1-rung.json").read_text())["rung"]
+    models = ["claude-sonnet-5-5"] if rung == 1 else ["claude-opus-5-5", "claude-sonnet-5-5"]
+    for stratum in STRATA:
+        for model in models:
+            quiet(repo, "run-stage1", "--work", str(work), "--stratum", stratum, "--shape", "brief", "--model", model, "--set", "pool", "--today", TODAY, fetch=judges)
+
+
+def stage1_audited(repo, work, judges):
+    for stratum in STRATA:
+        quiet(repo, "draw-stage1-audit", "--work", str(work), "--stratum", stratum)
+        quiet(repo, "fetch-screening-inputs", "--work", str(work), "--stratum", stratum, "--set", "stage1-audit", fetch=inputs_fetch())
+        quiet(repo, "run-judge", "--work", str(work), "--stratum", stratum, "--judge", "screening-A", "--set", "stage1-audit", "--today", TODAY, fetch=judges)
+        from study_stage1_audit import flagged
+        flags = flagged(work, stratum, OPUS)[1]
+        checks = work / f"saved-{stratum}-checks.json"
+        checks.write_text(json.dumps({str(r): "excluded" for r in flags}))
+        quiet(repo, "import-audit-checks", "--work", str(work), "--stratum", stratum, "--checks", str(checks))
+        checks.unlink()
+
+
+def stage2_screened(repo, work, judges, limits=None):
+    for stratum in STRATA:
+        limit = (limits or {}).get(stratum)
+        quiet(repo, "plan-stage2", "--work", str(work), "--stratum", stratum, *(("--limit", str(limit)) if limit else ()))
+        quiet(repo, "fetch-screening-inputs", "--work", str(work), "--stratum", stratum, "--set", "stage2", fetch=inputs_fetch())
+        for side in "AB":
+            quiet(repo, "run-screening-session", "--work", str(work), "--stratum", stratum, "--side", side, "--ranks", "1-2000", "--today", TODAY, fetch=judges)
+
+
+def cross_audited(repo, work, judges):
+    quiet(repo, "draw-audit-sample", "--work", str(work))
+    for stratum in STRATA:
+        quiet(repo, "run-judge", "--work", str(work), "--stratum", stratum, "--judge", "audit", "--set", "audit", "--today", TODAY, fetch=judges)
+
+
+def swept_work(limits=None):
+    judges = ScriptedJudges()
+    repo, work = calibrated_work(judges)
+    judged(repo, work, judges)
+    stage1_calibrated(repo, work, judges)
+    topic_qgs(repo, work, judges)
+    stage1_pooled(repo, work, judges)
+    stage1_audited(repo, work, judges)
+    stage2_screened(repo, work, judges, limits)
+    cross_audited(repo, work, judges)
+    return repo, work, judges
+
+
+def v4_sweep(audit=True):
+    judges = ScriptedJudges()
+    repo, work = calibrated_work(judges)
+    judged(repo, work, judges)
+    stage1_calibrated(repo, work, judges)
+    topic_qgs(repo, work, judges)
+    stage1_pooled(repo, work, judges)
+    stage1_audited(repo, work, judges)
+    stage2_screened(repo, work, judges, {"product": 60})
+    if audit:
+        cross_audited(repo, work, judges)
+    quiet(repo, "export-sweep-data", "--work", str(work))
+    from study_sweep_record import write_record
+    write_record(repo, load_topic(repo, "demo"))
+    return repo
+
+
+if __name__ == "__main__":
+    built = v4_sweep(audit="--no-audit" not in sys.argv)
+    shutil.copytree(built, Path(sys.argv[1]), dirs_exist_ok=True)
