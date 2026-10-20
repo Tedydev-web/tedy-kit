@@ -1,8 +1,7 @@
 import { EMPTY_TABLE, derive } from "./sweep-screening-derive.mjs";
-import { KAPPA_FLOOR, SENSITIVITY_FLOOR, blockHashes, covered, escapeRegex, kappa } from "./sweep-method-evidence-v4-shared.mjs";
+import { KAPPA_FLOOR, SENSITIVITY_FLOOR, blockHashes, covered, figureLine, interval, kappa } from "./sweep-method-evidence-v4-shared.mjs";
 
 const LABELLED = ["Authority", "Methodology", "Objectivity", "Position", "Relevance"];
-const NUMBER = "(undefined|-?\\d+\\.\\d+)";
 
 function metrics(pairs) {
   const tp = pairs.filter(([t, d]) => t && d).length;
@@ -11,7 +10,7 @@ function metrics(pairs) {
   const tn = pairs.length - tp - fn - fp;
   const sensitivity = tp + fn ? tp / (tp + fn) : null;
   const k = kappa(pairs);
-  return { sensitivity, specificity: tn + fp ? tn / (tn + fp) : null, kappa: k,
+  return { tp, positives: tp + fn, sensitivity, specificity: tn + fp ? tn / (tn + fp) : null, kappa: k,
     passed: sensitivity !== null && sensitivity >= SENSITIVITY_FLOOR && k !== null && k >= KAPPA_FLOOR };
 }
 
@@ -24,21 +23,17 @@ function labelAgreement(thin, rows, answers) {
   return Object.fromEntries(LABELLED.map((c) => [c, [rows.filter((r) => answers.get(r.order_rank)?.scores?.[c]?.v === r.user?.[c]).length, rows.length]]));
 }
 
-const close = (written, value, digits) => (value === null ? written === "undefined" : written !== "undefined" && Math.abs(Number(written) - value) <= 0.5 * 10 ** -digits + 1e-9);
+const ci = (k, n) => (n ? [" (95% CI ", [interval(k, n)[0], 2], "-", [interval(k, n)[1], 2], ")"] : []);
+const value = (v, empty = "undefined") => (v === null ? [empty] : [[v, 3]]);
 
 function lineErrors(text, head, runs, differ, runKappa) {
-  const part = (i) => `run ${i} sensitivity ${NUMBER}(?: \\(95% CI [0-9.]+-[0-9.]+\\))?, specificity ${NUMBER}, kappa ${NUMBER}(?: \\(one category\\))?; label agreement ([^;]*)`;
-  const line = text.match(new RegExp(`^- ${escapeRegex(head)}: ${part(1)}; ${part(2)}; runs differ on (\\d+) of (\\d+) rows \\(kappa ${NUMBER}(?: \\(one category\\))?\\); qualified$`, "m"));
-  if (!line) return [`the record has no judge line "- ${head}: ..." in the form the toolchain writes`];
-  const ok = runs.every((run, i) => {
-    const [sens, spec, k, labels] = line.slice(1 + 4 * i, 5 + 4 * i);
-    const written = Object.fromEntries([...labels.matchAll(/(\w+) (\d+)\/(\d+)/g)].map((m) => [m[1], [Number(m[2]), Number(m[3])]]));
-    return close(sens, run.sensitivity, 3) && close(spec, run.specificity, 3) && close(k, run.kappa, 3) && JSON.stringify(written) === JSON.stringify(run.labels);
-  });
-  if (!ok || Number(line[9]) !== differ.count || Number(line[10]) !== differ.rows || !close(line[11], runKappa, 3)) {
-    return [`${head}: the record's judge metrics are not the ones the validation runs and the calibration labels give`];
-  }
-  return [];
+  const run = (r, i) => [`run ${i + 1} sensitivity `, ...(r.sensitivity === null ? ["undefined"] : [[r.sensitivity, 3], ...ci(r.tp, r.positives)]), ", specificity ", ...value(r.specificity),
+    ", kappa ", ...value(r.kappa, "undefined (one category)"), "; label agreement ",
+    ...Object.entries(r.labels).flatMap(([name, [k, n]], j) => [`${j ? ", " : ""}${name} ${k}/${n}`, ...ci(k, n)])];
+  const parts = [`- ${head}: `, ...run(runs[0], 0), "; ", ...run(runs[1], 1), `; runs differ on ${differ.count} of ${differ.rows} rows (kappa `,
+    ...value(runKappa, "undefined (one category)"), "); qualified"];
+  if (!text.split("\n").some((l) => l.startsWith(`- ${head}: `))) return [`the record has no judge line "- ${head}: ..." in the form the toolchain writes`];
+  return figureLine(text, parts) ? [] : [`${head}: the record's judge metrics are not the ones the validation runs and the calibration labels give`];
 }
 
 export function judgeErrors(io, topic, sessions, strata, rows, batches) {

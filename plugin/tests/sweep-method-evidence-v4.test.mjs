@@ -124,6 +124,16 @@ test("H-judges: the gate recomputes screening judge qualification and every judg
   assert.match(v.errors(v.text.replace(/^(- qgs-B claude claude-sonnet-5-5, product, .*label agreement problems )(\d+)\//m, (_, head, n) => `${head}${Number(n) - 1}/`)),
     /qgs-B claude claude-sonnet-5-5, product, thin inputs, batches calibration: the record's judge metrics are not/);
   assert.match(v.errors(v.text.replace(/^(- reader claude claude-opus-5-5, config, .*runs differ on )0 /m, "$11 ")), /reader claude claude-opus-5-5, config, thin inputs, batches calibration: the record's judge metrics/);
+  const metrics = /the record's judge metrics are not the ones the validation runs and the calibration labels give/;
+  for (const [name, pattern, replacement] of [
+    ["R7", /^(- qgs-A claude claude-opus-5-5, config, .*?run 1 sensitivity 1\.000 \(95% CI )0\.\d\d-1\.00/m, "$10.99-1.00"],
+    ["R12", /^(- screening-A claude claude-opus-5-5, config, .*?Relevance \d+\/60 \(95% CI )0\.\d\d-0\.\d\d/m, "$10.99-1.00"],
+    ["R13", /^(- qgs-A claude claude-opus-5-5, config, .*?problems (\d+)\/\2 \(95% CI )0\.\d\d-1\.00/m, "$10.10-1.00"],
+  ]) {
+    const body = v.text.replace(pattern, replacement);
+    assert.notEqual(body, v.text, name);
+    assert.match(v.errors(body), metrics, name);
+  }
   const w = sweep();
   const sessions = w.json("meta.json");
   sessions.sessions["product-B"].model = "claude-haiku-5-5";
