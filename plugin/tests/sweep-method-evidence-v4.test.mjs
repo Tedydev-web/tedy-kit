@@ -327,6 +327,19 @@ test("the config-pool channel must have run on the final config pool, and its re
   assert.match(errors, /product-screening-order\.jsonl credits the config-pool channel with .*, which config-pool-channel\.json does not list/);
 });
 
+test("the config-pool joined count counts only repositories that stay in the product pool after aggregator removal, as the PRISMA config-pool line does", () => {
+  const s = sweep();
+  const joined = s.json("config-pool-channel.json").joined.map((r) => r.toLowerCase());
+  const credited = s.jsonl("product-screening-order.jsonl").filter((r) => r.channels?.includes("config-pool")).map((r) => r.repo.toLowerCase());
+  assert.deepEqual(joined.filter((r) => !credited.includes(r)), ["l/awesome-claude"]);
+  assert.match(s.text, /^\| product \| identified: config-pool \| 23 \|$/m);
+  const line = s.text.match(/^- product channel from the config pool: .*$/m)[0];
+  assert.match(line, /: 23 repositories joined the product pool before stage 1;/);
+  const errors = s.errors(s.text.replace(line, line.replace(": 23 repositories joined", ": 24 repositories joined")));
+  assert.match(errors, /^the record is not the one the renderer rebuilds from the sweep files: line \d+ reads "- product channel from the config pool: 24 repositories joined/m);
+  assert.match(errors, /^the record's config-pool channel line is not the one the files give \("- product channel from the config pool: 23 repositories joined/m);
+});
+
 test("the standard, snowball and calibration batch lines are recomputed from the files", () => {
   const s = sweep();
   assert.match(s.errors(s.text.replace("- standard: 47 members from 67 candidates", "- standard: 47 members from 70 candidates")), /the record's standard line is not the one the QGS files give/);

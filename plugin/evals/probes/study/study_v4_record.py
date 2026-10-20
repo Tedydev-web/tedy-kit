@@ -117,9 +117,12 @@ def recall_lines(topic, folder, strata, faceted):
     if (topic["strata"].get("product", {}).get("channels") or {}).get("config_pool") is True and "product" in strata:
         channel = read_json(folder, "config-pool-channel.json")
         joined = {r.lower() for r in channel["joined"]}
+        credited = {r["repo"].lower() for r in read_jsonl(folder, "product-screening-order.jsonl") if "config-pool" in (r.get("channels") or [])}
+        if credited - joined:
+            raise TopicError(f"product-screening-order.jsonl credits the config-pool channel with {', '.join(sorted(credited - joined)[:10])}, which config-pool-channel.json does not list")
         product = [m.lower() for m in stratum_members(out, "product")]
         outside = [m for m in product if not any(m in pools[s] for s in strata)]
-        lines.append(f"- product channel from the config pool: {len(joined)} repositories joined the product pool before stage 1; they recover {len(set(product) & joined)} of "
+        lines.append(f"- product channel from the config pool: {len(credited)} repositories joined the product pool before stage 1; they recover {len(set(product) & credited)} of "
                      f"the {len(product)} standard members the QGS judges labelled product; {len(outside)} of those members remain outside every pool")
         if outside:
             threats.append(f"- discovery gap: {len(outside)} standard members labelled product are in no pool: {', '.join(outside)}")

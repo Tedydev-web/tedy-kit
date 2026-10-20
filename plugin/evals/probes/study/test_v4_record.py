@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 import shutil
 import tempfile
 import unittest
@@ -63,6 +64,16 @@ class V4RecordTest(unittest.TestCase):
         self.assertRegex(section(self.text, "Recall"), r"- product channel from the config pool: \d+ repositories joined the product pool before stage 1; they recover \d+ of "
                                                        r"the \d+ standard members the QGS judges labelled product; 1 of those members remain outside every pool")
         self.assertIn("- discovery gap: 1 standard members labelled product are in no pool: o/outside1", section(self.text, "Threats"))
+
+    def test_the_config_pool_joined_count_is_the_prisma_config_pool_line_without_the_aggregators_the_product_ranking_removed(self):
+        joined = int(re.search(r"- product channel from the config pool: (\d+) repositories joined", self.text).group(1))
+        self.assertEqual((joined, int(re.search(r"^\| product \| identified: config-pool \| (\d+) \|$", self.text, re.M).group(1))), (23, 23))
+        repo, folder = self.copy()
+        channel = json.loads((folder / "config-pool-channel.json").read_text())
+        credited = next(json.loads(line)["repo"] for line in (folder / "product-screening-order.jsonl").read_text().splitlines() if "config-pool" in json.loads(line)["channels"])
+        (folder / "config-pool-channel.json").write_text(json.dumps({**channel, "joined": [r for r in channel["joined"] if r != credited]}))
+        with self.assertRaisesRegex(TopicError, "product-screening-order.jsonl credits the config-pool channel with .*, which config-pool-channel.json does not list"):
+            self.render(repo)
 
     def test_facets_count_included_rows_per_facet_from_the_problem_ids_the_stage_2_sessions_name(self):
         facets = section(self.text, "Facets")

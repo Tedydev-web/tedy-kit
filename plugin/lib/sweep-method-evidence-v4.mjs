@@ -234,7 +234,7 @@ function configPoolErrors(io, text, topic, strata, passes, pools, memberStrata) 
   if (stray.length) errors.push(`product-screening-order.jsonl credits the config-pool channel with ${stray.slice(0, 10).join(", ")}, which config-pool-channel.json does not list`);
   const labelled = Object.entries(memberStrata).filter(([, s]) => s.includes("product")).map(([m]) => m);
   const outside = labelled.filter((m) => !strata.some((s) => pools[s].has(m)));
-  const line = `- product channel from the config pool: ${joined.length} repositories joined the product pool before stage 1; they recover ${labelled.filter((m) => names.has(m)).length} of `
+  const line = `- product channel from the config pool: ${product.size} repositories joined the product pool before stage 1; they recover ${labelled.filter((m) => product.has(m)).length} of `
     + `the ${labelled.length} standard members the QGS judges labelled product; ${outside.length} of those members remain outside every pool`;
   if (!text.split("\n").includes(line)) errors.push(`the record's config-pool channel line is not the one the files give ("${line}")`);
   const gap = text.match(/^- discovery gap: (\d+) standard members labelled product are in no pool: (.*)$/m);
