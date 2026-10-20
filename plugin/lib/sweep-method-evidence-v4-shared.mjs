@@ -96,4 +96,11 @@ export function labelledRows({ json }, read, batches) {
 export const interval = (k, n) => [lowerBound(k, n, 0.025), 1 - lowerBound(n - k, n, 0.025)];
 
 export const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+export function figureLine(text, parts, prefix = false) {
+  const values = parts.filter(Array.isArray);
+  const pattern = parts.map((p) => (Array.isArray(p) ? "(-?\\d+\\.\\d+)" : escapeRegex(p))).join("");
+  const found = text.match(new RegExp(`^${pattern}${prefix ? "" : "$"}`, "m"));
+  return Boolean(found) && values.every(([value, digits], i) => Math.abs(Number(found[i + 1]) - value) <= 0.5 * 10 ** -digits + 1e-9);
+}
 export const upperBound = (k, n) => 1 - lowerBound(n - k, n);

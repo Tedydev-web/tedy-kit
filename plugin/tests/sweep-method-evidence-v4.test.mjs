@@ -287,6 +287,18 @@ test("H-inputs: stage-1 inputs must be the final pool after the config-pool chan
   assert.match(s.errors(text), /stage1-inputs-product-brief\.jsonl is not the final product pool of product-screening-order\.jsonl/);
 });
 
+test("the record's rung lines are recomputed from the stage-1 calibration and held-out runs", () => {
+  const rungs = /the record's stage-1 rung lines are not the ones the calibration runs give/;
+  const s = sweep();
+  assert.match(s.errors(s.text.replace(/^- rung 1: run 1 \d+\/\d+ positives passed/m, "- rung 1: run 1 999/999 positives passed")), rungs);
+  assert.match(s.errors(s.text.replace(/^(- rung 1: .*one-sided 95% lower bound )0\.\d{4}/m, "$10.9999")), rungs);
+  assert.match(s.errors(s.text.replace(/^(- rung 1 product: run 1 sensitivity )\d+\//m, "$1999/")), rungs);
+  assert.match(s.errors(s.text.replace("- chosen: rung 1 after 1 rungs tried", "- chosen: rung 1 after 3 rungs tried")), rungs);
+  const t = sweep(escalated);
+  assert.match(t.errors(t.text.replace(/^(- rung 1: .*the runs differ on )1 of/m, "$10 of")), rungs);
+  assert.match(t.errors(t.text.replace(/^(- held-out confirmation: rung 2 passed )(\d+)\/(\d+)/m, "$1999/999")), /the record's held-out confirmation line is not the one the held-out runs give/);
+});
+
 test("a rung above the first passes the gate only with its held-out confirmation", () => {
   const s = sweep(escalated);
   assert.equal(s.errors(), "");
