@@ -1,13 +1,10 @@
+import { judgeErrors } from "./sweep-method-evidence-v4-judges.mjs";
 import { stage1AuditErrors, stage1Errors } from "./sweep-method-evidence-v4-stage1.mjs";
 import { prismaErrors, stage2Errors } from "./sweep-method-evidence-v4-stage2.mjs";
 import {
   CALIBRATED,
-  KAPPA_FLOOR,
   RECALL_TARGET,
-  SENSITIVITY_FLOOR,
-  blockHashes,
   covered,
-  kappa,
   labelledRows,
   lower,
   reader,
@@ -64,56 +61,6 @@ function qgsErrors({ json, jsonl }, topic) {
   const writtenStrata = Object.fromEntries(Object.entries(adjudicated.strata ?? {}).map(([m, s]) => [lower(m), [...s].sort()]));
   if (members.some((m) => JSON.stringify(writtenStrata[m]) !== JSON.stringify(strata[m]))) errors.push("qgs-adjudicated.json does not hold the member strata the judges labelled");
   return { errors, members, strata };
-}
-
-function judgeErrors(io, topic, sessions, strata, rows) {
-  const errors = [];
-  const freeze = io.json("protocol-freeze.json");
-  const roster = [["qgs-A", topic?.qgs_judges?.A?.model, "thin"], ["qgs-B", topic?.qgs_judges?.B?.model, "thin"], ["reader", topic?.reader?.model, "thin"],
-    ["screening-A", freeze?.session_a?.model, "full"], ["screening-B", freeze?.session_b?.chosen?.model, "full"]];
-  const validated = {};
-  for (const [judge, model, shape] of roster) {
-    if (!model) {
-      errors.push(`${judge}: the topic config or the freeze names no model`);
-      continue;
-    }
-    validated[judge] = new Set();
-    for (const stratum of strata) {
-      const mine = rows.filter((r) => r.stratum === stratum);
-      for (const run of [1, 2]) {
-        const key = `judge-${stratum}-${judge}-${model}-run${run}`;
-        const entry = sessions[key];
-        if (!entry?.blocks?.length) {
-          errors.push(`${key}: meta.json records no validation run on the calibration rows`);
-          continue;
-        }
-        const hashes = blockHashes(entry);
-        if (mine.some((r) => hashes[String(r.order_rank)] !== (shape === "thin" ? r.qgs_sha256 : r.inputs_sha256))) errors.push(`${key}: the run judged other inputs than the calibration rows hold in the ${shape} shape`);
-        if (entry.blocks.some((b) => b.shape !== shape)) errors.push(`${key}: the run read another input shape than the ${shape} shape its production runs read`);
-        entry.blocks.forEach((b) => validated[judge].add(b.packet_sha256));
-        if (shape !== "thin") continue;
-        const answers = new Map(io.jsonl(`${key}.jsonl`).map((r) => [r.order_rank, r.verdict === "yes"]));
-        const pairs = mine.map((r) => [r.user?.Relevance === 1, answers.get(r.order_rank) === true]);
-        const positives = pairs.filter(([t]) => t);
-        const sensitivity = positives.length ? positives.filter(([, d]) => d).length / positives.length : null;
-        const k = kappa(pairs);
-        if (sensitivity === null || sensitivity < SENSITIVITY_FLOOR || k === null || k < KAPPA_FLOOR) {
-          errors.push(`${key}: ${judge} ${model} does not qualify on the ${stratum} calibration rows (sensitivity ${sensitivity}, kappa ${k}); a judge that fails is replaced before use`);
-        }
-      }
-    }
-  }
-  for (const [judge, file, model] of [["qgs-A", "qgs-judge-A", topic?.qgs_judges?.A?.model], ["qgs-B", "qgs-judge-B", topic?.qgs_judges?.B?.model], ["reader", "qgs-reader", topic?.reader?.model]]) {
-    const entry = sessions[file];
-    const ids = io.jsonl(`${file}.jsonl`).map((r) => r.id);
-    const blocks = entry?.blocks ?? [];
-    const outside = entry?.model !== model || blocks.some((b) => b.shape !== "thin" || !validated[judge]?.has(b.packet_sha256));
-    const coveredIds = covered(entry);
-    if (ids.length && (outside || ids.some((id) => !coveredIds.has(id)))) {
-      errors.push(`${file}.jsonl: its judgments come from outside the validated workflow (not all ${model} runs on the thin inputs under a validated packet)`);
-    }
-  }
-  return errors;
 }
 
 function facetRankingErrors(io, topic, strata) {
@@ -196,7 +143,7 @@ export function v4Errors(text, { read, files, topic, meta }) {
   return [
     ...labelled.errors,
     ...qgs.errors,
-    ...judgeErrors(io, topic, sessions, strata, labelled.rows),
+    ...judgeErrors(io, topic, sessions, strata, labelled.rows, batches),
     ...stage1.errors,
     ...stage1AuditErrors(io, topic, strata, stage1.passes, stage1.rung),
     ...facetRankingErrors(io, topic, strata),

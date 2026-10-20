@@ -99,6 +99,37 @@ test("item 7: judgments from an unvalidated judge, input shape or packet fail th
   assert.match(v.errors(), /stage1-rung\.json chose rung 2, but the first rung the calibration files certify is rung 1/);
 });
 
+test("H-judges: the gate recomputes screening judge qualification and every judge metric line from the validation runs", () => {
+  const key = (run) => `judge-config-screening-A-claude-opus-5-5-run${run}`;
+  const s = sweep();
+  for (const run of [1, 2]) s.write(`${key(run)}.jsonl`, "");
+  assert.match(s.errors(), new RegExp(`${key(1)}\\.jsonl covers ranks .* that the config calibration rows do not, or the reverse`));
+  const t = sweep();
+  for (const run of [1, 2]) {
+    const zero = Object.fromEntries(["Authority", "Methodology", "Objectivity", "Date", "Position", "Novelty", "Relevance"].map((c) => [c, { v: 0, why: "w" }]));
+    t.writeRows(`${key(run)}.jsonl`, t.jsonl(`${key(run)}.jsonl`).map((r) => ({ ...r, scores: zero, mechanisms: [], decision: "excluded: irrelevant" })));
+  }
+  assert.match(t.errors(), new RegExp(`${key(1)}: screening-A claude-opus-5-5 does not qualify on the config calibration rows \\(sensitivity 0, kappa `));
+  const u = sweep();
+  const meta = u.json("meta.json");
+  meta.sessions[key(1)].blocks[0].packet_sha256 = "f".repeat(64);
+  u.write("meta.json", meta);
+  assert.match(u.errors(), new RegExp(`${key(1)}: a block ran under a packet or criteria other than the frozen ones`));
+  const v = sweep();
+  const line = /^- screening-A claude claude-opus-5-5, config, full inputs, batches calibration: run 1 sensitivity 1\.000/m;
+  assert.match(v.text, line);
+  assert.match(v.errors(v.text.replace(line, (m) => m.replace("sensitivity 1.000", "sensitivity 0.420"))),
+    /screening-A claude claude-opus-5-5, config, full inputs, batches calibration: the record's judge metrics are not the ones the validation runs and the calibration labels give/);
+  assert.match(v.errors(v.text.replace(/^(- qgs-B claude claude-sonnet-5-5, product, .*label agreement problems )(\d+)\//m, (_, head, n) => `${head}${Number(n) - 1}/`)),
+    /qgs-B claude claude-sonnet-5-5, product, thin inputs, batches calibration: the record's judge metrics are not/);
+  assert.match(v.errors(v.text.replace(/^(- reader claude claude-opus-5-5, config, .*runs differ on )0 /m, "$11 ")), /reader claude claude-opus-5-5, config, thin inputs, batches calibration: the record's judge metrics/);
+  const w = sweep();
+  const sessions = w.json("meta.json");
+  sessions.sessions["product-B"].model = "claude-haiku-5-5";
+  w.write("meta.json", sessions);
+  assert.match(w.errors(), /product-B did not run the validated screening-B claude-sonnet-5-5 on the full inputs it was validated on/);
+});
+
 test("item 9: a cross-family row joined by another id, or an audit run before stage 2 ended, fails the gate", () => {
   const s = sweep();
   const cross = s.jsonl("qgs-cross-gemini-3.8-flash-high.jsonl");
