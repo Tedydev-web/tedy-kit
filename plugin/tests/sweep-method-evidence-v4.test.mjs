@@ -221,6 +221,17 @@ test("the config-pool channel must have run on the final config pool, and its re
   assert.match(errors, /product-screening-order\.jsonl credits the config-pool channel with .*, which config-pool-channel\.json does not list/);
 });
 
+test("the standard, snowball and calibration batch lines are recomputed from the files", () => {
+  const s = sweep();
+  assert.match(s.errors(s.text.replace("- standard: 47 members from 67 candidates", "- standard: 47 members from 70 candidates")), /the record's standard line is not the one the QGS files give/);
+  assert.match(s.errors(s.text.replace("reader queue 1 disputed or unsure", "reader queue 0 disputed or unsure")), /the record's standard line is not the one the QGS files give/);
+  assert.match(s.errors(s.text.replace("- snowball: 34 repositories", "- snowball: 40 repositories")), /the record's snowball line does not state the 34 snowballed repositories/);
+  assert.match(s.errors(s.text.replace("the user labelled 35 eligible", "the user labelled 45 eligible")), /the record's calibration config batch line is not the one the label and draw files give/);
+  assert.match(s.errors(s.text.replace("drawn per facet alpha 30, beta 30; likely positives 30; the user labelled 36", "drawn per facet alpha 40, beta 20; likely positives 30; the user labelled 36")),
+    /the record's calibration product batch line is not the one/);
+  assert.match(s.errors(s.text.replace("batches the rung was chosen on: 71", "batches the rung was chosen on: 90")), /the record's pooled positives are not the 71 the label files give/);
+});
+
 test("stage 1 and stage 2 are checked against the files: unscreened pool rows and stage-2 rows that passed no model fail", () => {
   const s = sweep();
   const rows = s.jsonl("stage1-product-brief-claude-sonnet-5-5.jsonl");

@@ -16,7 +16,7 @@ export { canonical, kappa, lowerBound } from "./sweep-method-evidence-v4-shared.
 
 const DROP_COPY = /^dropped\/[\w.-]+$/;
 
-function qgsErrors({ json, jsonl }, topic) {
+function qgsErrors({ json, jsonl, text }, topic) {
   const errors = [];
   const candidates = new Map(jsonl("qgs-candidates.jsonl").map((c) => [c.id, c.repo]));
   if (!candidates.size) return { errors: ["no qgs-candidates.jsonl in the sweep folder: the QGS is built once per topic"], members: [] };
@@ -45,6 +45,14 @@ function qgsErrors({ json, jsonl }, topic) {
   }
   const members = [];
   const strata = {};
+  const queue = { disputed: 0, cross: 0, both: 0 };
+  for (const [id, a] of sides.A) {
+    const b = sides.B.get(id);
+    if (!b) continue;
+    queue.both += 1;
+    if (a.verdict !== b.verdict || a.verdict === "unsure") queue.disputed += 1;
+    else if (a.verdict === "no" && cross.get(id)?.verdict === "yes") queue.cross += 1;
+  }
   for (const [id, a] of sides.A) {
     const b = sides.B.get(id);
     if (!b) continue;
@@ -62,6 +70,9 @@ function qgsErrors({ json, jsonl }, topic) {
   if (written.size !== members.length || members.some((m) => !written.has(m))) errors.push("qgs-adjudicated.json is not the standard the judge, reader and cross-family files give");
   const writtenStrata = Object.fromEntries(Object.entries(adjudicated.strata ?? {}).map(([m, s]) => [lower(m), [...s].sort()]));
   if (members.some((m) => JSON.stringify(writtenStrata[m]) !== JSON.stringify(strata[m]))) errors.push("qgs-adjudicated.json does not hold the member strata the judges labelled");
+  const line = `- standard: ${members.length} members from ${candidates.size} candidates; ${queue.both} judged by both Claude judges; reader queue ${queue.disputed} disputed or unsure, `
+    + `${queue.cross} cross-family only; dropped ${Object.keys(drops).length}`;
+  if (!text.split("\n").some((l) => l === line || l.startsWith(`${line};`))) errors.push(`the record's standard line is not the one the QGS files give ("${line}")`);
   return { errors, members, strata };
 }
 
@@ -131,9 +142,37 @@ function recallErrors(io, text, topic, strata, members, memberStrata, passes, sc
   }
   const snow = io.jsonl("snowball-screening-order.jsonl").filter((r) => !pools.config?.has(lower(r.repo)));
   if (snow.length) errors.push(`snowballed repositories ${snow.map((r) => r.repo).join(", ")} are not in the config stage-1 pool`);
+  const snowballed = io.jsonl("snowball-screening-order.jsonl").length;
+  if (snowballed && !text.split("\n").some((l) => l.startsWith(`- snowball: ${snowballed} repositories from the aggregators joined the config pool from rank 1001 on `))) {
+    errors.push(`the record's snowball line does not state the ${snowballed} snowballed repositories snowball-screening-order.jsonl holds`);
+  }
   const cut = io.json("snowball-cut.json")?.cut_row;
   if (cut !== undefined && cut !== null) errors.push(`snowball-cut.json cuts the snowball at row ${cut}; quality criteria v4 refuses a snowball cut, every snowballed repository joins the pool`);
   if (topic?.strata?.product?.channels?.config_pool === true && strata.includes("product")) errors.push(...configPoolErrors(io, text, topic, strata, passes, pools, memberStrata));
+  return errors;
+}
+
+function batchLineErrors(io, topic, strata, text) {
+  const errors = [];
+  const held = (io.files ?? []).map((f) => f.match(/^(held-out(?:-\d+)?)-set\.json$/)?.[1]).filter(Boolean);
+  const lines = new Set(text.split("\n"));
+  let pooled = 0;
+  for (const batch of ["calibration", "top-up", ...held]) {
+    const labels = io.json(`${batch}-labels.json`);
+    if (!labels) continue;
+    const drawn = new Map((io.json(`${batch}-draw.json`)?.rows ?? []).map((d) => [d.id, d]));
+    const purpose = io.json(`${batch}-set.json`)?.purpose;
+    for (const stratum of strata) {
+      const rows = (labels.rows ?? []).filter((r) => r.stratum === stratum);
+      const eligible = rows.filter((r) => r.user?.decision === "eligible").length;
+      if (!batch.startsWith("held-out")) pooled += eligible;
+      const facets = Object.keys(topic?.facets ?? {}).map((f) => `${f} ${rows.filter((r) => drawn.get(r.id)?.facet === f).length}`).join(", ");
+      const line = `- ${batch} ${stratum}: ${rows.length} rows (${purpose}), drawn per facet ${facets}; likely positives ${rows.filter((r) => drawn.get(r.id)?.class !== "random").length}; `
+        + `the user labelled ${eligible} eligible`;
+      if (!lines.has(line)) errors.push(`the record's ${batch} ${stratum} batch line is not the one the label and draw files give ("${line}")`);
+    }
+  }
+  if (!lines.has(`- positives pooled over the batches the rung was chosen on: ${pooled}`)) errors.push(`the record's pooled positives are not the ${pooled} the label files give`);
   return errors;
 }
 
@@ -182,6 +221,7 @@ export function v4Errors(text, { read, files, topic, meta }) {
   const stage2 = stage2Errors(io, sessions, strata, stage1.passes, qgs.members);
   return [
     ...labelled.errors,
+    ...batchLineErrors(io, topic, strata, text),
     ...qgs.errors,
     ...judgeErrors(io, topic, sessions, strata, labelled.rows, batches),
     ...stage1.errors,
