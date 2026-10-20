@@ -106,8 +106,9 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
                            (["--judge"], {"required": True, "choices": list(JUDGES), "help": "which judge of the roster runs"}),
                            (["--set"], {"required": True, "choices": list(SETS), "help": "which rows it judges"}),
                            (["--run"], {"type": int, "help": "calibration only: run 1 or run 2"}),
-                           (["--rows"], {"help": "first-last positions, from 1, of the block within the set's rows; default every row, and a prompt too long for one block "
-                                                 "is refused"}),
+                           (["--rows"], {"help": "first-last positions, from 1, of the rows to judge within the set's rows; default every row. --set stage1-audit splits "
+                                                 "them in rank order into blocks of at most 100 rows whose prompt fits the limit; every other set runs them as one block, "
+                                                 "and a prompt too long for one block is refused"}),
                            (["--today"], {"default": saigon_today(), "help": "run date, default today in Asia/Saigon"})).parse_args(argv)
     try:
         topic = load_topic(args.repo, args.topic)
