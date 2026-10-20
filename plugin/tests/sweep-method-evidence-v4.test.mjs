@@ -439,6 +439,10 @@ test("a ranked pool past rank 1000 keeps its snowball rows numbered after it, in
   const snowballed = order.filter((r) => canonical(r.channels) === canonical(["snowball"])).map((r) => r.order_rank);
   const ranked = order.filter((r) => canonical(r.channels) !== canonical(["snowball"])).map((r) => r.order_rank);
   assert.deepEqual([ranked.length > 1000, snowballed.length, Math.min(...snowballed) > Math.max(...ranked)], [true, 34, true]);
+  const audit = s.json("config-stage1-audit.json");
+  const blocks = s.json("meta.json").sessions["config-stage1-audit-claude-opus-5-5"].blocks.map((b) => b.ranks);
+  assert.deepEqual([blocks.flat().sort((a, b) => a - b), blocks.length > 1, Math.max(...blocks.map((b) => b.length)) <= 100, new Set(blocks.map((b) => b.length)).size > 1],
+    [[...audit.near, ...audit.far].sort((a, b) => a - b), true, true, true]);
   assert.match(s.text, /^- snowball: 34 repositories from the aggregators joined the config pool \(cut: none: /m);
   assert.equal(s.errors(), "");
 });

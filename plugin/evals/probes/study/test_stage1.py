@@ -179,6 +179,28 @@ class Stage1Test(unittest.TestCase):
         rows = [json.loads(line) for line in (self.work / "stage1-config-brief-claude-sonnet-5-5.jsonl").read_text().splitlines()]
         self.assertEqual([(r["order_rank"], r["verdict"]) for r in rows], [(1, "yes"), (2, "no"), (4, "yes"), (5, "yes")])
 
+    def test_a_rung_3_batch_whose_100_rows_overflow_one_prompt_splits_greedily_under_the_prompt_limit(self):
+        from study_session import MAX_PROMPT
+        from study_session_prompt import build_stage1_prompt
+        from study_stage1 import examples_text
+        self.inputs(100)
+        for i in range(1, 101):
+            write_json(self.work / f"cache/trees/c__r{i}.json", {"oid": "e" * 40, "paths": [f"skills/skill-{i}-{n}-{'x' * 30}/SKILL.md" for n in range(40)]})
+        self.call("build-stage1-inputs", "--stratum", "config", "--shape", "paths", fetch=FakeFetch())
+        self.frozen()
+        self.batch("calibration", [{"id": f"c{i}", "stratum": "config", "order_rank": i, "repo": f"c/r{i}", "user": {"decision": "eligible", "Relevance": 1}}
+                                   for i in range(1, 101)])
+        replies = Stage1Replies({})
+        self.call("run-stage1", "--stratum", "config", "--shape", "paths", "--model", OPUS, "--set", "calibration", "--run", "1", "--today", "2026-10-20", fetch=replies)
+        blocks = [b["ranks"] for b in json.loads((self.work / "meta.json").read_text())["sessions"]["judge-config-stage1-paths-claude-opus-5-5-run1"]["blocks"]]
+        rows = {json.loads(line)["order_rank"]: json.loads(line) for line in (self.work / "stage1-inputs-config-paths.jsonl").read_text().splitlines()}
+        packet, worked = (self.work / "stage1-packet-config.md").read_text(), examples_text(self.topic())
+        size = [len(build_stage1_prompt(packet, worked, [rows[r] for r in block]).encode()) for block in blocks]
+        grown = [len(build_stage1_prompt(packet, worked, [rows[r] for r in block + [nxt[0]]]).encode()) for block, nxt in zip(blocks, blocks[1:])]
+        self.assertGreater(len(build_stage1_prompt(packet, worked, list(rows.values())).encode()), MAX_PROMPT)
+        self.assertEqual(([r for block in blocks for r in block], replies.batches), (list(range(1, 101)), [len(b) for b in blocks]))
+        self.assertTrue(len(blocks) > 1 and all(s <= MAX_PROMPT for s in size) and all(g > MAX_PROMPT for g in grown), (size, grown))
+
     def test_a_stage1_block_over_100_rows_is_refused_before_any_session(self):
         from study_session import run_block
         write_jsonl(self.work / "stage1-inputs-config-brief.jsonl", [{"order_rank": i, "repo": f"c/r{i}", "description": "d"} for i in range(1, 102)])

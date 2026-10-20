@@ -360,6 +360,10 @@ class V4RecordTest(unittest.TestCase):
         ranked = [r["order_rank"] for r in order if r["channels"] != ["snowball"]]
         snowballed = [r["order_rank"] for r in order if r["channels"] == ["snowball"]]
         self.assertEqual((len(ranked) > 1000, len(snowballed), min(snowballed) > max(ranked)), (True, 34, True))
+        audit = json.loads((folder / "config-stage1-audit.json").read_text())
+        blocks = [b["ranks"] for b in json.loads((folder / "meta.json").read_text())["sessions"]["config-stage1-audit-claude-opus-5-5"]["blocks"]]
+        self.assertEqual((sorted(r for b in blocks for r in b), len(blocks) > 1, max(map(len, blocks)) <= 100, len({len(b) for b in blocks}) > 1),
+                         (sorted(audit["near"] + audit["far"]), True, True, True))
         self.assertIn("- snowball: 34 repositories from the aggregators joined the config pool (cut: none: two-stage screening reads the whole pool, so every snowballed "
                       "repository joins it); stage 1 read every one\n", self.render(large))
 

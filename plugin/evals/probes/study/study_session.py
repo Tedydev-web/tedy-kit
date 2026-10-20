@@ -1,3 +1,4 @@
+import bisect
 import fcntl
 import hashlib
 import json
@@ -150,6 +151,32 @@ def shaped(kind, row):
     return qgs_shape(row) if kind == "qgs" else row
 
 
+def block_prompt(job, rows):
+    work, stratum, kind = Path(job["work"]), job["stratum"], job.get("kind", "screening")
+    packet = (work / (job.get("packet") or f"screening-packet-{stratum}.md")).read_text()
+    if kind == "screening":
+        mech_file = work / f"{job['name']}-mechanisms.md"
+        known = mech_file.read_text() if mech_file.is_file() else ""
+        return build_prompt(packet, job["criteria"], (Path(job["repo"]) / job["criteria"]).read_text(), known, rows, job["sweep_date"])
+    if kind == "stage1":
+        return build_stage1_prompt(packet, job["examples"], rows)
+    return build_qgs_prompt(packet, rows)
+
+
+def run_blocks(job, ranks, fetch, most=STAGE1_BATCH_MAX):
+    if not ranks:
+        return 0, 0
+    work, stratum, kind = Path(job["work"]), job["stratum"], job.get("kind", "screening")
+    rows = {r: shaped(kind, row) for r, row in expected_rows({**job, "ranks": ranks}, work, stratum).items()}
+    left, written, blocks = list(rows), 0, 0
+    while left:
+        fits = bisect.bisect_right(range(1, min(most, len(left)) + 1), MAX_PROMPT, key=lambda n: len(block_prompt(job, [rows[r] for r in left[:n]]).encode()))
+        size = max(fits, 1)
+        written += run_block({**job, "ranks": left[:size]}, fetch)
+        left, blocks = left[size:], blocks + 1
+    return written, blocks
+
+
 def run_block(job, fetch):
     work, stratum, name, option = Path(job["work"]), job["stratum"], job["name"], job["option"]
     kind = job.get("kind", "screening")
@@ -189,12 +216,7 @@ def run_block(job, fetch):
             shutil.copyfile(packet, snapshot)
     mech_file = work / f"{name}-mechanisms.md"
     known = mech_file.read_text() if mech_file.is_file() else ""
-    if screening:
-        prompt = build_prompt(packet.read_text(), job["criteria"], criteria.read_text(), known, list(expected.values()), job["sweep_date"])
-    elif kind == "stage1":
-        prompt = build_stage1_prompt(packet.read_text(), job["examples"], list(expected.values()))
-    else:
-        prompt = build_qgs_prompt(packet.read_text(), list(expected.values()))
+    prompt = block_prompt(job, list(expected.values()))
     if len(prompt.encode()) > MAX_PROMPT:
         raise TopicError(f"the prompt for ranks {first}-{last} is {len(prompt.encode())} bytes, over {MAX_PROMPT}; run a smaller block")
     prompts = work / "prompts"

@@ -349,10 +349,7 @@ def stage1_audited(repo, work, judges):
         audit = json.loads((work / f"{stratum}-stage1-audit.json").read_text())
         inputs = {json.loads(line)["order_rank"]: json.loads(line)["repo"] for line in (work / f"stage1-inputs-{stratum}-brief.jsonl").read_text().splitlines()}
         judges.flip = {inputs[audit["near"][0]]}
-        picked = len(audit["near"]) + len(audit["far"])
-        spans = [("--rows", f"{i + 1}-{min(i + 50, picked)}") for i in range(0, picked, 50)] if picked > 50 else [()]
-        for span in spans:
-            quiet(repo, "run-judge", "--work", str(work), "--stratum", stratum, "--judge", "screening-A", "--set", "stage1-audit", *span, "--today", TODAY, fetch=judges)
+        quiet(repo, "run-judge", "--work", str(work), "--stratum", stratum, "--judge", "screening-A", "--set", "stage1-audit", "--today", TODAY, fetch=judges)
         judges.flip = set()
         from study_stage1_audit import flagged
         flags = flagged(work, stratum, OPUS)[1]
