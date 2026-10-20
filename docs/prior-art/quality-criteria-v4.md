@@ -31,6 +31,12 @@ Basis: Garousi, Felderer and Mäntylä, "Guidelines for including grey literatur
 | A judge run, a stage-1 run or a screening block is dropped and redone with `drop-run.py` or `drop-screening-block.py`, which keep a copy of the block and its rows and record the drop with its reason in `meta.json`; `meta.json` is never edited by hand. | A redo by hand edit leaves no trace of what was dropped and why. | Review round 1 |
 | The v4 sweep is named `<yymmdd>-<topic>` for the date its calibration set is drawn; the draw refuses another name. | v1 and v2 work folders of the canon topic exist; a name chosen at the draw cannot be confused with them. | Phase 02c constraints |
 
+## Amendment, revision 3 (2026-10-20)
+
+| Date | Change | Why | Source |
+|---|---|---|---|
+| 2026-10-20 | The stage-2 stop is pooled: the stage-1 passes of every stratum are ranked together by their best facet rank, and stage 2 stops at the first depth where pooled recall over every deduplicated standard member, including members lost at discovery or stage 1, reaches 0.80; the record states that recall with its interval. When those losses make 0.80 unreachable, stage 2 screens every pass and the record names the threat. This replaces the stop on 0.80 of the stratum's standard members that passed stage 1 in the Stage 2 rule below, which contradicted the pooled target of the two-stage row above. | A per-stratum stop over the members that passed stage 1 can stop while pooled topic recall is certainly below 0.80. | Phase 02c revision 3 decisions; review round 2 (fidelity M1, correctness M) |
+
 ## GitHub assets (repositories, skills, agents, hooks, commands)
 
 | Criterion | 1 | 0.5 | 0 |
@@ -185,7 +191,7 @@ Its order is the distinct channels hit, plus log₂(1 + source files holding bot
 - **Audit.** When `cross_family` names a model, 20 rows per stratum are drawn at random, seeded by the sweep name, from the rows both sessions screened after the pilot block, once stage 2 ended, and that model screens them under the frozen protocol. The record states its eligibility agreement and kappa with each session, or, while it has not run, names the pending audit as a threat.
 - **Stage 1.** `freeze-stage1.py` freezes the ladder, the worked examples, the stage-1 packets and the prompt template before any label is read. `build-stage1-inputs.py` writes one inputs file per stratum and shape, and the calibration runs, the held-out runs and the pool runs read the same file. `choose-stage1-rung.py` writes the first rung that meets the pass rule with every rung tried; `run-stage1.py --set pool` then screens the whole pool in batches of at most 100 rows, refusing a rung above the first until it missed no held-out positive.
 - **Stage-1 audit.** `draw-stage1-audit.py` lists the model disagreements (they pass under the union) and draws 200 near-boundary excludes (both models said no, but the name or description holds a topic term) and 100 random far excludes. The stage-2 screener reads them with README; the user checks only the rows it flags (`import-audit-checks.py`); the record states each part's upper elusion bound.
-- **Stage 2.** `plan-stage2.py` lists every stage-1 pass; sessions A and B screen exactly those rows. With `--limit`, the passes are ranked by their best facet rank and stage 2 stops at the first depth holding 0.80 of the standard members that passed stage 1, or at the limit; the record states the stop and names it as a threat. Every listed row must be screened by both sessions.
+- **Stage 2.** `plan-stage2.py` lists every stage-1 pass of every stratum; sessions A and B screen exactly those rows. With `--limit` (rows across all strata), the passes of every stratum are ranked together by their best facet rank and stage 2 stops at the first depth where pooled recall over every deduplicated standard member reaches 0.80, or at the limit; the record states the stop with its interval and names it as a threat. When fewer members passed stage 1 than 0.80 needs, stage 2 screens every pass and the record names the unreachable target as a threat. Every listed row must be screened by both sessions.
 - **Saturation.** The longest run of rows that added no new mechanism is recorded. It does not stop or extend screening.
 - **Second session.** A second session screen-codes the same rows blind.
 - **Chapman figure.**

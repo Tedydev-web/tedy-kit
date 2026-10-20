@@ -14,18 +14,21 @@ class StageTwoTest(unittest.TestCase):
         stage1_calibrated(self.repo, self.work, self.judges)
         topic_qgs(self.repo, self.work, self.judges)
 
-    def plan(self, stratum, *extra):
-        quiet(self.repo, "plan-stage2", "--work", str(self.work), "--stratum", stratum, *extra)
-        return json.loads((self.work / f"{stratum}-stage2.json").read_text())
+    def plan(self, *extra):
+        quiet(self.repo, "plan-stage2", "--work", str(self.work), *extra)
+        return {s: json.loads((self.work / f"{s}-stage2.json").read_text()) for s in ("config", "product")}
+
+    def repos(self, stratum):
+        return {json.loads(line)["order_rank"]: json.loads(line)["repo"].lower() for line in (self.work / f"stage1-inputs-{stratum}-brief.jsonl").read_text().splitlines()}
 
     def stage1(self, stratum):
         return {json.loads(line)["order_rank"]: json.loads(line) for line in (self.work / f"stage1-{stratum}-brief-claude-sonnet-5-5.jsonl").read_text().splitlines()}
 
     def test_stage_2_screens_every_stage_1_pass_and_rows_without_text_pass_unread(self):
         with self.assertRaisesRegex(SystemExit, r"config: stage 1 has not screened ranks \[1, 2, 3"):
-            self.plan("config")
+            self.plan()
         stage1_pooled(self.repo, self.work, self.judges)
-        plan = self.plan("config")
+        plan = self.plan()["config"]
         inputs = [json.loads(line) for line in (self.work / "stage1-inputs-config-brief.jsonl").read_text().splitlines()]
         verdicts = self.stage1("config")
         silent = [r["order_rank"] for r in inputs if not r["description"]]
@@ -41,18 +44,38 @@ class StageTwoTest(unittest.TestCase):
         self.assertTrue(set(excluded) & calibration)
         self.assertFalse(set(excluded) & screened)
 
-    def test_when_passes_exceed_the_limit_stage_2_ranks_them_by_facet_and_stops_on_the_recall_target(self):
+    def test_when_passes_exceed_the_limit_stage_2_ranks_every_stratum_together_and_stops_on_pooled_recall_over_the_whole_standard(self):
         stage1_pooled(self.repo, self.work, self.judges)
-        plan = self.plan("product", "--limit", "40")
-        stop = plan["stop"]
-        self.assertEqual((len(plan["order"]), stop["depth"], stop["reached"]), (stop["depth"],) * 2 + (True,))
-        self.assertLessEqual(stop["depth"], 40)
-        self.assertGreaterEqual(stop["found"] / stop["members"], 0.8)
-        self.assertIn("passes ranked by their best facet rank", stop["rule"])
-        tight = self.plan("product", "--limit", "3")["stop"]
-        self.assertEqual((tight["depth"], tight["reached"]), (3, False))
+        members = {m.lower() for m in json.loads((self.work / "qgs-adjudicated.json").read_text())["final"]}
+        total = sum(len(p["passes"]) for p in self.plan().values())
+        plans = self.plan("--limit", str(total - 1))
+        stop = plans["config"]["stop"]
+        self.assertEqual(stop, plans["product"]["stop"])
+        self.assertEqual((stop["members"], stop["reachable"], stop["reached"]), (len(members), True, True))
+        self.assertEqual(sum(len(p["order"]) for p in plans.values()), stop["depth"])
+        self.assertTrue(all(p["order"] for p in plans.values()))
+        found = {self.repos(s)[r] for s, p in plans.items() for r in p["order"]} & members
+        self.assertEqual(stop["found"], len(found))
+        self.assertGreaterEqual(len(found) / len(members), 0.8)
+        self.assertLess(stop["depth"], total - 1)
+        self.assertIn("passes of every stratum ranked together by their best facet rank", stop["rule"])
+        tight = self.plan("--limit", "3")["config"]["stop"]
+        self.assertEqual((tight["depth"], tight["reached"], tight["members"]), (3, False, len(members)))
         with self.assertRaisesRegex(SystemExit, "--limit must be a positive number of rows"):
-            self.plan("product", "--limit", "0")
+            self.plan("--limit", "0")
+
+    def test_when_the_losses_before_stage_2_make_the_target_unreachable_stage_2_screens_every_pass(self):
+        stage1_pooled(self.repo, self.work, self.judges)
+        path = self.work / "qgs-adjudicated.json"
+        standard = json.loads(path.read_text())
+        absent = [f"x/absent{i}" for i in range(len(standard["final"]))]
+        path.write_text(json.dumps({**standard, "final": standard["final"] + absent}))
+        plans = self.plan("--limit", "3")
+        stop = plans["product"]["stop"]
+        self.assertTrue(all(p["order"] == p["passes"] for p in plans.values()))
+        self.assertEqual((stop["reachable"], stop["reached"], stop["members"]), (False, False, 2 * len(absent)))
+        self.assertEqual(stop["depth"], sum(len(p["passes"]) for p in plans.values()))
+        self.assertIn("unreachable", stop["rule"])
 
     def test_the_stage_1_audit_lists_disagreements_draws_near_and_far_excludes_and_bounds_their_elusion(self):
         stage1_pooled(self.repo, self.work, self.judges)
@@ -90,7 +113,7 @@ class StageTwoTest(unittest.TestCase):
         quiet(self.repo, "fetch-screening-inputs", "--work", str(self.work), "--stratum", "config", "--through", "20", fetch=inputs_fetch())
         with self.assertRaisesRegex(SystemExit, "no config-stage2.json in .*; stage 2 screens the stage-1 passes plan-stage2.py lists"):
             call(self.repo, "run-screening-session", "--work", str(self.work), "--stratum", "config", "--side", "A", "--ranks", "1-20", "--today", TODAY, fetch=self.judges)
-        self.plan("config")
+        self.plan()
         with self.assertRaisesRegex(SystemExit, "no stage-2 row of config lies between ranks 5000 and 5001"):
             call(self.repo, "run-screening-session", "--work", str(self.work), "--stratum", "config", "--side", "A", "--ranks", "5000-5001", fetch=self.judges)
         self.assertTrue(load_topic(self.repo, "demo"))

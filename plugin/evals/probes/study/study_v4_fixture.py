@@ -340,10 +340,9 @@ def stage1_audited(repo, work, judges):
         checks.unlink()
 
 
-def stage2_screened(repo, work, judges, limits=None):
+def stage2_screened(repo, work, judges, limit=None):
+    quiet(repo, "plan-stage2", "--work", str(work), *(("--limit", str(limit)) if limit else ()))
     for stratum in STRATA:
-        limit = (limits or {}).get(stratum)
-        quiet(repo, "plan-stage2", "--work", str(work), "--stratum", stratum, *(("--limit", str(limit)) if limit else ()))
         quiet(repo, "fetch-screening-inputs", "--work", str(work), "--stratum", stratum, "--set", "stage2", fetch=inputs_fetch())
         for side in "AB":
             quiet(repo, "run-screening-session", "--work", str(work), "--stratum", stratum, "--side", side, "--ranks", "1-2000", "--today", TODAY, fetch=judges)
@@ -353,19 +352,6 @@ def cross_audited(repo, work, judges):
     quiet(repo, "draw-audit-sample", "--work", str(work))
     for stratum in STRATA:
         quiet(repo, "run-judge", "--work", str(work), "--stratum", stratum, "--judge", "audit", "--set", "audit", "--today", TODAY, fetch=judges)
-
-
-def swept_work(limits=None):
-    judges = ScriptedJudges()
-    repo, work = calibrated_work(judges)
-    judged(repo, work, judges)
-    stage1_calibrated(repo, work, judges)
-    topic_qgs(repo, work, judges)
-    stage1_pooled(repo, work, judges)
-    stage1_audited(repo, work, judges)
-    stage2_screened(repo, work, judges, limits)
-    cross_audited(repo, work, judges)
-    return repo, work, judges
 
 
 def stage1_escalated(repo, work, judges):
@@ -396,7 +382,7 @@ def v4_sweep(audit=True, escalate=False):
     topic_qgs(repo, work, judges)
     stage1_pooled(repo, work, judges)
     stage1_audited(repo, work, judges)
-    stage2_screened(repo, work, judges, {"product": 60})
+    stage2_screened(repo, work, judges, 150)
     if audit:
         cross_audited(repo, work, judges)
     quiet(repo, "export-sweep-data", "--work", str(work))

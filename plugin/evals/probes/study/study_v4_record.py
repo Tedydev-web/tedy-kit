@@ -13,6 +13,7 @@ from study_stage2 import plan_file, stage1_results, stage2_plan
 from study_topic import SNOWBALL_RANK_BASE, TopicError
 
 STAGE2_THREAT = "- stage 2 stopped before every stage-1 pass: "
+STAGE2_UNREACHABLE = "- pooled recall target unreachable at stage 2: "
 
 
 def is_v4(meta):
@@ -30,21 +31,36 @@ def problem_facets(topic, problems):
 
 def v4_stop(topic, folder, stratum, common):
     written = read_json(folder, plan_file(stratum))
-    plan = json.loads(json.dumps(stage2_plan(topic, folder, stratum, written.get("limit"))))
+    plan = json.loads(json.dumps(stage2_plan(topic, folder, written.get("limit"))))[stratum]
     if plan != written:
-        raise TopicError(f"{plan_file(stratum)} is not the plan the stage-1 files give; run plan-stage2.py --stratum {stratum} again")
+        raise TopicError(f"{plan_file(stratum)} is not the plan the stage-1 files give; run plan-stage2.py again")
     open_rows = sorted(set(plan["order"]) - set(common))
     if open_rows:
         raise TopicError(f"{stratum}: stage-2 ranks {open_rows[:10]} are not screened by both sessions")
     stop = plan["stop"]
-    if stop:
-        text = (f"stop: stage 2 ranked the {len(plan['passes'])} stage-1 passes by facet and stopped at depth {stop['depth']} (limit {plan['limit']}), holding "
-                f"{interval_text(stop['found'], stop['members']) if stop['members'] else '0/0'} of the standard members that passed stage 1; "
+    if stop and not stop["reachable"]:
+        text = (f"stop: stage 2 screened every one of the {len(plan['passes'])} stage-1 passes of the {plan['pool']}-row pool (rung {plan['rung']}) and ignored the "
+                f"limit of {plan['limit']} rows: only {stop['passed']} of the {stop['members']} deduplicated standard members passed stage 1 in any stratum, "
+                f"and the {RECALL_TARGET:.2f} pooled recall target needs {stop['need']}")
+    elif stop:
+        text = (f"stop: stage 2 ranked the stage-1 passes of every stratum together by facet and stopped at pooled depth {stop['depth']} (limit {plan['limit']}); "
+                f"this stratum screens {len(plan['order'])} of its {len(plan['passes'])} passes; pooled recall at the stop "
+                f"{interval_text(stop['found'], stop['members'])} of the {stop['members']} deduplicated standard members; "
                 + ("target reached" if stop["reached"] else "target not reached"))
     else:
         text = f"stop: stage 2 screened every one of the {len(plan['passes'])} stage-1 passes of the {plan['pool']}-row pool (rung {plan['rung']})"
     results = stage1_results(folder, stratum)[1]
     return text, {"plan": plan, "results": results, "common": set(common)}
+
+
+def stage2_threats(strata, faceted):
+    stops = [f"{STAGE2_THREAT}{s} screened {len(faceted[s]['plan']['order'])} of {len(faceted[s]['plan']['passes'])} passes" for s in strata
+             if len(faceted[s]["plan"]["order"]) < len(faceted[s]["plan"]["passes"])]
+    pooled = next((faceted[s]["plan"]["stop"] for s in strata if faceted[s]["plan"]["stop"]), None)
+    if pooled and not pooled["reachable"]:
+        stops.append(f"{STAGE2_UNREACHABLE}{pooled['passed']} of the {pooled['members']} deduplicated standard members passed stage 1 and {pooled['need']} are needed; "
+                     f"stage 2 screened every pass")
+    return stops
 
 
 def row_facets(topic, faceted, stratum):
@@ -331,7 +347,7 @@ def v4_parts(topic, folder, strata, freeze, sessions, faceted, common, decided_r
     stage1_workflow(folder, sessions, strata, chosen)
     judges, judge_threats = judge_lines(topic, folder, strata, freeze, sessions)
     audits, audit_threats = audit_lines(topic, folder, strata, sides, sessions)
-    stops = [f"{STAGE2_THREAT}{s} screened {len(faceted[s]['plan']['order'])} of {len(faceted[s]['plan']['passes'])} passes" for s in strata if faceted[s]["plan"]["stop"]]
+    stops = stage2_threats(strata, faceted)
     prisma = prisma_rows(topic, folder, strata, faceted, decided_rows)
     return {"recall": recall, "prisma": ["| stratum | stage | count |", "|---|---|---|"] + [f"| {s} | {k} | {v} |" for s, k, v in prisma],
             "facets": facet_lines(topic, strata, faceted, decided_rows) + snowball_lines(folder, strata, faceted),

@@ -65,7 +65,7 @@ class V4RecordTest(unittest.TestCase):
 
     def test_facets_count_included_rows_per_facet_with_their_overlap_from_the_stage_1_labels(self):
         facets = section(self.text, "Facets")
-        self.assertRegex(facets, r"- config: \d+ repositories included once each; counted per facet alpha \d+, beta \d+; overlap alpha\+beta 2; facets come from the stage-1 "
+        self.assertRegex(facets, r"- config: \d+ repositories included once each; counted per facet alpha \d+, beta \d+; overlap alpha\+beta 1; facets come from the stage-1 "
                                  r"problem labels")
         self.assertIn("| facets |", self.text)
 
@@ -81,6 +81,31 @@ class V4RecordTest(unittest.TestCase):
         self.assertIn("- cross-family QGS judge gemini-3.8-flash-high: 12 candidates judged, joined by repository name", judges)
         self.assertRegex(judges, r"- config audit: 20 rows drawn after stage 2 ended and screened again by gemini-3\.8-flash-high")
         self.assertIn("- QGS qgs-B: claude-sonnet-5-5 judged 66 candidates on the thin inputs it was validated on", judges)
+
+    def test_the_stage_2_stop_is_pooled_over_every_stratum_and_the_whole_deduplicated_standard(self):
+        for stratum in ("config", "product"):
+            self.assertRegex(section(self.text, f"Stratum: {stratum}"), r"stop: stage 2 ranked the stage-1 passes of every stratum together by facet and stopped at pooled "
+                                                                         r"depth 42 \(limit 150\); this stratum screens \d+ of its \d+ passes; pooled recall at the stop "
+                                                                         r"38/47 \(0\.809, 95% CI .*\) of the 47 deduplicated standard members; target reached")
+        self.assertIn("- stage 2 stopped before every stage-1 pass: config screened 22 of 98 passes", section(self.text, "Threats"))
+
+    def test_an_unreachable_target_screens_every_pass_and_the_record_states_the_threat(self):
+        from study_v4_fixture import quiet
+        from study_v4_record import stage2_threats, v4_stop
+        repo, folder = self.copy()
+        path = folder / "qgs-adjudicated.json"
+        standard = json.loads(path.read_text())
+        path.write_text(json.dumps({**standard, "final": standard["final"] + [f"x/absent{i}" for i in range(423)]}))
+        quiet(repo, "plan-stage2", "--work", str(folder), "--limit", "150")
+        topic, faceted = load_topic(repo, "demo"), {}
+        for stratum in ("config", "product"):
+            plan = json.loads((folder / f"{stratum}-stage2.json").read_text())
+            self.assertEqual(plan["order"], plan["passes"])
+            text, faceted[stratum] = v4_stop(topic, folder, stratum, plan["order"])
+            self.assertIn(f"stop: stage 2 screened every one of the {len(plan['passes'])} stage-1 passes", text)
+            self.assertIn("only 46 of the 470 deduplicated standard members passed stage 1 in any stratum, and the 0.80 pooled recall target needs 376", text)
+        self.assertEqual(stage2_threats(["config", "product"], faceted), ["- pooled recall target unreachable at stage 2: 46 of the 470 deduplicated standard members "
+                                                                          "passed stage 1 and 376 are needed; stage 2 screened every pass"])
 
     def test_the_record_refuses_a_hand_edited_plan_an_unvalidated_qgs_run_or_a_snowball_row_outside_the_pool(self):
         repo, folder = self.copy()

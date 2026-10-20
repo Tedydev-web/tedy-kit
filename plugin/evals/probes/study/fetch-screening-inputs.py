@@ -14,7 +14,7 @@ def set_ranks(work, stratum, which):
     if which == "stage2":
         path = Path(work) / plan_file(stratum)
         if not path.is_file():
-            raise TopicError(f"no {path.name} in {work}; plan stage 2 with plan-stage2.py --stratum {stratum}")
+            raise TopicError(f"no {path.name} in {work}; plan stage 2 with plan-stage2.py")
         return set(json.loads(path.read_text())["order"])
     if which == "stage1-audit":
         audit = read_audit(work, stratum)

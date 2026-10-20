@@ -159,6 +159,23 @@ test("stage 1 and stage 2 are checked against the files: unscreened pool rows an
   assert.match(u.errors(), /snowballed repositories s\/elsewhere are not in the config stage-1 pool/);
 });
 
+test("the pooled stage-2 plan and its stop line are recomputed from the files, so a hand-edited stop fails the gate", () => {
+  const s = sweep();
+  const plan = s.json("config-stage2.json");
+  s.write("config-stage2.json", { ...plan, stop: null, limit: 1 });
+  assert.match(s.errors(), /the stage-2 plans hold different limits 1, 150; plan-stage2\.py plans every stratum together/);
+  const t = sweep();
+  for (const stratum of ["config", "product"]) t.write(`${stratum}-stage2.json`, { ...t.json(`${stratum}-stage2.json`), stop: null, limit: null });
+  assert.match(t.errors(), /config-stage2\.json is not the pooled plan the stage-1 files, the facet rankings and the QGS standard give/);
+  const u = sweep();
+  const product = u.json("product-stage2.json");
+  u.write("product-stage2.json", { ...product, stop: { ...product.stop, found: 40 } });
+  assert.match(u.errors(), /product-stage2\.json is not the pooled plan/);
+  const v = sweep();
+  assert.match(v.errors(v.text.replace("stopped at pooled depth 42 (limit 150)", "stopped at pooled depth 40 (limit 150)")),
+    /config: the record's stage-2 stop line is not the plan the files give \("stopped at pooled depth 42 \(limit 150\); this stratum screens 22 of its 98 passes; pooled recall at the stop 38\/47"\)/);
+});
+
 test("H-rung: stage-1 verdicts count only with their recorded session, frozen packet, examples, template and row hashes", () => {
   const key = "judge-config-stage1-brief-claude-sonnet-5-5-run1";
   const probe = (edit) => {

@@ -286,9 +286,74 @@ function stage1Errors(io, sessions, strata, rows) {
   return { errors, passes, rung };
 }
 
-function stage2Errors(io, sessions, strata, passes) {
+const interval = (k, n) => [lowerBound(k, n, 0.025), 1 - lowerBound(n - k, n, 0.025)];
+
+function stage2Plans(io, topic, strata, passes, members, limit) {
+  const plans = Object.fromEntries(strata.map((s) => {
+    const passed = [...(passes[s]?.passed ?? [])].sort((a, b) => a - b);
+    return [s, { passes: passed, order: passed, stop: null }];
+  }));
+  const total = strata.reduce((sum, s) => sum + plans[s].passes.length, 0);
+  if (limit === null || limit === undefined || total <= limit) return plans;
+  const standard = new Set(members);
+  const need = Math.ceil(RECALL_TARGET * standard.size);
+  const repo = (s, r) => lower(passes[s].pool.get(r)?.repo);
+  const reachable = new Set(strata.flatMap((s) => plans[s].passes.map((r) => repo(s, r))).filter((m) => standard.has(m)));
+  const base = { limit, members: standard.size, need, passed: reachable.size, reachable: reachable.size >= need };
+  if (!base.reachable) {
+    const stop = { ...base, depth: total, found: reachable.size, reached: false, interval: interval(reachable.size, standard.size) };
+    return Object.fromEntries(strata.map((s) => [s, { ...plans[s], stop }]));
+  }
+  const ranks = Object.keys(topic?.facets ?? {}).flatMap((f) => strata.map((s) => [s, new Map((io.json(`facets/${f}/${s}-ranked.json`)?.rows ?? []).map((r) => [lower(r.repo), r.order_rank]))]));
+  const best = (s, r) => Math.min(Infinity, ...ranks.filter(([t, m]) => t === s && m.has(repo(s, r))).map(([, m]) => m.get(repo(s, r))));
+  const ordered = strata.flatMap((s) => plans[s].passes.map((r) => [s, r, best(s, r)])).sort((a, b) => a[2] - b[2] || strata.indexOf(a[0]) - strata.indexOf(b[0]) || a[1] - b[1]);
+  let depth = limit;
+  const found = new Set();
+  for (const [index, [s, r]] of ordered.slice(0, limit).entries()) {
+    if (standard.has(repo(s, r))) found.add(repo(s, r));
+    if (found.size >= need) {
+      depth = index + 1;
+      break;
+    }
+  }
+  const stop = { ...base, depth, found: found.size, reached: found.size >= need, interval: interval(found.size, standard.size) };
+  return Object.fromEntries(strata.map((s) => [s, { ...plans[s], order: ordered.slice(0, depth).filter(([t]) => t === s).map(([, r]) => r).sort((a, b) => a - b), stop }]));
+}
+
+function samePlan(written, plan) {
+  const keys = ["limit", "members", "need", "passed", "reachable", "depth", "found", "reached"];
+  if (canonical(written.passes) !== canonical(plan.passes) || canonical(written.order) !== canonical(plan.order)) return false;
+  if (!plan.stop || !written.stop) return !plan.stop && !written.stop;
+  return keys.every((k) => written.stop[k] === plan.stop[k]) && plan.stop.interval.every((v, i) => Math.abs(v - written.stop.interval?.[i]) < 1e-9);
+}
+
+function stopTextErrors(text, strata, plans) {
+  const errors = [];
+  for (const stratum of strata) {
+    const plan = plans[stratum];
+    const line = text.match(new RegExp(`^## Stratum: ${stratum}\\n\\n(stop: [^\\n]*)`, "m"))?.[1] ?? "";
+    const stop = plan.stop;
+    const expected = !stop?.reachable ? `stop: stage 2 screened every one of the ${plan.passes.length} stage-1 passes `
+      : `stopped at pooled depth ${stop.depth} (limit ${stop.limit}); this stratum screens ${plan.order.length} of its ${plan.passes.length} passes; pooled recall at the stop ${stop.found}/${stop.members} `;
+    if (!line.includes(expected)) errors.push(`${stratum}: the record's stage-2 stop line is not the plan the files give ("${expected.trim()}")`);
+    if (stop && !stop.reachable && !line.includes(`only ${stop.passed} of the ${stop.members} deduplicated standard members passed stage 1 in any stratum`)) {
+      errors.push(`${stratum}: the record's stage-2 stop line does not state the unreachable target the files give`);
+    }
+  }
+  const stop = plans[strata[0]]?.stop;
+  if (stop && !stop.reachable && !text.includes(`- pooled recall target unreachable at stage 2: ${stop.passed} of the ${stop.members} deduplicated standard members passed stage 1`)) {
+    errors.push("the pooled recall target is unreachable at stage 2 and the record names no threat");
+  }
+  return errors;
+}
+
+function stage2Errors(io, sessions, strata, passes, members) {
   const errors = [];
   const screened = {};
+  const limits = strata.map((s) => io.json(`${s}-stage2.json`)?.limit ?? null);
+  if (new Set(limits).size > 1) errors.push(`the stage-2 plans hold different limits ${limits.join(", ")}; plan-stage2.py plans every stratum together`);
+  const plans = stage2Plans(io, io.topic, strata, passes, members, limits[0]);
+  if (strata.every((s) => io.json(`${s}-stage2.json`))) errors.push(...stopTextErrors(io.text, strata, plans));
   for (const stratum of strata) {
     const plan = io.json(`${stratum}-stage2.json`);
     if (!plan) {
@@ -297,6 +362,7 @@ function stage2Errors(io, sessions, strata, passes) {
     }
     const passed = passes[stratum]?.passed ?? new Set();
     if (plan.passes.length !== passed.size || plan.passes.some((r) => !passed.has(r))) errors.push(`${stratum}-stage2.json does not list the stage-1 passes the stage-1 files give`);
+    else if (!samePlan(plan, plans[stratum])) errors.push(`${stratum}-stage2.json is not the pooled plan the stage-1 files, the facet rankings and the QGS standard give`);
     const both = ["A", "B"].map((side) => new Set(io.jsonl(`${stratum}-screen-${side}.jsonl`).map((r) => r.order_rank)));
     const extra = [...new Set([...both[0], ...both[1]])].filter((r) => !passed.has(r));
     if (extra.length) errors.push(`${stratum}: stage 2 screened ranks ${extra.slice(0, 10).join(", ")} that passed no stage-1 model`);
@@ -430,7 +496,7 @@ function recallErrors(io, text, topic, strata, members, passes, screened) {
 }
 
 export function v4Errors(text, { read, files, topic, meta }) {
-  const io = { ...reader(read), read, topic, files };
+  const io = { ...reader(read), read, topic, files, text };
   const sessions = meta.sessions ?? {};
   const strata = CALIBRATED.filter((s) => topic?.strata?.[s]?.channels && typeof topic.strata[s].channels === "object");
   if (!Object.keys(topic?.facets ?? {}).length) return ["a quality criteria v4 record needs a topic config that declares its facets"];
@@ -438,7 +504,7 @@ export function v4Errors(text, { read, files, topic, meta }) {
   const labelled = labelledRows(io, read, batches);
   const qgs = qgsErrors(io, topic);
   const stage1 = stage1Errors(io, sessions, strata, labelled.rows);
-  const stage2 = stage2Errors(io, sessions, strata, stage1.passes);
+  const stage2 = stage2Errors(io, sessions, strata, stage1.passes, qgs.members);
   return [
     ...labelled.errors,
     ...qgs.errors,

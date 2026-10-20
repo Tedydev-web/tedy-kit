@@ -6,7 +6,7 @@ from study_agreement import RECALL_TARGET, clopper_pearson
 from study_calibration_set import facet_ranks
 from study_qgs import ADJUDICATED
 from study_stage1 import RUNG_FILE, auto_pass, ladder_rung, pool_name, provenance, stage1_inputs, verdicts
-from study_topic import TopicError
+from study_topic import TopicError, screened_strata
 
 
 def plan_file(stratum):
@@ -54,35 +54,45 @@ def members(folder):
     return {m.lower() for m in json.loads(path.read_text())["final"]}
 
 
-def facet_order(topic, folder, stratum, passes, results):
-    ranks = {f: facet_ranks(folder, f, stratum) for f in topic["facets"]}
-    best = {r: min([ranks[f][results[r]["repo"].lower()] for f in ranks if results[r]["repo"].lower() in ranks[f]] or [math.inf]) for r in passes}
-    return sorted(passes, key=lambda r: (best[r], r))
+def facet_order(topic, folder, strata, plans, results):
+    ranks = {(f, s): facet_ranks(folder, f, s) for f in topic["facets"] for s in strata}
+    rows = [(s, r) for s in strata for r in plans[s]["passes"]]
+    best = {(s, r): min([ranks[f, s][results[s][r]["repo"].lower()] for f in topic["facets"] if results[s][r]["repo"].lower() in ranks[f, s]] or [math.inf]) for s, r in rows}
+    return sorted(rows, key=lambda row: (best[row], strata.index(row[0]), row[1]))
 
 
-def stage2_plan(topic, folder, stratum, limit=None):
+def stage2_plan(topic, folder, limit=None):
     if limit is not None and limit < 1:
         raise TopicError("--limit must be a positive number of rows")
-    rung, results = stage1_results(folder, stratum)
-    passes = [r for r, v in results.items() if v["pass"]]
-    plan = {"stratum": stratum, "rung": rung["rung"], "pool": len(results), "passes": passes, "auto_passes": sum(v["auto"] for v in results.values()), "limit": limit,
-            "order": passes, "stop": None}
-    if limit is None or len(passes) <= limit:
-        return plan
+    strata = screened_strata(topic)
+    plans, results = {}, {}
+    for stratum in strata:
+        rung, results[stratum] = stage1_results(folder, stratum)
+        passes = [r for r, v in results[stratum].items() if v["pass"]]
+        plans[stratum] = {"stratum": stratum, "rung": rung["rung"], "pool": len(results[stratum]), "passes": passes,
+                          "auto_passes": sum(v["auto"] for v in results[stratum].values()), "limit": limit, "order": passes, "stop": None}
+    total = sum(len(p["passes"]) for p in plans.values())
+    if limit is None or total <= limit:
+        return plans
     standard = members(folder)
-    ordered = facet_order(topic, folder, stratum, passes, results)
-    wanted = [r for r in ordered if results[r]["repo"].lower() in standard]
-    need = math.ceil(RECALL_TARGET * len(wanted))
-    depth, found = limit, 0
-    for index, rank in enumerate(ordered[:limit], 1):
-        found += results[rank]["repo"].lower() in standard
-        if wanted and found >= need:
+    if not standard:
+        raise TopicError(f"{ADJUDICATED} holds no member, so stage 2 cannot stop on recall; plan it without --limit")
+    need = math.ceil(RECALL_TARGET * len(standard))
+    reachable = {results[s][r]["repo"].lower() for s in strata for r in plans[s]["passes"]} & standard
+    stop = {"limit": limit, "members": len(standard), "need": need, "passed": len(reachable), "reachable": len(reachable) >= need}
+    if not stop["reachable"]:
+        stop.update(depth=total, found=len(reachable), reached=False, interval=clopper_pearson(len(reachable), len(standard)),
+                    rule=f"the {RECALL_TARGET:.2f} pooled recall target is unreachable: {len(reachable)} of the {len(standard)} deduplicated standard members passed "
+                         f"stage 1 and {need} are needed, so stage 2 screens every pass and ignores the limit of {limit} rows")
+        return {s: {**p, "stop": stop} for s, p in plans.items()}
+    ordered = facet_order(topic, folder, strata, plans, results)
+    depth, found = limit, set()
+    for index, (stratum, rank) in enumerate(ordered[:limit], 1):
+        found |= {results[stratum][rank]["repo"].lower()} & standard
+        if len(found) >= need:
             depth = index
             break
-    found = sum(results[r]["repo"].lower() in standard for r in ordered[:depth])
-    plan["order"] = sorted(ordered[:depth])
-    plan["stop"] = {"depth": depth, "found": found, "members": len(wanted), "reached": bool(wanted) and found >= need,
-                    "interval": clopper_pearson(found, len(wanted)) if wanted else None,
-                    "rule": f"passes ranked by their best facet rank; screening stops at the first depth holding {RECALL_TARGET:.2f} of the standard members that passed stage 1, "
-                            f"or at the limit of {limit} rows"}
-    return plan
+    stop.update(depth=depth, found=len(found), reached=len(found) >= need, interval=clopper_pearson(len(found), len(standard)),
+                rule=f"passes of every stratum ranked together by their best facet rank; screening stops at the first depth where pooled recall over the "
+                     f"{len(standard)} deduplicated standard members reaches {RECALL_TARGET:.2f}, or at the limit of {limit} rows")
+    return {s: {**p, "order": sorted(r for t, r in ordered[:depth] if t == s), "stop": stop} for s, p in plans.items()}
