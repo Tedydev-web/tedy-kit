@@ -24,6 +24,7 @@ function build(...flags) {
 const built = build();
 const pending = build("--no-audit");
 const escalated = build("--escalate");
+const toppedUp = build("--top-up");
 
 function sweep(source = built) {
   const repo = tempDir("v4-copy-");
@@ -61,6 +62,14 @@ test("a v4 sweep run end to end through the toolchain passes the gate, with the 
   assert.equal(sweep().errors(), "");
   assert.equal(sweep(pending).errors(), "");
   assert.match(sweep(pending).text, /^- cross-family audit pending: config: /m);
+});
+
+test("a correctly triggered top-up, drawn while the set held fewer than 59 positives, passes both layers", () => {
+  const s = sweep(toppedUp);
+  const set = s.json("top-up-set.json");
+  assert.ok(set.trigger.positives < 59, JSON.stringify(set.trigger));
+  assert.match(s.text, /^- top-up config: \d+ rows \(fewer than 59 positives pooled \(\d+\): the rows join the pooled bound\)/m);
+  assert.equal(s.errors(), "");
 });
 
 test("a v4 record with any added line fails the gate at that line, because the gate rebuilds the record with the Python renderer", () => {

@@ -270,7 +270,17 @@ def protocol_frozen(repo, work, judges):
     quiet(repo, "freeze-protocol", "--work", str(work), "--criteria", CRITERIA, "--today", TODAY)
 
 
-def calibrated_work(judges):
+def topped_up(repo, work):
+    labels = user_labels(json.loads((work / "calibration-set.json").read_text()))
+    for key in [k for k, v in labels.items() if v["decision"] == "eligible"][:10]:
+        labels[key] = {**labels[key], "decision": "excluded: below-threshold"}
+    path = saved_labels(work, "calibration", labels)
+    quiet(repo, "import-calibration-labels", "--work", str(work), "--batch", "calibration", "--labels", str(path))
+    path.unlink()
+    drawn_and_labelled(repo, work, top_up=30)
+
+
+def calibrated_work(judges, top_up=False):
     repo = v4_repo()
     work = v4_work(repo)
     shutil.copytree(repo / "docs/prior-art/sweeps" / SWEEP, work, dirs_exist_ok=True)
@@ -280,6 +290,8 @@ def calibrated_work(judges):
         write_json(work / f"{stratum}-adjudication.json", {"rows": {}, "capture_recapture": {"union": 1}})
     stage1_frozen(repo, work)
     drawn_and_labelled(repo, work)
+    if top_up:
+        topped_up(repo, work)
     protocol_frozen(repo, work, judges)
     return repo, work
 
@@ -378,9 +390,9 @@ def stage1_escalated(repo, work, judges):
             quiet(repo, "run-stage1", "--work", str(work), "--stratum", stratum, "--shape", "brief", "--model", model, "--set", "held-out", "--today", TODAY, fetch=judges)
 
 
-def v4_sweep(audit=True, escalate=False):
+def v4_sweep(audit=True, escalate=False, top_up=False):
     judges = ScriptedJudges()
-    repo, work = calibrated_work(judges)
+    repo, work = calibrated_work(judges, top_up)
     judged(repo, work, judges)
     if escalate:
         stage1_escalated(repo, work, judges)
@@ -399,5 +411,5 @@ def v4_sweep(audit=True, escalate=False):
 
 
 if __name__ == "__main__":
-    built = v4_sweep(audit="--no-audit" not in sys.argv, escalate="--escalate" in sys.argv)
+    built = v4_sweep(audit="--no-audit" not in sys.argv, escalate="--escalate" in sys.argv, top_up="--top-up" in sys.argv)
     shutil.copytree(built, Path(sys.argv[1]), dirs_exist_ok=True)
