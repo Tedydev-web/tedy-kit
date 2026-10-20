@@ -217,7 +217,7 @@ def page(topic, set_sha, shown, anchor):
     intro = (f"Bộ hiệu chuẩn có {len(shown)} dòng. Mỗi dòng là một repository kèm đúng dữ liệu đầu vào mà mọi giám khảo chấm. Trang không hiển thị câu trả lời của bất kỳ giám khảo "
              "hay phiên chấm nào, cũng không cho biết dòng được rút theo cách nào. Với mỗi dòng: đọc dữ liệu, chấm năm tiêu chí theo mô tả bên cạnh từng lựa chọn (1, 0.5 hoặc 0), rồi "
              "chọn Đủ điều kiện hoặc Loại kèm lý do. Date do công cụ tính sẵn nên chỉ hiển thị. Đủ điều kiện khi Relevance = 1 và Authority + Methodology + Objectivity + Date + "
-             "Position + Novelty ≥ 4.5, với Novelty = 1 khi có cơ chế mới đối với bộ kit. Tiến độ tự lưu trong trình duyệt; bấm «Tải nhãn về (JSON)» để lưu file, rồi chạy "
+             "Position + Novelty ≥ 4.5, với Novelty = 1 khi dòng có ít nhất một cơ chế: khi hiệu chuẩn, mọi cơ chế đều được tính là mới, như cách chấm giám khảo. Tiến độ tự lưu trong trình duyệt; bấm «Tải nhãn về (JSON)» để lưu file, rồi chạy "
              "import-calibration-labels.py với file đó.")
     sections = [row_section(i, len(shown), key, stratum, held, anchor, when) for i, (key, stratum, held) in enumerate(shown, 1)]
     return "\n".join(['<!DOCTYPE html>', '<html lang="vi">', "<head>", '<meta charset="utf-8">',

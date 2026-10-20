@@ -67,7 +67,8 @@ class CalibrationSetTest(unittest.TestCase):
         self.assertIsNone(re.search(r"<(?:script|link|img|iframe|object|embed|audio|video|source)\b[^>]*\b(?:src|href)=", self.page))
         for banned in ("fetch(", "XMLHttpRequest", "@import", "url(", "http://", "<a "):
             self.assertNotIn(banned, self.page.replace("&lt;img src=https://example.com/x.png", ""))
-        for text in ("Bộ hiệu chuẩn", "Đủ điều kiện", "Loại", "Tải nhãn về (JSON)", "Mở file nhãn đã lưu", "Date do công cụ tính sẵn"):
+        for text in ("Bộ hiệu chuẩn", "Đủ điều kiện", "Loại", "Tải nhãn về (JSON)", "Mở file nhãn đã lưu", "Date do công cụ tính sẵn",
+                     "Novelty = 1 khi dòng có ít nhất một cơ chế: khi hiệu chuẩn, mọi cơ chế đều được tính là mới"):
             self.assertIn(text, self.page)
         for criterion in ("Authority", "Methodology", "Objectivity", "Position", "Relevance"):
             self.assertIn(f"<h3>{criterion}</h3>", self.page)
