@@ -132,6 +132,18 @@ class StageTwoTest(unittest.TestCase):
         with self.assertRaisesRegex(TopicError, "config-stage1-audit.json is not the sample the stage-1 files give; the stage-1 audit is drawn once, by draw-stage1-audit.py"):
             elusion(topic, self.work, "config", OPUS)
 
+    def test_the_cross_family_audit_draws_the_screened_rows_with_the_lowest_hash_under_the_sweep_seed(self):
+        stage1_pooled(self.repo, self.work, self.judges)
+        stage2_screened(self.repo, self.work, self.judges)
+        quiet(self.repo, "draw-audit-sample", "--work", str(self.work))
+        frozen = json.loads((self.work / "protocol-freeze.json").read_text())["strata"]
+        for stratum in ("config", "product"):
+            sides = [{json.loads(line)["order_rank"] for line in (self.work / f"{stratum}-screen-{s}.jsonl").read_text().splitlines()} for s in "AB"]
+            ranks = sorted(r for r in sides[0] & sides[1] if r > frozen[stratum]["frozen_after_rank"])
+            self.assertGreater(len(ranks), 20)
+            ranked = sorted(ranks, key=lambda r: hashlib.sha256(f"261020-demo:audit:{stratum}:{r}".encode()).hexdigest())
+            self.assertEqual(json.loads((self.work / "audit-sample.json").read_text())[stratum], sorted(ranked[:20]))
+
     def test_a_stage_2_session_is_refused_without_the_stage_2_plan(self):
         stage1_pooled(self.repo, self.work, self.judges)
         quiet(self.repo, "fetch-screening-inputs", "--work", str(self.work), "--stratum", "config", "--through", "20", fetch=inputs_fetch())

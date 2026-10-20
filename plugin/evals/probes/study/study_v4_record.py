@@ -3,12 +3,12 @@ import json
 
 from study_agreement import RECALL_TARGET, cohen_kappa, interval_text, kappa_text
 from study_calibration_set import all_batches, labelled, labels_file, set_file
-from study_judges import AUDIT_FILE, SHAPES, criteria_version, decided, judged_batches, reader_shares_family, roster, validate
+from study_judges import AUDIT_FILE, AUDIT_ROWS, SHAPES, criteria_version, decided, judged_batches, reader_shares_family, roster, validate
 from study_qgs import ADJUDICATED, JUDGE_FILES, PACKET, UPPER_ESTIMATE, candidate_rows, cross_family, member_facets, qgs_standard, stratum_members
 from study_screening_core import read_json, read_jsonl
 from study_session import model_family
 from study_stage1 import FREEZE_FILE, RUNG_FILE, choose_rung, held_out_batches, held_out_check, ladder_rung, pool_name, stage1_inputs
-from study_stage1_audit import elusion
+from study_stage1_audit import cross_audit_sample, elusion
 from study_stage2 import plan_file, stage1_results, stage2_plan
 from study_topic import SNOWBALL_RANK_BASE, TopicError
 
@@ -336,6 +336,8 @@ def audit_lines(topic, folder, strata, sides, sessions):
     if option is None:
         return [], ["- no cross-family audit: the topic config names no cross_family model, so no model of another family checks the screening"]
     sample = read_json(folder, AUDIT_FILE) if (folder / AUDIT_FILE).is_file() else {}
+    if sample and sample != cross_audit_sample(topic, folder, AUDIT_ROWS):
+        raise TopicError(f"{AUDIT_FILE} is not the sample the stage-2 files give; the cross-family audit is drawn once, by draw-audit-sample.py")
     lines, threats = [], []
     for stratum in strata:
         rows = {r["order_rank"]: r for r in read_jsonl(folder, f"{stratum}-audit-{option['model']}.jsonl")}

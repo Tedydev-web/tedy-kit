@@ -11,6 +11,7 @@ import {
   canonical,
   escapeRegex,
   figureLine,
+  hashedSample,
   interval,
   labelledRows,
   lower,
@@ -151,8 +152,6 @@ export function stage1Errors(io, sessions, strata, rows) {
   }
   return { errors, passes, rung };
 }
-
-export const hashedSample = (pool, size, seed) => pool.map((r) => [sha256(`${seed}:${r}`), r]).sort((a, b) => (a[0] < b[0] ? -1 : 1)).slice(0, size).map(([, r]) => r).sort((a, b) => a - b);
 
 export function auditSample(io, topic, stratum, rung, passes) {
   const terms = [...new Set(Object.values(topic?.facets ?? {}).flatMap((f) => f.terms ?? []))].sort();

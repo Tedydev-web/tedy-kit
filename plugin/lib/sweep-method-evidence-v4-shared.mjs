@@ -8,6 +8,7 @@ export const POSITIVES_NEEDED = 59;
 export const HELD_OUT_POSITIVES = 10;
 export const NEAR_ROWS = 200;
 export const FAR_ROWS = 100;
+export const AUDIT_ROWS = 20;
 export const CALIBRATED = ["config", "product"];
 
 export const sha256 = (text) => createHash("sha256").update(text).digest("hex");
@@ -103,4 +104,6 @@ export function figureLine(text, parts, prefix = false) {
   const found = text.match(new RegExp(`^${pattern}${prefix ? "" : "$"}`, "m"));
   return Boolean(found) && values.every(([value, digits], i) => Math.abs(Number(found[i + 1]) - value) <= 0.5 * 10 ** -digits + 1e-9);
 }
+
 export const upperBound = (k, n) => 1 - lowerBound(n - k, n);
+export const hashedSample = (pool, size, seed) => pool.map((r) => [sha256(`${seed}:${r}`), r]).sort((a, b) => (a[0] < b[0] ? -1 : 1)).slice(0, size).map(([, r]) => r).sort((a, b) => a - b);

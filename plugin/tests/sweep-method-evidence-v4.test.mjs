@@ -232,6 +232,21 @@ test("the standard, snowball and calibration batch lines are recomputed from the
   assert.match(s.errors(s.text.replace("batches the rung was chosen on: 71", "batches the rung was chosen on: 90")), /the record's pooled positives are not the 71 the label files give/);
 });
 
+test("the cross-family audit sample is redrawn and the cross-family and QGS judge lines are recomputed", () => {
+  const s = sweep();
+  const sample = s.json("audit-sample.json");
+  const pilot = Math.min(...s.jsonl("config-screen-A.jsonl").map((r) => r.order_rank));
+  s.write("audit-sample.json", { ...sample, config: [...sample.config.slice(1), pilot].sort((a, b) => a - b) });
+  assert.match(s.errors(), /config: audit-sample\.json is not the sample the stage-2 files give: the 20 rows both sessions screened after the pilot with the lowest sha256/);
+  const t = sweep();
+  assert.match(t.errors(t.text.replace("eligibility agreement with A 20/20 (kappa 1.000)", "eligibility agreement with A 20/20 (kappa 0.900)")),
+    /config: the record's cross-family audit line is not the agreement the audit and screening files give/);
+  assert.match(t.errors(t.text.replace("agreement with qgs-A 11/12", "agreement with qgs-A 12/12")), /the record's cross-family QGS line is not the agreement the QGS judge files give/);
+  assert.match(t.errors(t.text.replace("(kappa 0.571)", "(kappa 0.900)")), /the record's cross-family QGS line is not the agreement/);
+  assert.match(t.errors(t.text.replace("- QGS qgs-B: claude-sonnet-5-5 judged 66 candidates", "- QGS qgs-B: claude-sonnet-5-5 judged 70 candidates")),
+    /the record's QGS qgs-B line is not the one qgs-judge-B\.jsonl gives/);
+});
+
 test("stage 1 and stage 2 are checked against the files: unscreened pool rows and stage-2 rows that passed no model fail", () => {
   const s = sweep();
   const rows = s.jsonl("stage1-product-brief-claude-sonnet-5-5.jsonl");

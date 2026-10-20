@@ -142,6 +142,15 @@ class V4RecordTest(unittest.TestCase):
             self.render(repo)
         self.assertEqual(sensitivity_text({"positives": 0, "passed": 0, "interval": None}), "no positive")
 
+    def test_the_record_redraws_the_cross_family_audit_sample(self):
+        repo, folder = self.copy()
+        sample = json.loads((folder / "audit-sample.json").read_text())
+        pilot = min({json.loads(line)["order_rank"] for line in (folder / "config-screen-A.jsonl").read_text().splitlines()})
+        self.assertNotIn(pilot, sample["config"])
+        (folder / "audit-sample.json").write_text(json.dumps({**sample, "config": sorted(sample["config"][1:] + [pilot])}))
+        with self.assertRaisesRegex(TopicError, "audit-sample.json is not the sample the stage-2 files give; the cross-family audit is drawn once, by draw-audit-sample.py"):
+            self.render(repo)
+
     def test_a_snowball_with_a_cut_is_refused_under_v4(self):
         repo, folder = self.copy()
         cut = json.loads((folder / "snowball-cut.json").read_text())

@@ -4,11 +4,11 @@ import math
 from pathlib import Path
 
 from study_agreement import upper_bound
-from study_protocol import EMPTY_TABLE
+from study_protocol import EMPTY_TABLE, FREEZE_FILE
 from study_screening_core import MechanismTable, derive, read_jsonl
 from study_stage1 import stage1_inputs
-from study_stage2 import chosen_rung, stage1_results
-from study_topic import TopicError, term_regex
+from study_stage2 import chosen_rung, plan_file, stage1_results
+from study_topic import TopicError, screened_strata, term_regex
 
 NEAR_ROWS, FAR_ROWS = 200, 100
 PARTS = ("near", "far")
@@ -48,6 +48,27 @@ def sample(topic, folder, stratum):
             "disagreements": [r for r, v in results.items() if len(set(v["verdicts"].values())) > 1],
             "near_pool": len(near_pool), "far_pool": len(far_pool),
             "near": hashed_sample(near_pool, NEAR_ROWS, f"{seed}:near"), "far": hashed_sample(far_pool, FAR_ROWS, f"{seed}:far")}
+
+
+def cross_audit_sample(topic, folder, size):
+    folder = Path(folder)
+    if not (folder / FREEZE_FILE).is_file():
+        raise TopicError(f"no {FREEZE_FILE} in {folder}; the audit sample is drawn from rows screened after the freeze")
+    frozen = json.loads((folder / FREEZE_FILE).read_text())["strata"]
+    out = {}
+    for stratum in screened_strata(topic):
+        plan = folder / plan_file(stratum)
+        if not plan.is_file():
+            raise TopicError(f"no {plan.name} in {folder}; the audit sample is drawn after stage 2 ends")
+        sides = [{r["order_rank"] for r in read_jsonl(folder, f"{stratum}-screen-{s}.jsonl")} for s in "AB"]
+        open_rows = sorted(set(json.loads(plan.read_text())["order"]) - (sides[0] & sides[1]))
+        if open_rows:
+            raise TopicError(f"{stratum}: stage 2 has not ended; ranks {open_rows[:10]} are not screened by both sessions")
+        ranks = sorted(r for r in sides[0] & sides[1] if r > frozen[stratum]["frozen_after_rank"])
+        if not ranks:
+            raise TopicError(f"{stratum}: no row both sessions screened after the pilot block")
+        out[stratum] = hashed_sample(ranks, size, f"{topic['sweep']}:audit:{stratum}")
+    return out
 
 
 def draw(topic, folder, stratum):

@@ -111,6 +111,9 @@ export function judgeErrors(io, topic, sessions, strata, rows, batches) {
     if (ids.length && (outside || ids.some((id) => !coveredIds.has(id)))) {
       errors.push(`${file}.jsonl: its judgments come from outside the validated workflow (not all ${model} runs on the thin inputs under a validated packet)`);
     }
+    const line = ids.length || entry ? `- QGS ${judge}: ${model} judged ${new Set(ids).size} candidates on the thin inputs it was validated on, under the validated packet`
+      : "- QGS reader: no candidate was queued for the reader";
+    if (!io.text.split("\n").includes(line)) errors.push(`the record's QGS ${judge} line is not the one ${file}.jsonl gives ("${line}")`);
   }
   return errors;
 }

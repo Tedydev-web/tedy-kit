@@ -1,9 +1,13 @@
 import { EMPTY_TABLE, derive, normal } from "./sweep-screening-derive.mjs";
 import {
+  AUDIT_ROWS,
   RECALL_TARGET,
   autoPass,
   canonical,
+  figureLine,
+  hashedSample,
   interval,
+  kappa,
   lower,
 } from "./sweep-method-evidence-v4-shared.mjs";
 
@@ -66,6 +70,26 @@ export function stopTextErrors(text, strata, plans) {
   return errors;
 }
 
+function crossAuditErrors(io, stratum, sample, model) {
+  const sides = Object.fromEntries(["A", "B"].map((side) => [side, new Map(io.jsonl(`${stratum}-screen-${side}.jsonl`).map((r) => [r.order_rank, r]))]));
+  const frozen = io.json("protocol-freeze.json")?.strata?.[stratum]?.frozen_after_rank ?? Infinity;
+  const ranks = [...sides.A.keys()].filter((r) => sides.B.has(r) && r > frozen).sort((a, b) => a - b);
+  if (canonical(sample) !== canonical(hashedSample(ranks, AUDIT_ROWS, `${io.topic?.sweep}:audit:${stratum}`))) {
+    return [`${stratum}: audit-sample.json is not the sample the stage-2 files give: the ${AUDIT_ROWS} rows both sessions screened after the pilot with the lowest sha256 under the sweep's seed`];
+  }
+  const rows = new Map(io.jsonl(`${stratum}-audit-${model}.jsonl`).map((r) => [r.order_rank, r]));
+  if (!sample.length || sample.some((r) => !rows.has(r))) return [];
+  const decide = (row) => derive(EMPTY_TABLE, stratum, { A: {}, B: {} }, "A", row).decision === "eligible";
+  const audit = sample.map((r) => decide(rows.get(r)));
+  const parts = ["A", "B"].flatMap((side, i) => {
+    const pairs = sample.map((r, j) => [audit[j], decide(sides[side].get(r))]);
+    const k = kappa(pairs);
+    return [`${i ? ", " : ""}with ${side} ${pairs.filter(([a, b]) => a === b).length}/${sample.length} (kappa `, k === null ? "undefined (one category)" : [k, 3], ")"];
+  });
+  const line = [`- ${stratum} audit: ${sample.length} rows drawn after stage 2 ended and screened again by ${model}: eligibility agreement `, ...parts];
+  return figureLine(io.text, line) ? [] : [`${stratum}: the record's cross-family audit line is not the agreement the audit and screening files give`];
+}
+
 export function stage2Errors(io, sessions, strata, passes, members) {
   const errors = [];
   const screened = {};
@@ -91,8 +115,9 @@ export function stage2Errors(io, sessions, strata, passes, members) {
     const last = ["A", "B"].flatMap((side) => (sessions[`${stratum}-${side}`]?.blocks ?? []).map((b) => b.date)).sort().at(-1);
     const model = io.topic?.cross_family?.model;
     const audit = sessions[`${stratum}-audit-${model}`];
-    const sample = io.json("audit-sample.json")?.[stratum] ?? [];
-    if (sample.some((r) => !screened[stratum].both.has(r))) errors.push(`${stratum}: the audit sample holds rows stage 2 did not screen`);
+    const drawn = io.json("audit-sample.json");
+    const sample = drawn?.[stratum] ?? [];
+    if (drawn) errors.push(...crossAuditErrors(io, stratum, sample, model));
     if ((audit?.blocks ?? []).some((b) => b.date < last)) errors.push(`${stratum}: the cross-family audit ran before stage 2 ended on ${last}; the audit sample is drawn after stage 2 ends`);
   }
   return { errors, screened };

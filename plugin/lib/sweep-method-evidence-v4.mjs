@@ -7,6 +7,8 @@ import {
   canonical,
   covered,
   escapeRegex,
+  figureLine,
+  kappa,
   labelledRows,
   lower,
   reader,
@@ -15,6 +17,21 @@ import {
 export { canonical, kappa, lowerBound } from "./sweep-method-evidence-v4-shared.mjs";
 
 const DROP_COPY = /^dropped\/[\w.-]+$/;
+
+function crossQgsErrors(text, model, sides, cross) {
+  const head = `- cross-family QGS judge ${model}: `;
+  if (!cross.size) return text.split("\n").includes(`${head}no judgment kept`) ? [] : [`the record's cross-family QGS line does not say that no ${model} judgment was kept`];
+  const overlap = [...cross.keys()].filter((id) => sides.A.has(id) && sides.B.has(id));
+  const onlyCross = overlap.filter((id) => sides.A.get(id).verdict === "no" && sides.B.get(id).verdict === "no" && cross.get(id).verdict === "yes");
+  const parts = ["A", "B"].flatMap((side, i) => {
+    const pairs = overlap.map((id) => [sides[side].get(id).verdict === "yes", cross.get(id).verdict === "yes"]);
+    const k = pairs.length ? kappa(pairs) : null;
+    return [`${i ? ", " : ""}with qgs-${side} ${pairs.filter(([a, b]) => a === b).length}/${overlap.length} (kappa `, k === null ? "undefined (one category)" : [k, 3], ")"];
+  });
+  const line = [`${head}${cross.size} candidates judged, joined by repository name, ${overlap.length} also judged by both Claude judges; agreement `, ...parts,
+    `; ${onlyCross.length} candidates both Claude judges rejected and it accepted went to the reader, which accepted ${onlyCross.filter((id) => sides.reader.get(id)?.verdict === "yes").length}`];
+  return figureLine(text, line) ? [] : ["the record's cross-family QGS line is not the agreement the QGS judge files give"];
+}
 
 function qgsErrors({ json, jsonl, text }, topic) {
   const errors = [];
@@ -73,6 +90,7 @@ function qgsErrors({ json, jsonl, text }, topic) {
   const line = `- standard: ${members.length} members from ${candidates.size} candidates; ${queue.both} judged by both Claude judges; reader queue ${queue.disputed} disputed or unsure, `
     + `${queue.cross} cross-family only; dropped ${Object.keys(drops).length}`;
   if (!text.split("\n").some((l) => l === line || l.startsWith(`${line};`))) errors.push(`the record's standard line is not the one the QGS files give ("${line}")`);
+  if (model) errors.push(...crossQgsErrors(text, model, sides, cross));
   return { errors, members, strata };
 }
 
