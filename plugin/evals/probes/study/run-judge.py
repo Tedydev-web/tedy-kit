@@ -45,7 +45,7 @@ def calibration_ranks(work, stratum):
     return [r["order_rank"] for r in json.loads(path.read_text())["rows"] if r["stratum"] == stratum]
 
 
-def judge_job(topic, work, stratum, judge, which_set, run, ids):
+def judge_job(topic, work, stratum, judge, which_set, run):
     kind = "qgs" if judge in QGS_JUDGES else "screening"
     freeze = read_freeze(work) if kind == "screening" else None
     job = {"kind": kind, "freeze": freeze, "inputs": None, "validated": None, "packet": f"{'screening' if kind == 'screening' else 'qgs'}-packet-{stratum}.md"}
@@ -67,7 +67,7 @@ def judge_job(topic, work, stratum, judge, which_set, run, ids):
     found = require_qualified(topic, work, None, [judge], stratum)
     validated = {p for r in found[judge]["strata"][stratum]["runs"] for p in r["packets"]}
     listed = [r["id"] for r in read_jsonl(Path(work), f"{stratum}-qgs-candidates.jsonl")]
-    ranks = queued(topic, work, stratum) if judge == "reader" else [i for i in listed if ids is None or ids[0] <= i <= ids[1]]
+    ranks = queued(topic, work, stratum) if judge == "reader" else listed
     name = f"{stratum}-qgs-reader" if judge == "reader" else f"{stratum}-qgs-judge-{judge[-1]}"
     return {**job, "option": option, "ranks": ranks, "name": name, "inputs": qgs_inputs_file(work, stratum).name, "validated": validated}
 
@@ -80,19 +80,22 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
                            (["--judge"], {"required": True, "choices": list(JUDGES), "help": "which judge of the roster runs"}),
                            (["--set"], {"required": True, "choices": ["calibration", "qgs", "audit"], "help": "which rows it judges"}),
                            (["--run"], {"type": int, "help": "calibration only: run 1 or run 2"}),
-                           (["--ids"], {"help": "qgs only: first-last candidate ids of the block, default every candidate"}),
+                           (["--rows"], {"help": "first-last positions, from 1, of the block within the set's rows (the calibration rows of the stratum, the candidates, "
+                                                 "the reader's queue or the audit sample); default every row, and a prompt too long for one block is refused"}),
                            (["--today"], {"default": saigon_today(), "help": "run date, default today in Asia/Saigon"})).parse_args(argv)
     try:
         topic = load_topic(args.repo, args.topic)
         whole_topic(topic, "a judge")
         require_screened(topic, args.stratum)
-        ids = None
-        if args.ids:
-            first, _, last = args.ids.partition("-")
-            if not (first.isdigit() and last.isdigit()):
-                raise TopicError(f"--ids {args.ids!r} must read first-last")
-            ids = (int(first), int(last))
-        job = judge_job(topic, args.work, args.stratum, args.judge, args.set, args.run, ids)
+        job = judge_job(topic, args.work, args.stratum, args.judge, args.set, args.run)
+        if args.rows:
+            first, _, last = args.rows.partition("-")
+            if not (first.isdigit() and last.isdigit() and 1 <= int(first) <= int(last)):
+                raise TopicError(f"--rows {args.rows!r} must read first-last, counted from 1")
+            block = job["ranks"][int(first) - 1:int(last)]
+            if not block:
+                raise TopicError(f"--rows {args.rows} holds no row of the {len(job['ranks'])} that {args.judge} judges on --set {args.set}")
+            job = {**job, "ranks": block}
         if job["validated"] is not None and job["validated"] != {hashlib.sha256((Path(args.work) / job["packet"]).read_bytes()).hexdigest()}:
             raise TopicError(f"{job['packet']} is not the packet {args.judge} was validated under; validate it again on the calibration set")
         option, freeze = job["option"], job["freeze"]

@@ -49,11 +49,25 @@ class JudgeValidationTest(unittest.TestCase):
         call(self.repo, "fetch-screening-inputs", "--work", str(self.work), "--stratum", "config", "--set", "qgs", fetch=inputs_fetch())
         with self.assertRaisesRegex(SystemExit, r"qgs-B \(claude-sonnet-5-5\) did not qualify"):
             call(self.repo, "run-judge", "--work", str(self.work), "--stratum", "config", "--judge", "qgs-B", "--set", "qgs", fetch=self.judges)
-        call(self.repo, "run-judge", "--work", str(self.work), "--stratum", "config", "--judge", "qgs-A", "--set", "qgs", "--ids", "1-5", fetch=self.judges)
+        call(self.repo, "run-judge", "--work", str(self.work), "--stratum", "config", "--judge", "qgs-A", "--set", "qgs", "--rows", "1-5", fetch=self.judges)
         self.assertEqual(len((self.work / "config-qgs-judge-A.jsonl").read_text().splitlines()), 5)
         (self.work / "qgs-packet-config.md").write_text("qgs packet config, edited after the validation\n")
         with self.assertRaisesRegex(SystemExit, "qgs-packet-config.md is not the packet qgs-A was validated under"):
-            call(self.repo, "run-judge", "--work", str(self.work), "--stratum", "config", "--judge", "qgs-A", "--set", "qgs", "--ids", "6-9", fetch=self.judges)
+            call(self.repo, "run-judge", "--work", str(self.work), "--stratum", "config", "--judge", "qgs-A", "--set", "qgs", "--rows", "6-9", fetch=self.judges)
+
+    def test_a_judge_run_too_long_for_one_prompt_is_split_into_blocks_and_validated_whole(self):
+        for rows in ("1-30", "31-60"):
+            call(self.repo, "run-judge", "--work", str(self.work), "--stratum", "config", "--judge", "qgs-A", "--set", "calibration", "--run", "1", "--rows", rows, "--today", "2026-10-20",
+                 fetch=self.judges)
+        with self.assertRaisesRegex(SystemExit, "already holds ranks"):
+            call(self.repo, "run-judge", "--work", str(self.work), "--stratum", "config", "--judge", "qgs-A", "--set", "calibration", "--run", "1", "--rows", "25-35", fetch=self.judges)
+        with self.assertRaisesRegex(SystemExit, "--rows 61-70 holds no row of the 60"):
+            call(self.repo, "run-judge", "--work", str(self.work), "--stratum", "config", "--judge", "qgs-A", "--set", "calibration", "--run", "2", "--rows", "61-70", fetch=self.judges)
+        call(self.repo, "run-judge", "--work", str(self.work), "--stratum", "config", "--judge", "qgs-A", "--set", "calibration", "--run", "2", "--today", "2026-10-20", fetch=self.judges)
+        meta = json.loads((self.work / "meta.json").read_text())["sessions"]
+        self.assertEqual([len(b["ranks"]) for b in meta["judge-config-qgs-A-claude-opus-5-5-run1"]["blocks"]], [30, 30])
+        entry = validate(load_topic(self.repo, "demo"), self.work, self.freeze(), ("config",))["qgs-A"]["strata"]["config"]
+        self.assertEqual((entry["qualified"], entry["differ"]), (True, 0))
 
     def test_a_run_on_other_inputs_or_without_labels_is_refused(self):
         judged(self.repo, self.work, self.judges, names=("qgs-A",), strata=("config",))
