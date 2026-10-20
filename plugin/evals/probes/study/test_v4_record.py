@@ -66,12 +66,14 @@ class V4RecordTest(unittest.TestCase):
     def test_facets_count_included_rows_per_facet_with_their_overlap_from_the_stage_1_labels(self):
         facets = section(self.text, "Facets")
         self.assertRegex(facets, r"- config: \d+ repositories included once each; counted per facet alpha \d+, beta \d+; overlap alpha\+beta 1; facets come from the stage-1 "
-                                 r"problem labels")
+                                 r"problem labels; \d+ of them passed stage 1 unread and carry no facet label\n")
         self.assertIn("| facets |", self.text)
 
     def test_stage_1_states_the_frozen_ladder_the_rung_used_the_rungs_tried_and_the_audit_bounds(self):
         stage1 = section(self.text, "Stage 1")
         self.assertIn("- chosen: rung 1 after 1 rungs tried", stage1)
+        self.assertRegex(stage1, r"- rung 1 config: run 1 sensitivity \d+/\d+ \(95% CI 0\.\d\d-1\.00\), pass rate 0\.\d{3}; run 2 sensitivity \d+/\d+ \(95% CI .*\), "
+                                 r"pass rate 0\.\d{3}\n")
         self.assertIn("- rung 1: run 1 71/71 positives passed, one-sided 95% lower bound 0.9587", stage1)
         self.assertRegex(stage1, r"- config stage-1 audit: 0 model disagreements .*; near excludes \d+ of \d+ read, 0 confirmed eligible, upper elusion bound 0\.\d+, at most \d+ of the \d+ eligible; far excludes .*; the stage-2 screener flagged 1 and the user checked every flagged row")
 
@@ -124,6 +126,21 @@ class V4RecordTest(unittest.TestCase):
         (folder / "snowball-cut.json").write_text(json.dumps({"stratum": "config", "cut_row": None, "source": "none"}))
         with self.assertRaisesRegex(TopicError, r"snowballed repositories \['s/elsewhere'\] are not in the config stage-1 pool"):
             self.render(repo)
+
+    def test_the_record_recomputes_the_rungs_tried_and_refuses_a_choice_made_on_other_labels(self):
+        from study_v4_record import sensitivity_text
+        repo, folder = self.copy()
+        chosen = json.loads((folder / "stage1-rung.json").read_text())
+        chosen["tried"][0]["runs"][0]["passed"] = 999
+        (folder / "stage1-rung.json").write_text(json.dumps(chosen))
+        with self.assertRaisesRegex(TopicError, "stage1-rung.json is not the rung choice the calibration files give"):
+            self.render(repo)
+        repo, folder = self.copy()
+        chosen = json.loads((folder / "stage1-rung.json").read_text())
+        (folder / "stage1-rung.json").write_text(json.dumps({**chosen, "labels_sha256": {"calibration": "0" * 64}}))
+        with self.assertRaisesRegex(TopicError, "stage1-rung.json was chosen on other labels or another freeze than calibration-labels.json holds now"):
+            self.render(repo)
+        self.assertEqual(sensitivity_text({"positives": 0, "passed": 0, "interval": None}), "no positive")
 
     def test_a_snowball_with_a_cut_is_refused_under_v4(self):
         repo, folder = self.copy()

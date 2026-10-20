@@ -7,7 +7,7 @@ from study_judges import AUDIT_FILE, SHAPES, criteria_version, decided, judged_b
 from study_qgs import ADJUDICATED, JUDGE_FILES, PACKET, UPPER_ESTIMATE, candidate_rows, cross_family, member_facets, qgs_standard, stratum_members
 from study_screening_core import read_json, read_jsonl
 from study_session import model_family
-from study_stage1 import FREEZE_FILE, RUNG_FILE, held_out_batches, held_out_check, ladder_rung, pool_name, stage1_inputs
+from study_stage1 import FREEZE_FILE, RUNG_FILE, choose_rung, held_out_batches, held_out_check, ladder_rung, pool_name, stage1_inputs
 from study_stage1_audit import elusion
 from study_stage2 import plan_file, stage1_results, stage2_plan
 from study_topic import SNOWBALL_RANK_BASE, TopicError
@@ -157,7 +157,8 @@ def facet_lines(topic, strata, faceted, decided_rows):
                 for b in held[i + 1:]:
                     pairs[f"{a}+{b}"] = pairs.get(f"{a}+{b}", 0) + 1
         lines.append(f"- {stratum}: {len(included)} repositories included once each; counted per facet " + ", ".join(f"{f} {n}" for f, n in per.items())
-                     + f"; overlap {', '.join(f'{k} {v}' for k, v in pairs.items()) or 'none'}; facets come from the stage-1 problem labels")
+                     + f"; overlap {', '.join(f'{k} {v}' for k, v in pairs.items()) or 'none'}; facets come from the stage-1 problem labels; "
+                     f"{sum(faceted[stratum]['results'][r['rank']]['auto'] for r in included)} of them passed stage 1 unread and carry no facet label")
     for facet in facet_names(topic):
         rule = topic["facets"][facet]
         lines.append(f"- {facet}: problems {', '.join(rule['problems'])}; terms {', '.join(rule['terms'])}; its ranking orders stage 2 only when stage 2 must stop")
@@ -203,18 +204,31 @@ def batch_lines(topic, folder, strata):
     return lines
 
 
+def sensitivity_text(s):
+    if not s["positives"]:
+        return "no positive"
+    low, high = s["interval"]
+    return f"sensitivity {s['passed']}/{s['positives']} (95% CI {low:.2f}-{high:.2f})"
+
+
 def stage1_lines(folder, strata):
     chosen = read_json(folder, RUNG_FILE)
     freeze = read_json(folder, FREEZE_FILE)
+    stale = [b for b in chosen["batches"] if chosen["labels_sha256"].get(b) != hashlib.sha256((folder / labels_file(b)).read_bytes()).hexdigest()]
+    if stale or chosen["freeze_sha256"] != hashlib.sha256((folder / FREEZE_FILE).read_bytes()).hexdigest():
+        raise TopicError(f"{RUNG_FILE} was chosen on other labels or another freeze than {', '.join(labels_file(b) for b in stale) or FREEZE_FILE} holds now; "
+                         "the rung is chosen once, on the labels as imported")
+    if json.loads(json.dumps(choose_rung(folder, labelled(folder, chosen["batches"])))) != {"rung": chosen["rung"], "tried": chosen["tried"]}:
+        raise TopicError(f"{RUNG_FILE} is not the rung choice the calibration files give; the rungs tried are recomputed from the stage-1 calibration runs")
     lines = [f"- ladder frozen {freeze['date']} before any label was read (stage1-freeze.json sha256 `{hashlib.sha256((folder / FREEZE_FILE).read_bytes()).hexdigest()[:16]}`): "
              + "; ".join(f"rung {r['rung']} {' + '.join(r['models'])} on {r['shape']}" for r in freeze["ladder"])]
     for tried in chosen["tried"]:
         runs = "; ".join(f"run {i} {r['passed']}/{r['positives']} positives passed, one-sided 95% lower bound {r['lower']:.4f}" for i, r in enumerate(tried["runs"], 1))
         lines.append(f"- rung {tried['rung']}: {runs}; the runs differ on {tried['differ']} of {tried['rows']} rows; " + ("meets the rule" if tried["meets"] else "fails the rule"))
         if tried["meets"]:
-            for stratum, s in tried["runs"][0]["strata"].items():
-                low, high = s["interval"] or (0, 0)
-                lines.append(f"- rung {tried['rung']} {stratum}: sensitivity {s['passed']}/{s['positives']} (95% CI {low:.2f}-{high:.2f}), pass rate {s['pass_rate']:.3f}")
+            for stratum in tried["runs"][0]["strata"]:
+                lines.append(f"- rung {tried['rung']} {stratum}: " + "; ".join(f"run {i} {sensitivity_text(r['strata'][stratum])}, pass rate {r['strata'][stratum]['pass_rate']:.3f}"
+                                                                            for i, r in enumerate(tried["runs"], 1)))
     lines.append(f"- chosen: rung {chosen['rung']} after {len(chosen['tried'])} rungs tried; rule: pooled one-sided 95% Clopper-Pearson lower bound >= 0.95 in both runs")
     if chosen["rung"] > 1:
         held = held_out_check(folder, chosen["rung"], labelled(folder, held_out_batches(folder)))
