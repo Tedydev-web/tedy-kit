@@ -2,7 +2,7 @@ import math
 import re
 from pathlib import Path
 
-from study_pool import AGGREGATOR_TEXT, ASSET, SOCIAL, cache_name, read_json
+from study_pool import AGGREGATOR_TEXT, ASSET, SOCIAL, cache_name, read_json, work_file
 from study_topic import term_regex
 
 VENDORED = {"fixtures", "fixture", "mirrors", "mirror", "dataset", "datasets", "profiles", "examples", "example", "vendor", "vendored",
@@ -40,7 +40,7 @@ class Ranker:
         return found
 
     def load(self, folder, key):
-        return read_json(self.cache / folder / cache_name(key), {"error": "not fetched"})
+        return read_json(work_file(self.cache.parent, Path(self.cache.name) / folder / cache_name(key)), {"error": "not fetched"})
 
     def name_hit(self, row):
         return bool(self.term.search(row["repo"].split("/", 1)[1].replace("_", "-")) or self.term.search(row.get("description") or ""))
@@ -97,8 +97,16 @@ class Ranker:
         return {"rows": ranked, "aggregators": aggregators, "snowball_from_paths": fresh}
 
 
-def rank_product(pool_rows, terms):
+def contract_path(evidence, prefixes):
+    known = next((evidence[len(p):] for p in prefixes if evidence.startswith(p)), None)
+    if known is not None:
+        return known
+    return evidence.split(": ", 1)[1] if evidence.startswith("code ") and ": " in evidence else evidence
+
+
+def rank_product(pool_rows, terms, code_queries=()):
     term = term_regex(terms)
+    prefixes = sorted((f"code {q}: " for q in code_queries), key=len, reverse=True)
     rows, aggregators = [], []
     for row in pool_rows:
         text = row["repo"] + " " + (row.get("description") or "")
@@ -106,10 +114,10 @@ def rank_product(pool_rows, terms):
             aggregators.append({"repo": row["repo"], "description": (row.get("description") or "")[:200]})
             continue
         evidence = row["evidence"]
-        contract = len(evidence.get("code", []))
+        contract = list(dict.fromkeys(contract_path(e, prefixes) for e in evidence.get("code", [])))
         name_hit = bool(term.search(row["repo"].split("/", 1)[1].replace("_", "-")) or term.search(row.get("description") or ""))
-        order = len(evidence) + math.log2(1 + contract) + (1 if name_hit else 0)
-        rows.append({"repo": row["repo"], "order": round(order, 3), "channels": sorted(evidence), "contract_files": evidence.get("code", [])[:6],
+        order = len(evidence) + math.log2(1 + len(contract)) + (1 if name_hit else 0)
+        rows.append({"repo": row["repo"], "order": round(order, 3), "channels": sorted(evidence), "contract_files": contract[:6],
                      "evidence": {c: v[:3] for c, v in evidence.items()}, "name_hit": name_hit, "description": (row.get("description") or "")[:200],
                      "stars": row["stars"], "created": row["created"][:10], "pushed": row["pushed"][:10], "archived": row["archived"], "fork": row["fork"],
                      **{k: row[k] for k in ("closed_issues", "merged_prs", "license") if k in row}})

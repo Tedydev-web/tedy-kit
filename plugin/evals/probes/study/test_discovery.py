@@ -1,13 +1,14 @@
 import json
 import os
 import shutil
+import sys
 import tempfile
 import unittest
 from pathlib import Path
 
 from study_fetch import Fetch, NetworkRefused
 from study_fixtures import HERE, FakeFetch, script, topic_repo, write_json
-from study_pool import Pool
+from study_pool import Pool, run_social
 from study_topic import TopicError, load_topic
 
 KIT = HERE.parents[3]
@@ -61,6 +62,38 @@ class FetchTest(unittest.TestCase):
         out, status, _ = Scripted(sleep=pauses.append).run(["gh", "search", "repos", "x"])
         self.assertEqual((out, status), ("[]", "ok"))
         self.assertEqual(pauses, [30])
+
+    def test_the_status_shows_200_characters_of_stderr_and_the_fetch_keeps_all_of_it(self):
+        old = os.environ.pop("STUDY_NO_NETWORK", None)
+        try:
+            fetch = Fetch(sleep=lambda s: None)
+            out, status, _ = fetch.run([sys.executable, "-c", "import sys; sys.stdout.write('out'); sys.stderr.write('e' * 500); sys.exit(1)"])
+        finally:
+            if old is not None:
+                os.environ["STUDY_NO_NETWORK"] = old
+        self.assertEqual((out, status, fetch.last_stderr), ("out", "exit 1: " + "e" * 200, "e" * 500))
+
+    def test_an_http_429_waits_the_seconds_github_asks_for_then_retries(self):
+        pauses = []
+
+        class Scripted(Fetch):
+            replies = [("", "exit 1: gh: try again in 3.006863164s (HTTP 429)", 0), ("", "exit 1: gh: Too Many Requests (HTTP 429)", 0), ("[]", "ok", 0)]
+
+            def _once(self, cmd, timeout, cwd=None):
+                return self.replies.pop(0)
+
+        out, status, _ = Scripted(sleep=pauses.append).run(["gh", "api", "search/code"])
+        self.assertEqual((out, status, pauses), ("[]", "ok", [5, 60]))
+
+    def test_four_429s_end_in_failure_with_no_wait_after_the_last_try(self):
+        pauses = []
+
+        class Scripted(Fetch):
+            def _once(self, cmd, timeout, cwd=None):
+                return "", "exit 1: gh: try again in 999.5s (HTTP 429)", 0
+
+        out, status, _ = Scripted(sleep=pauses.append).run(["gh", "api", "search/code"])
+        self.assertEqual((status, pauses), ("exit 1: gh: try again in 999.5s (HTTP 429)", [300, 300, 300]))
 
 
 class ConfigDiscoveryTest(Base):
@@ -143,6 +176,22 @@ class ProductDiscoveryTest(Base):
         product = script("discover-product-pool").Product(self.topic, self.work, FakeFetch())
         with self.assertRaisesRegex(TopicError, "run resolve-pool.py"):
             product.reverse()
+
+    def test_a_link_inside_a_failed_command_never_enters_the_pool(self):
+        error = '{"ok":false,"error":{"hint":"Download: https://github.com/jackwener/opencli/releases"}}'
+        product = script("discover-product-pool").Product(self.topic, self.work, FakeFetch([("twitter", (error, "exit 69: "))]))
+        product.social()
+        self.assertEqual((product.pool.state["hits"], product.pool.failed_steps()), ({}, 1))
+
+    def test_youtube_keeps_its_descriptions_when_only_single_videos_failed(self):
+        videos = "".join(f"ERROR: [youtube] {c * 11}: This video is unavailable\nWARNING: [youtube] {c * 11}: falling back to the web client\n" for c in "abcd")
+        fetch = FakeFetch([("ytsearch8:skipped", ("see github.com/o/skipped", "exit 1: " + videos[:200], videos)),
+                           ("ytsearch8:broken", ("see github.com/o/broken", "exit 1: " + videos[:200], videos + "ERROR: [youtube:search] Unable to download API page\n")),
+                           ("ytsearch8:empty", ("", "exit 1: ERROR: [youtube] aaaaaaaaaaa: This video is unavailable", "ERROR: [youtube] aaaaaaaaaaa: This video is unavailable\n"))])
+        pool = Pool(self.work / "yt-state.json")
+        run_social(fetch, pool, {"youtube": ["skipped", "broken", "empty"]})
+        self.assertEqual((sorted(pool.state["hits"]), pool.failed_steps()), (["o/skipped"], 2))
+        self.assertEqual(pool.state["log"][0]["status"], "ok")
 
     def test_social_hits_land_in_one_social_channel(self):
         product = script("discover-product-pool").Product(self.topic, self.work, FakeFetch([("twitter", "github.com/o/s")]))

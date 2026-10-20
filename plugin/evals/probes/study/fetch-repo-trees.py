@@ -3,12 +3,12 @@ import sys
 from pathlib import Path
 
 from study_fetch import Fetch
-from study_pool import ASSET, cache_name, parse_json
+from study_pool import ASSET, cache_name, parse_json, work_file
 from study_topic import TopicError, load_topic, topic_arguments
 
 
 def fetch_trees(work, stratum, fetch):
-    pool_file = Path(work) / f"{stratum}-pool.json"
+    pool_file = work_file(work, f"{stratum}-pool.json")
     if not pool_file.exists():
         raise TopicError(f"no pool at {pool_file}; run resolve-pool.py first")
     trees, shas = Path(work) / "cache" / "trees", Path(work) / "cache" / "asset-shas"
@@ -19,7 +19,7 @@ def fetch_trees(work, stratum, fetch):
         if row["archived"] or row["fork"]:
             continue
         name = cache_name(row["repo"])
-        if (trees / name).exists() and (shas / name).exists():
+        if work_file(work, Path("cache") / "trees" / name).exists() and work_file(work, Path("cache") / "asset-shas" / name).exists():
             continue
         ref = row.get("oid") or row.get("branch") or "HEAD"
         out, status, _ = fetch.run(["gh", "api", f"repos/{row['repo']}/git/trees/{ref}?recursive=1"], timeout=120)

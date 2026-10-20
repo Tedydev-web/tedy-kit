@@ -64,6 +64,14 @@ class RankerTest(unittest.TestCase):
         pool[0].update(closed_issues=2, merged_prs=7, license="MIT")
         self.assertEqual({k: rank_product(pool, ["tdd"])["rows"][0][k] for k in ("closed_issues", "merged_prs", "license")}, {"closed_issues": 2, "merged_prs": 7, "license": "MIT"})
 
+    def test_product_contract_files_are_the_distinct_paths_the_code_search_hit(self):
+        pool = [{"repo": "o/lint", "evidence": {"code": ["code SKILL.md lint extension:ts: src/a.ts", "code SKILL.md validate extension:ts: src/a.ts",
+                                                         "code plugin.json schema extension:js: lib/b.js", "code SKILL.md lint extension:ts: docs/a: b.md", "code retired query extension:py: src/c.py"]},
+                 "description": "", "stars": 1, "created": "2026-01-01T0", "pushed": "2026-02-01T0", "archived": False, "fork": False}]
+        queries = ["SKILL.md lint extension:ts", "SKILL.md validate extension:ts", "plugin.json schema extension:js"]
+        row = rank_product(pool, ["tdd"], queries)["rows"][0]
+        self.assertEqual((row["contract_files"], row["order"]), (["src/a.ts", "lib/b.js", "docs/a: b.md", "src/c.py"], 3.322))
+
 
 class OrderAndSnowballTest(unittest.TestCase):
     def setUp(self):
@@ -82,8 +90,22 @@ class OrderAndSnowballTest(unittest.TestCase):
         ranked["rows"][3]["repo"] = "O/Forced-Late"
         topic = {**self.topic, "strata": {"config": {"forced_repos": ["o/forced-late", "o/forced", "o/absent"]}}}
         rows, missing = script("export-screening-order").screening_order(topic, "config", ranked, 2)
-        self.assertEqual([(r.get("order_rank"), r["repo"], r["forced"]) for r in rows], [(1, "o/r1", False), (2, "o/r2", False), (4, "O/Forced-Late", True), (None, "o/forced", True)])
+        self.assertEqual([(r.get("order_rank"), r["repo"], r["forced"]) for r in rows], [(1, "o/r1", False), (2, "o/r2", False), (4, "O/Forced-Late", True), (6, "o/forced", True)])
         self.assertEqual(missing, ["o/absent"])
+
+    def test_a_forced_aggregator_gets_a_rank_after_every_ranked_row(self):
+        topic = {**self.topic, "strata": {"config": {"forced_repos": ["o/forced", "o/other"]}}}
+        ranked = {**self.ranked(3), "aggregators": [{"repo": "o/other", "description": "curated"}, {"repo": "o/forced", "description": "awesome"}]}
+        rows, _ = script("export-screening-order").screening_order(topic, "config", ranked, 2)
+        self.assertEqual([(r["order_rank"], r["repo"]) for r in rows], [(1, "o/r1"), (2, "o/r2"), (4, "o/other"), (5, "o/forced")])
+
+    def test_a_forced_row_ranked_past_1000_does_not_move_the_snowball_numbering(self):
+        write_jsonl(self.work / "config-screening-order.jsonl", [{"order_rank": 1, "repo": "o/r1"}, {"order_rank": 1001, "repo": "s/old"},
+                                                                 {"order_rank": 1002, "repo": "o/forced", "forced": True}, {"order_rank": 7071, "repo": "o/agg", "forced": True}])
+        write_jsonl(self.work / "snowball-screening-order.jsonl", [{"order_rank": 1001, "repo": "s/new"}, {"order_rank": 1002, "repo": "s/next"}])
+        write_json(self.work / "snowball-cut.json", {"stratum": "config", "cut_row": 60, "source": "the written stop row"})
+        added = script("merge-snowball-order").merge(self.work)
+        self.assertEqual([(r["order_rank"], r["repo"]) for r in added], [(1003, "s/new"), (1004, "s/next")])
 
     def test_snowballed_rows_above_the_stop_row_are_numbered_from_1001(self):
         before = self.ranked(3)
@@ -132,12 +154,51 @@ class OrderAndSnowballTest(unittest.TestCase):
         with self.assertRaisesRegex(TopicError, "qgs_list_topic"):
             script("extract-qgs-candidates").candidates(self.topic, self.work, fetch, "config-ranked.json")
 
+    def resolved(self, *names):
+        write_json(self.work / "cache/canonical.json", {n: n for n in names})
+
+    def test_recall_resolves_renamed_repositories_before_counting_a_miss(self):
+        for side in "AB":
+            write_jsonl(self.work / f"qgs-judge-{side}.jsonl", [{"id": 1, "repo": "Old/Name", "verdict": "yes"}, {"id": 2, "repo": "new/x", "verdict": "yes"}])
+        write_json(self.work / "qgs-adjudicated.json", {"final": ["Old/Name", "new/x", "gone/repo"]})
+        write_json(self.work / "product-state.json", {"hits": {"new/name": {"channels": {"npm": []}}, "older/x": {"channels": {"code": []}}}})
+        write_json(self.work / "cache/meta.json", {"older/x": {"nameWithOwner": "New/X"}, "new/name": None})
+        fetch = FakeFetch([("graphql", json.dumps({"data": {"r0": None, "r1": {"nameWithOwner": "New/X"}, "r2": {"nameWithOwner": "New/Name"}}}))])
+        out, resolved = script("qgs-recall").recall(self.work, self.work, ["product"], fetch=fetch)
+        self.assertEqual(out["standards"]["adjudicated (source read)"], {"size": 3, "found": 2, "quasi_sensitivity": 0.667, "per_channel": {"code": 1, "npm": 1},
+                                                                         "missed": ["gone/repo"], "gone": ["gone/repo"]})
+        self.assertEqual(resolved["final"], ["New/Name", "New/X", "gone/repo"])
+        again = FakeFetch()
+        script("qgs-recall").recall(self.work, self.work, ["product"], fetch=again)
+        self.assertEqual(again.calls, [])
+
+    def test_two_members_resolving_to_one_repository_count_once(self):
+        for side in "AB":
+            write_jsonl(self.work / f"qgs-judge-{side}.jsonl", [{"id": 1, "repo": "a/old", "verdict": "yes"}, {"id": 2, "repo": "a/new", "verdict": "yes"}])
+        write_json(self.work / "qgs-adjudicated.json", {"final": ["a/old", "a/new"]})
+        write_json(self.work / "product-state.json", {"hits": {"a/new": {"channels": {"npm": []}}}})
+        write_json(self.work / "cache/canonical.json", {"a/old": "A/New", "a/new": "A/New"})
+        out, resolved = script("qgs-recall").recall(self.work, self.work, ["product"], fetch=FakeFetch())
+        self.assertEqual((out["standards"]["strict (yes by both)"]["size"], out["standards"]["adjudicated (source read)"]["found"], resolved["final"]), (1, 1, ["A/New"]))
+        self.assertEqual((out["renamed"], out["collapsed"]), ({"a/old": "A/New"}, {"A/New": ["a/old", "a/new"]}))
+
+    def test_discovery_resolutions_are_used_before_any_github_lookup(self):
+        for side in "AB":
+            write_jsonl(self.work / f"qgs-judge-{side}.jsonl", [{"id": 1, "repo": "older/x", "verdict": "yes"}, {"id": 2, "repo": "lost/y", "verdict": "yes"}])
+        write_json(self.work / "qgs-adjudicated.json", {"final": ["older/x", "lost/y"]})
+        write_json(self.work / "product-state.json", {"hits": {"older/x": {"channels": {"npm": []}}}})
+        write_json(self.work / "cache/meta.json", {"older/x": {"nameWithOwner": "New/X"}, "lost/y": None})
+        fetch = FakeFetch()
+        out, resolved = script("qgs-recall").recall(self.work, self.work, ["product"], fetch=fetch)
+        self.assertEqual((fetch.calls, resolved["final"], out["standards"]["adjudicated (source read)"]["gone"]), ([], ["New/X", "lost/y"], ["lost/y"]))
+
     def test_qgs_recall_reports_kappa_and_quasi_sensitivity(self):
         verdicts = [("a/one", "yes", "yes"), ("a/two", "yes", "no"), ("a/three", "no", "no"), ("a/four", "yes", "yes")]
         for side, index in (("A", 1), ("B", 2)):
             write_jsonl(self.work / f"qgs-judge-{side}.jsonl", [{"id": i, "repo": v[0], "verdict": v[index]} for i, v in enumerate(verdicts)])
         write_json(self.work / "qgs-adjudicated.json", {"final": ["a/one", "a/two", "a/four"]})
         write_json(self.work / "product-state.json", {"hits": {"a/one": {"channels": {"npm": [], "code": []}}, "a/two": {"channels": {"npm": []}}}})
+        self.resolved("a/one", "a/two", "a/four")
         out, _ = script("qgs-recall").recall(self.work, self.work, ["product"])
         self.assertEqual((out["agreement"], out["kappa"]), (0.75, 0.5))
         self.assertEqual(out["standards"]["strict (yes by both)"], {"size": 2, "found": 1, "quasi_sensitivity": 0.5, "per_channel": {"code": 1, "npm": 1}, "missed": ["a/four"]})
@@ -150,6 +211,7 @@ class OrderAndSnowballTest(unittest.TestCase):
         write_json(self.work / "config-state.json", {"hits": {k: {"channels": {"github-code-search": []}} for k in ("a/one", "a/two", "a/three")}})
         write_jsonl(self.work / "config-screening-order.jsonl", [{"order_rank": 1, "repo": "a/one", "forced": False}, {"order_rank": 2, "repo": "a/two", "forced": True},
                                                                  {"order_rank": 9, "repo": "a/three", "forced": False}])
+        self.resolved("a/one", "a/two", "a/three", "a/four")
         result = subprocess.run([sys.executable, "-B", str(HERE / "qgs-recall.py"), "--topic", "demo", "--repo", str(self.repo), "--work", str(self.work),
                                  "--states", "config", "--stratum", "config", "--cut", "3"], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -179,6 +241,7 @@ class OrderAndSnowballTest(unittest.TestCase):
             write_jsonl(self.work / f"config-qgs-judge-{side}.jsonl", [{"id": 1, "repo": "a/one", "verdict": "yes"}])
         write_json(self.work / "config-qgs-adjudicated.json", {"final": ["a/one"]})
         write_json(self.work / "config-state.json", {"hits": {"a/one": {"channels": {"github-code-search": []}}}})
+        self.resolved("a/one")
         result = subprocess.run([sys.executable, "-B", str(HERE / "qgs-recall.py"), "--topic", "demo", "--repo", str(self.repo), "--work", str(self.work),
                                  "--states", "config", "--stratum", "config"], capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)

@@ -1,10 +1,14 @@
+import contextlib
 import hashlib
+import io
 import json
 import shutil
 import unittest
 
-from study_fixtures import script
+from study_agreement import resolved_standard
+from study_fixtures import FakeFetch, script
 from study_method_fixture import method_repo
+from study_method_notes import snowball_lines
 from study_sweep_record import render
 from study_topic import TopicError, load_topic
 
@@ -74,13 +78,34 @@ class MethodRecordTest(unittest.TestCase):
 
     def test_recall_at_the_cut_leaves_out_a_forced_row_only_one_session_screened(self):
         repo = self.build()
-        (self.folder / "config-qgs-adjudicated.json").write_text(json.dumps({"final": ["o/r1", "o/forced"]}))
+        (self.folder / "config-qgs-adjudicated.json").write_text(json.dumps({"final": ["o/r1", "o/forced"], "resolved": resolved_standard(["o/r1", "o/forced"], {})}))
         self.assertIn("- config: recall at the cut 2/2 (1.000)", self.section(render(repo, load_topic(repo, "demo"))[0], "Recall"))
         rows = (self.folder / "config-screen-B.jsonl").read_text().splitlines()
         (self.folder / "config-screen-B.jsonl").write_text("".join(line + "\n" for line in rows if json.loads(line)["order_rank"] != 8))
         self.edit_meta(lambda sessions: sessions["config-B"]["blocks"][0].update(ranks=[r for r in sessions["config-B"]["blocks"][0]["ranks"] if r != 8]))
         self.assertIn("- config: recall at the cut 1/2 (0.500) of the config standard, counting rows both sessions screened; below the 0.80 target: change the screening-order "
                       "formula or the cut, not the terms; missed: o/forced (rank 8)", self.section(render(repo, load_topic(repo, "demo"))[0], "Recall"))
+
+    def test_the_record_and_qgs_recall_count_a_renamed_member_the_same_way(self):
+        repo = self.build()
+        topic = load_topic(repo, "demo")
+        for side in "AB":
+            (self.folder / f"config-qgs-judge-{side}.jsonl").write_text("".join(json.dumps(r) + "\n" for r in ({"id": 1, "repo": "O/Old", "verdict": "yes"}, {"id": 2, "repo": "o/r2", "verdict": "yes"})))
+        (self.folder / "config-qgs-adjudicated.json").write_text(json.dumps({"final": ["O/Old", "o/r2"]}))
+        (self.folder / "config-state.json").write_text(json.dumps({"hits": {"o/r1": {"channels": {"github-code-search": []}}}}))
+        (self.folder / "cache").mkdir()
+        (self.folder / "cache/canonical.json").write_text(json.dumps({"o/old": "o/r1", "o/r2": "o/r2"}))
+        with self.assertRaisesRegex(TopicError, "run qgs-recall.py --stratum config --write"):
+            render(repo, topic)
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            script("qgs-recall").main(["--topic", "demo", "--repo", str(repo), "--work", str(self.folder), "--states", "config", "--stratum", "config", "--write"], fetch=FakeFetch())
+        at_cut = json.loads(printed.getvalue())["at_cut"]
+        self.assertIn(f"- config: recall at the cut {at_cut['at_cut']}/{at_cut['size']} ({at_cut['recall']:.3f})", self.section(render(repo, topic)[0], "Recall"))
+        self.assertEqual((at_cut["at_cut"], at_cut["size"]), (2, 2))
+        (self.folder / "config-qgs-adjudicated.json").write_text(json.dumps({**json.loads((self.folder / "config-qgs-adjudicated.json").read_text()), "final": ["o/r2"]}))
+        with self.assertRaisesRegex(TopicError, "run qgs-recall.py --stratum config --write"):
+            render(repo, topic)
 
     def test_every_session_lists_its_blocks(self):
         sessions = self.section(self.text(), "Screening sessions")
@@ -206,6 +231,16 @@ class MethodRecordTest(unittest.TestCase):
         (repo / "docs/prior-art/topics/demo.json").write_text(json.dumps(topic))
         with self.assertRaisesRegex(TopicError, "strata.product.stop_row is 60, the screening data stop at row 6"):
             render(repo, load_topic(repo, "demo"))
+
+    def test_a_forced_row_ranked_past_1000_is_not_a_snowball_row(self):
+        repo = self.build()
+        topic = {**load_topic(repo, "demo"), "strata": {"config": {"stop_row": 60}, "product": {"stop_row": 60}}}
+        (self.folder / "config-screening-order.jsonl").write_text("".join(json.dumps(r) + "\n" for r in ({"order_rank": 1, "repo": "o/r1"}, {"order_rank": 1001, "repo": "s/one"},
+                                                                                                         {"order_rank": 1402, "repo": "o/forced", "forced": True})))
+        (self.folder / "snowball-screening-order.jsonl").write_text(json.dumps({"order_rank": 1001, "repo": "s/one"}) + "\n")
+        (self.folder / "snowball-cut.json").write_text(json.dumps({"stratum": "config", "cut_row": 60, "source": "the written stop row"}))
+        (self.folder / "product-screening-order.jsonl").write_text("".join(json.dumps(r) + "\n" for r in ({"order_rank": 1, "repo": "p/r1"}, {"order_rank": 7071, "repo": "p/agg", "forced": True})))
+        self.assertEqual(snowball_lines(topic, self.folder, ["config", "product"]), ["- config snowball: 1 rows from 1001 on rank above the cut at row 60 (the written stop row)"])
 
     def test_a_tag_only_stratum_is_stated_and_not_screened(self):
         text = self.text()

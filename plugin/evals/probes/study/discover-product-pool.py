@@ -6,7 +6,7 @@ from pathlib import Path
 
 from study_academic import run_academic
 from study_fetch import Fetch
-from study_pool import CONFIG_DIR_MARKER, GH_LINK, Pool, cache_name, code_search, parse_json, read_json, run_social
+from study_pool import CONFIG_DIR_MARKER, GH_LINK, Pool, cache_name, code_search, parse_json, product_code_queries, read_json, run_social
 from study_topic import TopicError, load_topic, term_regex, topic_arguments
 
 CHANNELS = ("npm", "social", "reverse", "code", "repo", "academic")
@@ -24,7 +24,7 @@ class Product:
         self.term = term_regex(topic["terms"])
         self.harness = re.compile(channels["harness"], re.I)
         self.extra = re.compile(channels["extra_text"], re.I) if channels.get("extra_text") else None
-        self.pool = Pool(self.work / "product-state.json")
+        self.pool = Pool(self.work / "product-state.json", topic["terms"])
 
     def relevant(self, text):
         return bool(self.harness.search(text) and (self.term.search(text) or (self.extra and self.extra.search(text))))
@@ -60,10 +60,8 @@ class Product:
         run_academic(self.fetch, self.pool, self.channels.get("academic", {}))
 
     def code(self):
-        for field in self.channels.get("code_fields", []):
-            for term in self.channels.get("code_terms", []):
-                for ext in self.channels.get("code_extensions", []):
-                    code_search(self.fetch, self.pool, f"{field} {term} extension:{ext}", self.channels.get("code_pages", 10), "code", CONFIG_DIR_MARKER)
+        for query in product_code_queries(self.channels):
+            code_search(self.fetch, self.pool, query, self.channels.get("code_pages", 10), "code", CONFIG_DIR_MARKER)
 
     def repo(self):
         for query in self.channels.get("repo_queries", []):

@@ -16,12 +16,16 @@ def merge(work):
             raise TopicError(f"no {path.name} in {work}; run export-screening-order.py and snowball-above-cut.py first")
     order = read_jsonl(work, order_file.name)
     known = {r["repo"].lower() for r in order}
-    next_rank = max([SNOWBALL_RANK_BASE] + [r["order_rank"] for r in order if r["order_rank"] > SNOWBALL_RANK_BASE]) + 1
+    used = {r["order_rank"] for r in order}
+    rank = max([SNOWBALL_RANK_BASE] + [r["order_rank"] for r in order if r["order_rank"] > SNOWBALL_RANK_BASE and not r.get("forced")])
     added = []
     for row in read_jsonl(work, snowball.name):
         if row["repo"].lower() in known:
             continue
-        added.append({**row, "order_rank": next_rank + len(added)})
+        rank += 1
+        while rank in used:
+            rank += 1
+        added.append({**row, "order_rank": rank})
         known.add(row["repo"].lower())
     temporary = order_file.with_name(order_file.name + ".tmp")
     temporary.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in order + added))

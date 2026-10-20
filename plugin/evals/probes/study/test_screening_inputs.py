@@ -119,6 +119,18 @@ class InputsTest(unittest.TestCase):
         self.fetch_inputs(self.fetch(("registry.npmjs.org", ("", "exit 22: The requested URL returned error: 404"))))
         self.assertEqual((self.rows()[1].get("error"), self.rows()[1]["evidence"]["package"]["npm"]), (None, {"name": "@o/tdd-kit", "published": False}))
 
+    def test_a_package_the_registry_lists_as_unpublished_is_not_published(self):
+        unpublished = json.dumps({"_id": "@o/tdd-kit", "name": "@o/tdd-kit", "time": {"created": "2024-03-26", "unpublished": {"time": "2024-03-27", "versions": ["2.8.0"]}}})
+        self.fetch_inputs(self.fetch(("registry.npmjs.org", unpublished)))
+        self.assertEqual((self.rows()[1].get("error"), self.rows()[1]["evidence"]["package"]["npm"]), (None, {"name": "@o/tdd-kit", "published": False}))
+
+    def test_a_forced_aggregator_in_the_order_is_fetched_like_any_row(self):
+        ranked = {"rows": POOL, "aggregators": [{"repo": "o/forced", "description": "awesome list"}]}
+        rows, _ = script("export-screening-order").screening_order(self.topic, "config", ranked, 200)
+        write_jsonl(self.work / "config-screening-order.jsonl", rows)
+        self.fetch_inputs(self.fetch())
+        self.assertEqual(self.rows()[3]["repo"], "o/forced")
+
     def test_an_unparsable_or_empty_tree_is_a_transient_error(self):
         for body, message in (("not json", "tree: unparsable"), (json.dumps({"tree": []}), "tree: empty")):
             (self.work / "config-screening-inputs.jsonl").unlink(missing_ok=True)

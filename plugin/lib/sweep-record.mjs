@@ -119,14 +119,54 @@ function topicConfigErrors(config) {
   if (typeof config.id_prefix !== "string" || !/^[A-Z]+$/.test(config.id_prefix)) return ["id_prefix must be capital letters"];
   const { label, steps } = config.frame ?? {};
   if (typeof label !== "string" || !label || !Array.isArray(steps) || !steps.length || !steps.every((step) => typeof step === "string" && step)) return ["frame needs a label and a list of steps"];
-  return [];
+  return facetErrors(config);
+}
+
+function facetErrors(config) {
+  const object = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  if (config.facets === undefined) return [];
+  if (!object(config.facets)) return ["facets must be an object"];
+  const terms = new Set((config.terms ?? []).map((t) => String(t).toLowerCase()));
+  const problems = new Set(config.problems ?? []);
+  const strata = new Set(Object.keys(config.strata ?? {}));
+  const listed = (value) => Array.isArray(value) && value.length > 0 && value.every((v) => typeof v === "string" && v);
+  const errors = Object.entries(config.facets).flatMap(([name, facet]) => {
+    const where = `facets.${name}`;
+    if (!object(facet)) return [`${where} must be an object`];
+    const found = [];
+    for (const key of ["terms", "problems"]) if (!listed(facet[key])) found.push(`${where}: ${key} must be a non-empty list`);
+    const term = listed(facet.terms) ? facet.terms.filter((t) => !terms.has(t.toLowerCase())) : [];
+    if (term.length) found.push(`${where}: terms ${term.join(", ")} are not topic terms`);
+    const problem = listed(facet.problems) ? facet.problems.filter((p) => !problems.has(p)) : [];
+    if (problem.length) found.push(`${where}: problems ${problem.join(", ")} are not topic problems`);
+    if (facet.strata !== undefined && !object(facet.strata)) found.push(`${where}: strata must be an object`);
+    const own = object(facet.strata) ? Object.entries(facet.strata) : [];
+    for (const [s, rule] of own) if (!object(rule)) found.push(`${where}: strata.${s} must be an object`);
+    const stratum = own.map(([s]) => s).filter((s) => !strata.has(s));
+    if (stratum.length) found.push(`${where}: strata ${stratum.join(", ")} are not topic strata`);
+    if (typeof facet.sweep !== "string" || !facet.sweep) found.push(`${where}: sweep must name the facet's sweep`);
+    return found;
+  });
+  for (const problem of config.problems ?? []) {
+    const homes = Object.entries(config.facets).filter(([, facet]) => facet && Array.isArray(facet.problems) && facet.problems.includes(problem)).map(([name]) => name);
+    if (!homes.length) errors.push(`facets: problem ${problem} sits in no facet`);
+    else if (homes.length > 1) errors.push(`facets: problem ${problem} sits in facets ${homes.join(", ")}`);
+  }
+  return errors;
+}
+
+function sweepNames(stem, config) {
+  const own = typeof config?.sweep === "string" ? [[config.sweep, stem]] : [];
+  const facets = config?.facets && typeof config.facets === "object" ? Object.entries(config.facets) : [];
+  return [...own, ...facets.filter(([, facet]) => typeof facet?.sweep === "string").map(([name, facet]) => [facet.sweep, `${stem}:${name}`])];
 }
 
 export function checkTopicRegistries(repo) {
   const dir = join(repo, "docs", "prior-art", "topics");
   const files = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".json")).sort() : [];
   if (!files.length) return ["docs/prior-art/topics: no topic config"];
-  return files.flatMap((file) => {
+  const owners = new Map();
+  const errors = files.flatMap((file) => {
     const where = `topics/${file}`;
     let config;
     try {
@@ -134,6 +174,7 @@ export function checkTopicRegistries(repo) {
     } catch (error) {
       return [`${where}: not JSON: ${error.message}`];
     }
+    for (const [sweep, owner] of sweepNames(file.slice(0, -5), config)) owners.set(sweep, [...(owners.get(sweep) ?? []), owner]);
     const invalid = topicConfigErrors(config);
     if (invalid.length) return invalid.map((e) => `${where}: ${e}`);
     const registry = join(repo, config.registry);
@@ -141,6 +182,8 @@ export function checkTopicRegistries(repo) {
     const options = { topic: file.slice(0, -5), idPrefix: config.id_prefix, frame: config.frame };
     return checkCoverageMatrix(readFileSync(registry, "utf8"), options).map((e) => `${where}: ${e}`);
   });
+  for (const [sweep, names] of owners) if (names.length > 1) errors.push(`sweep ${sweep} is named more than once (${names.join(", ")})`);
+  return errors;
 }
 
 export function checkMechanismTable(table, coded) {

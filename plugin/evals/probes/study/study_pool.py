@@ -2,6 +2,11 @@ import json
 import re
 from pathlib import Path
 
+from study_topic import TopicError, terms_digest
+
+DISCOVERY_LINK = "discovery.json"
+DISCOVERY_STATES = ("config-state.json", "product-state.json")
+LINKED_FILES = (*DISCOVERY_STATES, "config-pool.json", "product-pool.json", "cache/meta.json", "cache/canonical.json", "cache/trees/", "cache/asset-shas/", "cache/readmes/")
 GH_LINK = re.compile(r"github\.com[/:]([A-Za-z0-9-]{1,39})/([A-Za-z0-9._-]{1,100})")
 INSTALL_REF = re.compile(r"(?:skills add|plugin install|plugin marketplace add|marketplace add)\s+([A-Za-z0-9-]{1,39})/([A-Za-z0-9._-]{1,100})", re.I)
 NOT_OWNERS = {"orgs", "topics", "sponsors", "features", "apps", "marketplace", "settings", "login", "about", "collections", "search",
@@ -11,6 +16,7 @@ ASSET = re.compile(r"(^|/)(\.claude|\.claude-plugin|\.agents)/|(^|/)(SKILL\.md|A
 CONFIG_DIR_MARKER = re.compile(r"(^|/)(\.claude|\.claude-plugin|\.agents)/")
 AGGREGATOR_TEXT = re.compile(r"awesome|mirror|curated|marketplace|list of|directory of", re.I)
 SOCIAL = {"x", "reddit", "youtube", "facebook"}
+VIDEO_ERROR = re.compile(r"ERROR: \[youtube\] [\w-]{11}: ")
 
 
 def cache_name(key):
@@ -22,10 +28,39 @@ def read_json(path, default):
     return json.loads(path.read_text()) if path.exists() else default
 
 
+def linked_discovery(work):
+    path = Path(work) / DISCOVERY_LINK
+    if not path.is_file():
+        return None
+    link = json.loads(path.read_text())
+    config = Path(link.get("config", ""))
+    if not config.is_file() or terms_digest(json.loads(config.read_text()).get("terms", [])) != link.get("terms_sha256"):
+        raise TopicError(f"{path} links a discovery made with other terms than {config} now lists; discover the whole topic again and link it again")
+    return Path(link["folder"])
+
+
+def work_file(work, relative):
+    own = Path(work) / relative
+    name = Path(relative).as_posix()
+    if not any(name == entry or (entry.endswith("/") and name.startswith(entry)) for entry in LINKED_FILES):
+        return own
+    folder = linked_discovery(work)
+    if own.exists() or folder is None:
+        return own
+    return folder / relative if (folder / relative).exists() else own
+
+
 class Pool:
-    def __init__(self, path):
+    def __init__(self, path, terms=None):
         self.path = Path(path)
         self.state = read_json(self.path, {"hits": {}, "log": [], "done": []})
+        if terms is None:
+            return
+        digest = terms_digest(terms)
+        if self.path.exists() and "terms_sha256" not in self.state:
+            raise TopicError(f"{self.path} predates the terms digest, so the terms it was discovered with are unknown; discover again in a new working folder")
+        if self.state.setdefault("terms_sha256", digest) != digest:
+            raise TopicError(f"{self.path} was discovered with other terms than the topic now lists; discover again in a new working folder")
 
     def add(self, owner, repo, channel, evidence):
         repo = re.sub(r"\.git$", "", repo).rstrip(".")
@@ -90,6 +125,10 @@ def graphql_repositories(fetch, repos, fields, batch=40):
     return found, failed
 
 
+def product_code_queries(channels):
+    return [f"{field} {term} extension:{ext}" for field in channels.get("code_fields", []) for term in channels.get("code_terms", []) for ext in channels.get("code_extensions", [])]
+
+
 def code_search(fetch, pool, query, pages, channel, skip_path=None):
     step = f"code {query}"
     if pool.done(step):
@@ -127,14 +166,20 @@ def social_jobs(social):
     return jobs
 
 
+def video_errors_only(status, stderr):
+    lines = [line for line in stderr.splitlines() if line.strip()]
+    return status.startswith("exit 1: ") and any(VIDEO_ERROR.match(line) for line in lines) and all(VIDEO_ERROR.match(line) or line.startswith("WARNING:") for line in lines)
+
+
 def run_social(fetch, pool, social, channel_name=None):
     for cmd, channel, via in social_jobs(social):
         step = f"social {via}"
         if pool.done(step):
             continue
         out, status, seconds = fetch.run(cmd, timeout=240)
-        linked, new = pool.links(out, channel_name or channel, via)
-        pool.record(step, channel, via, status, seconds, out.count("\n"), linked, new)
+        skipped = channel == "youtube" and out.strip() and video_errors_only(status, fetch.last_stderr)
+        linked, new = pool.links(out, channel_name or channel, via) if status == "ok" or skipped else (0, 0)
+        pool.record(step, channel, via, "ok" if skipped else status, seconds, out.count("\n"), linked, new, {"skipped_videos": status} if skipped else None)
         fetch.pace(2 if channel == "x" else 1)
 
 
@@ -143,8 +188,9 @@ README_LINK = re.compile(r"github\.com/([A-Za-z0-9][\w.-]*)/([\w.-]+?)(?:\.git)?
 
 def readme(fetch, cache, repo):
     target = Path(cache) / "readmes" / (repo.lower().replace("/", "__") + ".md")
-    if target.exists():
-        return target.read_text()
+    cached = work_file(Path(cache).parent, Path(Path(cache).name) / "readmes" / target.name)
+    if cached.exists():
+        return cached.read_text()
     out, status, _ = fetch.run(["gh", "api", "-H", "Accept: application/vnd.github.raw", f"repos/{repo}/readme"], timeout=120)
     if status != "ok":
         return None

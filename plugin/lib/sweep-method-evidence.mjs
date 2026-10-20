@@ -155,10 +155,19 @@ export function checkMethodEvidence(text, { files, read, criteriaText, topic }) 
   return errors;
 }
 
-function topicFor(repo, sweep) {
+export function topicForSweep(repo, sweep) {
   const dir = join(repo, "docs", "prior-art", "topics");
-  const configs = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".json")).map((f) => JSON.parse(readFileSync(join(dir, f), "utf8"))) : [];
-  return configs.find((config) => config.sweep === sweep);
+  const configs = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".json")).sort().map((f) => [f.slice(0, -5), JSON.parse(readFileSync(join(dir, f), "utf8"))]) : [];
+  const whole = configs.find(([, config]) => config.sweep === sweep);
+  if (whole) return { ...whole[1], name: whole[0] };
+  for (const [stem, config] of configs) {
+    const found = Object.entries(config.facets ?? {}).find(([, facet]) => facet?.sweep === sweep);
+    if (!found) continue;
+    const [name, facet] = found;
+    const strata = Object.fromEntries(Object.entries(config.strata ?? {}).map(([s, rule]) => [s, { ...rule, stop_row: facet.strata?.[s]?.stop_row ?? null, forced_repos: facet.strata?.[s]?.forced_repos ?? [] }]));
+    return { ...config, name: `${stem}:${name}`, sweep, strata };
+  }
+  return undefined;
 }
 
 export function sweepMethodErrors(repo, file, text) {
@@ -168,5 +177,8 @@ export function sweepMethodErrors(repo, file, text) {
   const files = existsSync(folder) ? readdirSync(folder).sort() : [];
   const read = (name) => (files.includes(name) ? readFileSync(join(folder, name), "utf8") : undefined);
   const criteriaText = (path) => (existsSync(join(repo, path)) ? readFileSync(join(repo, path), "utf8") : "");
-  return checkMethodEvidence(text, { files, read, criteriaText, topic: topicFor(repo, sweep) });
+  const topic = topicForSweep(repo, sweep);
+  const role = text.match(/^- Role: (\S+)$/m)?.[1];
+  const roleErrors = topic && role !== topic.name ? [`the record's role is ${role}, but its sweep belongs to ${topic.name}; set meta.json role to ${topic.name}`] : [];
+  return [...roleErrors, ...checkMethodEvidence(text, { files, read, criteriaText, topic })];
 }

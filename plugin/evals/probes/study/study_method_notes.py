@@ -20,7 +20,7 @@ def date_line(topic):
 def snowball_lines(topic, folder, strata):
     lines = []
     for stratum in strata:
-        snowballed = [r for r in read_jsonl(folder, f"{stratum}-screening-order.jsonl") if r["order_rank"] > SNOWBALL_RANK_BASE]
+        snowballed = [r for r in read_jsonl(folder, f"{stratum}-screening-order.jsonl") if r["order_rank"] > SNOWBALL_RANK_BASE and not r.get("forced")]
         cut = read_json(folder, SNOWBALL_CUT_FILE) if (folder / SNOWBALL_CUT_FILE).is_file() else None
         if cut is None or cut.get("stratum") != stratum:
             if snowballed:
