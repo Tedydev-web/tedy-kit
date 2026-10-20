@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { v4Errors } from "./sweep-method-evidence-v4.mjs";
+import { regenerationErrors } from "./sweep-method-evidence-v4-regeneration.mjs";
 
 export const GRANDFATHERED = new Map([
   [
@@ -111,7 +113,10 @@ function calibrationErrors(sample, sessions, strata) {
   return errors;
 }
 
-export function checkMethodEvidence(text, { files, read, criteriaText, topic }) {
+const criteriaVersion = (text) => Number(text.match(/^- Criteria: docs\/prior-art\/quality-criteria-v(\d+)\.md /m)?.[1] ?? 0);
+
+export function checkMethodEvidence(text, { files, read, criteriaText, topic, dropped }) {
+  const v4 = criteriaVersion(text) >= 4;
   const strata = [...text.matchAll(/^## Stratum: (\S+)$/gm)].map((m) => m[1]);
   const agreement = part(text, "Agreement and capture-recapture");
   const threats = part(text, "Threats");
@@ -140,17 +145,20 @@ export function checkMethodEvidence(text, { files, read, criteriaText, topic }) 
     if (!new RegExp(`^- ${s}: post-freeze rows \\d+ `, "m").test(agreement)) errors.push(`${stratum}: agreement is not measured on post-freeze rows`);
     if (!new RegExp(`^- ${s} kappa: .*; eligibility kappa `, "m").test(agreement)) errors.push(`${stratum}: no kappa per judged criterion with eligibility kappa`);
     if (!new RegExp(`^- ${s} capture-recapture.*Chapman [\\d.]+ is a lower bound`, "m").test(agreement)) errors.push(`${stratum}: no capture-recapture line with Chapman as a lower bound`);
-    if (CALIBRATED.has(stratum) && !new RegExp(`^- ${s}: recall at the cut \\d+/\\d+ \\([\\d.]+\\) of the ${s} standard, counting rows both sessions screened; `, "m").test(part(text, "Recall"))) {
+    if (!v4 && CALIBRATED.has(stratum) && !new RegExp(`^- ${s}: recall at the cut \\d+/\\d+ \\([\\d.]+\\) of the ${s} standard, counting rows both sessions screened; `, "m").test(part(text, "Recall"))) {
       errors.push(`${stratum}: no recall at the cut counting rows both sessions screened`);
     }
     const a = sessions[`${stratum}-A`]?.model ?? "";
     const b = sessions[`${stratum}-B`]?.model ?? "";
     if (family(a) === family(b) && !/^- same model family: /m.test(threats)) errors.push(`${stratum}: sessions A and B are both ${family(a)} models and the record names no same model family threat`);
+    if (v4) continue;
     const stop = part(text, `Stratum: ${stratum}`).match(/^stop: (?:effort bound|pool exhausted) at row (\d+)$/m);
     const written = topic?.strata?.[stratum]?.stop_row;
     if (!stop) errors.push(`${stratum}: no stop line derived from the screening data`);
     else if (topic && Number(stop[1]) !== written) errors.push(`${stratum}: the topic config's stop_row is ${written}, the record stops at row ${stop[1]}; write it with compare-screening-sessions.py --write-stop`);
   }
+  if (v4) return [...errors, ...v4Errors(text, { read, files, topic, meta: JSON.parse(read("meta.json") ?? "{}"), dropped })];
+  if (topic?.clusters) errors.push(`the record pins quality criteria v${criteriaVersion(text)}, but its topic holds a facet of more than one problem, a cluster that quality criteria v4 introduced; screen it under v4`);
   if (!/^- user vs session A: /m.test(part(text, "Calibration")) && !/^- LLM-only screening: /m.test(threats)) errors.push("no user calibration agreement and no LLM-only screening threat");
   return errors;
 }
@@ -158,14 +166,15 @@ export function checkMethodEvidence(text, { files, read, criteriaText, topic }) 
 export function topicForSweep(repo, sweep) {
   const dir = join(repo, "docs", "prior-art", "topics");
   const configs = existsSync(dir) ? readdirSync(dir).filter((f) => f.endsWith(".json")).sort().map((f) => [f.slice(0, -5), JSON.parse(readFileSync(join(dir, f), "utf8"))]) : [];
+  const cluster = (facet) => Array.isArray(facet?.problems) && facet.problems.length > 1;
   const whole = configs.find(([, config]) => config.sweep === sweep);
-  if (whole) return { ...whole[1], name: whole[0] };
+  if (whole) return { ...whole[1], name: whole[0], clusters: Object.values(whole[1].facets ?? {}).some(cluster) };
   for (const [stem, config] of configs) {
     const found = Object.entries(config.facets ?? {}).find(([, facet]) => facet?.sweep === sweep);
     if (!found) continue;
     const [name, facet] = found;
     const strata = Object.fromEntries(Object.entries(config.strata ?? {}).map(([s, rule]) => [s, { ...rule, stop_row: facet.strata?.[s]?.stop_row ?? null, forced_repos: facet.strata?.[s]?.forced_repos ?? [] }]));
-    return { ...config, name: `${stem}:${name}`, sweep, strata };
+    return { ...config, name: `${stem}:${name}`, sweep, strata, clusters: cluster(facet) };
   }
   return undefined;
 }
@@ -175,10 +184,14 @@ export function sweepMethodErrors(repo, file, text) {
   if (GRANDFATHERED.get(sweep)?.sha256 === sha256(text)) return [];
   const folder = join(repo, "docs", "prior-art", "sweeps", sweep);
   const files = existsSync(folder) ? readdirSync(folder).sort() : [];
-  const read = (name) => (files.includes(name) ? readFileSync(join(folder, name), "utf8") : undefined);
+  const read = (name) => (files.includes(name) || (/^(?:dropped\/[\w.-]+|facets\/[\w-]+\/[\w-]+-ranked\.json)$/.test(name) && existsSync(join(folder, name))) ? readFileSync(join(folder, name), "utf8") : undefined);
   const criteriaText = (path) => (existsSync(join(repo, path)) ? readFileSync(join(repo, path), "utf8") : "");
   const topic = topicForSweep(repo, sweep);
   const role = text.match(/^- Role: (\S+)$/m)?.[1];
   const roleErrors = topic && role !== topic.name ? [`the record's role is ${role}, but its sweep belongs to ${topic.name}; set meta.json role to ${topic.name}`] : [];
-  return [...roleErrors, ...checkMethodEvidence(text, { files, read, criteriaText, topic })];
+  const pinned = Number(String(JSON.parse(read("meta.json") ?? "{}").criteria ?? "").match(/quality-criteria-v(\d+)\.md$/)?.[1] ?? 0);
+  const v4 = Math.max(criteriaVersion(text), pinned) >= 4;
+  const regeneration = v4 ? regenerationErrors(repo, sweep, text) : [];
+  const dropped = v4 && existsSync(join(folder, "dropped")) && statSync(join(folder, "dropped")).isDirectory() ? readdirSync(join(folder, "dropped")).sort() : [];
+  return [...regeneration, ...roleErrors, ...checkMethodEvidence(text, { files, read, criteriaText, topic, dropped })];
 }

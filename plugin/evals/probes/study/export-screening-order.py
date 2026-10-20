@@ -17,6 +17,7 @@ def screening_order(topic, stratum, ranked, limit):
     last = max([0] + [r["order_rank"] for r in ranked["rows"]])
     aggregators = [{**a, "order_rank": last + i} for i, a in enumerate((a for a in ranked.get("aggregators", []) if a["repo"].lower() in forced), 1)]
     pool = ranked["rows"] + ranked.get("aggregators", [])
+    limit = len(ranked["rows"]) if limit is None else limit
     keep = ranked["rows"][:limit] + [r for r in ranked["rows"] if r["repo"].lower() in forced and r["order_rank"] > limit] + aggregators
     missing = sorted(forced - {r["repo"].lower() for r in pool})
     return [{**{k: r[k] for k in FIELDS if k in r}, "forced": r["repo"].lower() in forced} for r in keep], missing
@@ -27,15 +28,16 @@ def main(argv=None):
                            (["--work"], {"required": True, "help": "study working folder"}),
                            (["--stratum"], {"required": True, "help": "stratum whose <stratum>-ranked.json is read"}),
                            (["--ranked"], {"help": "ranking file in the working folder, default <stratum>-ranked.json"}),
-                           (["--limit"], {"type": int, "default": HARD_CAP, "help": f"rows taken in order, at most {HARD_CAP}"})).parse_args(argv)
+                           (["--limit"], {"type": int, "default": HARD_CAP, "help": f"rows taken in order, at most {HARD_CAP}"}),
+                           (["--all"], {"action": "store_true", "help": "quality criteria v4: take the whole deduplicated pool, which stage 1 screens"})).parse_args(argv)
     work = Path(args.work)
     ranked_file = work / (args.ranked or f"{args.stratum}-ranked.json")
     try:
-        if not 0 < args.limit <= HARD_CAP:
+        if not args.all and not 0 < args.limit <= HARD_CAP:
             raise TopicError(f"--limit must be between 1 and {HARD_CAP}, the criteria's hard cap")
         if not ranked_file.exists():
             raise TopicError(f"no ranking at {ranked_file}")
-        rows, missing = screening_order(load_topic(args.repo, args.topic), args.stratum, json.loads(ranked_file.read_text()), args.limit)
+        rows, missing = screening_order(load_topic(args.repo, args.topic), args.stratum, json.loads(ranked_file.read_text()), None if args.all else args.limit)
     except TopicError as error:
         sys.exit(f"export-screening-order: {error}")
     (work / f"{args.stratum}-screening-order.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))

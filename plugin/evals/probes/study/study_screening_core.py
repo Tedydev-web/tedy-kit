@@ -42,6 +42,9 @@ def normal(decision):
 
 def derive(table, stratum, mapping, side, row):
     scores = {k.capitalize(): v["v"] for k, v in row["scores"].items()}
+    lacking = [k for k in JUDGED if not isinstance(scores.get(k), (int, float)) or isinstance(scores.get(k), bool)]
+    if lacking:
+        raise TopicError(f"{stratum} rank {row.get('order_rank')} (session {side}) lacks the judged score {lacking[0]}")
     mechs = {table.canon(stratum, mapping, side, m) for m in row["mechanisms"]} - table.evidence()
     first = normal(row["decision"])
     copy = first.split(": ")[-1] in COPYLIKE

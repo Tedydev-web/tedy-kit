@@ -131,6 +131,15 @@ def term_regex(terms):
     return re.compile(r"(?<![a-z0-9])(" + "|".join(re.escape(t) for t in terms) + r")(?![a-z0-9])", re.I)
 
 
+def product_filter(topic):
+    channels = topic["strata"].get("product", {}).get("channels")
+    if not isinstance(channels, dict) or not isinstance(channels.get("harness"), str):
+        raise TopicError(f"{topic['path']}: strata.product.channels needs a harness pattern")
+    harness, term = re.compile(channels["harness"], re.I), term_regex(topic["terms"])
+    extra = re.compile(channels["extra_text"], re.I) if channels.get("extra_text") else None
+    return lambda text: bool(harness.search(text) and (term.search(text) or (extra and extra.search(text))))
+
+
 def stratum_rule(topic, stratum, key, kind):
     value = topic["strata"].get(stratum, {}).get(key)
     if not isinstance(value, kind) or isinstance(value, bool):

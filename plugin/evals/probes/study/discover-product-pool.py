@@ -7,9 +7,9 @@ from pathlib import Path
 from study_academic import run_academic
 from study_fetch import Fetch
 from study_pool import CONFIG_DIR_MARKER, GH_LINK, Pool, cache_name, code_search, parse_json, product_code_queries, read_json, run_social
-from study_topic import TopicError, load_topic, term_regex, topic_arguments
+from study_topic import TopicError, load_topic, product_filter, term_regex, topic_arguments
 
-CHANNELS = ("npm", "social", "reverse", "code", "repo", "academic")
+CHANNELS = ("npm", "social", "reverse", "code", "repo", "academic", "config-pool")
 COMMAND = re.compile(r"\b(npx|bunx|uvx|pipx run|pnpm dlx|yarn dlx)\s+(?:-y\s+|--yes\s+|--from\s+\S+\s+)?(@?[a-z0-9][\w.-]*(?:/[\w.-]+)?)", re.I)
 HOOK_CONFIG = re.compile(r"(^|/)(hooks/hooks\.json|\.claude/settings(\.local)?\.json|\.claude-plugin/plugin\.json|\.mcp\.json)$")
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
@@ -17,17 +17,10 @@ UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chr
 
 class Product:
     def __init__(self, topic, work, fetch):
-        channels = topic["strata"].get("product", {}).get("channels")
-        if not isinstance(channels, dict) or not isinstance(channels.get("harness"), str):
-            raise TopicError(f"{topic['path']}: strata.product.channels needs a harness pattern")
-        self.channels, self.work, self.fetch = channels, Path(work), fetch
+        self.relevant = product_filter(topic)
+        self.channels, self.work, self.fetch = topic["strata"]["product"]["channels"], Path(work), fetch
         self.term = term_regex(topic["terms"])
-        self.harness = re.compile(channels["harness"], re.I)
-        self.extra = re.compile(channels["extra_text"], re.I) if channels.get("extra_text") else None
         self.pool = Pool(self.work / "product-state.json", topic["terms"])
-
-    def relevant(self, text):
-        return bool(self.harness.search(text) and (self.term.search(text) or (self.extra and self.extra.search(text))))
 
     def npm(self):
         for query in self.channels.get("npm_queries", []):
@@ -85,6 +78,17 @@ class Product:
                 self.pool.record(step, "repo", f"topic:{harness} topic:{subject}", status, seconds, len(items), len(items), new)
                 self.fetch.pace(2.5)
 
+    def config_pool(self):
+        if self.channels.get("config_pool") is not True:
+            raise TopicError("strata.product.channels.config_pool is not true; quality criteria v4 draws this channel only when the topic config asks for it")
+        pool_file = self.work / "config-pool.json"
+        if not pool_file.exists():
+            raise TopicError(f"the config-pool channel reads {pool_file}; run resolve-pool.py for the config stratum first")
+        rows = json.loads(pool_file.read_text())["rows"]
+        joined = [r for r in rows if self.relevant(r["repo"] + " " + (r.get("description") or ""))]
+        new = sum(self.pool.add(*r["repo"].split("/", 1), "config-pool", "config pool: name or description passes the product filter") for r in joined)
+        self.pool.record("config-pool", "config-pool", "config pool rows whose name or description holds a harness word and a problem term", "ok", 0, len(rows), len(joined), new)
+
     def resolve_package(self, runner, name):
         if runner in ("uvx", "pipx run"):
             out, status, _ = self.fetch.run(["curl", "-sSf", f"https://pypi.org/pypi/{name}/json"])
@@ -135,12 +139,14 @@ def main(argv=None, fetch=None):
     try:
         product = Product(load_topic(args.repo, args.topic), args.work, fetch or Fetch())
         for name in CHANNELS:
-            if name in only:
-                getattr(product, name)()
+            if name == "config-pool" and product.channels.get("config_pool") is not True:
+                print("config-pool off: strata.product.channels.config_pool is not true", flush=True)
+            elif name in only:
+                getattr(product, name.replace("-", "_"))()
                 print(f"{name} done; repos so far {len(product.pool.state['hits'])}", flush=True)
     except TopicError as error:
         sys.exit(f"discover-product-pool: {error}")
-    counts = {c: sum(1 for h in product.pool.state["hits"].values() if c in h["channels"]) for c in ("npm", "code", "reverse", "social", "repo", "arxiv", "semantic-scholar")}
+    counts = {c: sum(1 for h in product.pool.state["hits"].values() if c in h["channels"]) for c in ("npm", "code", "reverse", "social", "repo", "arxiv", "semantic-scholar", "config-pool")}
     print(f"product repos {len(product.pool.state['hits'])}; per channel {counts}; failed steps {product.pool.failed_steps()}, run again to retry them")
 
 

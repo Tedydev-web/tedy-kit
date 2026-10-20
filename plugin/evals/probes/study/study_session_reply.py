@@ -72,7 +72,62 @@ def row_problems(row, expected):
     return problems
 
 
-def parse_reply(text, expected):
+STRATA = ("config", "product")
+
+
+def parse_qgs_reply(text, expected, topic_problems, allowed=("yes", "no", "unsure"), strata=False):
+    rows, problems = {}, []
+    for line in (raw.strip() for raw in text.splitlines()):
+        if not line.startswith("{"):
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            problems.append(f"unparsable row line {line[:80]!r}")
+            continue
+        rank = row.get("order_rank")
+        if type(rank) is not int or rank not in expected:
+            problems.append(f"row {rank!r} was not asked for")
+            continue
+        issues = []
+        if str(row.get("repo", "")).lower() != expected[rank]["repo"].lower():
+            issues.append(f"rank {rank} names {row.get('repo')!r}, not {expected[rank]['repo']}")
+        if row.get("verdict") not in allowed:
+            issues.append(f"rank {rank} has no {', '.join(allowed)} verdict")
+        if not isinstance(row.get("problems"), list) or not all(isinstance(p, str) for p in row["problems"]):
+            issues.append(f"rank {rank} has no problems list")
+        else:
+            outside = sorted(set(row["problems"]) - set(topic_problems))
+            if outside:
+                issues.append(f"rank {rank} names problems {outside} outside the topic")
+            if row.get("verdict") == "yes" and not row["problems"]:
+                issues.append(f"rank {rank} answers yes without a problem id")
+        if strata:
+            named = row.get("strata")
+            if not isinstance(named, list) or not set(named) <= set(STRATA) or (row.get("verdict") == "yes") != bool(named):
+                issues.append(f"rank {rank} needs strata naming config, product or both for a yes, and none otherwise")
+        if rank in rows:
+            issues.append(f"rank {rank} appears twice")
+        problems += issues
+        if not issues:
+            rows[rank] = {"id": rank, "order_rank": rank, "repo": expected[rank]["repo"], "verdict": row["verdict"], "problems": row["problems"], **({"strata": sorted(set(row["strata"]))} if strata else {}), "why": str(row.get("why", ""))}
+    problems += [f"rank {rank} missing from the reply" for rank in expected if rank not in rows and not any(f"rank {rank} " in p for p in problems)]
+    return [rows[r] for r in sorted(rows)], problems
+
+
+def problem_ids(row, topic_problems):
+    rank, ids = row["order_rank"], row.get("problems")
+    if not isinstance(ids, list) or not all(isinstance(p, str) for p in ids):
+        return [f"rank {rank} has no problems list naming the registry problems it addresses"]
+    outside = sorted(set(ids) - set(topic_problems))
+    if outside:
+        return [f"rank {rank} names problems {outside} outside the topic"]
+    if str(row.get("decision", "")).startswith("eligible") and not ids:
+        return [f"rank {rank} is eligible but names no registry problem"]
+    return []
+
+
+def parse_reply(text, expected, topic_problems=None):
     rows, mechanisms, problems = {}, [], []
     for line in (raw.strip() for raw in text.splitlines()):
         found = MECHANISM.match(line)
@@ -85,6 +140,8 @@ def parse_reply(text, expected):
                 problems.append(f"unparsable row line {line[:80]!r}")
                 continue
             issues = row_problems(row, expected)
+            if not issues and topic_problems is not None:
+                issues = problem_ids(row, topic_problems)
             if not issues and row["order_rank"] in rows:
                 issues = [f"rank {row['order_rank']} appears twice"]
             problems += issues

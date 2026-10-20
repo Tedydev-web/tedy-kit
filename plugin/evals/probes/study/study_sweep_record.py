@@ -4,15 +4,20 @@ from pathlib import Path
 from study_method_record import is_method_sweep, method_parts, method_stops
 from study_screening_core import JUDGED, SHORT, MechanismTable, derive, normal, read_json, read_jsonl
 from study_topic import SNOWBALL_RANK_BASE, screened_strata, stratum_rule, sweep_folder
+from study_stage2 import plan_file
+from study_v4_record import is_v4, row_facets
 
 
 def screened_ranks(topic, folder, stratum, sides):
+    order = read_jsonl(folder, f"{stratum}-screening-order.jsonl")
+    if is_v4(read_json(folder, "meta.json")):
+        return sorted(set(sides["A"]) & set(sides["B"]) & set(read_json(folder, plan_file(stratum))["order"]))
     stop = stratum_rule(topic, stratum, "stop_row", int)
-    forced = {r["order_rank"] for r in read_jsonl(folder, f"{stratum}-screening-order.jsonl") if r.get("forced")}
+    forced = {r["order_rank"] for r in order if r.get("forced")}
     return sorted(r for r in set(sides["A"]) & set(sides["B"]) if r <= stop or r in forced or r > SNOWBALL_RANK_BASE)
 
 
-def screen(repo, topic):
+def screen(repo, topic, faceted=None):
     D = sweep_folder(repo, topic)
     study = read_json(D, "study.json")
     table = MechanismTable(read_json(D, "mechanism-table.json"))
@@ -36,6 +41,7 @@ def screen(repo, topic):
                 for rank in e["rows"]:
                     extras.setdefault(rank, set()).add(key)
         ranks = screened_ranks(topic, D, stratum, sides)
+        held = row_facets(topic, D, stratum) if faceted else None
         beyond[stratum] = sorted((set(sides["A"]) | set(sides["B"])) - set(ranks))
         same = cells = 0
         rows = []
@@ -65,7 +71,7 @@ def screen(repo, topic):
             score += f" N{a['novelty']:g}" + ("" if a["novelty"] == b["novelty"] else f"/{b['novelty']:g}")
             commit = sides["A"][rank].get("commit") or sides["B"][rank].get("commit") or "-"
             names = ", ".join(sorted(m.split(":", 1)[1] for m in mechs)) or "-"
-            rows.append(f"| {rank} | {repo_name} | {commit} | {score} | {decision} | {names} | {reason.replace('|', '/')} |")
+            rows.append(f"| {rank} | {repo_name} | {commit} | {score} | {decision} | {names} | {reason.replace('|', '/')} |" + (f" {held[rank]} |" if held is not None else ""))
             issues = set(sides["A"][rank].get("issues") or []) | set(sides["B"][rank].get("issues") or [])
             decided.setdefault(stratum, []).append({"rank": rank, "repo": repo_name, "decision": decision, "mechs": mechs, "session_mechs": a["mechs"] | b["mechs"], "issues": issues})
         out_rows[stratum] = rows
@@ -78,8 +84,8 @@ def render(repo, topic):
     repo = Path(repo)
     method_sweep = is_method_sweep(sweep_folder(repo, topic))
     screened = {**topic, "strata": {k: topic["strata"][k] for k in screened_strata(topic)}} if method_sweep else topic
-    stops, captures = method_stops(screened, sweep_folder(repo, topic)) if method_sweep else (None, None)
-    s = screen(repo, screened)
+    stops, captures, faceted = method_stops(screened, sweep_folder(repo, topic)) if method_sweep else (None, None, None)
+    s = screen(repo, screened, faceted)
     D, study, table, strata, coded, differing = s["folder"], s["study"], s["table"], s["strata"], s["coded"], s["differing"]
     out_rows, agreement, beyond, capture = s["rows"], s["agreement"], s["beyond"], s["capture"]
     name = topic["sweep"]
@@ -94,9 +100,10 @@ def render(repo, topic):
              f"- Data: `{name}/` (screening sessions A and B, reader C, maps, mechanism table, adjudications, recall standard); regenerate with `python3 plugin/evals/probes/prior-art-sweep-record.py . {name}`",
              "", "Scores read A1 M1 O1 D1 P1 N1 for Authority, Methodology, Objectivity, Date, Position and the derived Novelty; a/b shows session A's and B's values where they differ.", ""]
     lines += ["## Query log", ""] + [f"- {stratum}: {q}" for stratum, qs in meta["query_log"].items() for q in qs] + [""]
-    lines += ["## PRISMA", "", "| stratum | stage | count |", "|---|---|---|"] + [f"| {s} | {k} | {v} |" for s, p in meta["prisma"].items() for k, v in p.items()] + [""]
-    method = method_parts(repo, topic, s, meta, captures) if stops else None
-    lines += ["## Recall", "", meta["recall"], ""] + (method["recall"] if method else [])
+    method = method_parts(repo, topic, s, meta, captures, faceted) if stops else None
+    prisma = (method or {}).get("prisma")
+    lines += ["## PRISMA", ""] + (prisma or ["| stratum | stage | count |", "|---|---|---|"] + [f"| {s} | {k} | {v} |" for s, p in meta["prisma"].items() for k, v in p.items()]) + [""]
+    lines += ["## Recall", ""] + ([] if prisma else [meta["recall"], ""]) + (method["recall"] if method else [])
     lines += ["## Agreement and capture-recapture", ""]
     if method:
         lines += method["agreement"] + method["sections"]
@@ -105,8 +112,10 @@ def render(repo, topic):
             lines.append(f"- {s}: {same}/{cells} judged cells identical ({same / cells:.3f}); target 0.90")
         lines += [f"- {s}: {capture[s]}" for s in strata] + [""]
     for stratum in strata:
+        header = (["| rank | repo | commit | scores | decision | mechanisms | reason | facets |", "|---|---|---|---|---|---|---|---|"] if faceted else
+                  ["| rank | repo | commit | scores | decision | mechanisms | reason |", "|---|---|---|---|---|---|---|"])
         lines += [f"## Stratum: {stratum}", "", stops[stratum] if stops else meta["stop"][stratum], "", f"Screened beyond the stop or outside both sessions: {len(beyond[stratum])} rows, kept in the data files.", "",
-                  "### Screened rows", "", "| rank | repo | commit | scores | decision | mechanisms | reason |", "|---|---|---|---|---|---|---|"] + out_rows[stratum] + [""]
+                  "### Screened rows", ""] + header + out_rows[stratum] + [""]
     lines += ["## Deep study", "", study["budget"] + ". " + study["method"], "", study["coverage"], ""] + [f"- {k}: {v}" for k, v in study["flags"].items()] + [""]
     lines += ["## Mechanisms", "", "| mechanism | class |", "|---|---|"] + [f"| {m} | {table.kind(m)} |" for m in sorted(coded)] + [""]
     lines += ["## Surfaces", ""]

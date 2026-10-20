@@ -73,6 +73,47 @@ class RankerTest(unittest.TestCase):
         self.assertEqual((row["contract_files"], row["order"]), (["src/a.ts", "lib/b.js", "docs/a: b.md", "src/c.py"], 3.322))
 
 
+class FacetRankingTest(unittest.TestCase):
+    def setUp(self):
+        self.repo = topic_repo(strata={"config": {"stop_row": None, "forced_repos": [], "channels": {"code_queries": ['"tdd" filename:SKILL.md', '"test" filename:AGENTS.md']}},
+                                       "product": {"stop_row": None, "forced_repos": [], "channels": {"harness": "claude", "code_fields": ["SKILL.md"], "code_terms": ["tdd", "test"],
+                                                                                                      "code_extensions": ["ts"]}}})
+        path = self.repo / "docs/prior-art/topics/demo.json"
+        write_json(path, {**json.loads(path.read_text()), "problems": ["X1", "X2"],
+                          "facets": {"alpha": {"sweep": "261020-demo-alpha", "problems": ["X1"], "terms": ["tdd"]}, "beta": {"sweep": "261020-demo-beta", "problems": ["X2"], "terms": ["test"]}}})
+        self.work = Path(tempfile.mkdtemp(prefix="study-facet-rank-"))
+        for path in (self.repo, self.work):
+            self.addCleanup(shutil.rmtree, path)
+
+    def test_a_facet_config_ranking_counts_only_the_code_queries_built_from_its_own_terms(self):
+        base = {"stars": 1, "pushed": "2026-09-01", "created": "2026-01-01", "description": "", "archived": False, "fork": False}
+        rows = [{**base, "repo": "o/lifted", "channels": ["github-code-search"], "via": ['code "test" filename:AGENTS.md: AGENTS.md']},
+                {**base, "repo": "o/own", "channels": ["github-code-search"], "via": ['code "tdd" filename:SKILL.md: SKILL.md']}]
+        write_json(self.work / "config-pool.json", {"rows": rows})
+        script("rank-config-pool").main(["--topic", "demo:alpha", "--repo", str(self.repo), "--work", str(self.work)])
+        ranked = json.loads((self.work / "config-ranked.json").read_text())
+        self.assertEqual([(r["repo"], r["code_queries"]) for r in ranked["rows"]], [("o/own", ['code "tdd" filename:SKILL.md']), ("o/lifted", [])])
+        self.assertEqual(ranked["code_queries_counted"], ['"tdd" filename:SKILL.md'])
+        script("rank-config-pool").main(["--topic", "demo", "--repo", str(self.repo), "--work", str(self.work)])
+        self.assertEqual(json.loads((self.work / "config-ranked.json").read_text())["code_queries_counted"], "all")
+
+    def test_a_facet_product_ranking_counts_only_its_own_terms_and_only_product_channels(self):
+        config_pool = ["config pool: name or description passes the product filter"]
+        lifted = {"code": ["code SKILL.md test extension:ts: src/other.ts"], "repo": ['repos "claude test"'], "npm": ["test-kit (claude test)"], "config-pool": config_pool}
+        own = {"code": ["code SKILL.md tdd extension:ts: src/own.ts"], "repo": ['repos "claude tdd"', 'repos "claude test"'], "npm": ["tdd-kit (claude tdd)"], "config-pool": config_pool}
+        base = {"description": "", "stars": 1, "created": "2026-01-01T0", "pushed": "2026-02-01T0", "archived": False, "fork": False}
+        pool = {"rows": [{**base, "repo": "p/lifted", "evidence": lifted}, {**base, "repo": "p/own", "evidence": own}], "prisma": {"identified": 2, "not_resolvable": 0}}
+        write_json(self.work / "product-pool.json", pool)
+        script("rank-product-pool").main(["--topic", "demo:alpha", "--repo", str(self.repo), "--work", str(self.work)])
+        ranked = json.loads((self.work / "product-ranked.json").read_text())
+        self.assertEqual([(r["repo"], r["channels"], r["contract_files"], r["order"]) for r in ranked["rows"]],
+                         [("p/own", ["code", "npm", "repo"], ["src/own.ts"], 4.0), ("p/lifted", [], [], 0.0)])
+        self.assertEqual(ranked["rows"][0]["evidence"]["repo"], ['repos "claude tdd"'])
+        self.assertEqual(ranked["code_queries_counted"], ["SKILL.md tdd extension:ts"])
+        script("rank-product-pool").main(["--topic", "demo", "--repo", str(self.repo), "--work", str(self.work)])
+        self.assertEqual(json.loads((self.work / "product-ranked.json").read_text())["rows"][0]["channels"], ["code", "config-pool", "npm", "repo"])
+
+
 class OrderAndSnowballTest(unittest.TestCase):
     def setUp(self):
         self.repo = topic_repo()
@@ -118,6 +159,38 @@ class OrderAndSnowballTest(unittest.TestCase):
         with self.assertRaisesRegex(TopicError, "no row 9"):
             script("snowball-above-cut").above_cut(before, after, 9)
 
+    def test_under_two_stage_screening_every_snowballed_repository_joins_the_pool_that_stage_1_reads(self):
+        before = self.ranked(250)
+        after = {"rows": [{"repo": f"s/{name}", "order": order, "pushed": "2026-01-01", "channels": ["snowball"], "units": [], "stars": 0, "via": [], "description": "tdd kit"}
+                          for name, order in (("high", 99), ("low", -5))] + [{"repo": "o/r1", "order": 9, "channels": ["github-code-search"]}]}
+        write_json(self.work / "config-ranked.json", before)
+        write_json(self.work / "config-ranked-snowball.json", after)
+        args = ["--topic", "demo", "--repo", str(self.repo), "--work", str(self.work)]
+        script("export-screening-order").main([*args, "--stratum", "config", "--all"])
+        script("snowball-above-cut").main([*args, "--all"])
+        self.assertEqual(json.loads((self.work / "snowball-cut.json").read_text())["cut_row"], None)
+        script("merge-snowball-order").main(args)
+        order = [json.loads(line) for line in (self.work / "config-screening-order.jsonl").read_text().splitlines()]
+        self.assertEqual((len(order), [(r["order_rank"], r["repo"]) for r in order[-2:]]), (253, [(1001, "s/high"), (1002, "s/low")]))
+        script("build-stage1-inputs").main([*args, "--stratum", "config", "--shape", "brief"], fetch=FakeFetch())
+        held = [json.loads(line)["repo"] for line in (self.work / "stage1-inputs-config-brief.jsonl").read_text().splitlines()]
+        self.assertEqual((len(held), held[-2:]), (253, ["s/high", "s/low"]))
+        with self.assertRaisesRegex(SystemExit, "--limit must be between 1 and 200"):
+            script("export-screening-order").main([*args, "--stratum", "config", "--limit", "250"])
+
+    def test_a_snowball_cut_is_refused_when_a_facet_of_the_topic_clusters_several_problems(self):
+        from study_v4_fixture import v4_repo
+        repo = v4_repo()
+        work = Path(tempfile.mkdtemp(prefix="study-snow-cut-"))
+        self.addCleanup(shutil.rmtree, work, ignore_errors=True)
+        write_json(work / "config-ranked.json", self.ranked(250))
+        write_json(work / "config-ranked-snowball.json", {"rows": [{"repo": "s/high", "order": 9, "pushed": "2026-01-01", "channels": ["snowball"], "units": [], "stars": 0, "via": []}]})
+        args = ["--topic", "demo", "--repo", str(repo), "--work", str(work)]
+        with self.assertRaisesRegex(SystemExit, "facet alpha clusters the problems X1, X2, a quality criteria v4 topic; a snowball cut is refused, run snowball-above-cut.py --all"):
+            script("snowball-above-cut").main(args)
+        script("snowball-above-cut").main([*args, "--all"])
+        self.assertIsNone(json.loads((work / "snowball-cut.json").read_text())["cut_row"])
+
     def test_snowballed_rows_merge_into_the_order_without_renumbering(self):
         write_jsonl(self.work / "config-screening-order.jsonl", [{"order_rank": 1, "repo": "o/r1"}, {"order_rank": 1001, "repo": "s/old"}])
         write_jsonl(self.work / "snowball-screening-order.jsonl", [{"order_rank": 1001, "repo": "s/new"}, {"order_rank": 1002, "repo": "S/Old"}])
@@ -144,8 +217,11 @@ class OrderAndSnowballTest(unittest.TestCase):
 
     def test_qgs_candidates_come_only_from_curated_lists_on_the_topic(self):
         topic = {**self.topic, "qgs_list_topic": "claude|agent"}
-        write_json(self.work / "config-ranked.json", {"aggregators": [{"repo": "l/awesome-claude", "description": "curated"}, {"repo": "l/awesome-web", "description": "web"},
-                                                                      {"repo": "l/mirror-claude", "description": "mirror"}]})
+        aggregators = [{"repo": "l/awesome-claude", "description": "curated"}, {"repo": "l/awesome-web", "description": "web"}, {"repo": "l/mirror-claude", "description": "mirror"}]
+        write_json(self.work / "config-ranked.json", {"terms": ["tdd"], "aggregators": aggregators})
+        with self.assertRaisesRegex(TopicError, r"was ranked with the terms \['tdd'\], not the topic's \['tdd', 'test'\]"):
+            script("extract-qgs-candidates").candidates(topic, self.work, FakeFetch(), "config-ranked.json")
+        write_json(self.work / "config-ranked.json", {"terms": ["TEST", "tdd"], "aggregators": aggregators})
         fetch = FakeFetch([("repos/l/awesome-claude/readme", "## TDD\n- https://github.com/a/one tdd guard\n- https://github.com/a/one again tdd\n- https://github.com/a/two docs\n")])
         lists, failed, rows, unique = script("extract-qgs-candidates").candidates(topic, self.work, fetch, "config-ranked.json")
         self.assertEqual([l["repo"] for l in lists], ["l/awesome-claude"])

@@ -11,6 +11,7 @@ UNIT = re.compile(r"(?:^|/)(?:skills|agents|commands|hooks|rules|workflows)/[^/]
 CONFIG_DIR = re.compile(r"(?:^|/)(?:\.claude|\.claude-plugin|\.agents)/[^/]+/")
 FOREIGN_SEGMENT = re.compile(r"^([A-Za-z0-9][\w.-]*)[@§]([\w.-]+)$")
 SKILL_FILE = re.compile(r"(?:^|/)skills/[^/]+/SKILL\.md$")
+CONFIG_CHANNELS = ("config-pool",)
 NOT_SOCIAL_VIA = ("code ", "repos ", "topic ", "listed ", "marketplace ")
 
 
@@ -18,10 +19,22 @@ def order_key(row):
     return (-row["order"], -int(row["pushed"].replace("-", "")), row["repo"].lower())
 
 
+def counted_code_queries(topic, queries):
+    if not topic.get("facet"):
+        return "all"
+    term = term_regex(topic["terms"])
+    return [q for q in queries if term.search(q)]
+
+
+def counts_query(counted, via):
+    return counted == "all" or via.split(": ", 1)[0] in {f"code {q}" for q in counted}
+
+
 class Ranker:
-    def __init__(self, terms, cache):
+    def __init__(self, terms, cache, counted="all"):
         self.term = term_regex(terms)
         self.cache = Path(cache)
+        self.counted = counted
 
     def vendored(self, path):
         head = path[:ASSET.search(path).start()].split("/")
@@ -71,7 +84,7 @@ class Ranker:
             blob = shas[key].get("shas")
             original = kept if blob is None else [p for p in kept if p not in blob or first_holder.get(blob[p]) == key]
             units = sorted({unit(p) for p in original})
-            code_queries = sorted({v.split(": ", 1)[0] for v in row["via"] if v.startswith("code ")})
+            code_queries = sorted({v.split(": ", 1)[0] for v in row["via"] if v.startswith("code ") and counts_query(self.counted, v)})
             social_hit = bool(SOCIAL & set(row["channels"])) and any(self.term.search(v) for v in row["via"] if not v.startswith(NOT_SOCIAL_VIA))
             name_hit = self.name_hit(row)
             all_units = {unit(p) for p in paths if ASSET.search(p) and not self.vendored(p)}
@@ -104,7 +117,7 @@ def contract_path(evidence, prefixes):
     return evidence.split(": ", 1)[1] if evidence.startswith("code ") and ": " in evidence else evidence
 
 
-def rank_product(pool_rows, terms, code_queries=()):
+def rank_product(pool_rows, terms, code_queries=(), counted="all"):
     term = term_regex(terms)
     prefixes = sorted((f"code {q}: " for q in code_queries), key=len, reverse=True)
     rows, aggregators = [], []
@@ -113,7 +126,10 @@ def rank_product(pool_rows, terms, code_queries=()):
         if AGGREGATOR_TEXT.search(text):
             aggregators.append({"repo": row["repo"], "description": (row.get("description") or "")[:200]})
             continue
-        evidence = row["evidence"]
+        own = [e for e in row["evidence"].get("code", []) if counts_query(counted, e)]
+        evidence = {c: (own if c == "code" else v) for c, v in row["evidence"].items() if c != "code" or own}
+        if counted != "all":
+            evidence = {c: kept for c, v in evidence.items() if c not in CONFIG_CHANNELS for kept in [[e for e in v if term.search(e)]] if kept}
         contract = list(dict.fromkeys(contract_path(e, prefixes) for e in evidence.get("code", [])))
         name_hit = bool(term.search(row["repo"].split("/", 1)[1].replace("_", "-")) or term.search(row.get("description") or ""))
         order = len(evidence) + math.log2(1 + len(contract)) + (1 if name_hit else 0)

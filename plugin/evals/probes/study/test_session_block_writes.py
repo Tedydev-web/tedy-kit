@@ -90,7 +90,8 @@ class BlockWriteTest(SessionBase):
         self.assertEqual([b["ranks"] for b in self.meta()["config-pilot-A"]["blocks"]], [[1]])
 
     def drop(self, session="config-pilot-A", ranks="1-1"):
-        script("drop-screening-block").main(["--topic", "demo", "--repo", str(self.repo), "--work", str(self.work), "--stratum", "config", "--session", session, "--ranks", ranks])
+        script("drop-screening-block").main(["--topic", "demo", "--repo", str(self.repo), "--work", str(self.work), "--stratum", "config", "--session", session, "--ranks", ranks,
+                                                "--reason", "the packet changed after this block", "--today", "2026-10-20"])
 
     def test_a_scored_block_can_be_dropped_and_its_ranks_fetched_and_screened_again(self):
         (self.work / "config-pilot-A-mechanisms.md").write_text("kept: from an earlier block\n")

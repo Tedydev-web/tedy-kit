@@ -18,6 +18,36 @@ REPLY_FORMAT = ("## Reply format\n\nReply with nothing but these lines. One JSON
                 "mechanisms (names), new (true when a mechanism is new to you), decision (eligible, or exclude: <code>) and note. Then one line per mechanism you name "
                 "for the first time: mechanism: <kebab-case-name>: <one-line definition>.")
 TEMPLATE_SHA256 = hashlib.sha256((ROWS_NOTE + "\n\n" + REPLY_FORMAT).encode()).hexdigest()
+REPLY_FORMAT_V4 = REPLY_FORMAT.replace("mechanisms (names), ", "mechanisms (names), problems (the ids of the registry problems the repository carries a mechanism for; "
+                                                             "at least one for an eligible row), ")
+TEMPLATE_SHA256_V4 = hashlib.sha256((ROWS_NOTE + "\n\n" + REPLY_FORMAT_V4).encode()).hexdigest()
+
+
+def criteria_version(path):
+    found = re.search(r"quality-criteria-v(\d+)\.md$", str(path or ""))
+    return int(found.group(1)) if found else 0
+
+
+def reply_format(criteria):
+    return REPLY_FORMAT_V4 if criteria_version(criteria) >= 4 else REPLY_FORMAT
+
+
+def template_sha256(criteria):
+    return TEMPLATE_SHA256_V4 if criteria_version(criteria) >= 4 else TEMPLATE_SHA256
+QGS_ROWS_NOTE = ("Each row below is one JSON object: the pinned commit, the repository facts from discovery, the top-level listing, the README excerpt, up to two asset files "
+                 "read at that commit, and the evidence the toolchain fetched. Judge only from these inputs; you have no tools. A file listed under missing could not be read "
+                 "at the pinned commit and counts as absent.")
+QGS_REPLY_FORMAT = ("## Reply format\n\nReply with nothing but these lines. One JSON object per row, on one line, in order_rank order, with the fields order_rank, repo, "
+                    "verdict (\"yes\", \"no\" or \"unsure\"), problems (the ids of the problems the repository carries a mechanism for; at least one for a yes, none otherwise), "
+                    "strata (\"config\" when the repository's own agent assets carry the mechanism, \"product\" when it ships the mechanism as source code a harness runs, "
+                    "or both; at least one for a yes, none otherwise) and why (one sentence).")
+QGS_TEMPLATE_SHA256 = hashlib.sha256((QGS_ROWS_NOTE + "\n\n" + QGS_REPLY_FORMAT).encode()).hexdigest()
+STAGE1_ROWS_NOTE = ("Each row below is one repository: its name and description and, when given, its agent-asset paths or the first lines of its README. Answer yes when it "
+                    "plausibly carries a mechanism for a listed problem; unsure when the text is empty, vague or could plausibly address a listed problem; no only when it clearly "
+                    "addresses none of them. When in doubt, include: only no excludes a row. You have no tools.")
+STAGE1_REPLY_FORMAT = ("## Reply format\n\nReply with nothing but these lines. One JSON object per row, on one line, in order_rank order, with the fields order_rank, repo, "
+                       "verdict (\"yes\", \"unsure\" or \"no\"), problems (the ids of the problems it may address; at least one for a yes) and why (one short sentence).")
+STAGE1_TEMPLATE_SHA256 = hashlib.sha256((STAGE1_ROWS_NOTE + "\n\n" + STAGE1_REPLY_FORMAT).encode()).hexdigest()
 
 
 def sweep_date(topic):
@@ -54,5 +84,15 @@ def with_computed_date(row, inputs, when):
 def build_prompt(packet, criteria_path, criteria_text, mechanisms_text, rows, when):
     blocks = ["```json\n" + json.dumps(r, ensure_ascii=False) + "\n```" for r in rows]
     parts = [packet.rstrip(), f"## Criteria ({criteria_path})", criteria_text.rstrip(), "## Your mechanism names so far", mechanisms_text.strip() or "none yet",
-             "## Rows", ROWS_NOTE.format(sweep_date=when.isoformat()), *blocks, REPLY_FORMAT]
+             "## Rows", ROWS_NOTE.format(sweep_date=when.isoformat()), *blocks, reply_format(criteria_path)]
     return "\n\n".join(parts) + "\n"
+
+
+def build_stage1_prompt(packet, worked, rows):
+    blocks = ["```json\n" + json.dumps(r, ensure_ascii=False) + "\n```" for r in rows]
+    return "\n\n".join([packet.rstrip(), "## Worked examples", worked, "## Rows", STAGE1_ROWS_NOTE, *blocks, STAGE1_REPLY_FORMAT]) + "\n"
+
+
+def build_qgs_prompt(packet, rows):
+    blocks = ["```json\n" + json.dumps(r, ensure_ascii=False) + "\n```" for r in rows]
+    return "\n\n".join([packet.rstrip(), "## Rows", QGS_ROWS_NOTE, *blocks, QGS_REPLY_FORMAT]) + "\n"

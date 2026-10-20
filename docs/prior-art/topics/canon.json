@@ -12,8 +12,25 @@
   "pilot_rows": 20,
   "sessions": {
     "A": {"cli": "claude", "model": "claude-opus-5-5", "effort": "high"},
-    "B": {"cli": "agy", "model": "gemini-3.8-flash-high", "fallback": {"cli": "claude", "model": "claude-sonnet-4-6", "effort": "high"}, "pilot_also": [{"cli": "agy", "model": "gpt-oss-120b-medium"}]}
+    "B": {"cli": "claude", "model": "claude-sonnet-5-5", "effort": "high"}
   },
+  "qgs_judges": {
+    "A": {"cli": "claude", "model": "claude-opus-5-5", "effort": "high"},
+    "B": {"cli": "claude", "model": "claude-sonnet-5-5", "effort": "high"}
+  },
+  "reader": {"cli": "claude", "model": "claude-opus-5-5", "effort": "high"},
+  "cross_family": {"cli": "agy", "model": "gemini-3.8-flash-high"},
+  "stage1_examples": [
+    {"repo": "agent-sh/agnix", "description": "The missing linter and lsp for AI coding assistants. Validate CLAUDE.md, AGENTS.md, SKILL.md, hooks, MCP. Plugin for all major IDEs included, with autofixes.", "verdict": "yes", "problems": ["S12"], "why": "a linter and LSP that validates CLAUDE.md, AGENTS.md, SKILL.md, hooks and MCP config, with autofixes"},
+    {"repo": "TheStack-ai/pulser", "description": "SKILL.md linter for Claude Code — auto-diagnose and fix skills against Anthropic best practices. npx pulser", "verdict": "yes", "problems": ["S12"], "why": "a linter that diagnoses and fixes SKILL.md files against Anthropic's skill guidance"},
+    {"repo": "Lexxes-Projects/obey", "description": "Makes Claude actually follow your rules. Save rules with natural language, enforce them with hooks, remember them across sessions.", "verdict": "yes", "problems": ["S23"], "why": "enforces the rules a user saves through lifecycle hooks, with an audit trail"},
+    {"repo": "anthropics/skills", "description": "Public repository for Agent Skills", "verdict": "unsure", "problems": [], "why": "an example skill collection; the description shows no validator or eval, so only the files can tell"},
+    {"repo": "Chachamaru127/claude-code-harness", "description": "Claude Code Dedicated Development Harness - Achieving High-Quality Development Through an Autonomous Plan→Work→Review Cycle", "verdict": "unsure", "problems": [], "why": "a plan, work and review harness; the description does not show whether code checks the kit's own artifacts"},
+    {"repo": "redhuntlabs/superpower-builder", "description": "Build AI spells for what you do - a meta-builder that turns recurring tasks into reusable workflows that any AI assistant can run.", "verdict": "unsure", "problems": [], "why": "a workflow builder that mentions a baseline-versus-skill test, but not whether that test is code"},
+    {"repo": "1160054/claude-code-zsh-completion", "description": "Zsh completion for the Claude Code CLI: press TAB to see every command and option with what it does, plus your own sessions, MCP servers and agents. 120 languages.", "verdict": "no", "problems": [], "why": "shell completion for the CLI; nothing checks or changes kit artifacts"},
+    {"repo": "Aboudjem/sniff", "description": "Point it at your running app. It walks your real user flows in a real browser and tells you what is actually broken, with proof.", "verdict": "no", "problems": [], "why": "QA of a running application, not of a kit's skills, hooks or rules"},
+    {"repo": "Atomic-Mail/atomic-mail-agentic", "description": "Let your agents read, send, and react to email autonomously, without human involvement", "verdict": "no", "problems": [], "why": "an email MCP server for a product domain, not a kit mechanism"}
+  ],
   "strata": {
     "config": {
       "stop_row": null,
@@ -44,6 +61,7 @@
       "forced_repos": [],
       "channels": {
         "harness": "claude|ai agent|coding agent|agent skills?|llm|copilot|codex|cursor|architecture|decision records?|fitness functions?|rule ?sets?|codemods?|lint\\w*|schema",
+        "config_pool": true,
         "extra_text": "breaking changes?|backward.compat\\w*|versioned rules?|rules? as code|standards? as code|policy as code|architecture tests?",
         "npm_queries": ["claude-code skill validator", "claude-code plugin validator", "claude-code lint", "agent skills lint", "skill-creator", "claude-code eval", "agent eval harness", "llm eval regression", "keywords:claude-code-plugin", "keywords:claude-code", "keywords:agent-skills", "architecture decision record", "adr cli", "fitness function architecture", "architecture test", "lint baseline", "lint ratchet", "codemod migration", "rules migration", "policy as code"],
         "code_fields": ["SKILL.md", "plugin.json", "marketplace.json"],

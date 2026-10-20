@@ -1,3 +1,5 @@
+import math
+
 from study_screening_core import JUDGED
 from study_topic import SNOWBALL_RANK_BASE, TopicError
 
@@ -77,6 +79,49 @@ def resolved_standard(members, names):
     return {"of": list(members), "final": [canonical for canonical, _ in groups.values()],
             "renamed": {m: names[m.lower()] for m in members if names.get(m.lower()) and names[m.lower()].lower() != m.lower()},
             "collapsed": {canonical: group for canonical, group in groups.values() if len(group) > 1}}
+
+
+def binomial_tail(k, n, p, upper):
+    terms = range(k, n + 1) if upper else range(0, k + 1)
+    log_p, log_q, log_n = math.log(p), math.log1p(-p), math.lgamma(n + 1)
+    return sum(math.exp(log_n - math.lgamma(i + 1) - math.lgamma(n - i + 1) + i * log_p + (n - i) * log_q) for i in terms)
+
+
+def solve_bound(k, n, upper, target):
+    low, high = 0.0, 1.0
+    for _ in range(100):
+        mid = (low + high) / 2
+        if (binomial_tail(k, n, mid, upper) < target) == upper:
+            low = mid
+        else:
+            high = mid
+    return (low + high) / 2
+
+
+def checked_counts(k, n):
+    if n < 1 or not 0 <= k <= n:
+        raise TopicError(f"an interval needs 0 <= hits <= members and at least one member, got {k}/{n}")
+
+
+def clopper_pearson(k, n, confidence=0.95):
+    checked_counts(k, n)
+    alpha = (1 - confidence) / 2
+    return (0.0 if k == 0 else solve_bound(k, n, True, alpha), 1.0 if k == n else solve_bound(k, n, False, alpha))
+
+
+def lower_bound(k, n, alpha=0.05):
+    checked_counts(k, n)
+    return 0.0 if k == 0 else solve_bound(k, n, True, alpha)
+
+
+def upper_bound(k, n, alpha=0.05):
+    checked_counts(k, n)
+    return 1.0 if k == n else solve_bound(k, n, False, alpha)
+
+
+def interval_text(k, n):
+    low, high = clopper_pearson(k, n)
+    return f"{k}/{n} ({k / n:.3f}, 95% CI {low:.2f}-{high:.2f})"
 
 
 def cohen_kappa(pairs):

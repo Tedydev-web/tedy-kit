@@ -1,18 +1,24 @@
+import hashlib
 import json
 import re
 import sys
 from pathlib import Path
 
 from study_pool import DISCOVERY_STATES, work_file
+from study_session import canonical_sha256
 from study_topic import TopicError, load_topic, sweep_folder, topic_arguments
 
 HEX40 = re.compile(r"[0-9a-f]{40}")
 LONGHEX = re.compile(r"\b[0-9a-fA-F]{32,}\b")
 DIGEST = re.compile(r"[0-9a-f]{64}")
 HOME_PATH = re.compile(r"/(?:home|Users)/[^/\s]+/")
-ORDER_FIELDS = ("order_rank", "repo", "order", "units", "contract_files", "stars", "pushed", "created", "channels", "archived", "forced", "closed_issues", "merged_prs", "license")
-SHARED_JSON = ("meta.json", "study.json", "surface-map.json", "mechanism-table.json", "qgs-adjudicated.json", "protocol-freeze.json", "calibration-sample.json", "snowball-cut.json")
-SHARED_JSONL = ("qgs-candidates.jsonl", "qgs-judge-A.jsonl", "qgs-judge-B.jsonl", "snowball-screening-order.jsonl")
+ORDER_FIELDS = ("order_rank", "repo", "order", "units", "contract_files", "stars", "pushed", "created", "channels", "archived", "forced", "closed_issues", "merged_prs", "license",
+                "facets")
+SHARED_JSON = ("meta.json", "study.json", "surface-map.json", "mechanism-table.json", "qgs-adjudicated.json", "protocol-freeze.json", "calibration-sample.json", "snowball-cut.json",
+               "calibration-set.json", "calibration-labels.json", "calibration-draw.json", "audit-sample.json", "stage1-freeze.json", "stage1-rung.json", "qgs-dropped.json",
+               "top-up-set.json", "top-up-labels.json", "top-up-draw.json", "held-out-set.json", "held-out-labels.json", "held-out-draw.json")
+FETCHED_TEXT = re.compile(r"-(?:screening|qgs)-inputs\.jsonl$")
+SHARED_JSONL = ("qgs-candidates.jsonl", "qgs-judge-A.jsonl", "qgs-judge-B.jsonl", "qgs-reader.jsonl", "snowball-screening-order.jsonl")
 
 
 def pin(row):
@@ -47,6 +53,23 @@ def paper_rows(work):
     return [{**paper, "linked_repos": sorted(repo for repo, evidence in hits.items() if paper["key"] in evidence)} for paper in papers.values()]
 
 
+def stage1_row(row):
+    row = {**row, "row_sha256": canonical_sha256(row)}
+    lead = row.pop("readme_lead", None)
+    if lead:
+        row["readme_lead_sha256"] = hashlib.sha256(lead.encode()).hexdigest()
+    return row
+
+
+def config_pool_channel(work):
+    state = work_file(work, "product-state.json")
+    hits = json.loads(state.read_text())["hits"] if state.exists() else {}
+    meta = json.loads(work_file(work, "cache/meta.json").read_text()) if work_file(work, "cache/meta.json").exists() else {}
+    names = {key: (meta.get(key) or {}).get("nameWithOwner") or hit["repo"] for key, hit in hits.items() if "config-pool" in hit["channels"]}
+    only = [names[key] for key, hit in hits.items() if key in names and set(hit["channels"]) == {"config-pool"}]
+    return {"joined": sorted(names.values(), key=str.lower), "only": sorted(only, key=str.lower)}
+
+
 def export(topic, repo, work):
     repo, work = Path(repo).resolve(), Path(work).resolve()
     out = sweep_folder(repo, topic)
@@ -66,6 +89,11 @@ def export(topic, repo, work):
         (out / name).write_text(body)
         counts[name] = "copied"
 
+    def data(name):
+        (out / name).parent.mkdir(parents=True, exist_ok=True)
+        (out / name).write_text(json.dumps(clean(json.loads((work / name).read_text())), indent=1, ensure_ascii=False) + "\n")
+        counts[name] = "copied"
+
     def packet(name):
         data = (work / name).read_bytes()
         body = data.decode("utf-8", errors="replace")
@@ -82,11 +110,27 @@ def export(topic, repo, work):
             if (work / f"{stratum}-screen-{side}-mechanisms.md").exists():
                 text(f"{stratum}-screen-{side}-mechanisms.md")
         for path in sorted(work.glob(f"{stratum}-reader-C-*.jsonl")) + sorted(work.glob(f"{stratum}-qgs-*.jsonl")):
-            jsonl(path.name)
-        for path in sorted(work.glob(f"{stratum}-pilot-*.jsonl")):
+            if not FETCHED_TEXT.search(path.name):
+                jsonl(path.name)
+        for path in sorted(work.glob(f"{stratum}-pilot-*.jsonl")) + sorted(work.glob(f"judge-{stratum}-*.jsonl")) + sorted(work.glob(f"{stratum}-audit-*.jsonl")):
             jsonl(path.name, pin)
         for path in sorted(work.glob(f"{stratum}-pilot-*-mechanisms.md")):
             text(path.name)
+        for path in sorted(work.glob(f"stage1-{stratum}-*.jsonl")) + sorted(work.glob(f"{stratum}-stage1-audit-*.jsonl")):
+            jsonl(path.name, pin)
+        for path in sorted(work.glob(f"stage1-inputs-{stratum}-*.jsonl")):
+            jsonl(path.name, stage1_row)
+        for name in (f"{stratum}-stage2.json", f"{stratum}-stage1-audit.json", f"{stratum}-stage1-audit-checks.json"):
+            if (work / name).exists():
+                data(name)
+        for facet in topic.get("facets") or {}:
+            name = f"facets/{facet}/{stratum}-ranked.json"
+            if (work / name).exists():
+                ranked = json.loads((work / name).read_text())
+                (out / name).parent.mkdir(parents=True, exist_ok=True)
+                (out / name).write_text(json.dumps({"terms": ranked.get("terms"), "rows": [{"order_rank": r["order_rank"], "repo": r["repo"]} for r in ranked["rows"]]},
+                                                   indent=1) + "\n")
+                counts[name] = "ranks only"
         if (work / f"{stratum}-qgs-adjudicated.json").exists():
             (out / f"{stratum}-qgs-adjudicated.json").write_text(json.dumps(clean(json.loads((work / f"{stratum}-qgs-adjudicated.json").read_text())), indent=1, ensure_ascii=False) + "\n")
             counts[f"{stratum}-qgs-adjudicated.json"] = "copied"
@@ -99,6 +143,17 @@ def export(topic, repo, work):
     for name in SHARED_JSONL:
         if (work / name).exists():
             jsonl(name)
+    for path in sorted(work.glob("held-out-*-*.json")):
+        data(path.name)
+    for path in sorted(work.glob("qgs-cross-*.jsonl")):
+        jsonl(path.name)
+    for path in sorted(work.glob("dropped/*")):
+        name = f"dropped/{path.name}"
+        (out / "dropped").mkdir(exist_ok=True)
+        if path.name.endswith(".rows.jsonl"):
+            jsonl(name, pin)
+        elif path.name.endswith(".block.json"):
+            data(name)
     for name in SHARED_JSON:
         if (work / name).exists():
             (out / name).write_text(json.dumps(clean(json.loads((work / name).read_text())), indent=1, ensure_ascii=False) + "\n")
@@ -107,6 +162,9 @@ def export(topic, repo, work):
         packet(path.name)
     for path in sorted(work.glob("*-qgs-log.md")):
         text(path.name)
+    if (topic["strata"].get("product", {}).get("channels") or {}).get("config_pool") is True:
+        (out / "config-pool-channel.json").write_text(json.dumps(config_pool_channel(work), indent=1, ensure_ascii=False) + "\n")
+        counts["config-pool-channel.json"] = "written"
     if any(s.get("channels", {}).get("academic") for s in topic["strata"].values()):
         rows = paper_rows(work)
         (out / "papers.jsonl").write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))

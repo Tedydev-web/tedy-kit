@@ -3,10 +3,10 @@ import sys
 from pathlib import Path
 
 from study_pool import product_code_queries, work_file
-from study_rank import rank_product
+from study_rank import counted_code_queries, rank_product
 from study_topic import TopicError, load_topic, topic_arguments
 
-PRODUCT_CHANNELS = ("npm", "code", "reverse", "social", "repo", "arxiv", "semantic-scholar")
+PRODUCT_CHANNELS = ("npm", "code", "reverse", "social", "repo", "arxiv", "semantic-scholar", "config-pool")
 
 
 def main(argv=None):
@@ -20,12 +20,14 @@ def main(argv=None):
     except TopicError as error:
         sys.exit(f"rank-product-pool: {error}")
     pool = json.loads(work_file(work, "product-pool.json").read_text())
-    ranked = rank_product(pool["rows"], topic["terms"], product_code_queries(topic["strata"]["product"].get("channels") or {}))
+    queries = product_code_queries(topic["strata"]["product"].get("channels") or {})
+    counted = counted_code_queries(topic, queries)
+    ranked = rank_product(pool["rows"], topic["terms"], queries, counted)
     identified = {c: sum(1 for r in pool["rows"] if c in r["evidence"]) for c in PRODUCT_CHANNELS}
     prisma = {"identified_per_channel": identified, "union": pool["prisma"]["identified"], "not_resolvable": pool["prisma"]["not_resolvable"],
               "aggregators_removed": len(ranked["aggregators"]), "screenable": len(ranked["rows"]),
               "archived": sum(r["archived"] for r in ranked["rows"]), "forks": sum(r["fork"] for r in ranked["rows"])}
-    (work / "product-ranked.json").write_text(json.dumps({"terms": topic["terms"], "prisma": prisma, **ranked}, indent=1))
+    (work / "product-ranked.json").write_text(json.dumps({"terms": topic["terms"], "code_queries_counted": counted, "prisma": prisma, **ranked}, indent=1))
     print(json.dumps(prisma))
 
 
