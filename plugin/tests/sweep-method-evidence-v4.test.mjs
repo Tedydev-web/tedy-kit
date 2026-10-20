@@ -260,6 +260,20 @@ test("item 10: a drop without its reason or copy, or a block removed by hand, fa
   assert.match(errors, /judge-config-reader-claude-opus-5-5-run1\.jsonl holds rows .* that no recorded block covers; drop or rerun a block with the redo tools/);
 });
 
+test("meta.drops matches the copies under dropped/ in both directions", () => {
+  const s = sweep();
+  s.write("meta.json", { ...s.json("meta.json"), drops: [] });
+  assert.match(s.errors(), /^the record renderer refused the sweep files: prior-art-sweep-record: dropped\/qgs-judge-B-1-5-1: a dropped copy without its meta\.json drops entry; /m);
+  const t = sweep();
+  writeFileSync(join(t.folder, "dropped", "qgs-judge-A-1-5-1.rows.jsonl"), "");
+  assert.match(t.errors(), /^the record renderer refused the sweep files: prior-art-sweep-record: dropped\/qgs-judge-A-1-5-1: a dropped copy without its meta\.json drops entry; /m);
+  const u = sweep();
+  rmSync(join(u.folder, "dropped", "qgs-judge-B-1-5-1.block.json"));
+  const errors = u.errors();
+  assert.match(errors, /^the record renderer refused the sweep files: prior-art-sweep-record: the drop of qgs-judge-B ranks \[1, 5\] has no copy of its block in the sweep folder/m);
+  assert.match(errors, /^the drop of qgs-judge-B ranks 1,5 has no copy of its block in the sweep folder$/m);
+});
+
 test("item 11: PRISMA and recall are recomputed from the files, so an edited count fails the gate", () => {
   const s = sweep();
   assert.match(s.errors(s.text.replace("| config | stage-1 screened | 133 |", "| config | stage-1 screened | 132 |")), /PRISMA config "stage-1 screened": the record says 132, the files give 133/);

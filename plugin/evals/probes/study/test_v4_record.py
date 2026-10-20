@@ -245,6 +245,26 @@ class V4RecordTest(unittest.TestCase):
                 with self.assertRaisesRegex(TopicError, rf"^{key}: the run was \S+ \S+, not the roster's \S+ \S+ it validates; a validation run counts only for its own judge$"):
                     self.render(repo)
 
+    def test_meta_drops_matches_the_copies_under_dropped_in_both_directions(self):
+        repo, folder = self.copy()
+        meta = json.loads((folder / "meta.json").read_text())
+        (folder / "meta.json").write_text(json.dumps({**meta, "drops": []}))
+        with self.assertRaisesRegex(TopicError, r"^dropped/qgs-judge-B-1-5-1: a dropped copy without its meta.json drops entry; "):
+            self.render(repo)
+        repo, folder = self.copy()
+        (folder / "dropped/qgs-judge-A-1-5-1.rows.jsonl").write_text("")
+        with self.assertRaisesRegex(TopicError, r"^dropped/qgs-judge-A-1-5-1: a dropped copy without its meta.json drops entry; "):
+            self.render(repo)
+        repo, folder = self.copy()
+        (folder / "dropped/qgs-judge-B-1-5-1.block.json").unlink()
+        with self.assertRaisesRegex(TopicError, r"^the drop of qgs-judge-B ranks \[1, 5\] has no copy of its block in the sweep folder"):
+            self.render(repo)
+        repo, folder = self.copy()
+        meta = json.loads((folder / "meta.json").read_text())
+        (folder / "meta.json").write_text(json.dumps({**meta, "drops": [{**meta["drops"][0], "reason": " "}]}))
+        with self.assertRaisesRegex(TopicError, r"^the drop of qgs-judge-B ranks \[1, 5\] records no reason"):
+            self.render(repo)
+
     def test_the_cross_family_audit_carries_the_frozen_packet_and_criteria_and_the_row_hashes_stage_2_screened(self):
         key = "config-audit-gemini-3.8-flash-high"
         frozen = "a block ran under a packet or criteria other than the frozen ones"

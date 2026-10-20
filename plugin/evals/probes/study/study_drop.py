@@ -8,6 +8,7 @@ from study_topic import TopicError
 
 SCREEN_KEY = re.compile(r"^([a-z0-9]+)-([AB])$")
 PILOT_KEY = re.compile(r"^([a-z0-9]+)-pilot-")
+DROP_SUFFIX = re.compile(r"\.(?:block\.json|rows\.jsonl|inputs\.jsonl)$")
 
 
 def free_name(folder, stem):
@@ -21,6 +22,21 @@ def rewrite(path, lines):
     temporary = path.with_name(path.name + ".tmp")
     temporary.write_text("".join(lines))
     temporary.replace(path)
+
+
+def drop_checks(folder):
+    folder = Path(folder)
+    drops = json.loads((folder / "meta.json").read_text()).get("drops") or []
+    for drop in drops:
+        where = f"the drop of {drop.get('key')} ranks {drop.get('ranks')}"
+        if not str(drop.get("reason") or "").strip():
+            raise TopicError(f"{where} records no reason")
+        if not re.fullmatch(r"dropped/[\w.-]+", str(drop.get("copy") or "")) or not (folder / f"{drop['copy']}.block.json").is_file():
+            raise TopicError(f"{where} has no copy of its block in the sweep folder")
+    copies = {drop["copy"] for drop in drops}
+    loose = sorted({f"dropped/{re.sub(DROP_SUFFIX, '', p.name)}" for p in (folder / "dropped").glob("*")} - copies) if (folder / "dropped").is_dir() else []
+    if loose:
+        raise TopicError(f"{', '.join(loose)}: a dropped copy without its meta.json drops entry; a run is dropped only by drop-run.py, which records both")
 
 
 def file_stem(key):

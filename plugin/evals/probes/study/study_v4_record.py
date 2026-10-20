@@ -4,6 +4,7 @@ from pathlib import Path
 
 from study_agreement import RECALL_TARGET, cohen_kappa, interval_text, kappa_text
 from study_calibration_set import all_batches, calibration_checks, labelled, labels_file, set_file
+from study_drop import drop_checks
 from study_judges import AUDIT_FILE, AUDIT_ROWS, SHAPES, criteria_version, decided, judged_batches, reader_shares_family, roster, validate
 from study_method_sessions import checked_entry, row_hashes
 from study_qgs import ADJUDICATED, JUDGE_FILES, PACKET, UPPER_ESTIMATE, candidate_rows, cross_family, member_facets, qgs_standard, stratum_members
@@ -392,6 +393,7 @@ def audit_lines(topic, folder, strata, sides, sessions, freeze):
 
 def v4_parts(topic, folder, strata, freeze, sessions, faceted, common, decided_rows):
     calibration_checks(topic, folder)
+    drop_checks(folder)
     sides = {s: {side: {r["order_rank"]: r for r in read_jsonl(folder, f"{s}-screen-{side}.jsonl")} for side in "AB"} for s in strata}
     for stratum in strata:
         faceted[stratum]["inputs"] = list(stage1_inputs(folder, stratum, stage1_results(folder, stratum)[0]["shape"]).values())
