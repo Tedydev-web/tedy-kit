@@ -126,18 +126,22 @@ def aggregator_readme():
     return "\n".join(lines + [f"- [{r.split('/')[1]}](https://github.com/{r}) a tdd snowball" for r in SNOWBALLED]) + "\n"
 
 
-def v4_work(repo):
+def padding_repos(pad):
+    return [f"o/z{6 * i}" for i in range(1, pad + 1)]
+
+
+def v4_work(repo, pad=0):
     work = Path(tempfile.mkdtemp(prefix="study-v4-work-"))
     atexit.register(shutil.rmtree, work, ignore_errors=True)
     terms = load_topic(repo, "demo")["terms"]
-    known = [*pool_repos("config"), *pool_repos("product"), *SNOWBALLED, AGGREGATOR]
+    known = [*pool_repos("config"), *padding_repos(pad), *pool_repos("product"), *SNOWBALLED, AGGREGATOR]
     write_json(work / "cache/meta.json", {r.lower(): meta_info(r) for r in known})
     for r in [*known, OUTSIDE]:
         write_json(work / "cache/trees" / (r.replace("/", "__") + ".json"), {"oid": "e" * 40, "paths": ["README.md", "skills/tdd/SKILL.md", "src/hook.ts"]})
     (work / "cache/readmes").mkdir(parents=True, exist_ok=True)
     (work / "cache/readmes" / (AGGREGATOR.replace("/", "__") + ".md")).write_text(aggregator_readme())
     code = ['code "tdd" filename:SKILL.md: skills/tdd/SKILL.md']
-    state(work, "config-state.json", {**{r: {"github-code-search": code} for r in pool_repos("config")}, AGGREGATOR: {"repo-search": ['repos "claude tdd"']}}, terms)
+    state(work, "config-state.json", {**{r: {"github-code-search": code} for r in pool_repos("config") + padding_repos(pad)}, AGGREGATOR: {"repo-search": ['repos "claude tdd"']}}, terms)
     state(work, "product-state.json", {r: {"repo": ['repos "claude tdd"']} for r in pool_repos("product")}, terms)
     args = ["--work", str(work)]
     run(repo, "resolve-pool", *args, "--stratum", "config", "--states", "config", fetch=FakeFetch(), now=NOW)
@@ -280,9 +284,9 @@ def topped_up(repo, work):
     drawn_and_labelled(repo, work, top_up=30)
 
 
-def calibrated_work(judges, top_up=False):
+def calibrated_work(judges, top_up=False, pad=0):
     repo = v4_repo()
-    work = v4_work(repo)
+    work = v4_work(repo, pad)
     shutil.copytree(repo / "docs/prior-art/sweeps" / SWEEP, work, dirs_exist_ok=True)
     write_json(work / "mechanism-table.json", {"aliases": {}, "class": {}, "default": "new"})
     for stratum in STRATA:
@@ -345,7 +349,10 @@ def stage1_audited(repo, work, judges):
         audit = json.loads((work / f"{stratum}-stage1-audit.json").read_text())
         inputs = {json.loads(line)["order_rank"]: json.loads(line)["repo"] for line in (work / f"stage1-inputs-{stratum}-brief.jsonl").read_text().splitlines()}
         judges.flip = {inputs[audit["near"][0]]}
-        quiet(repo, "run-judge", "--work", str(work), "--stratum", stratum, "--judge", "screening-A", "--set", "stage1-audit", "--today", TODAY, fetch=judges)
+        picked = len(audit["near"]) + len(audit["far"])
+        spans = [("--rows", f"{i + 1}-{min(i + 50, picked)}") for i in range(0, picked, 50)] if picked > 50 else [()]
+        for span in spans:
+            quiet(repo, "run-judge", "--work", str(work), "--stratum", stratum, "--judge", "screening-A", "--set", "stage1-audit", *span, "--today", TODAY, fetch=judges)
         judges.flip = set()
         from study_stage1_audit import flagged
         flags = flagged(work, stratum, OPUS)[1]
@@ -390,9 +397,9 @@ def stage1_escalated(repo, work, judges):
             quiet(repo, "run-stage1", "--work", str(work), "--stratum", stratum, "--shape", "brief", "--model", model, "--set", "held-out", "--today", TODAY, fetch=judges)
 
 
-def v4_sweep(audit=True, escalate=False, top_up=False):
+def v4_sweep(audit=True, escalate=False, top_up=False, pad=0):
     judges = ScriptedJudges()
-    repo, work = calibrated_work(judges, top_up)
+    repo, work = calibrated_work(judges, top_up, pad)
     judged(repo, work, judges)
     if escalate:
         stage1_escalated(repo, work, judges)
@@ -411,5 +418,5 @@ def v4_sweep(audit=True, escalate=False, top_up=False):
 
 
 if __name__ == "__main__":
-    built = v4_sweep(audit="--no-audit" not in sys.argv, escalate="--escalate" in sys.argv, top_up="--top-up" in sys.argv)
+    built = v4_sweep(audit="--no-audit" not in sys.argv, escalate="--escalate" in sys.argv, top_up="--top-up" in sys.argv, pad=1000 if "--large-pool" in sys.argv else 0)
     shutil.copytree(built, Path(sys.argv[1]), dirs_exist_ok=True)
