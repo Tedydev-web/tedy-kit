@@ -279,6 +279,25 @@ class V4RecordTest(unittest.TestCase):
                                                         r"snowballed rows above rank 1000; "):
                     self.render(repo)
 
+    def test_a_topic_flag_never_drops_the_config_pool_line_while_its_evidence_exists(self):
+        def channels(edit):
+            def change(repo, folder):
+                path = repo / "docs/prior-art/topics/demo.json"
+                topic = json.loads(path.read_text())
+                topic["strata"]["product"]["channels"] = edit(topic["strata"]["product"]["channels"])
+                path.write_text(json.dumps(topic))
+            return change
+        flag = (r"^the sweep folder holds the config-pool channel's evidence \(config-pool-channel.json or product rows credited with config-pool\), but the topic config "
+                r"does not set strata.product.channels.config_pool; ")
+        for name, edit, message in (("config_pool false", channels(lambda c: {**c, "config_pool": False}), flag),
+                                    ("config_pool deleted", channels(lambda c: {k: v for k, v in c.items() if k != "config_pool"}), flag),
+                                    ("channels emptied", channels(lambda c: {}), flag)):
+            with self.subTest(name=name):
+                repo, folder = self.copy()
+                edit(repo, folder)
+                with self.assertRaisesRegex(TopicError, message):
+                    self.render(repo)
+
     def test_meta_drops_matches_the_copies_under_dropped_in_both_directions(self):
         repo, folder = self.copy()
         meta = json.loads((folder / "meta.json").read_text())

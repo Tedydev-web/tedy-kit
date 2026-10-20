@@ -212,7 +212,12 @@ function recallErrors(io, text, topic, strata, members, memberStrata, passes, sc
   if (!cutFile) errors.push("no snowball-cut.json in the sweep folder; under quality criteria v4 snowball-above-cut.py --all records cut_row null");
   const cut = cutFile?.cut_row;
   if (cut !== undefined && cut !== null) errors.push(`snowball-cut.json cuts the snowball at row ${cut}; quality criteria v4 refuses a snowball cut, every snowballed repository joins the pool`);
-  if (topic?.strata?.product?.channels?.config_pool === true && strata.includes("product")) errors.push(...configPoolErrors(io, text, topic, strata, passes, pools, memberStrata));
+  const switchedOn = topic?.strata?.product?.channels?.config_pool === true;
+  if (!switchedOn && (io.files?.includes("config-pool-channel.json") || io.jsonl("product-screening-order.jsonl").some((r) => r.channels?.includes("config-pool")))) {
+    errors.push("the sweep folder holds the config-pool channel's evidence (config-pool-channel.json or product rows credited with config-pool), but the topic config does not set "
+      + "strata.product.channels.config_pool; a topic config edit never removes the requirement-5 line of a channel that ran");
+  }
+  if (switchedOn && strata.includes("product")) errors.push(...configPoolErrors(io, text, topic, strata, passes, pools, memberStrata));
   return errors;
 }
 

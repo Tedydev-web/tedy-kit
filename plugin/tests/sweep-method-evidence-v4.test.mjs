@@ -311,6 +311,23 @@ test("the snowball rows equal the pool's snowballed rows and the stage-1 inputs,
   }
 });
 
+test("a topic flag never drops the config-pool channel line while its evidence files exist", () => {
+  const flag = /^the sweep folder holds the config-pool channel's evidence \(config-pool-channel\.json or product rows credited with config-pool\), but the topic config does not set strata\.product\.channels\.config_pool; /;
+  const product = (edit) => (t) => ({ ...t, strata: { ...t.strata, product: { ...t.strata.product, channels: edit(t.strata.product.channels) } } });
+  const probes = [
+    ["C8 config_pool false", built, product((c) => ({ ...c, config_pool: false }))],
+    ["config_pool deleted", built, product(({ config_pool: _, ...c }) => c)],
+    ["channels emptied", built, product(() => ({}))],
+    ["config_pool false, escalated", escalated, product((c) => ({ ...c, config_pool: false }))],
+    ["config_pool false, audit pending", pending, product((c) => ({ ...c, config_pool: false }))],
+  ];
+  for (const [name, source, edit] of probes) {
+    const s = sweep(source);
+    s.topic(edit);
+    failsBothLayers(s, new RegExp(`prior-art-sweep-record: ${flag.source.slice(1)}`), flag, name);
+  }
+});
+
 test("meta.drops matches the copies under dropped/ in both directions", () => {
   const s = sweep();
   s.write("meta.json", { ...s.json("meta.json"), drops: [] });

@@ -141,10 +141,14 @@ def recall_lines(topic, folder, strata, faceted):
         f_pool, f_pass, f_screened = recall_counts(mine, pools, faceted, strata)
         lines.append(f"- facet {facet}: recall {rate(len(f_screened), len(mine))} of the {len(mine)} members labelled for it; in-pool rate {rate(len(f_pool), len(mine))}; "
                      f"stage-1 pass rate {rate(len(f_pass), len(f_pool))}; reported, no pass or fail")
-    if (topic["strata"].get("product", {}).get("channels") or {}).get("config_pool") is True and "product" in strata:
+    credited = {r["repo"].lower() for r in read_jsonl(folder, "product-screening-order.jsonl") if "config-pool" in (r.get("channels") or [])}
+    switched_on = (topic["strata"].get("product", {}).get("channels") or {}).get("config_pool") is True
+    if not switched_on and (credited or (folder / "config-pool-channel.json").is_file()):
+        raise TopicError("the sweep folder holds the config-pool channel's evidence (config-pool-channel.json or product rows credited with config-pool), but the topic config "
+                         "does not set strata.product.channels.config_pool; a topic config edit never removes the requirement-5 line of a channel that ran")
+    if switched_on and "product" in strata:
         channel = read_json(folder, "config-pool-channel.json")
         joined = {r.lower() for r in channel["joined"]}
-        credited = {r["repo"].lower() for r in read_jsonl(folder, "product-screening-order.jsonl") if "config-pool" in (r.get("channels") or [])}
         if credited - joined:
             raise TopicError(f"product-screening-order.jsonl credits the config-pool channel with {', '.join(sorted(credited - joined)[:10])}, which config-pool-channel.json does not list")
         product = [m.lower() for m in stratum_members(out, "product")]
