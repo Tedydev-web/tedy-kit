@@ -73,6 +73,42 @@ class RankerTest(unittest.TestCase):
         self.assertEqual((row["contract_files"], row["order"]), (["src/a.ts", "lib/b.js", "docs/a: b.md", "src/c.py"], 3.322))
 
 
+class FacetRankingTest(unittest.TestCase):
+    def setUp(self):
+        self.repo = topic_repo(strata={"config": {"stop_row": None, "forced_repos": [], "channels": {"code_queries": ['"tdd" filename:SKILL.md', '"test" filename:AGENTS.md']}},
+                                       "product": {"stop_row": None, "forced_repos": [], "channels": {"harness": "claude", "code_fields": ["SKILL.md"], "code_terms": ["tdd", "test"],
+                                                                                                      "code_extensions": ["ts"]}}})
+        path = self.repo / "docs/prior-art/topics/demo.json"
+        write_json(path, {**json.loads(path.read_text()), "problems": ["X1", "X2"],
+                          "facets": {"alpha": {"sweep": "261020-demo-alpha", "problems": ["X1"], "terms": ["tdd"]}, "beta": {"sweep": "261020-demo-beta", "problems": ["X2"], "terms": ["test"]}}})
+        self.work = Path(tempfile.mkdtemp(prefix="study-facet-rank-"))
+        for path in (self.repo, self.work):
+            self.addCleanup(shutil.rmtree, path)
+
+    def test_a_facet_config_ranking_counts_only_the_code_queries_built_from_its_own_terms(self):
+        base = {"stars": 1, "pushed": "2026-09-01", "created": "2026-01-01", "description": "", "archived": False, "fork": False}
+        rows = [{**base, "repo": "o/lifted", "channels": ["github-code-search"], "via": ['code "test" filename:AGENTS.md: AGENTS.md']},
+                {**base, "repo": "o/own", "channels": ["github-code-search"], "via": ['code "tdd" filename:SKILL.md: SKILL.md']}]
+        write_json(self.work / "config-pool.json", {"rows": rows})
+        script("rank-config-pool").main(["--topic", "demo:alpha", "--repo", str(self.repo), "--work", str(self.work)])
+        ranked = json.loads((self.work / "config-ranked.json").read_text())
+        self.assertEqual([(r["repo"], r["code_queries"]) for r in ranked["rows"]], [("o/own", ['code "tdd" filename:SKILL.md']), ("o/lifted", [])])
+        self.assertEqual(ranked["code_queries_counted"], ['"tdd" filename:SKILL.md'])
+        script("rank-config-pool").main(["--topic", "demo", "--repo", str(self.repo), "--work", str(self.work)])
+        self.assertEqual(json.loads((self.work / "config-ranked.json").read_text())["code_queries_counted"], "all")
+
+    def test_a_facet_product_ranking_counts_only_the_code_queries_built_from_its_own_terms(self):
+        evidence = {"code": ["code SKILL.md test extension:ts: src/other.ts"], "repo": ["r"]}
+        pool = {"rows": [{"repo": "p/lifted", "evidence": evidence, "description": "", "stars": 1, "created": "2026-01-01T0", "pushed": "2026-02-01T0", "archived": False, "fork": False},
+                         {"repo": "p/own", "evidence": {"code": ["code SKILL.md tdd extension:ts: src/own.ts"], "repo": ["r"]}, "description": "", "stars": 1,
+                          "created": "2026-01-01T0", "pushed": "2026-02-01T0", "archived": False, "fork": False}], "prisma": {"identified": 2, "not_resolvable": 0}}
+        write_json(self.work / "product-pool.json", pool)
+        script("rank-product-pool").main(["--topic", "demo:alpha", "--repo", str(self.repo), "--work", str(self.work)])
+        ranked = json.loads((self.work / "product-ranked.json").read_text())
+        self.assertEqual([(r["repo"], r["channels"], r["contract_files"], r["order"]) for r in ranked["rows"]], [("p/own", ["code", "repo"], ["src/own.ts"], 3.0), ("p/lifted", ["repo"], [], 1.0)])
+        self.assertEqual(ranked["code_queries_counted"], ["SKILL.md tdd extension:ts"])
+
+
 class OrderAndSnowballTest(unittest.TestCase):
     def setUp(self):
         self.repo = topic_repo()

@@ -3,7 +3,7 @@ import sys
 from pathlib import Path
 
 from study_pool import work_file
-from study_rank import Ranker
+from study_rank import Ranker, counted_code_queries
 from study_topic import TopicError, load_topic, topic_arguments
 
 
@@ -20,8 +20,9 @@ def main(argv=None):
     except TopicError as error:
         sys.exit(f"rank-config-pool: {error}")
     rows = [r for r in json.loads(work_file(work, args.pool).read_text())["rows"] if not r["archived"] and not r["fork"]]
-    ranked = Ranker(topic["terms"], work / "cache").rank(rows)
-    (work / args.out).write_text(json.dumps({"terms": topic["terms"], **ranked}, indent=1))
+    counted = counted_code_queries(topic, (topic["strata"].get("config", {}).get("channels") or {}).get("code_queries", []))
+    ranked = Ranker(topic["terms"], work / "cache", counted).rank(rows)
+    (work / args.out).write_text(json.dumps({"terms": topic["terms"], "code_queries_counted": counted, **ranked}, indent=1))
     print(f"screenable {len(ranked['rows'])}; aggregators {len(ranked['aggregators'])}; snowball repos from paths {len(ranked['snowball_from_paths'])} (new to pool)")
 
 
