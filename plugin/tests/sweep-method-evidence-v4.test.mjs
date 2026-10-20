@@ -7,7 +7,7 @@ import { cpSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { sweepMethodErrors } from "../lib/sweep-method-evidence.mjs";
-import { kappa, lowerBound } from "../lib/sweep-method-evidence-v4.mjs";
+import { canonical, kappa, lowerBound } from "../lib/sweep-method-evidence-v4.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const STUDY = fileURLToPath(new URL("../evals/probes/study/", import.meta.url));
@@ -469,6 +469,66 @@ test("H-prose: the Protocol, screening session and threat lines and the four sta
   const topic = JSON.parse(readFileSync(path, "utf8"));
   writeFileSync(path, JSON.stringify({ ...topic, sessions: { ...topic.sessions, B: { cli: "agy", model: "gemini-3.8-flash-high" } } }));
   assert.match(m7.errors(), /protocol-freeze\.json session B is claude claude-sonnet-5-5, but the topic config names agy gemini-3\.8-flash-high/);
+});
+
+test("every round-3 probe the gate already failed stays a failing negative fixture", () => {
+  const rows = (s, name, edit) => s.writeRows(name, edit(s.jsonl(name)));
+  const meta = (s, edit) => {
+    const m = s.json("meta.json");
+    edit(m.sessions);
+    s.write("meta.json", m);
+  };
+  const cal = "judge-config-stage1-brief-claude-sonnet-5-5-run";
+  const probes = [
+    ["J2", built, (s) => rows(s, "judge-config-screening-B-claude-sonnet-5-5-run1.jsonl", (r) => r.slice(1))],
+    ["J4", built, (s) => s.write("judge-config-qgs-A-claude-opus-5-5-run1.jsonl", "")],
+    ["J5", built, (s) => s.write(`${cal}1.jsonl`, "")],
+    ["J6", built, (s) => rows(s, `${cal}1.jsonl`, (r) => r.slice(0, r.length / 2))],
+    ["J7", built, (s) => { s.write("judge-config-screening-A-claude-opus-5-5-run1.jsonl", ""); meta(s, (m) => { delete m["judge-config-screening-A-claude-opus-5-5-run1"]; }); }],
+    ["V5", built, (s) => meta(s, (m) => { delete m["stage1-config-brief-claude-sonnet-5-5"]; })],
+    ["V6", escalated, (s) => meta(s, (m) => { delete m["judge-config-stage1-brief-claude-opus-5-5-held-out"]; })],
+    ["V7", built, (s) => meta(s, (m) => { m["stage1-product-brief-claude-sonnet-5-5"].model = "claude-haiku-5-5"; })],
+    ["V8", built, (s) => rows(s, `${cal}1.jsonl`, (r) => r.map((x) => ({ ...x, verdict: "yes" })))],
+    ["I1", built, (s) => rows(s, "stage1-inputs-config-brief.jsonl", (r) => r.slice(1))],
+    ["I4", built, (s) => rows(s, "stage1-inputs-config-brief.jsonl", (r) => r.map((x, i) => {
+      if (i) return x;
+      const { row_sha256: _, ...rest } = { ...x, description: "rewritten and hashed again" };
+      return { ...rest, row_sha256: createHash("sha256").update(canonical(rest)).digest("hex") };
+    }))],
+    ["A3", built, (s) => s.write("config-stage1-audit-claude-opus-5-5.jsonl", "")],
+    ["P2", built, (s) => s.text.replace("| config | identified: github-code-search | 99 |", "| config | identified: github-code-search | 34 |")
+      .replace("| config | identified: snowball | 34 |", "| config | identified: snowball | 99 |")],
+    ["P4", built, (s) => s.text.replace(/^\| 1 \| o\/a1 \| .*\n/m, "")],
+    ["P5", built, (s) => s.text.replace(/^(\| config \| stage 2: eligible \| \d+ \|)$/m, "$1\n| config | stage 2: excluded: copy | 3 |")],
+    ["R9", built, (s) => s.text.replace("- rung 1 config: run 1 sensitivity 31/31 (95% CI 0.89-1.00)", "- rung 1 config: run 1 sensitivity 31/31 (95% CI 0.50-1.00)")],
+    ["R11", escalated, (s) => s.text.replace(/lower bound 0\.\d{4}; the pooled/, "lower bound 0.9999; the pooled")],
+    ["H1", escalated, (s) => {
+      const labels = s.json("held-out-labels.json");
+      let kept = 0;
+      s.write("held-out-labels.json", { ...labels, rows: labels.rows.map((r) => (r.user.decision !== "eligible" || (kept += 1) <= 9 ? r
+        : { ...r, user: { ...r.user, decision: "excluded: irrelevant", Relevance: 0, problems: [] } })) });
+    }],
+    ["H3", escalated, (s) => { rmSync(join(s.folder, "held-out-labels.json")); rmSync(join(s.folder, "held-out-set.json")); }],
+    ["S2", built, (s) => rows(s, "qgs-judge-A.jsonl", (r) => r.map((x) => (x.verdict === "yes" && x === r.find((y) => y.verdict === "yes") ? Object.fromEntries(Object.entries(x).filter(([k]) => k !== "strata")) : x)))],
+    ["S4", built, (s) => rows(s, "qgs-reader.jsonl", (r) => r.map((x) => (x.verdict === "yes" ? { ...x, strata: [] } : x)))],
+    ["N2", built, (s) => s.write("snowball-cut.json", { ...s.json("snowball-cut.json"), cut_row: 0 })],
+    ["N3", built, (s) => s.write("snowball-cut.json", { ...s.json("snowball-cut.json"), cut_row: "5" })],
+    ["M10", built, (s) => s.text.replace("- QGS reader: claude-opus-5-5 judged 2 candidates", "- QGS reader: claude-opus-5-5 judged 3 candidates")],
+    ["M11", built, (s) => s.text.replace("- screening-A claude claude-opus-5-5, config,", "- screening-A agy gemini-3.8-flash-high, config,")],
+    ["X6", built, (s) => s.write("stage1-rung.json", { ...s.json("stage1-rung.json"), rung: 2 })],
+    ["X7", built, (s) => s.write("stage1-freeze.json", { ...s.json("stage1-freeze.json"), packets: { ...s.json("stage1-freeze.json").packets, config: "0".repeat(64) } })],
+    ["Z5", built, (s) => { const l = s.json("calibration-labels.json"); l.rows[0] = { ...l.rows[0], inputs_sha256: "0".repeat(64) }; s.write("calibration-labels.json", l); }],
+    ["CP-miss", built, (s) => {
+      const described = new Set(s.jsonl("stage1-inputs-config-brief.jsonl").filter((r) => r.description).map((r) => r.order_rank));
+      const positive = s.json("calibration-labels.json").rows.find((r) => r.stratum === "config" && r.user.decision === "eligible" && described.has(r.order_rank));
+      for (const run of [1, 2]) rows(s, `${cal}${run}.jsonl`, (r) => r.map((x) => (x.order_rank === positive.order_rank ? { ...x, verdict: "no", problems: [] } : x)));
+    }],
+  ];
+  for (const [name, source, edit] of probes) {
+    const s = sweep(source);
+    const body = edit(s);
+    assert.notEqual(s.errors(typeof body === "string" ? body : s.text), "", name);
+  }
 });
 
 test("H-rung: stage-1 verdicts count only with their recorded session, frozen packet, examples, template and row hashes", () => {
