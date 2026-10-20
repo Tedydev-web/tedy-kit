@@ -116,12 +116,15 @@ function facetRankingErrors(io, topic, strata) {
   return errors;
 }
 
-function dropErrors(io, read, meta) {
+function dropErrors(io, read, meta, dropped) {
   const errors = [];
   for (const drop of meta.drops ?? []) {
     if (!String(drop?.reason ?? "").trim()) errors.push(`a drop of ${drop?.key} ranks ${drop?.ranks} records no reason`);
     if (!DROP_COPY.test(String(drop?.copy ?? "")) || read(`${drop.copy}.block.json`) === undefined) errors.push(`the drop of ${drop?.key} ranks ${drop?.ranks} has no copy of its block in the sweep folder`);
   }
+  const copies = new Set((meta.drops ?? []).map((d) => d?.copy));
+  const loose = [...new Set(dropped.map((name) => `dropped/${name.replace(/\.(?:block\.json|rows\.jsonl|inputs\.jsonl)$/, "")}`))].filter((copy) => !copies.has(copy)).sort();
+  if (loose.length) errors.push(`${loose.join(", ")}: a dropped copy without its meta.json drops entry; a run is dropped only by drop-run.py, which records both`);
   const runLike = /^(?:judge-.+|stage1-(?!inputs-).+|qgs-judge-[AB]|qgs-reader|[a-z0-9]+-(?:stage1-)?audit-.+|[a-z0-9]+-screen-[AB]|[a-z0-9]+-pilot-.+)\.jsonl$/;
   for (const file of io.files ?? []) {
     if (!runLike.test(file)) continue;
@@ -278,7 +281,7 @@ function configPoolErrors(io, text, topic, strata, passes, pools, memberStrata) 
   return errors;
 }
 
-function recomputedErrors(text, { read, files, topic, meta }) {
+function recomputedErrors(text, { read, files, topic, meta, dropped = [] }) {
   const io = { ...reader(read), read, topic, files, text, sessions: meta.sessions ?? {} };
   const sessions = meta.sessions ?? {};
   const strata = CALIBRATED.filter((s) => topic?.strata?.[s]?.channels && typeof topic.strata[s].channels === "object");
@@ -299,7 +302,7 @@ function recomputedErrors(text, { read, files, topic, meta }) {
     ...stage1AuditErrors(io, topic, strata, stage1.passes, stage1.rung),
     ...facetRankingErrors(io, topic, strata),
     ...stage2.errors,
-    ...dropErrors(io, read, meta),
+    ...dropErrors(io, read, meta, dropped),
     ...prismaErrors(io, text, strata, stage1.passes, stage2.screened),
     ...decisionErrors(io, text, topic, strata, stage1.passes, stage2.screened),
     ...agreementErrors(io, text, strata),

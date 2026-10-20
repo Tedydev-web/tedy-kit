@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { v4Errors } from "./sweep-method-evidence-v4.mjs";
 import { regenerationErrors } from "./sweep-method-evidence-v4-regeneration.mjs";
@@ -115,7 +115,7 @@ function calibrationErrors(sample, sessions, strata) {
 
 const criteriaVersion = (text) => Number(text.match(/^- Criteria: docs\/prior-art\/quality-criteria-v(\d+)\.md /m)?.[1] ?? 0);
 
-export function checkMethodEvidence(text, { files, read, criteriaText, topic }) {
+export function checkMethodEvidence(text, { files, read, criteriaText, topic, dropped }) {
   const v4 = criteriaVersion(text) >= 4;
   const strata = [...text.matchAll(/^## Stratum: (\S+)$/gm)].map((m) => m[1]);
   const agreement = part(text, "Agreement and capture-recapture");
@@ -157,7 +157,7 @@ export function checkMethodEvidence(text, { files, read, criteriaText, topic }) 
     if (!stop) errors.push(`${stratum}: no stop line derived from the screening data`);
     else if (topic && Number(stop[1]) !== written) errors.push(`${stratum}: the topic config's stop_row is ${written}, the record stops at row ${stop[1]}; write it with compare-screening-sessions.py --write-stop`);
   }
-  if (v4) return [...errors, ...v4Errors(text, { read, files, topic, meta: JSON.parse(read("meta.json") ?? "{}") })];
+  if (v4) return [...errors, ...v4Errors(text, { read, files, topic, meta: JSON.parse(read("meta.json") ?? "{}"), dropped })];
   if (topic?.clusters) errors.push(`the record pins quality criteria v${criteriaVersion(text)}, but its topic holds a facet of more than one problem, a cluster that quality criteria v4 introduced; screen it under v4`);
   if (!/^- user vs session A: /m.test(part(text, "Calibration")) && !/^- LLM-only screening: /m.test(threats)) errors.push("no user calibration agreement and no LLM-only screening threat");
   return errors;
@@ -190,6 +190,8 @@ export function sweepMethodErrors(repo, file, text) {
   const role = text.match(/^- Role: (\S+)$/m)?.[1];
   const roleErrors = topic && role !== topic.name ? [`the record's role is ${role}, but its sweep belongs to ${topic.name}; set meta.json role to ${topic.name}`] : [];
   const pinned = Number(String(JSON.parse(read("meta.json") ?? "{}").criteria ?? "").match(/quality-criteria-v(\d+)\.md$/)?.[1] ?? 0);
-  const regeneration = Math.max(criteriaVersion(text), pinned) >= 4 ? regenerationErrors(repo, sweep, text) : [];
-  return [...regeneration, ...roleErrors, ...checkMethodEvidence(text, { files, read, criteriaText, topic })];
+  const v4 = Math.max(criteriaVersion(text), pinned) >= 4;
+  const regeneration = v4 ? regenerationErrors(repo, sweep, text) : [];
+  const dropped = v4 && existsSync(join(folder, "dropped")) && statSync(join(folder, "dropped")).isDirectory() ? readdirSync(join(folder, "dropped")).sort() : [];
+  return [...regeneration, ...roleErrors, ...checkMethodEvidence(text, { files, read, criteriaText, topic, dropped })];
 }

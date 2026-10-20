@@ -351,9 +351,11 @@ test("meta.drops matches the copies under dropped/ in both directions", () => {
   const s = sweep();
   s.write("meta.json", { ...s.json("meta.json"), drops: [] });
   assert.match(s.errors(), /^the record renderer refused the sweep files: prior-art-sweep-record: dropped\/qgs-judge-B-1-5-1: a dropped copy without its meta\.json drops entry; /m);
+  assert.match(s.errors(), /^dropped\/qgs-judge-B-1-5-1: a dropped copy without its meta\.json drops entry; /m);
   const t = sweep();
   writeFileSync(join(t.folder, "dropped", "qgs-judge-A-1-5-1.rows.jsonl"), "");
   assert.match(t.errors(), /^the record renderer refused the sweep files: prior-art-sweep-record: dropped\/qgs-judge-A-1-5-1: a dropped copy without its meta\.json drops entry; /m);
+  assert.match(t.errors(), /^dropped\/qgs-judge-A-1-5-1: a dropped copy without its meta\.json drops entry; /m);
   const u = sweep();
   rmSync(join(u.folder, "dropped", "qgs-judge-B-1-5-1.block.json"));
   const errors = u.errors();
