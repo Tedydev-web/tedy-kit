@@ -3,7 +3,9 @@ import {
   AUDIT_ROWS,
   RECALL_TARGET,
   autoPass,
+  blockHashes,
   canonical,
+  covered,
   figureLine,
   hashedSample,
   interval,
@@ -155,6 +157,16 @@ export function stage2Errors(io, sessions, strata, passes, members, rung) {
     const drawn = io.json("audit-sample.json");
     const sample = drawn?.[stratum] ?? [];
     const read = new Set(io.jsonl(`${stratum}-audit-${model}.jsonl`).map((r) => r.order_rank));
+    if (read.size) {
+      const frozen = io.json("protocol-freeze.json")?.strata?.[stratum];
+      const screenedHashes = blockHashes(sessions[`${stratum}-A`]);
+      const auditHashes = blockHashes(audit);
+      const ranks = covered(audit);
+      const exact = ranks.size === read.size && [...read].every((r) => ranks.has(r)) && [...ranks].every((r) => typeof auditHashes[String(r)] === "string" && auditHashes[String(r)] === screenedHashes[String(r)]);
+      if (!exact || (audit?.blocks ?? []).some((b) => b.packet_sha256 !== frozen?.packet_sha256 || b.criteria_sha256 !== frozen?.criteria_sha256)) {
+        errors.push(`${stratum}-audit-${model}: the audit blocks do not carry the frozen packet and criteria and the row hashes of exactly the rows stage 2 screened that it read`);
+      }
+    }
     const done = sample.length > 0 && sample.every((r) => read.has(r)) && Boolean(audit);
     if (drawn) errors.push(...crossAuditErrors(io, stratum, sample, model));
     const pending = `- cross-family audit pending: ${stratum}: ${sample.filter((r) => read.has(r)).length} of ${sample.length} audit rows screened by ${model}; `

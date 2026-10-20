@@ -5,6 +5,7 @@ from pathlib import Path
 from study_agreement import RECALL_TARGET, cohen_kappa, interval_text, kappa_text
 from study_calibration_set import all_batches, calibration_checks, labelled, labels_file, set_file
 from study_judges import AUDIT_FILE, AUDIT_ROWS, SHAPES, criteria_version, decided, judged_batches, reader_shares_family, roster, validate
+from study_method_sessions import checked_entry, row_hashes
 from study_qgs import ADJUDICATED, JUDGE_FILES, PACKET, UPPER_ESTIMATE, candidate_rows, cross_family, member_facets, qgs_standard, stratum_members
 from study_screening_core import read_json, read_jsonl
 from study_session import model_family
@@ -348,7 +349,7 @@ def stage1_audit_lines(topic, folder, strata, freeze):
     return lines
 
 
-def audit_lines(topic, folder, strata, sides, sessions):
+def audit_lines(topic, folder, strata, sides, sessions, freeze):
     option = cross_family(topic)
     if option is None:
         return [], ["- no cross-family audit: the topic config names no cross_family model, so no model of another family checks the screening"]
@@ -364,7 +365,13 @@ def audit_lines(topic, folder, strata, sides, sessions):
         raise TopicError(f"{AUDIT_FILE} is not the sample the stage-2 files give; the cross-family audit is drawn once, by draw-audit-sample.py")
     lines, threats = [], []
     for stratum in strata:
-        rows = {r["order_rank"]: r for r in read_jsonl(folder, f"{stratum}-audit-{option['model']}.jsonl")}
+        key = f"{stratum}-audit-{option['model']}"
+        rows = {r["order_rank"]: r for r in read_jsonl(folder, f"{key}.jsonl")}
+        if rows:
+            screened = row_hashes(sessions[f"{stratum}-A"])
+            wrong = sorted(int(r) for r, h in row_hashes(checked_entry(sessions, key, folder / f"{key}.jsonl", freeze["strata"][stratum])).items() if screened.get(r) != h)
+            if wrong:
+                raise TopicError(f"{key}: ranks {wrong[:10]} were screened on other inputs than stage 2 screened; the audit reads the rows both sessions screened")
         ranks = sample.get(stratum) or []
         if not ranks or set(ranks) - set(rows):
             threats.append(f"- cross-family audit pending: {stratum}: {len(set(ranks) & set(rows))} of {len(ranks)} audit rows screened by {option['model']}; the same-family "
@@ -392,7 +399,7 @@ def v4_parts(topic, folder, strata, freeze, sessions, faceted, common, decided_r
     stage1, chosen = stage1_lines(folder, strata)
     stage1_workflow(folder, sessions, strata, chosen)
     judges, judge_threats = judge_lines(topic, folder, strata, freeze, sessions)
-    audits, audit_threats = audit_lines(topic, folder, strata, sides, sessions)
+    audits, audit_threats = audit_lines(topic, folder, strata, sides, sessions, freeze)
     stops = stage2_threats(strata, faceted)
     prisma = prisma_rows(topic, folder, strata, faceted, decided_rows)
     return {"recall": recall, "prisma": ["| stratum | stage | count |", "|---|---|---|"] + [f"| {s} | {k} | {v} |" for s, k, v in prisma],

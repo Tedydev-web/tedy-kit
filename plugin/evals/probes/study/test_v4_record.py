@@ -245,6 +245,21 @@ class V4RecordTest(unittest.TestCase):
                 with self.assertRaisesRegex(TopicError, rf"^{key}: the run was \S+ \S+, not the roster's \S+ \S+ it validates; a validation run counts only for its own judge$"):
                     self.render(repo)
 
+    def test_the_cross_family_audit_carries_the_frozen_packet_and_criteria_and_the_row_hashes_stage_2_screened(self):
+        key = "config-audit-gemini-3.8-flash-high"
+        frozen = "a block ran under a packet or criteria other than the frozen ones"
+        for name, edit, message in (("packet", lambda b: b.update(packet_sha256="0" * 64), frozen),
+                                    ("criteria", lambda b: b.update(criteria_sha256="0" * 64), frozen),
+                                    ("row hashes emptied", lambda b: b.update(row_sha256={}), "has a block whose ranks lack a row_sha256 each"),
+                                    ("a row hash changed", lambda b: b["row_sha256"].update({str(b["ranks"][0]): "0" * 64}), "were screened on other inputs than stage 2 screened")):
+            with self.subTest(name=name):
+                repo, folder = self.copy()
+                meta = json.loads((folder / "meta.json").read_text())
+                edit(meta["sessions"][key]["blocks"][0])
+                (folder / "meta.json").write_text(json.dumps(meta))
+                with self.assertRaisesRegex(TopicError, message):
+                    self.render(repo)
+
     def test_the_cross_family_audit_must_be_the_topic_cross_family_model_outside_the_claude_family(self):
         repo, folder = self.copy()
         meta = json.loads((folder / "meta.json").read_text())

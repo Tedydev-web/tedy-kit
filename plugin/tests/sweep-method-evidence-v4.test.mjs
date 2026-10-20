@@ -533,6 +533,26 @@ test("H-cross-audit: the audit is the topic's non-Claude cross_family model, or 
   assert.match(claude.errors(), /the cross_family model claude-haiku-5-5 is a Claude model; the audit needs a model outside the Claude family/);
 });
 
+test("the cross-family audit carries the frozen packet and criteria and the row hashes of the rows stage 2 screened", () => {
+  const key = "config-audit-gemini-3.8-flash-high";
+  const probes = [
+    ["packet", (b) => { b.packet_sha256 = "0".repeat(64); }],
+    ["criteria", (b) => { b.criteria_sha256 = "0".repeat(64); }],
+    ["row hashes emptied", (b) => { b.row_sha256 = {}; }],
+    ["a row hash changed", (b) => { b.row_sha256[String(b.ranks[0])] = "0".repeat(64); }],
+    ["a rank dropped from the block", (b) => { b.ranks = b.ranks.slice(1); }],
+  ];
+  for (const [name, edit] of probes) {
+    const s = sweep();
+    const meta = s.json("meta.json");
+    edit(meta.sessions[key].blocks[0]);
+    s.write("meta.json", meta);
+    const errors = s.errors();
+    assert.match(errors, /^the record renderer refused the sweep files: /m, name);
+    assert.match(errors, new RegExp(`^${key.replaceAll(".", "\\.")}: the audit blocks do not carry the frozen packet and criteria and the row hashes of exactly the rows stage 2 screened that it read$`, "m"), name);
+  }
+});
+
 test("H-prose: the Protocol, screening session and threat lines and the four statement lines are rebuilt from meta.json, the freeze and the topic", () => {
   const s = sweep();
   const protocol = /the record's Protocol section is not the one meta\.json and protocol-freeze\.json give/;
