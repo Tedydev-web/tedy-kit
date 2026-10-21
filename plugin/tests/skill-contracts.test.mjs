@@ -21,6 +21,13 @@ test("one blast-radius procedure sees every tracked file, reads siblings from th
   assert.match(read("skills/review-pr/SKILL.md"), /Blast radius in source-access\.md/);
 });
 
+test("every approval before a github-write post, reply or edit carries the verbatim body in an AskUserQuestion preview", () => {
+  const review = read("skills/review-pr/SKILL.md");
+  const approval = review.slice(review.indexOf("10. **Approval.**"), review.indexOf("12. **Next step.**"));
+  assert.ok(approval.includes("verbatim in its `preview`"), "review-pr steps 10 and 11");
+  for (const path of ["skills/review-pr/references/draft-format.md", "skills/review-pr/references/follow-up.md", "skills/dev/references/rebut.md"]) assert.ok(read(path).includes("`preview`"), path);
+});
+
 test("eval graders check facts only: no llm or baseline grader in any case", async () => {
   const { readdirSync } = await import("node:fs");
   const evals = new URL("../evals/", import.meta.url);

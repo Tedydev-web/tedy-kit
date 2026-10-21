@@ -1,6 +1,6 @@
 # Follow-up on a posted review
 
-Use when the user asks to check replies, when a teammate says a thread is fixed, or when the next-step menu picks `replies.header`. Writes still go through `github-write.mjs` after the user approves, one `AskUserQuestion` per batch. Quote each reply or edit body verbatim before the batch question.
+Use when the user asks to check replies, when a teammate says a thread is fixed, or when the next-step menu picks `replies.header`. Writes still go through `github-write.mjs` after the user approves, one `AskUserQuestion` per batch. Quote each reply or edit body verbatim before the batch question, and put every body verbatim in the `preview` of the option that posts it, because a tool call is always recorded while reply prose can land in thinking.
 
 Start with the status-after-merge sweep of step 1a in the skill; a merged PR of the user's own work package is handed to the PM session there.
 
