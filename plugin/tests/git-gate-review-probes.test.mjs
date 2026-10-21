@@ -351,3 +351,10 @@ test("the round-2 review's everyday commands, reconstructed from its list, give 
   });
   assert.deepEqual(wrong, []);
 });
+
+test("honest: an interpreter whose script path comes from a variable is refused (round 2 R2 n32 n33)", () => {
+  refusedToRewrite(["GW=/k/github-write.mjs; node \"$GW\" reply 7 PRRT_1 --body ok", "node $SCRIPT post d.md", "python3 \"${TOOL}\" x", "deno run -A $X", "bun ${X}", "tsx \"$X\"", "node `which x`"]);
+  assert.equal(hook(...shell("GW=/k/github-write.mjs\nnode \"$GW\" reply 7 PRRT_1 --body ok")), "deny");
+  const allowed = ["node scripts/check.mjs \"$ARG\"", "FOO=1 node x.mjs", "python3 x.py --out \"$HOME/o.json\"", "node -e \"console.log(process.env.HOME)\""];
+  assert.deepEqual(allowed.filter((command) => verdict(command) !== "allow"), []);
+});

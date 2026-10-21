@@ -3,6 +3,7 @@ export const INTERPRETER = /^(?:python|node|perl|ruby|deno|bun|php|tsx|ts-node)[
 
 const STDIN_SCRIPT = /^(?:-|\/dev\/stdin|\/dev\/fd\/\d+|\/proc\/[^/]+\/fd\/\d+)$|^<\(/;
 const GLOB = /[*?[]/;
+const EXPANSION = /[$`]/;
 const REDIRECT = /^\d*(?:[<>](?!\()|&>)/;
 const BARE_REDIRECT = /^\d*(?:[<>][<>&|-]*|&>>?)$/;
 const STDIN_FEED = /^0?<(?!\()/;
@@ -51,6 +52,6 @@ export function scriptOperand(program, args) {
 export function readsUnreadableCode(program, args, piped) {
   const { script, inline } = scriptOperand(program, args);
   if (inline) return false;
-  if (script !== undefined) return STDIN_SCRIPT.test(script) || GLOB.test(script);
+  if (script !== undefined) return STDIN_SCRIPT.test(script) || GLOB.test(script) || (!SHELLS.has(program) && EXPANSION.test(script));
   return SHELLS.has(program) || piped || args.some((arg) => STDIN_FEED.test(arg));
 }
