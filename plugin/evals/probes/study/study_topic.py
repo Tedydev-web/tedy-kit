@@ -250,21 +250,39 @@ def reference_option(topic, ladder=()):
     return option
 
 
-def flaggers(topic):
+def flagger_option(topic, where, option):
+    checked = session_option(topic, where, option)
+    if "retest" not in option:
+        return checked
+    if option["retest"] is not True:
+        raise TopicError(f"{topic['path']}: {where}.retest must be true or absent")
+    reference = topic.get("reference") if isinstance(topic.get("reference"), dict) else {}
+    if checked != {k: reference[k] for k in ("cli", "model", "effort") if k in reference}:
+        raise TopicError(f"{topic['path']}: {where} is a retest, a second independent pass of the reference; it names the reference's cli, model and effort")
+    return {**checked, "retest": True}
+
+
+def flaggers(topic, ladder=()):
     out = {}
     for role, default in FLAGGERS.items():
         key = f"{role}_flaggers"
         listed = topic.get(key, default)
         if not isinstance(listed, list):
             raise TopicError(f"{topic['path']}: {key} must be a list")
-        out[role] = [session_option(topic, f"{key}[{i}]", o) for i, o in enumerate(listed)]
-    models = [o["model"] for options in out.values() for o in options]
+        out[role] = [flagger_option(topic, f"{key}[{i}]", o) for i, o in enumerate(listed)]
+    options = [o for listed in out.values() for o in listed]
+    models = [o["model"] for o in options]
     twice = sorted({m for m in models if models.count(m) > 1})
     if twice:
         raise TopicError(f"{topic['path']}: flagger {', '.join(twice)} listed twice; a flagger has one role")
     reference = topic.get("reference") if isinstance(topic.get("reference"), dict) else {}
-    if reference.get("model") in models:
+    if reference.get("model") in [o["model"] for o in options if not o.get("retest")]:
         raise TopicError(f"{topic['path']}: flagger {reference['model']} is the reference; a flagger labels blind of it")
+    judges = {where: model for where, model in named_models(topic).items() if where != "cross_family"}
+    for model in models:
+        roles = [where for where, judge in judges.items() if judge == model] + (["the stage-1 ladder"] if model in ladder else [])
+        if roles:
+            raise TopicError(f"{topic['path']}: flagger {model} is also {', '.join(roles)}; an index judge never flags the reference it is measured against")
     return out
 
 

@@ -1,3 +1,4 @@
+import contextlib
 import hashlib
 import json
 import os
@@ -11,6 +12,7 @@ from study_fetch import Fetch, NetworkRefused
 from study_judges import AUDIT_FILE, QGS_JUDGES, SCREENING_JUDGES, SHAPES, audit_option, criteria_version, judged_batches, require_qualified, roster, run_name
 from study_protocol import FREEZE_FILE
 from study_qgs import INPUTS, JUDGE_FILES, PACKET, candidates, cross_family, cross_name, dropped, read_cross, read_verdicts, reader_queue, whole_topic
+from study_reference_flags import agy_window, flagger_key
 from study_screening_core import read_jsonl
 from study_screening_input import inputs_file
 from study_session import ReplyRefused, model_family, record_refusal, run_block, run_blocks
@@ -139,7 +141,8 @@ def note_job(work, batch, stratum, ranks):
 
 def reference_job(topic, work, stratum, judge, batch, model, note):
     require_screened(topic, stratum)
-    reference = reference_option(topic, [m for rung in LADDER for m in rung["models"]])
+    ladder = [m for rung in LADDER for m in rung["models"]]
+    reference = reference_option(topic, ladder)
     if reference is None:
         raise TopicError(f"{topic['path']} names no reference; a topic without one keeps the user's labels")
     if not batch:
@@ -156,10 +159,10 @@ def reference_job(topic, work, stratum, judge, batch, model, note):
             raise TopicError("--rerun-notes re-runs the reference; flaggers label each row once")
         if not model:
             raise TopicError("--judge flagger needs --model, one of the topic config's flaggers")
-        found = [o for options in flaggers(topic).values() for o in options if o["model"] == model]
+        found = [o for options in flaggers(topic, ladder).values() for o in options if o["model"] == model]
         if not found:
             raise TopicError(f"{model} is in neither rubric_trigger_flaggers nor record_only_flaggers of {topic['path']}")
-        option, name = found[0], f"{name}-flagger-{model}"
+        option, name = {k: v for k, v in found[0].items() if k != "retest"}, flagger_key(batch, stratum, found[0])
     else:
         if model:
             raise TopicError("--model names a flagger; the reference is the topic config's reference")
@@ -210,6 +213,8 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
                            (["--rerun-notes"], {"type": int, "help": "--judge reference only: round N (from 1) re-runs every row a note of "
                                                                     "reference-notes-<batch>.json selects, with every note's criteria line under Rubric notes, as "
                                                                     "reference-<batch>-<stratum>-notes-N; the derive step reads the latest round holding a row"}),
+                           (["--agy-window"], {"action": "store_true", "help": "--judge flagger on agy only, off by default: disable the context-mode MCP server "
+                                                                               "and the ponytail plugin for the run and enable them again after it"}),
                            (["--today"], {"default": saigon_today(), "help": "run date, default today in Asia/Saigon"})).parse_args(argv)
     try:
         topic = load_topic(args.repo, args.topic)
@@ -235,6 +240,8 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
                 raise TopicError(f"--rows {args.rows} holds no row of the {len(job['ranks'])} that {args.judge} judges on --set {args.set}")
             job = {**job, "ranks": block}
         option, freeze = job["option"], job["freeze"]
+        if args.agy_window and (args.judge != "flagger" or option["cli"] != "agy"):
+            raise TopicError("--agy-window belongs to --judge flagger on agy; it switches agy extensions only")
         if not which(option["cli"]):
             raise TopicError(f"{option['model']} runs on {option['cli']}, which is not on PATH")
         if not job["ranks"]:
@@ -247,7 +254,9 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
                  "bare": bool(environ.get("ANTHROPIC_API_KEY")), "today": args.today, "sweep_date": required_sweep_date(topic), "notes": job.get("notes"),
                  "notes_sha256": job.get("notes_sha256")}
         if args.set == "reference":
-            rows, refused = run_reference(block, fetch or Fetch(), args.judge == "flagger")
+            fetch = fetch or Fetch()
+            with agy_window(fetch) if args.agy_window else contextlib.nullcontext():
+                rows, refused = run_reference(block, fetch, args.judge == "flagger")
             print(f"{job['name']}: {rows} rows from {option['cli']} {option['model']}" + (f"; refused twice, recorded: ranks {refused}" if refused else ""))
             return
         rows = run_blocks(block, job["ranks"], fetch or Fetch())[0] if args.set == "stage1-audit" else run_block(block, fetch or Fetch())
