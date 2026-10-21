@@ -3,6 +3,7 @@ import json
 from pathlib import Path
 
 from study_calibration_set import BATCHES, labelled, labels_file, set_file
+from study_citation_check import check_holds
 from study_protocol import FREEZE_FILE as PROTOCOL_FILE
 from study_reference_labels import cites_file, notes_file, reference_option, rerun_keys, session_key
 from study_reference_packet import BUNDLE_FILE
@@ -222,17 +223,21 @@ def freeze_batch(topic, repo, work, batch, today, without=None):
     return out
 
 
+def frozen_sha(work, batch):
+    path = Path(work) / freeze_file(batch)
+    if not path.is_file():
+        raise TopicError(f"no {path.name} in {work}; the {batch} labels are frozen with freeze-reference.py before any judge or stage-1 calibration run reads them")
+    freeze = read_json(path, "the freeze")
+    for name, key in ((set_file(batch), "set_sha256"), (labels_file(batch), "labels_sha256")):
+        if optional_sha256(Path(work) / name) != freeze.get(key):
+            raise TopicError(f"{name} differs from the one {path.name} froze; nothing after the freeze changes a label")
+    return sha256_file(path)
+
+
 def require_frozen(topic, work, batches):
     if topic.get("reference") is None:
         return {}
-    work, out = Path(work), {}
-    for batch in batches:
-        path = work / freeze_file(batch)
-        if not path.is_file():
-            raise TopicError(f"no {path.name} in {work}; the {batch} labels are frozen with freeze-reference.py before any judge or stage-1 calibration run reads them")
-        freeze = read_json(path, "the freeze")
-        for name, key in ((set_file(batch), "set_sha256"), (labels_file(batch), "labels_sha256")):
-            if optional_sha256(work / name) != freeze.get(key):
-                raise TopicError(f"{name} differs from the one {path.name} froze; nothing after the freeze changes a label")
-        out[batch] = sha256_file(path)
+    out = {batch: frozen_sha(work, batch) for batch in batches}
+    if "calibration" in out:
+        check_holds(topic, work, out["calibration"])
     return out

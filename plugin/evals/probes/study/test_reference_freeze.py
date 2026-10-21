@@ -8,11 +8,12 @@ import unittest
 from pathlib import Path
 
 from study_calibration_set import pinned_inputs
+from study_citation_check import UNSUPPORTED, drawn, summary
 from study_fixtures import script, write_json, write_jsonl
 from study_reference_freeze import require_frozen
 from study_session import canonical_sha256
 from study_topic import TopicError, load_topic
-from study_v4_fixture import CRITERIA, TODAY, ScriptedJudges, calibrated_work, quiet
+from study_v4_fixture import CRITERIA, SWEEP, TODAY, ScriptedJudges, calibrated_work, quiet
 from test_calibration_set import drawn_work
 from test_reference_labels import README, packet, reply
 
@@ -308,7 +309,8 @@ class RequireFrozenTest(ReferenceFreezeBase):
         with self.assertRaisesRegex(TopicError, "no reference-freeze-calibration.json in .*; the calibration labels are frozen with freeze-reference.py"):
             require_frozen(topic, work, ("calibration",))
         self.freeze(repo, work)
-        self.assertEqual(require_frozen(topic, work, ("calibration",)), {"calibration": sha(work / "reference-freeze-calibration.json")})
+        with self.assertRaisesRegex(TopicError, "no citation-check.json in"):
+            require_frozen(topic, work, ("calibration",))
         (work / "calibration-labels.json").write_text((work / "calibration-labels.json").read_text() + " ")
         with self.assertRaisesRegex(TopicError, "calibration-labels.json differs from the one reference-freeze-calibration.json froze"):
             require_frozen(topic, work, ("calibration",))
@@ -334,10 +336,15 @@ class RunnerRefusalTest(unittest.TestCase):
         shutil.copytree(type(self).work, self.work)
         with_reference(self.repo)
 
-    def frozen(self, batch="calibration"):
+    def frozen(self, batch="calibration", unsupported=0):
         write_json(self.work / f"reference-freeze-{batch}.json", {"batch": batch, "set_sha256": sha(self.work / f"{batch}-set.json"),
                                                                    "labels_sha256": sha(self.work / f"{batch}-labels.json")})
-        return sha(self.work / f"reference-freeze-{batch}.json")
+        freeze = sha(self.work / f"reference-freeze-{batch}.json")
+        rows = drawn(SWEEP, json.loads((self.work / f"{batch}-labels.json").read_text())["rows"])
+        answers = [{"id": r["id"], "kind": r["kind"], "answer": UNSUPPORTED[r["kind"]] if n < unsupported else "yes" if r["kind"] == "relevance-1" else "no",
+                    "unsupported": n < unsupported} for n, r in enumerate(rows)]
+        write_json(self.work / "citation-check.json", summary(freeze, answers))
+        return freeze
 
     def judge(self):
         quiet(self.repo, "run-judge", "--work", str(self.work), "--stratum", "config", "--judge", "screening-A", "--set", "calibration", "--run", "1", "--rows", "1-2",
@@ -369,6 +376,13 @@ class RunnerRefusalTest(unittest.TestCase):
         freeze = self.frozen()
         self.stage1()
         self.assertEqual({b["reference_freeze_sha256"]["calibration"] for b in self.blocks("judge-config-stage1-brief-claude-sonnet-5-5-run1")}, {freeze})
+
+    def test_a_stopped_citation_check_refuses_both_runners(self):
+        self.frozen(unsupported=2)
+        with self.assertRaisesRegex(SystemExit, "citation-check.json stopped the method: 2 of 30 rows unsupported"):
+            self.judge()
+        with self.assertRaisesRegex(SystemExit, "citation-check.json stopped the method: 2 of 30 rows unsupported"):
+            self.stage1()
 
     def test_a_stage1_held_out_run_is_refused_without_a_freeze(self):
         write_json(self.work / "stage1-rung.json", {"rung": 2})
