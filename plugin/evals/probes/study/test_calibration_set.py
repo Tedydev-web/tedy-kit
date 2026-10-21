@@ -244,11 +244,11 @@ class CalibrationSetTest(unittest.TestCase):
         for leak in (SECRET, "qgs candidate", "top-ranked", "random", "facet_rank", "calibration-draw"):
             self.assertNotIn(leak, self.page)
 
-    def test_a_topic_without_an_eligibility_definition_renders_the_page_byte_identical_to_before_the_field(self):
+    def test_a_topic_without_an_eligibility_definition_renders_no_eligibility_block_and_the_pinned_page(self):
         self.assertEqual(hashlib.sha256(self.page.encode()).hexdigest(), "25e0a3cd7d36affcc064ea2c36b5f8d634b8e10e333fc41ea625fa5b435cff6b")
         self.assertNotIn('id="eligibility"', self.page)
 
-    def test_removing_the_highlight_note_style_and_marks_gives_back_the_page_byte_identical_to_before_the_highlight(self):
+    def test_removing_the_highlight_note_style_and_marks_gives_the_pinned_unhighlighted_page(self):
         bare = re.sub(r"<p>Tô sáng theo [^<]*</p>", "", self.page, count=1).replace(".hit{background:#ffe08a;font-weight:600}", "")
         bare = re.sub(r'<span class="hit">([^<]*)</span>', r"\1", bare).replace("<details open><summary>Danh sách thư mục gốc", "<details><summary>Danh sách thư mục gốc")
         bare = re.sub(r' data-highlight="[0-9a-f]{64}"', "", bare, count=1).replace(" highlight_sha256: document.body.dataset.highlight,", "")
