@@ -14,9 +14,9 @@ const EXECUTE_FILE = "mcp__plugin_context-mode_context-mode__ctx_execute_file";
 const BATCH = "mcp__context-mode__ctx_batch_execute";
 const HEREDOC = "cat <<'EOF' | bash\ngit push origin main\nEOF";
 
-function hook(toolName, toolInput, cwd = "/tmp") {
+function hook(toolName, toolInput, cwd = "/tmp", ask = []) {
   const settings = join(tempDir("tedy-settings-"), "settings.json");
-  writeFileSync(settings, JSON.stringify({ permissions: { ask: [] } }));
+  writeFileSync(settings, JSON.stringify({ permissions: { ask } }));
   const input = JSON.stringify({ tool_name: toolName, tool_input: toolInput, cwd });
   const env = { ...process.env, TEDY_STATE_DIR: tempDir("tedy-state-"), TEDY_CLAUDE_SETTINGS: settings, TEDY_PROFILE_DIR: profileWith({ gates: {} }) };
   const out = execFileSync("node", [GATE_ENTRY], { input, encoding: "utf8", env });
@@ -51,7 +51,24 @@ test("an allowed plain command through ctx_execute passes and is read from the c
   assert.equal(hook(EXECUTE, { language: "shell", code: "git status" }), null);
   assert.equal(hook(BATCH, { commands: [{ label: "log", command: "git log -1" }, { label: "diff", command: "git diff" }] }), null);
   const input = { tool_name: EXECUTE, tool_input: { language: "shell", code: "git status", cwd: "sub" }, cwd: "/w", transcript_path: "/t.jsonl" };
-  assert.deepEqual(bashInputs(input), { inputs: [{ ...input, cwd: "/w/sub", tool_input: { command: "git status" } }] });
+  assert.deepEqual(bashInputs(input), { inputs: [{ ...input, tool_name: "Bash", cwd: "/w/sub", tool_input: { command: "git status" } }] });
+});
+
+test("a publish through a context-mode tool is refused and sent back to run as a plain Bash command", () => {
+  const rules = ["Bash(*github-write.mjs*post*)", "Bash(*openproject.mjs*set*--apply*)"];
+  const publish = "node /k/github-write.mjs post d.md";
+  assert.equal(hook("Bash", { command: publish }, "/tmp", rules), null);
+  for (const [toolName, toolInput] of [
+    [EXECUTE, { language: "shell", code: publish }],
+    [EXECUTE_FILE, { path: "x", language: "shell", code: `cd /tmp && ${publish}` }],
+    [BATCH, { commands: [{ label: "a", command: "git status" }, { label: "b", command: "node /k/openproject.mjs set 12 --status Done --apply" }] }],
+  ]) {
+    const result = hook(toolName, toolInput, "/tmp", rules);
+    assert.equal(result?.permissionDecision, "deny", JSON.stringify(toolInput));
+    assert.match(result.permissionDecisionReason, /plain Bash command/, JSON.stringify(toolInput));
+  }
+  assert.equal(hook(EXECUTE, { language: "shell", code: "git commit -F - <<'EOF'\nrun github-write.mjs post later\nEOF" }, "/tmp", rules), null);
+  assert.equal(hook(EXECUTE, { language: "shell", code: "node /k/github-write.mjs view 1" }, "/tmp", rules), null);
 });
 
 test("a Bash call is passed through unchanged", () => {

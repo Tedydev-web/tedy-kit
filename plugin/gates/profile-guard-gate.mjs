@@ -4,6 +4,7 @@ import { join, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ask, logGate, readHookInput } from "../lib/hook-io.mjs";
 import { profileDir } from "../lib/profile.mjs";
+import { bashInputs } from "./git-gate.mjs";
 import { expandHome, walkSegments } from "../lib/shell-segments.mjs";
 
 const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
@@ -45,10 +46,12 @@ export function evaluate(input, { profile = profileDir(), release = releaseDir()
     const path = input.tool_input?.file_path ?? input.tool_input?.notebook_path;
     return typeof path === "string" && names(path) ? REASON : null;
   }
-  if (input.tool_name !== "Bash" || typeof input.tool_input?.command !== "string") return null;
-  for (const { dir, tokens } of walkSegments(input.tool_input.command, cwd)) {
-    if (movesRelease(dir, tokens, releaseRoot)) return REASON;
-    if (tokens.some((token) => guarded.has(real(resolve(dir, expandHome(token)))))) return REASON;
+  for (const item of bashInputs(input).inputs ?? []) {
+    if (item.tool_name !== "Bash" || typeof item.tool_input?.command !== "string") continue;
+    for (const { dir, tokens } of walkSegments(item.tool_input.command, item.cwd ?? cwd)) {
+      if (movesRelease(dir, tokens, releaseRoot)) return REASON;
+      if (tokens.some((token) => guarded.has(real(resolve(dir, expandHome(token)))))) return REASON;
+    }
   }
   return null;
 }

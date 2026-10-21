@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { classify, splitSegments } from "./git-gate.mjs";
+import { bashInputs, classify, splitSegments } from "./git-gate.mjs";
 import { route } from "../lib/handoff.mjs";
 import { ask, gateSwitches, logGate, readHookInput } from "../lib/hook-io.mjs";
 import { resolveMap } from "../lib/project-map.mjs";
@@ -49,19 +49,21 @@ export function classifyAction(input, map) {
     const hit = repoOf(map, path);
     return isCode(hit) ? { kind: "code", repo: hit.repo } : null;
   }
-  if (input.tool_name !== "Bash") return null;
-  let dir = cwd;
-  for (const segment of splitSegments(input.tool_input?.command ?? "")) {
-    const action = classify(segment, dir);
-    if (action.kind === "cd") {
-      dir = action.dir;
-      continue;
-    }
-    const script = SCRIPT_WRITES.find((write) => write.pattern.test(segment));
-    if (script) return { kind: script.kind, repo: null };
-    if (action.kind === "commit" || action.kind === "push") {
-      const hit = repoOf(map, action.dir);
-      if (hit) return { kind: "code", repo: hit.repo };
+  for (const item of bashInputs(input).inputs ?? []) {
+    if (item.tool_name !== "Bash") continue;
+    let dir = item.cwd ?? cwd;
+    for (const segment of splitSegments(item.tool_input?.command ?? "")) {
+      const action = classify(segment, dir);
+      if (action.kind === "cd") {
+        dir = action.dir;
+        continue;
+      }
+      const script = SCRIPT_WRITES.find((write) => write.pattern.test(segment));
+      if (script) return { kind: script.kind, repo: null };
+      if (action.kind === "commit" || action.kind === "push") {
+        const hit = repoOf(map, action.dir);
+        if (hit) return { kind: "code", repo: hit.repo };
+      }
     }
   }
   return null;

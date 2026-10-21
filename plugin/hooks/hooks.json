@@ -8,7 +8,7 @@
         ]
       },
       {
-        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash",
+        "matcher": "^(Edit|Write|MultiEdit|NotebookEdit|Bash)$|^mcp__.*context-mode.*__ctx_(execute|execute_file|batch_execute)$",
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/role-gate.mjs\"", "timeout": 20, "onFailure": "block" }
         ]
@@ -20,7 +20,7 @@
         ]
       },
       {
-        "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash",
+        "matcher": "^(Edit|Write|MultiEdit|NotebookEdit|Bash)$|^mcp__.*context-mode.*__ctx_(execute|execute_file|batch_execute)$",
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/profile-guard-gate.mjs\"", "timeout": 15, "onFailure": "block" }
         ]

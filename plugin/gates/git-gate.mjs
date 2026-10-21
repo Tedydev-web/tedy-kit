@@ -59,6 +59,7 @@ const REWRITING_PUSH = /^(-f|--force|--force-with-lease(=.*)?|--force-if-include
 const REDIRECT = /^\d*[<>]/;
 const BARE_REDIRECT = /^\d*[<>][<>&|-]*$/;
 const CTX_TOOL = /__ctx_(execute|execute_file|batch_execute)$/;
+const CTX_PUBLISH_REASON = "tedy gate: this publishes through a kit script from a context-mode tool, where the user's permission rules never ask. Run the publish as a plain Bash command of its own, so the permission rule asks the user before it goes out.";
 const CTX_LANGUAGES = new Set(["javascript", "typescript", "python", "ruby", "go", "rust", "php", "perl", "r", "elixir", "csharp"]);
 
 function graphQuery(args) {
@@ -412,7 +413,7 @@ export function bashInputs(input) {
   if (!toolInput || typeof toolInput !== "object") return { malformed: "no tool input" };
   if (toolInput.cwd !== undefined && typeof toolInput.cwd !== "string") return { malformed: "`cwd` is not a string" };
   const cwd = toolInput.cwd === undefined ? input.cwd : resolve(input.cwd ?? process.cwd(), toolInput.cwd);
-  const shell = (command) => ({ ...input, cwd, tool_input: { command } });
+  const shell = (command) => ({ ...input, tool_name: "Bash", cwd, tool_input: { command } });
   if (tool === "batch_execute") {
     const commands = batchCommands(toolInput.commands);
     return commands ? { inputs: commands.map(shell) } : { malformed: "`commands` is not a non-empty list of commands" };
@@ -423,11 +424,11 @@ export function bashInputs(input) {
   return { malformed: `language \`${toolInput.language.slice(0, 40)}\` is not one the gate knows` };
 }
 
-function judge(input) {
+function judge(input, tool) {
   const command = input.tool_input?.command ?? "";
   try {
     const gates = gateSwitches();
-    let result = evaluate(command, input.cwd ?? process.cwd(), { gates, settingsFile: CLAUDE_SETTINGS });
+    let result = CTX_TOOL.test(tool) && splitSegments(command, false).some((segment) => PUBLISH.test(segment)) ? { allow: false, reason: CTX_PUBLISH_REASON } : evaluate(command, input.cwd ?? process.cwd(), { gates, settingsFile: CLAUDE_SETTINGS });
     if (result.allow || result.ask) {
       const token = trackerToken(input.tool_input, trackerHost(), { cwd: input.cwd ?? process.cwd() });
       if (token) result = { allow: false, reason: token };
@@ -441,10 +442,10 @@ function judge(input) {
       }
       if (quoted && (!quoted.ask || result.allow)) result = { allow: false, ...quoted };
     }
-    if (!result.allow) logGate({ hook: "git-gate", decision: result.ask ? "ask" : "deny", tool: input.tool_name, command: command.slice(0, 200), cwd: input.cwd, reason: result.reason });
+    if (!result.allow) logGate({ hook: "git-gate", decision: result.ask ? "ask" : "deny", tool, command: command.slice(0, 200), cwd: input.cwd, reason: result.reason });
     return result;
   } catch (error) {
-    logGate({ hook: "git-gate", decision: "ask", tool: input.tool_name, command: String(command).slice(0, 200), error: error.message });
+    logGate({ hook: "git-gate", decision: "ask", tool, command: String(command).slice(0, 200), error: error.message });
     return { allow: false, ask: true, reason: PUBLISH.test(command) ? `tedy gate: could not check this publish command (${error.message}). Approve only if you have seen the exact draft.` : `tedy gate: could not check this command (${error.message}). Allow it only if the user asked for it.` };
   }
 }
@@ -458,7 +459,7 @@ export function run() {
     deny(reason);
     return;
   }
-  const results = inputs.map(judge);
+  const results = inputs.map((item) => judge(item, String(input.tool_name ?? "")));
   const result = results.find((item) => !item.allow && !item.ask) ?? results.find((item) => item.ask);
   if (result?.ask) ask(result.reason);
   else if (result) deny(result.reason);
