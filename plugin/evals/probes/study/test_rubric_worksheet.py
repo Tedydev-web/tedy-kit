@@ -181,6 +181,19 @@ class WorksheetTest(unittest.TestCase):
         self.refused(repo, work, "protocol freeze")
         self.assertFalse((work / "rubric-questions-calibration.md").exists())
 
+    def test_the_worksheet_is_refused_once_the_batch_is_frozen_and_keeps_its_outcomes(self):
+        repo, work = self.copies()
+        self.objectivity_split(repo, work)
+        write_json(work / "rubric-outcomes-calibration.json", {"rows": []})
+        write_json(work / "reference-freeze-calibration.json", {})
+        self.refused(repo, work, "reference-freeze-calibration.json")
+        self.assertEqual(json.loads((work / "rubric-outcomes-calibration.json").read_text()), {"rows": []})
+        self.assertFalse((work / "rubric-questions-calibration.md").exists())
+        (work / "reference-freeze-calibration.json").unlink()
+        write_json(work / "reference-freeze-top-up.json", {})
+        self.worksheet(repo, work)
+        self.assertTrue((work / "rubric-questions-calibration.md").exists())
+
     def test_anchors_sha256_changes_on_an_anchor_cell_and_not_on_an_amendment_row(self):
         repo, work = self.copies()
         self.objectivity_split(repo, work)

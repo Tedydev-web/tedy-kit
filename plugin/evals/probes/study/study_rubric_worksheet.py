@@ -38,6 +38,10 @@ def outcomes_file(batch):
     return f"rubric-outcomes-{batch}.json"
 
 
+def batch_freeze_file(batch):
+    return f"reference-freeze-{batch}.json"
+
+
 def sha256(text):
     return hashlib.sha256(text.encode()).hexdigest()
 
@@ -168,6 +172,8 @@ def write_worksheet(topic, repo, work, batch, criteria):
         raise TopicError(f"batch {batch!r} is not a calibration-family batch; rubric questions come from calibration, top-up and held-out flags")
     if (work / FREEZE_FILE).exists():
         raise TopicError(f"{FREEZE_FILE} exists: no wording enters the criteria after the protocol freeze, and a flagged row stays contested")
+    if (work / batch_freeze_file(batch)).exists():
+        raise TopicError(f"{batch_freeze_file(batch)} exists: a frozen batch keeps its labels and its rubric outcomes")
     (work / outcomes_file(batch)).unlink(missing_ok=True)
     for name in (set_file(batch), flags_file(batch)):
         if not (work / name).is_file():
