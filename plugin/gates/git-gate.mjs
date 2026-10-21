@@ -346,6 +346,7 @@ function mentionsGhMerge(segment) {
 }
 
 export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, settingsFile } = {}) {
+  if (command.length > MAX_COMMAND) return { allow: false, reason: `tedy gate: this command is longer than ${MAX_COMMAND} characters, too long to check. ${REWRITE}` };
   let asked = null;
   let rewrite = null;
   const askFor = (reason) => {
@@ -358,7 +359,6 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
   if (hidden) askFor(`tedy gate: this publishes through a kit script in a form the permission rules do not match (\`${hidden.slice(0, 120)}\`). Allow it only if the user approved this exact publish; otherwise run it as a plain \`node <script> …\` command.`);
   const uncovered = settingsFile ? uncoveredPublish(command, settingsFile) : null;
   if (uncovered) askFor(uncovered);
-  if (command.length > MAX_COMMAND) rewriteFor(`tedy gate: this command is longer than ${MAX_COMMAND} characters, too long to check. ${REWRITE}`);
   const { parts, tooDeep } = walkCommands(command, cwd);
   if (tooDeep) rewriteFor(`tedy gate: this command nests command substitutions too deeply to check. ${REWRITE}`);
   for (const { text: segment, piped, dir } of parts) {
