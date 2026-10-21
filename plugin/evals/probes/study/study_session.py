@@ -54,7 +54,7 @@ def session_command(option, prompt, bare):
 def session_header(option, bare):
     effort = option.get("effort") or ("default" if option["cli"] == "claude" else "set by the model id")
     served = "modelUsage must name only the requested model" if option["cli"] == "claude" else "requested only: agy reports no served model"
-    threats = ([NO_BARE_THREAT] if not bare else []) if option["cli"] == "claude" else [AGY_THREAT]
+    threats = [] if option["cli"] == "claude" else [AGY_THREAT]
     return {"cli": option["cli"], "model": option["model"], "effort": effort, "isolation": isolation(option["cli"], bare), "served": served, "threats": threats}
 
 

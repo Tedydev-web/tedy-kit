@@ -20,6 +20,7 @@ const BLOCK_FIELDS = ["packet_sha256", "criteria_sha256", "prompt_sha256", "inpu
 const HASH_FIELDS = ["packet_sha256", "criteria_sha256", "prompt_sha256", "inputs_sha256"];
 const HEX64 = /^[0-9a-f]{64}$/;
 const AGY_THREAT = "agy MCP servers, hooks and user settings not excluded";
+const NO_BARE_THREAT = "plugin hooks not excluded (no --bare)";
 const SAMPLE_SIZE = 10;
 const CALIBRATED = new Set(["config", "product"]);
 const SESSION_FILE = /^([a-z0-9]+)-(?:screen-[AB]|pilot-.+)\.jsonl$/;
@@ -124,11 +125,11 @@ export function checkMethodEvidence(text, { files, read, criteriaText, topic, dr
   const { errors, digests } = protocolDigests(text, strata, { read, criteriaText });
   errors.push(...sessionErrors(files, sessions, strata, digests));
   if (!topic) errors.push("no topic config names this sweep, so its stop rows cannot be checked");
-  const hookThreat = /^- plugin hooks not excluded \(no --bare\): /m.test(threats);
+  const hookThreat = threats.includes(`\n- ${NO_BARE_THREAT}: `);
   const agyThreat = threats.includes(`\n- ${AGY_THREAT}: `);
   const versionThreat = /^- CLI version changed within a session: /m.test(threats);
   for (const [key, entry] of Object.entries(sessions)) {
-    if (entry?.cli === "claude" && !String(entry.isolation ?? "").includes("--bare") && !hookThreat) errors.push(`${key} ran claude without --bare and the record names no plugin hooks threat`);
+    if ((entry?.threats ?? []).includes(NO_BARE_THREAT) && !hookThreat) errors.push(`${key} recorded the threat "${NO_BARE_THREAT}" and the record does not name it`);
     if (entry?.cli === "agy" && !agyThreat) errors.push(`${key} ran through agy and the record names no "${AGY_THREAT}" threat`);
     if (new Set((entry?.blocks ?? []).map((b) => b.cli_version)).size > 1 && !versionThreat) errors.push(`${key}: its blocks ran under different CLI versions and the record names no CLI version threat`);
   }

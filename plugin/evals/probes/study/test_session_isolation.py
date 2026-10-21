@@ -23,14 +23,14 @@ class IsolationTest(SessionBase):
                                                       "--no-session-persistence --disable-slash-commands --max-turns 1 -- "))
         self.assertIn("claude --version", fetch.calls)
 
-    def test_without_an_api_key_claude_runs_the_proven_flags_without_bare_and_records_the_threat(self):
+    def test_without_an_api_key_claude_runs_the_proven_flags_without_bare_and_records_no_plugin_threat(self):
         fetch = FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one")))])
         self.pilot(fetch, environ={"HOME": "/nowhere"})
         [call] = fetch.called("claude -p")
         self.assertNotIn("--bare", call)
         self.assertIn("--output-format json --tools  --setting-sources  --strict-mcp-config --no-session-persistence --disable-slash-commands --max-turns 1 -- ", call)
         entry = self.meta()["config-pilot-A"]
-        self.assertEqual(entry.get("threats"), ["plugin hooks not excluded (no --bare)"])
+        self.assertEqual(entry.get("threats"), [])
         self.assertNotIn("--bare", entry["isolation"])
 
     def test_with_an_api_key_claude_runs_bare_and_records_no_threat(self):
