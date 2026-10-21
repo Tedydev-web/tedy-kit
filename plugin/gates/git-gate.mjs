@@ -56,6 +56,8 @@ const MERGE_REASON = "tedy gate: merging or marking a PR ready belongs to the us
 const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve|unresolve|pr-body)|openproject\.mjs["']?\s+apply|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor|edit|delete))\b|^(?=[\s\S]*--apply\b)[\s\S]*?(?:openproject\.mjs["']?\s+(?:set|comment|comment-edit|relation|relation-delete|rollback)|doc-comment-file\.mjs["']?\s+post)\b/;
 export const CLAUDE_SETTINGS = process.env.TEDY_CLAUDE_SETTINGS ?? join(homedir(), ".claude", "settings.json");
 const REWRITING_PUSH = /^(-f|--force|--force-with-lease(=.*)?|--force-if-includes|--mirror|--all|--prune|-d|--delete)$/;
+const REDIRECT = /^\d*[<>]/;
+const BARE_REDIRECT = /^\d*[<>][<>&|-]*$/;
 const CTX_TOOL = /__ctx_(execute|execute_file|batch_execute)$/;
 const CTX_LANGUAGES = new Set(["javascript", "typescript", "python", "ruby", "go", "rust", "php", "perl", "r", "elixir", "csharp"]);
 
@@ -138,7 +140,9 @@ function unreadable(segment) {
   if (/\$'[^']*\\/.test(segment)) return true;
   const raw = tokenize(segment);
   if (raw.some((token, index) => RUNNERS.has(basename(token)) && raw.slice(index + 1).some((arg) => /\s/.test(arg) && /\bgh\b|github/i.test(arg)))) return true;
-  if (SHELLS.has(program)) return args.some((arg) => /^-[a-zA-Z]*[cs]/.test(arg) || arg === "<<<" || arg === "<") || !args.some((arg) => !arg.startsWith("-"));
+  const operands = args.filter((arg, index) => !BARE_REDIRECT.test(args[index - 1] ?? "") && (arg === "-" || !(arg.startsWith("-") || REDIRECT.test(arg))));
+  if (SHELLS.has(program)) return args.some((arg) => /^-[a-zA-Z]*[cs]/.test(arg) || arg === "<<<" || arg === "<") || !operands.some((arg) => arg !== "-");
+  if (INTERPRETER.test(program) && args.some((arg) => arg.startsWith("<<")) && (operands[0] ?? "-") === "-") return true;
   if (INTERPRETER.test(program)) return args.some((arg) => /^(-[a-zA-Z]*[ce][a-zA-Z]*|--eval|--print)$/.test(arg)) && /\bgh\b|github/i.test(segment);
   if (program === "git") {
     let index = 0;

@@ -414,3 +414,41 @@ test("approved everyday commands stay allowed (phase 03 case list F)", () => {
   const asked = ['git commit -m "gh pr merge 1 now asks"', 'rg "gh pr merge" docs', 'jq . f.json <<< "{}"', "find . -name '*.md'", "echo {a,b}", "gh pr view 1 --json mergeable"].filter((command) => !evaluate(command, "/w").allow);
   assert.deepEqual(asked, []);
 });
+
+test("a shell or interpreter reading code from a heredoc or from stdin is sent back to rewrite", () => {
+  for (const command of [
+    "bash <<EOF\ngh pr merge 1\nEOF",
+    "bash <<'EOF'\ngit push origin main\nEOF",
+    "bash << EOF\ngit push origin main\nEOF",
+    "bash - <<EOF\ngit push origin main\nEOF",
+    "bash 2>/dev/null <<EOF\ngit push origin main\nEOF",
+    "python3 - <<EOF\nprint(1)\nEOF",
+    "python3 -I <<'EOF'\nprint(1)\nEOF",
+    "node <<EOF\nconsole.log(1)\nEOF",
+    "bash <script.sh",
+    "bash > out.log",
+    "cat x | bash",
+    "bash -s",
+  ]) {
+    const result = evaluate(command, "/w");
+    assert.equal(result.allow, false, JSON.stringify(command));
+    assert.notEqual(result.ask, true, JSON.stringify(command));
+    assert.match(result.reason, /script file/, JSON.stringify(command));
+  }
+});
+
+test("heredoc data written to a file or fed to a script keeps its current behaviour", () => {
+  for (const command of [
+    "cat <<EOF > /tmp/notes.txt\nhello\nEOF",
+    "cat > notes.md <<'EOF'\ngit push --force origin main\nEOF",
+    "tee notes.md <<EOF\ngh pr merge 1\nEOF",
+    "cat <<-EOF >> log.txt\n\tline\n\tEOF",
+    "git commit -F - <<EOF\nfix: x\nEOF",
+    "bash script.sh <<EOF\ndata\nEOF",
+    "python3 script.py <<EOF\ndata\nEOF",
+    "python3 -m json.tool <<EOF\n{}\nEOF",
+    "bash script.sh 2> err.log <<EOF\ndata\nEOF",
+  ]) {
+    assert.equal(evaluate(command, "/w").allow, true, JSON.stringify(command));
+  }
+});
