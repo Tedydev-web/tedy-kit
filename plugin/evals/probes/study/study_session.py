@@ -171,9 +171,7 @@ def call_isolated(fetch, cmd, folder=None):
     with working_folder(folder) as cwd:
         out, status, _ = fetch.run(cmd, timeout=1800, cwd=str(cwd))
         left = sorted(p.name for p in cwd.iterdir())
-    if left:
-        raise TopicError(f"the session wrote {left} into its empty working folder; a screening session has no tools")
-    return out, status
+    return out, status, left
 
 
 def expected_rows(job, work, stratum):
@@ -296,13 +294,22 @@ def run_block(job, fetch):
     lists = reference and option["cli"] == "agy"
     before = agy_lists(fetch) if lists else None
     system, own = reference_prompt_parts(packet.read_text(), job.get("notes") or [], list(expected.values())) if reference and option["cli"] == "claude" else (None, prompt)
-    out, status = call_isolated(fetch, session_command(option, own, job["bare"], system), session_folder(work, job["key"]) if reference else None)
-    after = agy_lists(fetch) if lists else None
+    out, status, left = call_isolated(fetch, session_command(option, own, job["bare"], system), session_folder(work, job["key"]) if reference else None)
 
-    def refusal(reason):
-        if kind == "reference":
+    def spend(reason=None):
+        if reference:
             append_lines({work / LEDGER: spend_line({**job, "ranks": list(expected)}, out, prompt, reason)})
-        return ReplyRefused(reason)
+
+    def refusal(reason, kind_of=ReplyRefused):
+        spend(reason)
+        return kind_of(reason)
+
+    if left:
+        raise refusal(f"the session wrote {left} into its empty working folder; a screening session has no tools", TopicError)
+    try:
+        after = agy_lists(fetch) if lists else None
+    except TopicError as error:
+        raise refusal(str(error), TopicError) from error
 
     try:
         text, served = reply_text(option, out, status)
@@ -334,9 +341,13 @@ def run_block(job, fetch):
 
     def commit(sessions):
         add_block(sessions, job["key"], header, block)
-        files = {work / f"{name}.jsonl": "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), **({mech_file: "".join(fresh)} if screening else {}),
-                 **({work / LEDGER: spend_line({**job, "ranks": list(expected)}, out, prompt)} if kind == "reference" else {})}
+        files = {work / f"{name}.jsonl": "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), **({mech_file: "".join(fresh)} if screening else {})}
         undo.append(append_lines(files))
 
-    update_sessions(work, commit, lambda: undo and undo[0]())
+    try:
+        update_sessions(work, commit, lambda: undo and undo[0]())
+    except BaseException as error:
+        spend(f"the block was not recorded: {error!r}")
+        raise
+    spend()
     return len(rows)

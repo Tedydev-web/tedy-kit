@@ -335,7 +335,23 @@ class ReferenceRunTest(ReferenceBase):
                 return super().run(cmd, timeout, cwd)
 
         self.assertIn("wrote ['notes.txt']", self.refused(Writer([("claude -p", fable(label(1, "o/one")))]), "--rows", "1-1"))
-        self.nothing_written()
+        self.only_spend_written("wrote ['notes.txt']")
+
+    def test_a_block_whose_record_fails_still_logs_its_spend(self):
+        work = self.work
+
+        class Corrupter(FakeFetch):
+            def run(self, cmd, timeout=180, cwd=None):
+                if cwd:
+                    (work / "meta.json").write_text("{")
+                return super().run(cmd, timeout, cwd)
+
+        with self.assertRaises(ValueError):
+            self.judge(Corrupter([("claude -p", fable(label(1, "o/one")))]), "--rows", "1-1")
+        self.assertEqual(self.rows(), [])
+        [line] = self.ledger()
+        self.assertEqual((line["ranks"], line["total_cost_usd"], line["num_turns"]), ([1], 0.42, 1))
+        self.assertIn("the block was not recorded", line["refused"])
 
     def test_two_rows_send_a_byte_identical_system_part_from_one_fixed_empty_folder(self):
         folder = session_folder(self.work, "reference-calibration-config")
@@ -425,6 +441,21 @@ class FlaggerRunTest(ReferenceBase):
         self.assertEqual([b["agy_lists"] for b in entry["blocks"]], [{"before": snapshot, "after": snapshot}] * 2)
         self.assertNotIn("refused", entry)
         self.assertEqual([(line["total_cost_usd"], line["num_turns"], line["served_models"]) for line in self.ledger()], [(None, 1, None), (None, 1, None)])
+
+    def test_an_agy_list_that_fails_after_the_session_still_logs_its_spend(self):
+        class After(FakeFetch):
+            def run(self, cmd, timeout=180, cwd=None):
+                if cmd[:3] == ["agy", "mcp", "list"] and self.called("agy --model"):
+                    self.calls.append(" ".join(cmd))
+                    return "", "exit 1: gone", 0
+                return super().run(cmd, timeout, cwd)
+
+        message = self.refused(After([*self.lists(), ("agy --model", agy_reply(label(1, "o/one")))]), "--model", "gemini-3.8-flash-high", "--rows", "1-1",
+                               judge="flagger")
+        self.assertIn("agy mcp list: exit 1: gone", message)
+        [line] = self.ledger()
+        self.assertEqual((line["model"], line["num_turns"], line["refused"]), ("gemini-3.8-flash-high", 1, "agy mcp list: exit 1: gone"))
+        self.assertEqual(self.rows("reference-calibration-config-flagger-gemini-3.8-flash-high"), [])
 
     def test_disabled_agy_lists_are_recorded_as_disabled(self):
         mcp, plugins = MCP_LIST.replace("  enabled  ", "  disabled  "), PLUGIN_LIST.replace("(enabled,", "(disabled,")
