@@ -7,7 +7,7 @@ import { evaluate } from "../gates/git-gate.mjs";
 import { prBodyRefusal } from "../lib/github-write.mjs";
 import { prBodyFrom, sameComment } from "../lib/openproject.mjs";
 import { classifyAction, decide } from "../gates/role-gate.mjs";
-import { check, publishes, unshown } from "../gates/publish-quote-gate.mjs";
+import { check, publishes, reasonFor, unshown } from "../gates/publish-quote-gate.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const mapFile = (data) => `# Project map\n\n\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\`\n`;
@@ -61,6 +61,23 @@ test("posting needs every comment body shown to the user after the draft's last 
   const reply = publishes("node /k/github-write.mjs reply 735 99 --body \"đã sửa ạ.\"", "/", read);
   assert.deepEqual(unshown(reply, [say(10, "Reply: đã sửa ạ.")], mtime), []);
   assert.equal(unshown(reply, [say(10, "Reply thread 5?")], mtime).length, 1);
+});
+
+test("only reply text and AskUserQuestion strings count as shown, and the block reason names those channels", () => {
+  const file = "/w/review-735-line-comments.md";
+  const found = publishes(`node /k/github-write.mjs post ${file}`, "/", () => draft);
+  const mtime = () => 1_000;
+  const block = (content) => ({ type: "assistant", timestamp: at(2_000), message: { content: [content] } });
+  const ask = (option) => block({ type: "tool_use", name: "AskUserQuestion", input: { questions: [{ question: "Đăng review PR #735?", header: "Post", multiSelect: false, options: [{ label: "Đăng", description: "Đăng 2 comment", ...option }, { label: "Giữ", description: "Giữ draft" }] }] } });
+  const thought = block({ type: "thinking", thinking: "c check lại chỗ này giúp e nha\nđoạn này thiếu case rỗng" });
+  const missing = unshown(found, [thought, ask({})], mtime);
+  assert.deepEqual(missing, [`comment 1 of ${file}`, `comment 2 of ${file}`]);
+  const reason = reasonFor(missing);
+  assert.ok(reason.includes(`comment 1 of ${file}, comment 2 of ${file}`), reason);
+  for (const phrase of ["text block in the reply", "AskUserQuestion question or preview", "Thinking", "Write or Bash input", "verbatim", "AskUserQuestion preview"]) assert.ok(reason.includes(phrase), phrase);
+  assert.deepEqual(unshown(found, [ask({ preview: draft })], mtime), []);
+  const written = block({ type: "tool_use", name: "Write", input: { file_path: file, content: draft } });
+  assert.equal(unshown(found, [written, ask({})], mtime).length, 2);
 });
 
 test("the quote check asks when there is no transcript path to confirm what the user saw", () => {

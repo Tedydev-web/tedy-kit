@@ -73,7 +73,7 @@ export function unshown(found, entries, mtime) {
 }
 
 export const reasonFor = (missing) =>
-  `tedy gate: the user has not seen the exact text being published under their name since its last change (${missing.join(", ")}). Quote the whole draft, verbatim, in a reply, then ask the approval question, then post.`;
+  `tedy gate: the user has not seen the exact text being published under their name since its last change (${missing.join(", ")}). Only two places count as shown: a text block in the reply, and an AskUserQuestion question or preview. Thinking does not count, and neither does Write or Bash input or any other tool's input. Put the whole body, verbatim, in the AskUserQuestion preview of the approval question, then post.`;
 
 function transcriptSince(path, sinceMs) {
   let size = 0;
