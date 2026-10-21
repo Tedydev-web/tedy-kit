@@ -301,10 +301,10 @@ def batch_lines(topic, folder, strata):
 def highlight_line(batch, labels):
     sha = labels.get("highlight_sha256")
     if sha is None:
-        return f"- {batch} labelling page: labelled without highlighting; the saved labels carry no pattern list sha256"
-    line = (f"- {batch} labelling page: root listing entries matching a fixed path pattern list were highlighted (no AI), pattern list sha256 `{sha}`; "
-            "a highlight is not a verdict, and a missing highlight does not mean no mechanism")
-    return line if sha == highlight_sha256() else line + f"; not the toolchain's current pattern list (sha256 `{highlight_sha256()}`)"
+        return f"- {batch} labelling page: labelled without highlighting; the saved labels carry no aid list sha256"
+    line = (f"- {batch} labelling page: root listing entries and README lines matching a fixed aid list were marked (no AI), aid list sha256 `{sha}`; "
+            "a mark is a cue, not a verdict, and a missing mark does not mean no mechanism")
+    return line if sha == highlight_sha256() else line + f"; not the toolchain's current aid list (sha256 `{highlight_sha256()}`)"
 
 
 def sensitivity_text(s):

@@ -27,10 +27,33 @@ SET_FILE, DRAW_FILE, LABELS_FILE, PAGE_FILE = "calibration-set.json", "calibrati
 HIGHLIGHT_PATTERNS = (".github", "codeowners", ".husky", ".pre-commit-config.yaml", ".claude", ".claude-plugin", "hooks", "hooks.json", "settings.json", "skill.md", "agents.md", "claude.md", "*.schema.json", "schema", "schemas", ".eslintrc*", "eslint.config.*", "biome.json*", ".markdownlint*", "commitlint*",
                       ".commitlintrc*", "contributing*", "changelog*", "adr", "decisions", "migrations", "evals", "tests", "test", "renovate.json*", ".release*",
                       "release-please*")
+README_CUES = (("objectivity", ("affiliate", "course", "courses", "enterprise", "paid", "premium", "pricing", "sponsor", "sponsored", "subscribe", "subscription")),
+               ("position", ("alternative", "vs", "versus", "compared to", "instead of", "unlike")))
+FACT_AIDS = (("facts", "stars"), ("evidence", "releases"), ("evidence", "tags"))
+
+
+def aid_list():
+    return HIGHLIGHT_PATTERNS + tuple(f"{group}:{word}" for group, words in README_CUES for word in words) + tuple(f"fact:{source}.{name}" for source, name in FACT_AIDS)
 
 
 def highlight_sha256():
-    return hashlib.sha256(("\n".join(HIGHLIGHT_PATTERNS) + "\n").encode()).hexdigest()
+    return hashlib.sha256(("\n".join(aid_list()) + "\n").encode()).hexdigest()
+
+
+def cue_lines(readme, words):
+    pattern = re.compile(r"\b(?:" + "|".join(re.escape(w).replace(r"\ ", r"\s+") for w in words) + r")\b", re.I)
+    return [f"{number}: {line}" for number, line in enumerate(readme.splitlines() if isinstance(readme, str) else [], 1) if pattern.search(line)]
+
+
+def fact_summary(held):
+    parts = []
+    for source, name in FACT_AIDS:
+        value = held.get(source).get(name) if isinstance(held.get(source), dict) else None
+        if isinstance(value, dict):
+            value = ", ".join(f"{k} {v}" for k, v in value.items() if v is not None)
+        if value is not None:
+            parts.append(f"{name}: {value}")
+    return parts
 
 
 def highlighted(name):
@@ -365,6 +388,9 @@ def row_section(index, total, key, stratum, held, anchor, when, problems):
              f"<p>commit {html.escape(str(held.get('sha', '-')))}</p>",
              f"<p class=\"date\">Date do công cụ tính sẵn, không chấm: {date['v']:g} ({html.escape(date['why'])})</p>",
              "<details open><summary>Dữ kiện từ khâu tìm kiếm</summary>" + pre(held.get("facts", {})) + "</details>"]
+    facts = fact_summary(held)
+    if facts:
+        parts.append(f'<p class="facts">Dữ kiện có sẵn trong dữ liệu đầu vào: {html.escape(" · ".join(facts))}</p>')
     if held.get("error"):
         parts.append(f"<p class=\"warn\">Không đọc được: {html.escape(held['error'])}</p>")
     if held.get("missing"):
@@ -374,6 +400,9 @@ def row_section(index, total, key, stratum, held, anchor, when, problems):
     entries = ", ".join(f'<span class="hit">{html.escape(n)}</span>' if hit else html.escape(n) for n, hit in zip(names, hits))
     parts.append(f"<details{' open' if any(hits) else ''}><summary>Danh sách thư mục gốc</summary><pre>{entries}</pre></details>")
     parts.append("<details open><summary>README</summary>" + pre(held.get("readme", "")) + "</details>")
+    cues = [(group.capitalize(), cue_lines(held.get("readme"), words)) for group, words in README_CUES]
+    text = "\n\n".join(group + "\n" + ("\n".join(lines) or "(không có dòng khớp)") for group, lines in cues)
+    parts.append(f"<details{' open' if any(lines for _, lines in cues) else ''}><summary>Dòng README khớp danh sách từ khóa cố định</summary>{pre(text)}</details>")
     parts += [f"<details open><summary>{html.escape(f['path'])}</summary>" + pre("(tệp nhị phân, không hiển thị)" if f.get("binary") else f.get("text", "")) + "</details>"
               for f in held.get("files", [])]
     parts.append("<details open><summary>Bằng chứng các mốc chấm đọc</summary>" + pre(held.get("evidence", {})) + "</details>")
@@ -491,6 +520,9 @@ def page(topic, batch, set_sha, shown, anchor):
     sha = highlight_sha256()
     note = (f"Tô sáng theo một danh sách mẫu đường dẫn cố định (không dùng AI), sha256 {sha}; tô sáng không phải là kết luận, và không có tô sáng không có nghĩa là không có cơ chế. "
             f"Highlighted by a fixed path pattern list (no AI), sha256 {sha}; a highlight is not a verdict, and missing highlights do not mean no mechanism.")
+    cue_note = ("Sha256 trên phủ cả danh sách từ khóa cố định chọn ra các dòng README khớp và các dữ kiện có sẵn được tóm tắt, chỉ lấy từ đúng dữ liệu đầu vào mà giám khảo chấm "
+                "(không dùng AI); một dòng khớp là gợi ý, không phải điểm. The sha256 above also covers the fixed keyword list that picks the matching README lines and the "
+                "available facts summarised, taken only from the inputs the judges score (no AI); a matched line is a cue, not a score.")
     problems = topic.get("problems") or []
     sections = [row_section(i, len(shown), key, stratum, held, anchor, when, problems) for i, (key, stratum, held) in enumerate(shown, 1)]
     eligibility = [eligibility_block(topic["eligibility"])] if "eligibility" in topic else []
@@ -498,7 +530,7 @@ def page(topic, batch, set_sha, shown, anchor):
                       "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'\">",
                       f"<title>{TITLES[batch]} {html.escape(topic['sweep'])}</title>", f"<style>{STYLE}</style>", "</head>",
                       f'<body data-set="{set_sha}" data-sweep="{html.escape(topic["sweep"])}" data-batch="{batch}" data-highlight="{sha}">',
-                      f"<header><h1>{TITLES[batch]} · {html.escape(topic['sweep'])}</h1><p>{html.escape(note)}</p><p>{html.escape(intro)}</p>"
+                      f"<header><h1>{TITLES[batch]} · {html.escape(topic['sweep'])}</h1><p>{html.escape(note)}</p><p>{html.escape(cue_note)}</p><p>{html.escape(intro)}</p>"
                       "<p id=\"progress\"></p>",
                       '<button id="download" type="button">Tải nhãn về (JSON)</button> <label>Mở file nhãn đã lưu <input id="restore" type="file" accept="application/json"></label></header>',
                       *eligibility, "<main>", *sections, "</main>", f"<script>{SCRIPT % (json.dumps(list(FIELDS)), json.dumps(list(RATED)), json.dumps(ELIGIBLE_TOTAL))}</script>", "</body>", "</html>", ""])

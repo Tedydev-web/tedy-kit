@@ -95,14 +95,14 @@ class V4RecordTest(unittest.TestCase):
         from study_calibration_set import highlight_sha256
         from study_v4_record import highlight_line
         calibration = section(self.text, "Calibration").splitlines()
-        self.assertIn("- calibration labelling page: labelled without highlighting; the saved labels carry no pattern list sha256", calibration)
-        self.assertFalse([line for line in calibration if "fixed path pattern list" in line])
+        self.assertIn("- calibration labelling page: labelled without highlighting; the saved labels carry no aid list sha256", calibration)
+        self.assertFalse([line for line in calibration if "fixed aid list" in line])
         current = highlight_sha256()
-        said = ("- calibration labelling page: root listing entries matching a fixed path pattern list were highlighted (no AI), pattern list sha256 `{}`; "
-                "a highlight is not a verdict, and a missing highlight does not mean no mechanism")
+        said = ("- calibration labelling page: root listing entries and README lines matching a fixed aid list were marked (no AI), aid list sha256 `{}`; "
+                "a mark is a cue, not a verdict, and a missing mark does not mean no mechanism")
         self.assertEqual(highlight_line("calibration", {"highlight_sha256": current}), said.format(current))
-        self.assertEqual(highlight_line("calibration", {"highlight_sha256": "0" * 64}), said.format("0" * 64) + f"; not the toolchain's current pattern list (sha256 `{current}`)")
-        self.assertEqual(highlight_line("top-up", {}), "- top-up labelling page: labelled without highlighting; the saved labels carry no pattern list sha256")
+        self.assertEqual(highlight_line("calibration", {"highlight_sha256": "0" * 64}), said.format("0" * 64) + f"; not the toolchain's current aid list (sha256 `{current}`)")
+        self.assertEqual(highlight_line("top-up", {}), "- top-up labelling page: labelled without highlighting; the saved labels carry no aid list sha256")
 
     def test_stage_1_states_the_frozen_ladder_the_rung_used_the_rungs_tried_and_the_audit_bounds(self):
         stage1 = section(self.text, "Stage 1")

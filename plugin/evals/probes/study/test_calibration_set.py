@@ -183,14 +183,14 @@ class CalibrationSetTest(unittest.TestCase):
             self.assertNotIn(leak, self.page)
 
     def test_a_topic_without_an_eligibility_definition_renders_the_page_byte_identical_to_before_the_field(self):
-        self.assertEqual(hashlib.sha256(self.page.encode()).hexdigest(), "5482a04eb5a995fce9e1766e21a7788eb6f12b9916059bf189c1274dd5f696a4")
+        self.assertEqual(hashlib.sha256(self.page.encode()).hexdigest(), "dfeb054e5c52de7b83f01555a3f317458081eae75e438bd2c379db779e48316e")
         self.assertNotIn('id="eligibility"', self.page)
 
     def test_removing_the_highlight_note_style_and_marks_gives_back_the_page_byte_identical_to_before_the_highlight(self):
         bare = re.sub(r"<p>Tô sáng theo [^<]*</p>", "", self.page, count=1).replace(".hit{background:#ffe08a;font-weight:600}", "")
         bare = re.sub(r'<span class="hit">([^<]*)</span>', r"\1", bare).replace("<details open><summary>Danh sách thư mục gốc", "<details><summary>Danh sách thư mục gốc")
         bare = re.sub(r' data-highlight="[0-9a-f]{64}"', "", bare, count=1).replace(" highlight_sha256: document.body.dataset.highlight,", "")
-        self.assertEqual(hashlib.sha256(bare.encode()).hexdigest(), "853e20599a59e707d86d0ddee06ae28c43e36b195909e996dc84e5e015f8f060")
+        self.assertEqual(hashlib.sha256(bare.encode()).hexdigest(), "a238a2b58244dd571445ba4a8d1ac815030025dfa490ef1495c0b455b91899f2")
 
     def test_the_topic_eligibility_definition_tops_the_page_escaped_and_leaves_the_set_and_the_draw_unchanged(self):
         _, work = drawn_work(eligibility=ELIGIBILITY)
@@ -221,15 +221,52 @@ class CalibrationSetTest(unittest.TestCase):
         self.assertEqual(listing(["src", "docs", "README.md"]), (None, "src, docs, README.md"))
         self.assertEqual(listing([]), (None, ""))
 
-    def test_the_pattern_list_is_frozen_lowercase_and_its_sha256_is_the_newline_joined_list(self):
-        from study_calibration_set import HIGHLIGHT_PATTERNS, highlight_sha256
-        self.assertEqual(highlight_sha256(), hashlib.sha256(("\n".join(HIGHLIGHT_PATTERNS) + "\n").encode()).hexdigest())
+    def test_the_aid_list_is_frozen_lowercase_and_its_sha256_is_the_newline_joined_list(self):
+        from study_calibration_set import HIGHLIGHT_PATTERNS, README_CUES, aid_list, highlight_sha256
+        self.assertEqual(highlight_sha256(), hashlib.sha256(("\n".join(aid_list()) + "\n").encode()).hexdigest())
         self.assertIsInstance(HIGHLIGHT_PATTERNS, tuple)
         self.assertEqual([p for p in HIGHLIGHT_PATTERNS if p != p.lower() or "/" in p], [])
         self.assertEqual(len(set(HIGHLIGHT_PATTERNS)), len(HIGHLIGHT_PATTERNS))
         self.assertNotIn("skills", HIGHLIGHT_PATTERNS)
         self.assertTrue({"skill.md", ".claude", ".claude-plugin"} <= set(HIGHLIGHT_PATTERNS))
-        self.assertEqual(highlight_sha256(), "a0b78ed86b8a7fa25451a757db477ee0d1d372f219af8dd1fc0c14dcd577d304")
+        self.assertEqual(README_CUES, (("objectivity", ("affiliate", "course", "courses", "enterprise", "paid", "premium", "pricing", "sponsor", "sponsored", "subscribe",
+                                                        "subscription")),
+                                       ("position", ("alternative", "vs", "versus", "compared to", "instead of", "unlike"))))
+        cues = tuple(f"{group}:{word}" for group, words in README_CUES for word in words)
+        self.assertEqual(aid_list(), HIGHLIGHT_PATTERNS + cues + ("fact:facts.stars", "fact:evidence.releases", "fact:evidence.tags"))
+        self.assertEqual([a for a in aid_list() if a != a.lower()], [])
+        self.assertEqual(len(set(aid_list())), len(aid_list()))
+        self.assertEqual(highlight_sha256(), "d9fb0877671d30e2be28728d33fb42991ef6db36550ae1bf72fe5c04a57840b9")
+
+    def test_readme_lines_matching_the_frozen_keywords_are_shown_verbatim_with_line_numbers_per_group(self):
+        from study_calibration_set import row_section
+        anchor = {c: {"1": "a", "0.5": "b", "0": "c"} for c in ("Authority", "Methodology", "Objectivity", "Position", "Relevance")}
+
+        def cues(readme):
+            section = row_section(1, 1, "k", "config", {"repo": "o/r", "readme": readme}, anchor, date(2026, 10, 20), [])
+            return re.search(r"<details( open)?><summary>Dòng README khớp danh sách từ khóa cố định</summary><pre>(.*?)</pre></details>", section, re.S).groups()
+
+        readme = "# Tool\nA paid <b>Pricing</b> page\nunpaid work and coursework\nCompared  to X, unlike Y\nVS Code extension\nversusX alternatives\nSponsored by Z"
+        self.assertEqual(cues(readme), (" open", "Objectivity\n2: A paid &lt;b&gt;Pricing&lt;/b&gt; page\n7: Sponsored by Z\n\nPosition\n4: Compared  to X, unlike Y\n5: VS Code extension"))
+        none = (None, "Objectivity\n(không có dòng khớp)\n\nPosition\n(không có dòng khớp)")
+        for empty in ("# Tool\nunpaid", "", None):
+            self.assertEqual(cues(empty), none)
+
+    def test_the_row_shows_the_stars_release_and_tag_facts_its_inputs_hold_and_invents_none(self):
+        from study_calibration_set import row_section
+        anchor = {c: {"1": "a", "0.5": "b", "0": "c"} for c in ("Authority", "Methodology", "Objectivity", "Position", "Relevance")}
+
+        def facts(held):
+            found = re.findall(r'<p class="facts">(.*?)</p>', row_section(1, 1, "k", "config", {"repo": "o/r", **held}, anchor, date(2026, 10, 20), []))
+            return found[0] if found else None
+
+        held = {"facts": {"stars": 6252, "license": "MIT"}, "evidence": {"releases": {"count": "100+", "latest": "v<1>", "published": "2026-10-20"},
+                                                                         "tags": {"count": 0, "latest": None}, "workflows": ["ci.yml"]}}
+        self.assertEqual(facts(held), "Dữ kiện có sẵn trong dữ liệu đầu vào: stars: 6252 · releases: count 100+, latest v&lt;1&gt;, published 2026-10-20 · tags: count 0")
+        self.assertEqual(facts({"facts": {"stars": 3}}), "Dữ kiện có sẵn trong dữ liệu đầu vào: stars: 3")
+        for bare in ({}, {"facts": {"license": "MIT"}, "evidence": {"workflows": []}}, {"error": "gone"}):
+            self.assertIsNone(facts(bare))
+        self.assertIn('<p class="facts">Dữ kiện có sẵn trong dữ liệu đầu vào: stars: 3 · releases: count 0 · tags: count 0</p>', self.page)
 
     def test_the_page_saves_the_pattern_list_sha256_with_the_labels_it_downloads(self):
         from study_calibration_set import highlight_sha256
@@ -264,6 +301,9 @@ class CalibrationSetTest(unittest.TestCase):
         self.assertIn(f"Tô sáng theo một danh sách mẫu đường dẫn cố định (không dùng AI), sha256 {sha}; tô sáng không phải là kết luận, và không có tô sáng không có nghĩa là "
                       "không có cơ chế.", header)
         self.assertIn(f"Highlighted by a fixed path pattern list (no AI), sha256 {sha}; a highlight is not a verdict, and missing highlights do not mean no mechanism.", header)
+        self.assertIn("<p>Sha256 trên phủ cả danh sách từ khóa cố định chọn ra các dòng README khớp và các dữ kiện có sẵn được tóm tắt, chỉ lấy từ đúng dữ liệu đầu vào mà giám "
+                      "khảo chấm (không dùng AI); một dòng khớp là gợi ý, không phải điểm. The sha256 above also covers the fixed keyword list that picks the matching README "
+                      "lines and the available facts summarised, taken only from the inputs the judges score (no AI); a matched line is a cue, not a score.</p>", header)
 
     def test_the_pattern_list_leaves_the_set_the_draw_and_the_saved_progress_key_unchanged(self):
         from unittest import mock
@@ -273,8 +313,8 @@ class CalibrationSetTest(unittest.TestCase):
             return re.search(r'<body data-set="([0-9a-f]{64})"', page).group(1), re.search(r"^  const SET = .*KEY = (.*);$", page, re.M).group(1)
 
         self.assertEqual(key_parts(self.page), (set_sha, '"calibration:" + SET'))
-        for patterns in ((), ("src",)):
-            with mock.patch("study_calibration_set.HIGHLIGHT_PATTERNS", patterns):
+        for name, patterns in (("HIGHLIGHT_PATTERNS", ()), ("HIGHLIGHT_PATTERNS", ("src",)), ("README_CUES", ()), ("README_CUES", (("position", ("tdd",)),))):
+            with mock.patch(f"study_calibration_set.{name}", patterns):
                 _, work = drawn_work()
             for name in ("calibration-set.json", "calibration-draw.json"):
                 self.assertEqual((work / name).read_bytes(), (self.work / name).read_bytes())
