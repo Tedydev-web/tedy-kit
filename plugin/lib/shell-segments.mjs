@@ -17,11 +17,12 @@ function skipHeredocs(command, index, line) {
   return at;
 }
 
-export function splitSegments(command, unwrap = true) {
+export function splitParts(command, unwrap = true) {
   const segments = [];
   let current = "";
   let line = "";
   let quote = null;
+  let piped = false;
   for (let index = 0; index < command.length; index += 1) {
     const char = command[index];
     const pair = command.slice(index, index + 2);
@@ -54,35 +55,44 @@ export function splitSegments(command, unwrap = true) {
     }
     if (pair === "&&" || pair === "||") {
       line += pair;
-      segments.push(current);
+      segments.push({ text: current, piped });
       current = "";
+      piped = false;
       index += 1;
       continue;
     }
     if (char === "\n") {
       index = skipHeredocs(command, index, line);
       line = "";
-      segments.push(current);
+      segments.push({ text: current, piped });
       current = "";
+      piped = false;
       continue;
     }
     if (char === ";" || char === "|") {
       line += char;
-      segments.push(current);
+      segments.push({ text: current, piped });
       current = "";
+      piped = char === "|";
       continue;
     }
     line += char;
     current += char;
   }
-  segments.push(current);
+  segments.push({ text: current, piped });
   return segments
-    .map((segment) => segment.trim())
-    .filter(Boolean)
-    .flatMap((segment) => {
-      const wrapped = unwrap && segment.match(SHELL_WRAPPER);
-      return wrapped ? splitSegments(wrapped[2]) : [segment];
+    .map((part) => ({ text: part.text.trim(), piped: part.piped }))
+    .filter((part) => part.text)
+    .flatMap((part) => {
+      const wrapped = unwrap && part.text.match(SHELL_WRAPPER);
+      if (!wrapped) return [part];
+      const inner = splitParts(wrapped[2]);
+      return inner.map((item, index) => (index === 0 && part.piped ? { ...item, piped: true } : item));
     });
+}
+
+export function splitSegments(command, unwrap = true) {
+  return splitParts(command, unwrap).map((part) => part.text);
 }
 
 export function tokenize(segment) {
@@ -121,6 +131,10 @@ export function tokenize(segment) {
       current = "";
       started = false;
       continue;
+    }
+    if ((char === "<" || char === ">") && segment[index + 1] !== "(" && started && !/^(\d*|&)$|[<>]$/.test(current)) {
+      tokens.push(current);
+      current = "";
     }
     current += char;
     started = true;

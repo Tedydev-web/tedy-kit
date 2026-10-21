@@ -5,7 +5,8 @@ import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ALL_GATES_ON, ask, deny, gateSwitches, logGate, readHookInput } from "../lib/hook-io.mjs";
 import { resolveMap } from "../lib/project-map.mjs";
-import { splitSegments, substitutions, tokenize } from "../lib/shell-segments.mjs";
+import { splitParts, splitSegments, substitutions, tokenize } from "../lib/shell-segments.mjs";
+import { INTERPRETER, SHELLS, readsUnreadableCode } from "../lib/shell-program-arguments.mjs";
 import { check as checkQuoted } from "./publish-quote-gate.mjs";
 import { evaluate as trackerToken, trackerHost } from "./tracker-token-gate.mjs";
 
@@ -43,21 +44,17 @@ const WRAPPERS = new Map([
 ]);
 const WRAPPER_ARGUMENTS = new Map([["timeout", 1]]);
 const PR_CREATE_VALUE_FLAGS = new Set(["-t", "--title", "-b", "--body", "-F", "--body-file", "-B", "--base", "-H", "--head", "-a", "--assignee", "-l", "--label", "-m", "--milestone", "-p", "--project", "-r", "--reviewer", "-T", "--template"]);
-const SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh", "fish"]);
-const INTERPRETER = /^(?:python|node|perl|ruby|deno|bun)[\d.]*$/;
 const EVAL_WORDS = new Set(["eval", "source", ".", "alias", "function"]);
 const NOT_LITERAL = /[$`(*?,{]|^\[(?!\[?$)|.}/;
 const RUNNERS = new Set(["env", "script", "ssh", "su", "runuser", "sg", "setsid", "flock", "watch", "parallel", "tmux", "screen", "expect", "unbuffer", "at", "batch", "chroot", "systemd-run", "nsenter", "unshare", "firejail", "bwrap"]);
 const API_MERGE = /pulls\/\d+\/merge\b|mergePullRequest|markPullRequestReadyForReview|enablePullRequestAutoMerge/;
 const MAX_COMMAND = 10_000;
 const REWRITE = "Rewrite it so every command word is literal: split it into plain commands, or put the code in a script file in the system temp directory (never inside the repository) with the Write tool and run it as `python3 <file>` or `node <file>`, with no eval, no `bash -c`, no heredoc code and no command word in a variable. Never put a git push, a merge or a GitHub write inside a script: run it as a plain command of its own so the gate can check it. The user is not asked, because they cannot check this form either.";
-const UNREADABLE_REASON = `tedy gate: this command runs code the gate cannot read (a command word built at run time, eval, a shell reading code from stdin or -c, an interpreter one-liner that mentions gh, or git -c alias/core). ${REWRITE}`;
+const UNREADABLE_REASON = `tedy gate: this command runs code the gate cannot read (a command word built at run time, eval, a shell or interpreter reading code from stdin, a heredoc, a pipe or a process substitution, a shell given -c, an interpreter one-liner that mentions gh, or git -c alias/core). ${REWRITE}`;
 const MERGE_REASON = "tedy gate: merging or marking a PR ready belongs to the user. Allow it only if the user asked for this exact PR in this turn.";
 const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve|unresolve|pr-body)|openproject\.mjs["']?\s+apply|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor|edit|delete))\b|^(?=[\s\S]*--apply\b)[\s\S]*?(?:openproject\.mjs["']?\s+(?:set|comment|comment-edit|relation|relation-delete|rollback)|doc-comment-file\.mjs["']?\s+post)\b/;
 export const CLAUDE_SETTINGS = process.env.TEDY_CLAUDE_SETTINGS ?? join(homedir(), ".claude", "settings.json");
 const REWRITING_PUSH = /^(-f|--force|--force-with-lease(=.*)?|--force-if-includes|--mirror|--all|--prune|-d|--delete)$/;
-const REDIRECT = /^\d*[<>]/;
-const BARE_REDIRECT = /^\d*[<>][<>&|-]*$/;
 const CTX_TOOL = /__ctx_(execute|execute_file|batch_execute)$/;
 const CTX_PUBLISH_REASON = "tedy gate: this publishes through a kit script from a context-mode tool, where the user's permission rules never ask. Run the publish as a plain Bash command of its own, so the permission rule asks the user before it goes out.";
 const CTX_LANGUAGES = new Set(["javascript", "typescript", "python", "ruby", "go", "rust", "php", "perl", "r", "elixir", "csharp"]);
@@ -133,7 +130,7 @@ function strippedTokens(segment) {
   return all.slice(at);
 }
 
-function unreadable(segment) {
+function unreadable(segment, piped = false) {
   const tokens = strippedTokens(segment);
   const [word = "", ...args] = tokens;
   if (NOT_LITERAL.test(word) || EVAL_WORDS.has(word)) return true;
@@ -141,9 +138,8 @@ function unreadable(segment) {
   if (/\$'[^']*\\/.test(segment)) return true;
   const raw = tokenize(segment);
   if (raw.some((token, index) => RUNNERS.has(basename(token)) && raw.slice(index + 1).some((arg) => /\s/.test(arg) && /\bgh\b|github/i.test(arg)))) return true;
-  const operands = args.filter((arg, index) => !BARE_REDIRECT.test(args[index - 1] ?? "") && (arg === "-" || !(arg.startsWith("-") || REDIRECT.test(arg))));
-  if (SHELLS.has(program)) return args.some((arg) => /^-[a-zA-Z]*[cs]/.test(arg) || arg === "<<<" || arg === "<") || !operands.some((arg) => arg !== "-");
-  if (INTERPRETER.test(program) && args.some((arg) => arg.startsWith("<<")) && (operands[0] ?? "-") === "-") return true;
+  if (SHELLS.has(program)) return args.some((arg) => /^-[a-zA-Z]*[cs]/.test(arg) || arg === "<<<" || arg === "<") || readsUnreadableCode(program, args, piped);
+  if (INTERPRETER.test(program) && readsUnreadableCode(program, args, piped)) return true;
   if (INTERPRETER.test(program)) return args.some((arg) => /^(-[a-zA-Z]*[ce][a-zA-Z]*|--eval|--print)$/.test(arg)) && /\bgh\b|github/i.test(segment);
   if (program === "git") {
     let index = 0;
@@ -343,13 +339,13 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
   const nested = substitutions(command);
   if (nested === null) rewriteFor(`tedy gate: this command nests command substitutions too deeply to check. ${REWRITE}`);
   let dir = cwd;
-  for (const segment of [...splitSegments(command), ...(nested ?? []).flatMap((body) => splitSegments(body))]) {
+  for (const { text: segment, piped } of [...splitParts(command), ...(nested ?? []).flatMap((body) => splitParts(body))]) {
     const action = classify(segment, dir);
     if (action.kind === "cd") {
       dir = action.dir;
       continue;
     }
-    if (unreadable(segment)) rewriteFor(UNREADABLE_REASON);
+    if (unreadable(segment, piped)) rewriteFor(UNREADABLE_REASON);
     if (action.kind === "push") {
       const risk = pushRisk(action.args, action.dir, gates.pushExempt);
       if (risk) askFor(`tedy gate: ${risk}, which belongs to the user. Allow it only if the user asked for this push.`);
