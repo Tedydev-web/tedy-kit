@@ -23,6 +23,13 @@ export function splitParts(command, unwrap = true) {
   let line = "";
   let quote = null;
   let piped = false;
+  let depth = 0;
+  let nested = 0;
+  const end = (next = false) => {
+    segments.push({ text: current, piped, depth });
+    current = "";
+    piped = next;
+  };
   for (let index = 0; index < command.length; index += 1) {
     const char = command[index];
     const pair = command.slice(index, index + 2);
@@ -53,50 +60,98 @@ export function splitParts(command, unwrap = true) {
       index += 1;
       continue;
     }
+    if (/^[$<>]\($/.test(pair)) {
+      nested += 1;
+      current += pair;
+      line += pair;
+      index += 1;
+      continue;
+    }
+    if (nested > 0 && (char === "(" || char === ")")) {
+      nested += char === "(" ? 1 : -1;
+      current += char;
+      line += char;
+      continue;
+    }
+    const definition = char === "(" && current.trim() ? command.slice(index).match(/^\(\s*\)/) : null;
+    if (definition) {
+      current += definition[0];
+      line += definition[0];
+      index += definition[0].length - 1;
+      continue;
+    }
+    if (char === "(" || char === ")") {
+      line += char;
+      end();
+      depth = Math.max(0, depth + (char === "(" ? 1 : -1));
+      continue;
+    }
     if (pair === "&&" || pair === "||") {
       line += pair;
-      segments.push({ text: current, piped });
-      current = "";
-      piped = false;
+      end();
       index += 1;
       continue;
     }
     if (char === "\n") {
       index = skipHeredocs(command, index, line);
       line = "";
-      segments.push({ text: current, piped });
-      current = "";
-      piped = false;
+      end();
       continue;
     }
     if (char === "&" && command[index - 1] === "|") continue;
     if (char === "&" && !/[<>]/.test(command[index - 1] ?? "") && command[index + 1] !== ">") {
       line += char;
-      segments.push({ text: current, piped });
-      current = "";
-      piped = false;
+      end();
       continue;
     }
     if (char === ";" || char === "|") {
       line += char;
-      segments.push({ text: current, piped });
-      current = "";
-      piped = char === "|";
+      end(char === "|");
       continue;
     }
     line += char;
     current += char;
   }
-  segments.push({ text: current, piped });
+  end();
   return segments
-    .map((part) => ({ text: part.text.trim(), piped: part.piped }))
+    .map((part) => ({ ...part, text: part.text.trim() }))
     .filter((part) => part.text)
     .flatMap((part) => {
       const wrapped = unwrap && part.text.match(SHELL_WRAPPER);
       if (!wrapped) return [part];
       const inner = splitParts(wrapped[2]);
-      return inner.map((item, index) => (index === 0 && part.piped ? { ...item, piped: true } : item));
+      return inner.map((item, index) => ({ ...item, depth: item.depth + part.depth, piped: item.piped || (index === 0 && part.piped) }));
     });
+}
+
+const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
+
+export function* walkParts(command, cwd, unwrap = true) {
+  const scopes = [{ dir: cwd, stack: [] }];
+  for (const part of splitParts(command, unwrap)) {
+    while (scopes.length > part.depth + 1) scopes.pop();
+    while (scopes.length < part.depth + 1) scopes.push({ dir: scopes.at(-1).dir, stack: [...scopes.at(-1).stack] });
+    const scope = scopes.at(-1);
+    const tokens = tokenize(part.text);
+    let at = 0;
+    while (at < tokens.length && ASSIGNMENT.test(tokens[at])) at += 1;
+    const [word, ...args] = tokens.slice(at);
+    const target = args.find((arg) => !/^[-+<>]|^\d+[<>]/.test(arg));
+    if (word === "cd") {
+      scope.dir = resolve(scope.dir, expandHome(args[0] ?? "~"));
+      continue;
+    }
+    if (word === "pushd" && target !== undefined) {
+      scope.stack.push(scope.dir);
+      scope.dir = resolve(scope.dir, expandHome(target));
+      continue;
+    }
+    if (word === "popd") {
+      scope.dir = scope.stack.pop() ?? scope.dir;
+      continue;
+    }
+    yield { ...part, dir: scope.dir };
+  }
 }
 
 export function splitSegments(command, unwrap = true) {
@@ -192,13 +247,5 @@ export function substitutions(command) {
 export const expandHome = (path) => (path === "~" || path.startsWith("~/") ? join(homedir(), path.slice(1)) : path);
 
 export function* walkSegments(command, cwd) {
-  let dir = cwd;
-  for (const segment of splitSegments(command)) {
-    const tokens = tokenize(segment);
-    if (tokens[0] === "cd") {
-      dir = resolve(dir, expandHome(tokens[1] ?? "~"));
-      continue;
-    }
-    yield { dir, tokens };
-  }
+  for (const { text, dir } of walkParts(command, cwd)) yield { dir, tokens: tokenize(text) };
 }

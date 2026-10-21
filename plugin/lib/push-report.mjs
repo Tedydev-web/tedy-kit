@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { isScannedFile, newComments } from "./comment-scan.mjs";
-import { CTX_TOOL, bashInputs, classify, splitSegments } from "../gates/git-gate.mjs";
+import { CTX_TOOL, bashInputs, classify } from "../gates/git-gate.mjs";
+import { walkParts } from "./shell-segments.mjs";
 import { strings } from "../gates/tracker-token-gate.mjs";
 import { gateSwitches, logGate, readHookInput } from "./hook-io.mjs";
 
@@ -21,12 +22,10 @@ function tryGit(dir, args) {
 const lines = (output) => (output ?? "").split("\n").map((line) => line.trim()).filter(Boolean);
 
 export function pushTargets(command, cwd) {
-  let dir = cwd;
   const targets = [];
-  for (const segment of splitSegments(command)) {
+  for (const { text: segment, dir } of walkParts(command, cwd)) {
     const action = classify(segment, dir);
-    if (action.kind === "cd") dir = action.dir;
-    else if (action.kind === "push" || action.kind === "pr-create") targets.push(action.dir);
+    if (action.kind === "push" || action.kind === "pr-create") targets.push(action.dir);
   }
   return [...new Set(targets)];
 }

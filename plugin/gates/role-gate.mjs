@@ -1,11 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { bashInputs, classify, splitSegments } from "./git-gate.mjs";
+import { bashInputs, classify } from "./git-gate.mjs";
 import { route } from "../lib/handoff.mjs";
 import { ask, gateSwitches, logGate, readHookInput } from "../lib/hook-io.mjs";
 import { resolveMap } from "../lib/project-map.mjs";
-import { shellWords } from "../lib/shell-segments.mjs";
+import { shellWords, walkParts } from "../lib/shell-segments.mjs";
 
 const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 const SCRIPT_WRITES = [
@@ -52,13 +52,9 @@ export function classifyAction(input, map) {
   }
   for (const item of bashInputs(input).inputs ?? []) {
     if (item.tool_name !== "Bash") continue;
-    let dir = item.cwd ?? cwd;
-    for (const segment of splitSegments(item.tool_input?.command ?? "")) {
+    for (const { text: segment, dir } of walkParts(item.tool_input?.command ?? "", item.cwd ?? cwd)) {
       const action = classify(segment, dir);
-      if (action.kind === "cd") {
-        dir = action.dir;
-        continue;
-      }
+      if (action.kind === "cd") continue;
       const script = SCRIPT_WRITES.find((write) => write.pattern.test(shellWords(segment)));
       if (script) return { kind: script.kind, repo: null };
       if (action.kind === "commit" || action.kind === "push") {

@@ -286,3 +286,68 @@ test("a runner named only as an argument is not treated as running anything", ()
   assert.deepEqual(["mv script sh", "ls busybox git", "rg -n find -e bash"].filter((command) => verdict(command) !== "allow"), []);
   assert.equal(verdict(`sudo find . -exec ${PUSH} \;`), "deny");
 });
+
+test("honest: a push or commit inside a subshell is judged in the subshell's directory (round 2 R1 n01 n02 n03 n01c n03b)", () => {
+  const { main, feat } = repos();
+  assert.equal(verdict(`(cd ${main} && git push)`, feat), "ask");
+  assert.equal(verdict("(git push origin main)", feat), "ask");
+  assert.equal(verdict(`(cd ${main} && git push origin master)`, feat), "ask");
+  assert.equal(verdict(`( cd ${main} && git push )`, feat), "ask");
+  assert.equal(hook(...shell(`(cd ${main} && git push)`), { cwd: feat, projectDir: feat }), "ask");
+  assert.equal(hook(BATCH, { commands: [`(cd ${main} && git push origin master)`] }, { cwd: feat, projectDir: feat }), "ask");
+  assert.equal(verdict(`(cd ${feat} && git push)`, main), "allow");
+  assert.equal(verdict(`(cd ${feat} && npm test) && git push`, main), "ask");
+  const map = { name: "shop", paths: ["/w/shop"], repos: [{ path: "shop-fe" }], sessions: [{ name: "PM", role: "pm" }, { name: "Dev", role: "dev" }] };
+  assert.deepEqual(classifyAction({ tool_name: "Bash", cwd: "/w/shop", tool_input: { command: "(cd shop-fe && git commit -m x)" } }, map), { kind: "code", repo: "shop-fe" });
+  assert.deepEqual(classifyAction({ tool_name: EXECUTE, cwd: "/w/shop", tool_input: { language: "shell", code: "(cd shop-fe && git commit -m x)" } }, map), { kind: "code", repo: "shop-fe" });
+});
+
+test("parentheses that are not a subshell keep their current behaviour", () => {
+  assert.deepEqual(splitSegments("x=$(git rev-parse HEAD) && echo $((1 + 2)) && diff <(sort a) <(sort b)"), ["x=$(git rev-parse HEAD)", "echo $((1 + 2))", "diff <(sort a) <(sort b)"]);
+  assert.deepEqual(splitSegments("echo 'f() { x; }' \"(a)\""), ["echo 'f() { x; }' \"(a)\""]);
+  const allowed = ["[[ -n x ]] && echo y", "[[ $x == a ]] || echo n", "(( i = i + 1 ))", "echo \"(git push origin main)\"", "echo 'f() { git push; }'", "find . \\( -name a -o -name b \\) -print", "x=$(git rev-parse HEAD) && echo $x", "echo $((1 + 2))", "diff <(sort a) <(sort b)"];
+  assert.deepEqual(allowed.filter((command) => verdict(command) !== "allow"), []);
+  assert.equal(verdict(`f() { ${PUSH}; }; f`), "deny");
+  assert.equal(verdict(`push() { git push "$@"; }; push origin main`), "deny");
+});
+
+test("honest, fixed: a push in a case branch is judged as its own command", () => {
+  assert.equal(verdict(`case $x in a) ${PUSH};; esac`), "ask");
+});
+
+test("honest: pushd and popd move the directory a push is judged in (round 2 R3 n05)", () => {
+  const { main, feat } = repos();
+  assert.equal(verdict(`pushd ${main} && git push`, feat), "ask");
+  assert.equal(verdict(`pushd ${main} > /dev/null && git push`, feat), "ask");
+  assert.equal(verdict(`pushd ${main} && popd && git push`, feat), "allow");
+  assert.equal(verdict(`pushd ${feat} && git push && popd`, main), "allow");
+  assert.equal(hook(...shell(`pushd ${main} && git push`), { cwd: feat, projectDir: feat }), "ask");
+});
+
+test("the round-2 review's everyday commands, reconstructed from its list, give the same result in Bash and through ctx_execute", () => {
+  const { main, feat } = repos();
+  const forms = [
+    ["git status"], ["git log --oneline -5"], ["git diff"], ["git show HEAD"], ["git branch -a"], ["git remote -v"], ["git fetch origin"], ["git rev-parse HEAD"], ["git blame README.md"], ["git -C plugin log -1"],
+    ["git commit -F /tmp/msg.txt"], ["git commit -F - <<'EOF'\nfix: x & y ; bash\nEOF"], ["git add -A && git commit -m x"],
+    ["git push", "allow", feat], ["git push -u origin feat/x", "allow", feat], ["git push", "ask", main], ["git push origin HEAD:main", "ask", feat],
+    ["npm test"], ["npm run build | tail -20"], ["npm test -- --test-name-pattern=gate"], ["timeout 120 npm test"], ["env FOO=1 npm test"], ["time npm test"],
+    ["node --test plugin/tests/a.test.mjs"], ["node --test 'plugin/tests/*.test.mjs'"], ["node --test --test-concurrency=1 plugin/tests"], ["npx vitest run"], ["npx tsx scripts/build.ts"], ["FOO=1 BAR=2 node scripts/check.mjs"],
+    ["python3 /tmp/x.py"], ["python3 -m unittest discover -s plugin/evals/probes/study -p 'test_*.py'"], ["STUDY_NO_NETWORK=1 python3 -m unittest discover -s plugin/evals/probes/study -p 'test_*.py'"], ["python3 -m json.tool < f.json"], ["cat f.json | python3 -m json.tool"], ["python3 x.py < in.txt > out.txt"], ["python3 x.py --input 'data/*.json'"],
+    ["bun test"], ["deno test -A"],
+    ["cat <<EOF > f.txt\nx\nEOF"], ["cat > f.txt <<'EOF'\nx\nEOF"],
+    ["jq '.a' f.json"], ["jq -r '.[] | .name' f.json"], ["rg -n x plugin | head"], ["rg --glob '*.mjs' -n x"], ["rg -l x"], ["fd -e mjs"], ["sed -n 1,20p f"], ["sed -i 's/a/b/' f"], ["awk '{print $1}' f | sort | uniq -c"], ["printf 'b\\na\\n' | sort"], ["grep -c '&' f"], ["echo \"a && b\" | tr a-z A-Z"], ["ls *.md"], ["diff <(sort a) <(sort b)"],
+    ["find . -name '*.md' -print"], ["find plugin -type f -name '*.mjs' -print"], ["find . -name '*.mjs' | xargs wc -l"], ["ls | xargs -n1 basename"],
+    ["for f in *.md; do echo $f; done"], ["if [ -f x ]; then echo y; fi"], ["while read -r l; do echo $l; done < f"], ["x=$(git rev-parse HEAD) && echo $x"], ["cd plugin && npm test && cd .."], ["(cd plugin && npm test)"], ["tail -f log & sleep 1; kill %1"], ["node x.mjs > log 2>&1 &"],
+    ["bash s.sh > log 2>&1"], ["bash -euo pipefail s.sh"], ["sh ./configure"],
+    ["gh pr view 1"], ["gh pr list && gh pr checks 1"], ["gh api repos/o/r/pulls --paginate | jq '.[].number'"], ["curl -s https://example.com | jq ."],
+    ["git stash && git checkout -b feat/y"], ["tar -czf a.tgz dir"], ["docker compose up -d"], ["sqlite3 db.sqlite 'select 1'"], ["node -e 'console.log(1)'"], ["python3 -c 'print(1)'"], ["mv script sh && ls busybox"],
+    ["python3 - <<'EOF'\nprint(1)\nEOF", "deny"], ["bash <<'EOF'\necho hi\nEOF", "deny"],
+  ];
+  assert.ok(forms.length >= 80);
+  const wrong = forms.flatMap(([command, expected = "allow", dir = feat]) => {
+    const viaBash = verdict(command, dir);
+    const viaCtx = hook(...shell(command), { cwd: dir, projectDir: dir });
+    return viaBash === expected && viaCtx === expected ? [] : [{ command, expected, viaBash, viaCtx }];
+  });
+  assert.deepEqual(wrong, []);
+});
