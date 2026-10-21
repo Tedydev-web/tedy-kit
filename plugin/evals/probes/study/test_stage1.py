@@ -354,7 +354,7 @@ class CanonTopicTest(unittest.TestCase):
         self.assertTrue(all(2 <= n <= 3 for n in counts.values()), counts)
         self.assertTrue(all(re.fullmatch(r"[\w.-]+/[\w.-]+", e["repo"]) and e["description"].strip() and e["why"].strip() and "\n" not in e["why"] for e in listed))
         self.assertEqual(example_repos(topic), {e["repo"].lower() for e in listed})
-        self.assertEqual(topic["sweep"], "261019-canon")
+        self.assertEqual(topic["sweep"], "261021-canon")
         work = Path(tempfile.mkdtemp(prefix="study-canon-freeze-"))
         self.addCleanup(shutil.rmtree, work, ignore_errors=True)
         for stratum in calibrated(topic):
