@@ -14,6 +14,7 @@ from study_topic import TopicError, screened_strata, session_option
 REPLY_KEYS = ("order_rank", "repo", "scores", "mechanisms", "decision", "decision_cite")
 MECHANISM_KEYS = ("problem", "path", "why")
 NOTE_KEYS = ("line", "quote", "criterion", "cue")
+NOTED = (*LABELLED, "decision")
 CITE = re.compile(r"(path|readme|fact):(.*)", re.S)
 CITE_MAX = 200
 FACT_CUE = re.compile(r"fact:((?:prefilled|evidence)\.[A-Za-z0-9_]+)")
@@ -122,15 +123,16 @@ def row_label(where, first, chosen, packet, date):
         label["Relevance"] = 0.5
         flags.append("Relevance 1 needs a mechanism outside a README at a path in the tree; Relevance kept at 0.5")
     label["problems"] = sorted({m["problem"] for m in mechanisms}) if label["Relevance"] == 1 else []
-    copied = first["decision"].startswith("excluded: ") and first["decision"][10:] in COPYLIKE
-    kept = copied and cite_holds(first["decision_cite"], packet)
+    decided = chosen.get("decision", (None, first))[1]
+    copied = decided["decision"].startswith("excluded: ") and decided["decision"][10:] in COPYLIKE
+    kept = copied and cite_holds(decided["decision_cite"], packet)
     if kept:
-        cites["decision"] = first["decision_cite"]
+        cites["decision"] = decided["decision_cite"]
     elif copied:
-        flags.append(f"citation failed: decision {first['decision_cite']}")
+        flags.append(f"citation failed: decision {decided['decision_cite']}")
     scores = {**{c: {"v": label[c]} for c in LABELLED}, "Date": {"v": date}}
     label["decision"] = derive(MechanismTable(EMPTY_TABLE), "reference", {"A": {}, "B": {}}, "A",
-                               {"order_rank": where, "scores": scores, "mechanisms": label["problems"], "decision": first["decision"] if kept else "eligible"})["decision"]
+                               {"order_rank": where, "scores": scores, "mechanisms": label["problems"], "decision": decided["decision"] if kept else "eligible"})["decision"]
     rerun = {c: key for c, (key, _) in chosen.items()}
     return label, {"cites": cites, "mechanisms": mechanisms if label["Relevance"] == 1 else [], "flags": flags, **({"rerun": rerun} if rerun else {})}
 
@@ -145,8 +147,8 @@ def checked_notes(notes, lines, packets):
         line = note["line"]
         if isinstance(line, bool) or not isinstance(line, int) or not 1 <= line <= len(lines) or not lines[line - 1].strip() or note["quote"] != lines[line - 1]:
             raise TopicError(f"{where}: line {line!r} with its quote is not a verbatim non-empty line of the criteria file")
-        if note["criterion"] not in LABELLED:
-            raise TopicError(f"{where}: criterion {note['criterion']!r} is not one of {', '.join(LABELLED)}")
+        if note["criterion"] not in NOTED:
+            raise TopicError(f"{where}: criterion {note['criterion']!r} is not one of {', '.join(NOTED)}")
         fact = FACT_CUE.fullmatch(note["cue"]) if isinstance(note["cue"], str) else None
         if note["cue"] not in README_CUE_NAMES and not (fact and any(field(p, fact.group(1)) is not MISSING for p in packets)):
             raise TopicError(f"{where}: cue {note['cue']!r} is neither a frozen README cue nor a prefilled or evidence field of the packet rows")
