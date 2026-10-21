@@ -145,6 +145,10 @@ export function* walkParts(command, cwd, unwrap = true) {
     while (scopes.length > part.depth + 1) scopes.pop();
     while (scopes.length < part.depth + 1) scopes.push({ dir: scopes.at(-1).dir, stack: [...scopes.at(-1).stack] });
     const scope = scopes.at(-1);
+    if (!/\b(?:cd|pushd|popd)\b/.test(part.text)) {
+      yield { ...part, dir: scope.dir, changesDir: false };
+      continue;
+    }
     const tokens = tokenize(part.text);
     let at = 0;
     while (at < tokens.length && (ASSIGNMENT.test(tokens[at]) || LEADING_WORDS.has(tokens[at]))) at += 1;
