@@ -48,10 +48,11 @@ STAGE1_ROWS_NOTE = ("Each row below is one repository: its name and description 
 STAGE1_REPLY_FORMAT = ("## Reply format\n\nReply with nothing but these lines. One JSON object per row, on one line, in order_rank order, with the fields order_rank, repo, "
                        "verdict (\"yes\", \"unsure\" or \"no\"), problems (the ids of the problems it may address; at least one for a yes) and why (one short sentence).")
 STAGE1_TEMPLATE_SHA256 = hashlib.sha256((STAGE1_ROWS_NOTE + "\n\n" + STAGE1_REPLY_FORMAT).encode()).hexdigest()
-REFERENCE_ROWS_NOTE = ("Each row below is one JSON object read at its pinned commit sha: the repository facts and the evidence the anchors score on, the README, the "
-                       "tree (agent-asset paths first), and as lists of {path, text}: up to ten asset files, up to ten test files of which only the first 40 lines are "
-                       "given, and up to two manifests; then the CHANGELOG head, the prefilled facts (released, changelog, paid_tier_cues) and, under truncated, the bytes "
-                       "each part held before and after its cap. Label only from these inputs; you have no tools. A file listed under missing, with the reason, could not "
+REFERENCE_ROWS_NOTE = ("Each row below is one JSON object read at its pinned commit sha, with these fields: facts (the repository facts) and evidence (the evidence "
+                       "the anchors score on), readme (the README), tree (agent-asset paths first), and as lists of {path, text}: assets (up to ten asset files), tests "
+                       "(up to ten test files of which only the first 40 lines are given) and manifests (up to two); then changelog (the CHANGELOG head), prefilled "
+                       "(released, changelog, paid_tier_cues) and truncated (the bytes each part held before and after its cap). Label only from these inputs; you have "
+                       "no tools. A file listed under missing, with the reason, could not "
                        "be read at the pinned commit and counts as absent; a test file's lines past the first 40 are not absent, only not shown. Date is not asked: the "
                        "toolchain computes it.")
 REFERENCE_REPLY_FORMAT = ("## Reply format\n\nReply with nothing but these lines. One JSON object per row, on one line, in order_rank order, with the fields order_rank, repo, "
@@ -59,7 +60,8 @@ REFERENCE_REPLY_FORMAT = ("## Reply format\n\nReply with nothing but these lines
                           "mechanisms (a list of {\"problem\": \"<registry problem id>\", \"path\": \"<tree path of the file that carries the mechanism>\", "
                           "\"why\": \"<one sentence>\"}; empty when the repository carries none), decision (eligible, or excluded: <code> with the code irrelevant, "
                           "below-threshold, copy, dead or aggregator) and decision_cite. Every cite is path:<a path from tree>, readme:<a verbatim README quote of at most "
-                          "200 characters> or fact:<a field of the row, such as prefilled.released>.")
+                          "200 characters> or fact:<the full dotted path of a field from the row root>, for example fact:evidence.changelog_head, "
+                          "fact:prefilled.released or fact:evidence.releases.count; a bare field name such as fact:changelog_head names no field.")
 REFERENCE_TEMPLATE_SHA256 = hashlib.sha256((REFERENCE_ROWS_NOTE + "\n\n" + REFERENCE_REPLY_FORMAT).encode()).hexdigest()
 
 

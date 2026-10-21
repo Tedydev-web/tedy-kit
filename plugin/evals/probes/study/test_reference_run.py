@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 import shutil
 import tempfile
 import unittest
@@ -7,6 +8,7 @@ from pathlib import Path
 
 from study_calibration_set import EXCLUDE_CODES, LABELLED
 from study_fixtures import FakeFetch, script, topic_repo, write_json, write_jsonl
+from study_reference_labels import cite_holds
 from study_session import MAX_PROMPT, canonical_sha256
 from study_session_prompt import REFERENCE_REPLY_FORMAT, REFERENCE_ROWS_NOTE, REFERENCE_TEMPLATE_SHA256, build_reference_prompt
 from study_session_reply import REFERENCE_CODES, REFERENCE_CRITERIA, parse_reference_reply
@@ -113,12 +115,26 @@ class ReferencePromptTest(unittest.TestCase):
 
     def test_the_template_sha_is_pinned_and_the_format_names_every_code_and_criterion(self):
         self.assertEqual(REFERENCE_TEMPLATE_SHA256, hashlib.sha256((REFERENCE_ROWS_NOTE + "\n\n" + REFERENCE_REPLY_FORMAT).encode()).hexdigest())
-        self.assertEqual(REFERENCE_TEMPLATE_SHA256, "3cc31ac1307c16700a2c204ef6f48ade3ead6c3eb978fc9681e05d3b524a86d7")
+        self.assertEqual(REFERENCE_TEMPLATE_SHA256, "b81e03ba35967f04381cffb8f169e6553bc3976cd6c274775ff172325ed00196")
         self.assertEqual(set(REFERENCE_CODES), set(EXCLUDE_CODES))
         self.assertEqual(REFERENCE_CRITERIA, LABELLED)
         for word in (*REFERENCE_CODES, *REFERENCE_CRITERIA, "decision_cite", "path:", "readme:", "fact:"):
             self.assertIn(word, REFERENCE_REPLY_FORMAT)
         self.assertNotIn("Date", REFERENCE_REPLY_FORMAT)
+
+
+    def test_a_fact_cite_is_the_full_dotted_path_from_the_row_root_with_examples_the_packet_holds(self):
+        examples = re.findall(r"fact:([A-Za-z_]+(?:\.[A-Za-z_]+)+)", REFERENCE_REPLY_FORMAT)
+        self.assertGreaterEqual(len(examples), 2)
+        self.assertIn("evidence.changelog_head", examples)
+        self.assertIn("full dotted path", REFERENCE_REPLY_FORMAT)
+        packet = {"facts": {"pushed": "2026-09-30"}, "evidence": {"changelog_head": "## 1.0", "releases": {"count": 2}},
+                  "prefilled": {"released": False, "changelog": "CHANGELOG.md", "paid_tier_cues": []}}
+        for example in examples:
+            self.assertTrue(cite_holds(f"fact:{example}", packet), example)
+            self.assertFalse(cite_holds(f"fact:{example.split('.', 1)[1]}", packet), example)
+        for key in ("facts", "evidence", "readme", "tree", "assets", "tests", "manifests", "changelog", "prefilled", "truncated"):
+            self.assertIn(f"{key} (", REFERENCE_ROWS_NOTE)
 
 
 class ReferenceReplyTest(unittest.TestCase):
