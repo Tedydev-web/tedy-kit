@@ -5,7 +5,7 @@ from collections import Counter
 from pathlib import Path
 
 from study_agreement import RECALL_TARGET, cohen_kappa, interval_text, kappa_text
-from study_calibration_set import all_batches, calibration_checks, labelled, labels_file, set_file
+from study_calibration_set import all_batches, calibration_checks, highlight_sha256, labelled, labels_file, set_file
 from study_drop import RETIRABLE, drop_checks, file_stem
 from study_judges import AUDIT_FILE, AUDIT_ROWS, SHAPES, criteria_version, decided, judged_batches, reader_shares_family, roster, validate
 from study_method_sessions import checked_entry, row_hashes
@@ -294,6 +294,8 @@ def batch_lines(topic, folder, strata):
             lines.append(f"- {batch} {stratum}: {len(rows)} rows ({sample['purpose']}), drawn per facet " + ", ".join(f"{f} {n}" for f, n in facets.items())
                          + f"; likely positives {sum(drawn[r['id']]['class'] != 'random' for r in rows)}; the user labelled {eligible} eligible")
     lines.append(f"- positives pooled over the batches the rung was chosen on: {pooled}")
+    lines.append(f"- labelling page: root listing entries matching a fixed path pattern list are highlighted (no AI), pattern list sha256 `{highlight_sha256()}`; "
+                 "a highlight is not a verdict, and a missing highlight does not mean no mechanism")
     return lines
 
 

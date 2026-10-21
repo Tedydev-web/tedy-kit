@@ -1,3 +1,4 @@
+import fnmatch
 import hashlib
 import html
 import json
@@ -21,6 +22,18 @@ EXCLUDE_CODES = {"irrelevant": "không liên quan", "below-threshold": "dưới 
                  "aggregator": "danh sách tổng hợp"}
 RATINGS = (1, 0.5, 0)
 SET_FILE, DRAW_FILE, LABELS_FILE, PAGE_FILE = "calibration-set.json", "calibration-draw.json", "calibration-labels.json", "calibration.html"
+HIGHLIGHT_PATTERNS = (".github", "codeowners", ".husky", ".pre-commit-config.yaml", ".claude", ".claude-plugin", "hooks", "hooks.json", "settings.json", "skills", "skill.md",
+                      "agents.md", "claude.md", "*.schema.json", "schema", "schemas", ".eslintrc*", "eslint.config.*", "biome.json*", ".markdownlint*", "commitlint*",
+                      ".commitlintrc*", "contributing*", "changelog*", "adr", "decisions", "migrations", "evals", "tests", "test", "renovate.json*", ".release*",
+                      "release-please*")
+
+
+def highlight_sha256():
+    return hashlib.sha256(("\n".join(HIGHLIGHT_PATTERNS) + "\n").encode()).hexdigest()
+
+
+def highlighted(name):
+    return any(fnmatch.fnmatchcase(name.lower(), p) for p in HIGHLIGHT_PATTERNS)
 
 
 def set_file(batch):
@@ -312,7 +325,10 @@ def row_section(index, total, key, stratum, held, anchor, when, problems):
         parts.append(f"<p class=\"warn\">Không đọc được: {html.escape(held['error'])}</p>")
     if held.get("missing"):
         parts.append("<p class=\"warn\">Thiếu ở commit đã ghim (coi như không có): " + html.escape("; ".join(held["missing"])) + "</p>")
-    parts.append("<details><summary>Danh sách thư mục gốc</summary>" + pre(", ".join(held.get("listing", []))) + "</details>")
+    names = held.get("listing", [])
+    hits = [highlighted(n) for n in names]
+    entries = ", ".join(f'<span class="hit">{html.escape(n)}</span>' if hit else html.escape(n) for n, hit in zip(names, hits))
+    parts.append(f"<details{' open' if any(hits) else ''}><summary>Danh sách thư mục gốc</summary><pre>{entries}</pre></details>")
     parts.append("<details open><summary>README</summary>" + pre(held.get("readme", "")) + "</details>")
     parts += [f"<details open><summary>{html.escape(f['path'])}</summary>" + pre("(tệp nhị phân, không hiển thị)" if f.get("binary") else f.get("text", "")) + "</details>"
               for f in held.get("files", [])]
@@ -335,7 +351,7 @@ STYLE = ("body{font:15px/1.5 system-ui,sans-serif;margin:0 auto;max-width:1100px
          "pre{white-space:pre-wrap;word-break:break-word;background:#f3f3f3;padding:8px;max-height:420px;overflow:auto;font-size:13px}"
          ".criterion{border-top:1px solid #eee;padding:6px 0}.criterion h3{margin:4px 0;font-size:15px}"
          ".criterion label{display:block;margin:3px 0 3px 8px}.criterion label.inline{display:inline-block;margin-right:12px}"
-         ".warn{color:#8a4b00}.date{color:#444}button{font-size:15px;padding:4px 12px}")
+         ".warn{color:#8a4b00}.date{color:#444}button{font-size:15px;padding:4px 12px}.hit{background:#ffe08a;font-weight:600}")
 
 SCRIPT = """(() => {
   const SET = document.body.dataset.set, SWEEP = document.body.dataset.sweep, BATCH = document.body.dataset.batch, KEY = "calibration:" + SET;
@@ -423,6 +439,9 @@ def page(topic, batch, set_sha, shown, anchor):
              "dấu các mã vấn đề mà repository có cơ chế xử lý, rồi chọn Đủ điều kiện hoặc Loại kèm lý do. Date do công cụ tính sẵn nên chỉ hiển thị. Đủ điều kiện khi Relevance = 1 "
              "và Authority + Methodology + Objectivity + Date + Position + Novelty ≥ 4.5, với Novelty = 1 khi dòng có ít nhất một cơ chế: khi hiệu chuẩn, mọi cơ chế đều được tính "
              "là mới, như cách chấm giám khảo. Tiến độ tự lưu trong trình duyệt; bấm «Tải nhãn về (JSON)» để lưu file, rồi chạy import-calibration-labels.py với file đó.")
+    sha = highlight_sha256()
+    note = (f"Tô sáng theo một danh sách mẫu đường dẫn cố định (không dùng AI), sha256 {sha}; tô sáng không phải là kết luận, và không có tô sáng không có nghĩa là không có cơ chế. "
+            f"Highlighted by a fixed path pattern list (no AI), sha256 {sha}; a highlight is not a verdict, and missing highlights do not mean no mechanism.")
     problems = topic.get("problems") or []
     sections = [row_section(i, len(shown), key, stratum, held, anchor, when, problems) for i, (key, stratum, held) in enumerate(shown, 1)]
     eligibility = [eligibility_block(topic["eligibility"])] if "eligibility" in topic else []
@@ -430,7 +449,8 @@ def page(topic, batch, set_sha, shown, anchor):
                       "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'\">",
                       f"<title>{TITLES[batch]} {html.escape(topic['sweep'])}</title>", f"<style>{STYLE}</style>", "</head>",
                       f'<body data-set="{set_sha}" data-sweep="{html.escape(topic["sweep"])}" data-batch="{batch}">',
-                      f"<header><h1>{TITLES[batch]} · {html.escape(topic['sweep'])}</h1><p>{html.escape(intro)}</p><p id=\"progress\"></p>",
+                      f"<header><h1>{TITLES[batch]} · {html.escape(topic['sweep'])}</h1><p>{html.escape(note)}</p><p>{html.escape(intro)}</p>"
+                      "<p id=\"progress\"></p>",
                       '<button id="download" type="button">Tải nhãn về (JSON)</button> <label>Mở file nhãn đã lưu <input id="restore" type="file" accept="application/json"></label></header>',
                       *eligibility, "<main>", *sections, "</main>", f"<script>{SCRIPT % json.dumps(list(FIELDS))}</script>", "</body>", "</html>", ""])
 

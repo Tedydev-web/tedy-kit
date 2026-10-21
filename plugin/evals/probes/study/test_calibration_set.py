@@ -4,6 +4,7 @@ import re
 import shutil
 import tempfile
 import unittest
+from datetime import date
 from pathlib import Path
 
 from study_fixtures import script, write_json, write_jsonl
@@ -161,8 +162,13 @@ class CalibrationSetTest(unittest.TestCase):
             self.assertNotIn(leak, self.page)
 
     def test_a_topic_without_an_eligibility_definition_renders_the_page_byte_identical_to_before_the_field(self):
-        self.assertEqual(hashlib.sha256(self.page.encode()).hexdigest(), "07a08fa6bc8cdc3e94eef0aa5d4d4a78b19dfefd6fb6ed6ad8111eb333a5ac13")
+        self.assertEqual(hashlib.sha256(self.page.encode()).hexdigest(), "26c9f1c35e97f391be8c378d314246fe88371c3e04da602ccecb1ea8775f3237")
         self.assertNotIn('id="eligibility"', self.page)
+
+    def test_removing_the_highlight_note_style_and_marks_gives_back_the_page_byte_identical_to_before_the_highlight(self):
+        bare = re.sub(r"<p>Tô sáng theo [^<]*</p>", "", self.page, count=1).replace(".hit{background:#ffe08a;font-weight:600}", "")
+        bare = re.sub(r'<span class="hit">([^<]*)</span>', r"\1", bare).replace("<details open><summary>Danh sách thư mục gốc", "<details><summary>Danh sách thư mục gốc")
+        self.assertEqual(hashlib.sha256(bare.encode()).hexdigest(), "07a08fa6bc8cdc3e94eef0aa5d4d4a78b19dfefd6fb6ed6ad8111eb333a5ac13")
 
     def test_the_topic_eligibility_definition_tops_the_page_escaped_and_leaves_the_set_and_the_draw_unchanged(self):
         _, work = drawn_work(eligibility=ELIGIBILITY)
@@ -178,6 +184,52 @@ class CalibrationSetTest(unittest.TestCase):
                      '<div lang="en">', "<p>The judges&#x27; &lt;b&gt;question&lt;/b&gt;.</p>", "<p>The second line.</p>"):
             self.assertIn(text, block)
         self.assertNotIn("<b>", block)
+
+    def test_listing_entries_matching_the_frozen_pattern_list_are_highlighted_escaped_and_open_the_listing(self):
+        from study_calibration_set import row_section
+        anchor = {c: {"1": "a", "0.5": "b", "0": "c"} for c in ("Authority", "Methodology", "Objectivity", "Position", "Relevance")}
+
+        def listing(names):
+            section = row_section(1, 1, "k", "config", {"repo": "o/r", "listing": names}, anchor, date(2026, 10, 20), [])
+            return re.search(r"<details( open)?><summary>Danh sách thư mục gốc</summary><pre>(.*?)</pre></details>", section, re.S).groups()
+
+        self.assertEqual(listing([".github", "src", "<b>x</b>", "CONTRIBUTING.md", "eslint.config.js", "docs"]),
+                         (" open", '<span class="hit">.github</span>, src, &lt;b&gt;x&lt;/b&gt;, <span class="hit">CONTRIBUTING.md</span>, '
+                                   '<span class="hit">eslint.config.js</span>, docs'))
+        self.assertEqual(listing(["src", "docs", "README.md"]), (None, "src, docs, README.md"))
+        self.assertEqual(listing([]), (None, ""))
+
+    def test_the_pattern_list_is_frozen_lowercase_and_its_sha256_is_the_newline_joined_list(self):
+        from study_calibration_set import HIGHLIGHT_PATTERNS, highlight_sha256
+        self.assertEqual(highlight_sha256(), hashlib.sha256(("\n".join(HIGHLIGHT_PATTERNS) + "\n").encode()).hexdigest())
+        self.assertIsInstance(HIGHLIGHT_PATTERNS, tuple)
+        self.assertEqual([p for p in HIGHLIGHT_PATTERNS if p != p.lower() or "/" in p], [])
+        self.assertEqual(len(set(HIGHLIGHT_PATTERNS)), len(HIGHLIGHT_PATTERNS))
+
+    def test_the_page_header_states_the_pattern_list_sha256_and_that_a_highlight_is_no_verdict(self):
+        from study_calibration_set import highlight_sha256
+        header = self.page[self.page.index("<header>"):self.page.index("</header>")]
+        sha = highlight_sha256()
+        self.assertIn(f"Tô sáng theo một danh sách mẫu đường dẫn cố định (không dùng AI), sha256 {sha}; tô sáng không phải là kết luận, và không có tô sáng không có nghĩa là "
+                      "không có cơ chế.", header)
+        self.assertIn(f"Highlighted by a fixed path pattern list (no AI), sha256 {sha}; a highlight is not a verdict, and missing highlights do not mean no mechanism.", header)
+
+    def test_the_pattern_list_leaves_the_set_the_draw_and_the_saved_progress_key_unchanged(self):
+        from unittest import mock
+        set_sha = hashlib.sha256((self.work / "calibration-set.json").read_bytes()).hexdigest()
+
+        def key_parts(page):
+            return re.search(r'<body data-set="([0-9a-f]{64})"', page).group(1), re.search(r"^  const SET = .*KEY = (.*);$", page, re.M).group(1)
+
+        self.assertEqual(key_parts(self.page), (set_sha, '"calibration:" + SET'))
+        for patterns in ((), ("src",)):
+            with mock.patch("study_calibration_set.HIGHLIGHT_PATTERNS", patterns):
+                _, work = drawn_work()
+            for name in ("calibration-set.json", "calibration-draw.json"):
+                self.assertEqual((work / name).read_bytes(), (self.work / name).read_bytes())
+            page = (work / "calibration.html").read_text()
+            self.assertNotEqual(page, self.page)
+            self.assertEqual(key_parts(page), key_parts(self.page))
 
     def test_the_topic_validator_accepts_an_eligibility_definition_only_as_vietnamese_and_english_texts(self):
         repo = v4_repo()

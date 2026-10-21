@@ -91,6 +91,11 @@ class V4RecordTest(unittest.TestCase):
                                                 rf"problem"):
             self.render(repo)
 
+    def test_the_calibration_section_states_the_labelling_page_highlight_pattern_list_sha256(self):
+        from study_calibration_set import highlight_sha256
+        self.assertIn(f"- labelling page: root listing entries matching a fixed path pattern list are highlighted (no AI), pattern list sha256 `{highlight_sha256()}`; "
+                      "a highlight is not a verdict, and a missing highlight does not mean no mechanism", section(self.text, "Calibration").splitlines())
+
     def test_stage_1_states_the_frozen_ladder_the_rung_used_the_rungs_tried_and_the_audit_bounds(self):
         stage1 = section(self.text, "Stage 1")
         self.assertIn("- chosen: rung 1 after 1 rungs tried", stage1)
