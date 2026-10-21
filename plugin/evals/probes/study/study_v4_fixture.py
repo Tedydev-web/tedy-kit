@@ -26,6 +26,7 @@ FACETS = {"alpha": {"sweep": "261020-demo-alpha", "problems": ["X1", "X2"], "ter
 EXAMPLES = [{"repo": f"e/{v}{i}", "description": f"{v} example {i}", "verdict": v, "problems": ["X1"] if v == "yes" else [], "why": "worked example"}
             for v in ("yes", "unsure", "no") for i in (1, 2)]
 ROWS_PER_FACET = 50
+JUDGE_BLOCK_ROWS = 30
 SHARED = {"config": ("o/shared", 3, 5), "product": ("p/shared", 4, 6)}
 OUTSIDE = "o/outside1"
 CELLS = ("Authority", "Methodology", "Objectivity", "Date", "Position", "Novelty", "Relevance")
@@ -302,9 +303,12 @@ def calibrated_work(judges, top_up=False, pad=0):
 
 def judged(repo, work, judges, names=SCREENING_JUDGE_NAMES + QGS_JUDGE_NAMES, strata=STRATA):
     for stratum in strata:
+        count = len(script("run-judge").calibration_ranks(work, stratum))
         for name in names:
             for run in ("1", "2"):
-                quiet(repo, "run-judge", "--work", str(work), "--stratum", stratum, "--judge", name, "--set", "calibration", "--run", run, "--today", TODAY, fetch=judges)
+                for first in range(1, count + 1, JUDGE_BLOCK_ROWS):
+                    quiet(repo, "run-judge", "--work", str(work), "--stratum", stratum, "--judge", name, "--set", "calibration", "--run", run,
+                          "--rows", f"{first}-{min(first + JUDGE_BLOCK_ROWS - 1, count)}", "--today", TODAY, fetch=judges)
 
 
 def stage1_calibrated(repo, work, judges, models=("claude-sonnet-5-5",)):

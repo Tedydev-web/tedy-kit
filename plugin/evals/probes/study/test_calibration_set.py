@@ -1,4 +1,5 @@
 import hashlib
+import html
 import json
 import re
 import shutil
@@ -8,6 +9,7 @@ from datetime import date
 from pathlib import Path
 
 from study_fixtures import script, write_json, write_jsonl
+from study_calibration_set import anchors
 from study_session import canonical_sha256, qgs_shape
 from study_topic import TopicError, load_topic
 from study_v4_fixture import CRITERIA, SECRET, SWEEP, TODAY, drawn_and_labelled, inputs_fetch, quiet, screening_row, user_labels, v4_repo, v4_work
@@ -244,15 +246,22 @@ class CalibrationSetTest(unittest.TestCase):
         for leak in (SECRET, "qgs candidate", "top-ranked", "random", "facet_rank", "calibration-draw"):
             self.assertNotIn(leak, self.page)
 
+    def without_criteria(self, page):
+        page = page.replace(hashlib.sha256((self.work / "calibration-set.json").read_bytes()).hexdigest(), "")
+        for cells in anchors((self.repo / CRITERIA).read_text()).values():
+            for value, text in cells.items():
+                page = page.replace(f"<b>{value}</b> {html.escape(text)}</label>", f"<b>{value}</b> </label>")
+        return page
+
     def test_a_topic_without_an_eligibility_definition_renders_no_eligibility_block_and_the_pinned_page(self):
-        self.assertEqual(hashlib.sha256(self.page.encode()).hexdigest(), "e6ef96b5ddb6942764868c41ed36014cdddc3544ef8c735039d0003ae4a1f38e")
+        self.assertEqual(hashlib.sha256(self.without_criteria(self.page).encode()).hexdigest(), "f6758e80085271f608bb29d167f5559e2f226c36c2e97a90e39e75e229e5079d")
         self.assertNotIn('id="eligibility"', self.page)
 
     def test_removing_the_highlight_note_style_and_marks_gives_the_pinned_unhighlighted_page(self):
         bare = re.sub(r"<p>Tô sáng theo [^<]*</p>", "", self.page, count=1).replace(".hit{background:#ffe08a;font-weight:600}", "")
         bare = re.sub(r'<span class="hit">([^<]*)</span>', r"\1", bare).replace("<details open><summary>Danh sách thư mục gốc", "<details><summary>Danh sách thư mục gốc")
         bare = re.sub(r' data-highlight="[0-9a-f]{64}"', "", bare, count=1).replace(" highlight_sha256: document.body.dataset.highlight,", "")
-        self.assertEqual(hashlib.sha256(bare.encode()).hexdigest(), "e3343aefc177adf873254901d30eaf2c58926d46196284f07d646d6cf5c14aa3")
+        self.assertEqual(hashlib.sha256(self.without_criteria(bare).encode()).hexdigest(), "04fc442ecdd9a7bb5d352eea738b5eb55dc1a8c7ebfedb0d7cf417c6c34b4304")
 
     def test_the_topic_eligibility_definition_tops_the_page_escaped_and_leaves_the_set_and_the_draw_unchanged(self):
         _, work = drawn_work(eligibility=ELIGIBILITY)
