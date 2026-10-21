@@ -11,7 +11,7 @@ from study_fetch import Fetch, NetworkRefused
 from study_judges import AUDIT_FILE, QGS_JUDGES, SCREENING_JUDGES, SHAPES, audit_option, criteria_version, judged_batches, require_qualified, roster, run_name
 from study_protocol import FREEZE_FILE
 from study_qgs import INPUTS, JUDGE_FILES, PACKET, candidates, cross_family, cross_name, dropped, read_cross, read_verdicts, reader_queue, whole_topic
-from study_reference_freeze import require_frozen
+from study_reference_freeze import freeze_file, require_frozen
 from study_screening_core import read_jsonl
 from study_screening_input import inputs_file
 from study_session import ReplyRefused, model_family, record_refusal, run_block, run_blocks
@@ -169,6 +169,10 @@ def reference_job(topic, work, stratum, judge, batch, model, note):
         if note is not None:
             if note < 1:
                 raise TopicError(f"--rerun-notes {note} must be a round number from 1")
+            if (Path(work) / FREEZE_FILE).is_file():
+                raise TopicError(f"{FREEZE_FILE} exists; no note re-runs a row after the protocol freeze, a flagged row stays contested")
+            if (Path(work) / freeze_file(batch)).is_file():
+                raise TopicError(f"{freeze_file(batch)} exists; nothing after the freeze changes a label, so no note re-runs its rows")
             notes, notes_sha256, ranks = note_job(work, batch, stratum, ranks)
             name = f"{name}-notes-{note}"
     return {"kind": "reference", "freeze": None, "option": option, "ranks": ranks, "name": name, "inputs": f"reference-inputs-{stratum}.jsonl", "packet": BUNDLE, "notes": notes,
