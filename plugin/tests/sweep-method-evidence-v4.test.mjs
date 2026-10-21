@@ -419,7 +419,7 @@ test("the pilot sessions run the roster's session A and session B options, cli a
 });
 
 test("the snowball rows equal the pool's snowballed rows and the stage-1 inputs, once each", () => {
-  const snowball = /^snowball-screening-order\.jsonl holds (33 rows \(33|35 rows \(34|0 rows \(0) distinct\), but the config pool holds 34 and the stage-1 inputs 34 snowballed rows above rank 1000; /;
+  const snowball = /^snowball-screening-order\.jsonl holds (33 rows \(33|35 rows \(34|0 rows \(0) distinct\), but the config pool holds 34 and the stage-1 inputs 34 snowballed rows; /;
   const probes = [
     ["a row deleted", (s) => s.writeRows("snowball-screening-order.jsonl", s.jsonl("snowball-screening-order.jsonl").filter((_, i) => i !== 4))],
     ["a row duplicated", (s) => { const rows = s.jsonl("snowball-screening-order.jsonl"); s.writeRows("snowball-screening-order.jsonl", [...rows, rows[0]]); }],
@@ -431,6 +431,20 @@ test("the snowball rows equal the pool's snowballed rows and the stage-1 inputs,
     edit(s);
     failsBothLayers(s, new RegExp(`prior-art-sweep-record: ${snowball.source.slice(1)}`), snowball, name);
   }
+});
+
+test("a ranked pool past rank 1000 keeps its snowball rows numbered after it, in both layers", () => {
+  const s = sweep(build("--large-pool"));
+  const order = s.jsonl("config-screening-order.jsonl");
+  const snowballed = order.filter((r) => canonical(r.channels) === canonical(["snowball"])).map((r) => r.order_rank);
+  const ranked = order.filter((r) => canonical(r.channels) !== canonical(["snowball"])).map((r) => r.order_rank);
+  assert.deepEqual([ranked.length > 1000, snowballed.length, Math.min(...snowballed) > Math.max(...ranked)], [true, 34, true]);
+  const audit = s.json("config-stage1-audit.json");
+  const blocks = s.json("meta.json").sessions["config-stage1-audit-claude-opus-5-5"].blocks.map((b) => b.ranks);
+  assert.deepEqual([blocks.flat().sort((a, b) => a - b), blocks.length > 1, Math.max(...blocks.map((b) => b.length)) <= 100, new Set(blocks.map((b) => b.length)).size > 1],
+    [[...audit.near, ...audit.far].sort((a, b) => a - b), true, true, true]);
+  assert.match(s.text, /^- snowball: 34 repositories from the aggregators joined the config pool \(cut: none: /m);
+  assert.equal(s.errors(), "");
 });
 
 test("a topic flag never drops the config-pool channel line while its evidence files exist", () => {

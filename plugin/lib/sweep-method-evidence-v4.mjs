@@ -239,18 +239,18 @@ function recallErrors(io, text, topic, strata, members, memberStrata, passes, sc
   if (snow.length) errors.push(`snowballed repositories ${snow.map((r) => r.repo).join(", ")} are not in the config stage-1 pool`);
   if (strata.includes("config")) {
     const key = (r) => `${r.order_rank}:${lower(r.repo)}`;
-    const above = (rows) => [...new Set(rows.filter((r) => r.order_rank > 1000).map(key))].sort();
-    const rows = io.jsonl("snowball-screening-order.jsonl").map(key);
-    const unique = [...new Set(rows)].sort();
-    const order = above(io.jsonl("config-screening-order.jsonl"));
-    const inputs = above([...(passes.config?.pool.values() ?? [])]);
-    if (unique.length !== rows.length || canonical(unique) !== canonical(order) || canonical(order) !== canonical(inputs)) {
+    const rows = io.jsonl("snowball-screening-order.jsonl").map((r) => lower(r.repo)).sort();
+    const unique = [...new Set(rows)];
+    const order = io.jsonl("config-screening-order.jsonl").filter((r) => canonical(r.channels) === canonical(["snowball"]));
+    const held = new Set([...(passes.config?.pool.values() ?? [])].map(key));
+    const inputs = order.filter((r) => held.has(key(r)));
+    if (unique.length !== rows.length || canonical(rows) !== canonical(order.map((r) => lower(r.repo)).sort()) || inputs.length !== order.length) {
       errors.push(`snowball-screening-order.jsonl holds ${rows.length} rows (${unique.length} distinct), but the config pool holds ${order.length} and the stage-1 inputs ${inputs.length} `
-        + "snowballed rows above rank 1000; the snowball rows are the pool's own, once each");
+        + "snowballed rows; the snowball rows are the pool's own, once each");
     }
   }
   const snowballed = io.jsonl("snowball-screening-order.jsonl").length;
-  if (snowballed && !text.split("\n").includes(`- snowball: ${snowballed} repositories from the aggregators joined the config pool from rank 1001 on (cut: ${io.json("snowball-cut.json")?.source}); stage 1 read every one`)) {
+  if (snowballed && !text.split("\n").includes(`- snowball: ${snowballed} repositories from the aggregators joined the config pool (cut: ${io.json("snowball-cut.json")?.source}); stage 1 read every one`)) {
     errors.push(`the record's snowball line does not state the ${snowballed} snowballed repositories snowball-screening-order.jsonl holds`);
   }
   const cutFile = io.json("snowball-cut.json");

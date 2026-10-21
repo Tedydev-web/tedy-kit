@@ -350,8 +350,22 @@ class V4RecordTest(unittest.TestCase):
                 repo, folder = self.copy()
                 edit(folder)
                 with self.assertRaisesRegex(TopicError, rf"^snowball-screening-order.jsonl holds {re.escape(held)} distinct\), but the config pool holds 34 and the stage-1 inputs 34 "
-                                                        r"snowballed rows above rank 1000; "):
+                                                        r"snowballed rows; "):
                     self.render(repo)
+
+    def test_a_ranked_pool_past_rank_1000_keeps_its_snowball_rows_numbered_after_it(self):
+        large = v4_sweep(pad=1000)
+        folder = large / "docs/prior-art/sweeps" / SWEEP
+        order = [json.loads(line) for line in (folder / "config-screening-order.jsonl").read_text().splitlines()]
+        ranked = [r["order_rank"] for r in order if r["channels"] != ["snowball"]]
+        snowballed = [r["order_rank"] for r in order if r["channels"] == ["snowball"]]
+        self.assertEqual((len(ranked) > 1000, len(snowballed), min(snowballed) > max(ranked)), (True, 34, True))
+        audit = json.loads((folder / "config-stage1-audit.json").read_text())
+        blocks = [b["ranks"] for b in json.loads((folder / "meta.json").read_text())["sessions"]["config-stage1-audit-claude-opus-5-5"]["blocks"]]
+        self.assertEqual((sorted(r for b in blocks for r in b), len(blocks) > 1, max(map(len, blocks)) <= 100, len({len(b) for b in blocks}) > 1),
+                         (sorted(audit["near"] + audit["far"]), True, True, True))
+        self.assertIn("- snowball: 34 repositories from the aggregators joined the config pool (cut: none: two-stage screening reads the whole pool, so every snowballed "
+                      "repository joins it); stage 1 read every one\n", self.render(large))
 
     def test_a_topic_flag_never_drops_the_config_pool_line_while_its_evidence_exists(self):
         def channels(edit):

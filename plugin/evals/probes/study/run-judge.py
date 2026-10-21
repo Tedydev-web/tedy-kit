@@ -11,7 +11,7 @@ from study_judges import AUDIT_FILE, QGS_JUDGES, SCREENING_JUDGES, SHAPES, audit
 from study_protocol import FREEZE_FILE
 from study_qgs import INPUTS, JUDGE_FILES, PACKET, candidates, cross_family, cross_name, dropped, read_cross, read_verdicts, reader_queue, whole_topic
 from study_screening_input import inputs_file
-from study_session import model_family, run_block
+from study_session import model_family, run_block, run_blocks
 from study_session_prompt import required_sweep_date
 from study_stage1_audit import read_audit, screener_name
 from study_topic import TopicError, load_topic, require_screened, saigon_today, topic_arguments
@@ -106,8 +106,9 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
                            (["--judge"], {"required": True, "choices": list(JUDGES), "help": "which judge of the roster runs"}),
                            (["--set"], {"required": True, "choices": list(SETS), "help": "which rows it judges"}),
                            (["--run"], {"type": int, "help": "calibration only: run 1 or run 2"}),
-                           (["--rows"], {"help": "first-last positions, from 1, of the block within the set's rows; default every row, and a prompt too long for one block "
-                                                 "is refused"}),
+                           (["--rows"], {"help": "first-last positions, from 1, of the rows to judge within the set's rows; default every row. --set stage1-audit splits "
+                                                 "them in rank order into blocks of at most 100 rows whose prompt fits the limit; every other set runs them as one block, "
+                                                 "and a prompt too long for one block is refused"}),
                            (["--today"], {"default": saigon_today(), "help": "run date, default today in Asia/Saigon"})).parse_args(argv)
     try:
         topic = load_topic(args.repo, args.topic)
@@ -134,7 +135,7 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
                  "packet": job.get("packet") or f"screening-packet-{stratum}.md", "shape": job.get("shape"), "problems": topic.get("problems") or [],
                  "criteria": freeze["criteria"] if freeze else None, "frozen": freeze["strata"][stratum] if freeze else None,
                  "bare": bool(environ.get("ANTHROPIC_API_KEY")), "today": args.today, "sweep_date": required_sweep_date(topic)}
-        rows = run_block(block, fetch or Fetch())
+        rows = run_blocks(block, job["ranks"], fetch or Fetch())[0] if args.set == "stage1-audit" else run_block(block, fetch or Fetch())
         print(f"{job['name']}: {rows} rows from {option['cli']} {option['model']} (family {model_family(option['model'])})")
     except (TopicError, NetworkRefused) as error:
         sys.exit(f"run-judge: {error}")

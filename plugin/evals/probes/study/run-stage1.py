@@ -8,7 +8,7 @@ from study_calibration_set import labelled, set_file
 from study_fetch import Fetch, NetworkRefused
 from study_qgs import whole_topic
 from study_screening_core import read_jsonl
-from study_session import run_block
+from study_session import run_blocks
 from study_stage1 import (BATCH_MAX, LADDER, RUNG_FILE, SHAPES, auto_pass, calibration_name, examples_text, held_out_batches, held_out_check, held_out_labels_sha256, held_out_name,
                           inputs_name, ladder_rung, option, pool_name, read_freeze, sha256_text, stage1_inputs)
 from study_topic import TopicError, load_topic, require_screened, saigon_today, topic_arguments
@@ -52,8 +52,8 @@ def plan(work, stratum, shape, model, which, run):
 
 
 def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
-    args = topic_arguments("Run one stage-1 model, isolated, in batches of at most 100 rows: twice on the calibration rows, once on the held-out batch, or on the whole pool "
-                           "once the rung is chosen. Rows with no text pass unread.",
+    args = topic_arguments("Run one stage-1 model, isolated, in batches of at most 100 rows whose prompt fits the prompt limit, cut greedily in rank order: "
+                           "twice on the calibration rows, once on the held-out batch, or on the whole pool once the rung is chosen. Rows with no text pass unread.",
                            (["--work"], {"required": True, "help": "the topic's working folder"}),
                            (["--stratum"], {"required": True, "help": "stratum to screen"}),
                            (["--shape"], {"required": True, "choices": list(SHAPES), "help": "input shape of the rung"}),
@@ -87,12 +87,10 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
                 **({"held_out_labels_sha256": held_out_labels_sha256(args.work)} if args.set == "pool" and chosen_rung(args.work)["rung"] > 1 else {})}
         if frozen["examples_sha256"] != sha256_text(worked):
             raise TopicError("the topic's stage1_examples differ from the freeze; no stage-1 session runs on changed examples")
-        written = 0
-        for start in range(0, len(todo), BATCH_MAX):
-            written += run_block({**base, "ranks": todo[start:start + BATCH_MAX]}, fetch or Fetch())
+        written, batches = run_blocks(base, todo, fetch or Fetch(), BATCH_MAX)
     except (TopicError, NetworkRefused) as error:
         sys.exit(f"run-stage1: {error}")
-    print(f"{name}: {written} rows in {-(-len(todo) // BATCH_MAX)} batches; {len(set(ranks)) - len(todo) - len(done & set(ranks))} rows with no text pass unread")
+    print(f"{name}: {written} rows in {batches} batches;{len(set(ranks)) - len(todo) - len(done & set(ranks))} rows with no text pass unread")
 
 
 if __name__ == "__main__":
