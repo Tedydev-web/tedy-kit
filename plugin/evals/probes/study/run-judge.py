@@ -11,6 +11,7 @@ from study_fetch import Fetch, NetworkRefused
 from study_judges import AUDIT_FILE, QGS_JUDGES, SCREENING_JUDGES, SHAPES, audit_option, criteria_version, judged_batches, require_qualified, roster, run_name
 from study_protocol import FREEZE_FILE
 from study_qgs import INPUTS, JUDGE_FILES, PACKET, candidates, cross_family, cross_name, dropped, read_cross, read_verdicts, reader_queue, whole_topic
+from study_reference_freeze import require_frozen
 from study_screening_core import read_jsonl
 from study_screening_input import inputs_file
 from study_session import ReplyRefused, model_family, record_refusal, run_block, run_blocks
@@ -83,7 +84,7 @@ def stratum_job(topic, work, stratum, judge, which_set, run):
     freeze = read_freeze(work) if kind == "screening" else None
     option = {k: v for k, v in roster(topic, freeze)[judge].items() if k != "kind"}
     return {"kind": kind, "freeze": freeze, "option": option, "ranks": calibration_ranks(work, stratum), "name": run_name(stratum, judge, option, run), "shape": SHAPES[kind],
-            **({"packet": PACKET} if kind == "qgs" else {})}
+            "reference_freeze_sha256": require_frozen(topic, work, judged_batches(work)), **({"packet": PACKET} if kind == "qgs" else {})}
 
 
 def qgs_job(topic, work, judge):
@@ -246,7 +247,7 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
                  "packet": job.get("packet") or f"screening-packet-{stratum}.md", "shape": job.get("shape"), "problems": topic.get("problems") or [],
                  "criteria": freeze["criteria"] if freeze else None, "frozen": freeze["strata"][stratum] if freeze else None,
                  "bare": bool(environ.get("ANTHROPIC_API_KEY")), "today": args.today, "sweep_date": required_sweep_date(topic), "notes": job.get("notes"),
-                 "notes_sha256": job.get("notes_sha256")}
+                 "notes_sha256": job.get("notes_sha256"), "reference_freeze_sha256": job.get("reference_freeze_sha256")}
         if args.set == "reference":
             rows, refused = run_reference(block, fetch or Fetch(), args.judge == "flagger")
             print(f"{job['name']}: {rows} rows from {option['cli']} {option['model']}" + (f"; refused twice, recorded: ranks {refused}" if refused else ""))
