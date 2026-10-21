@@ -5,7 +5,7 @@ import { basename, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ALL_GATES_ON, ask, deny, gateSwitches, logGate, readHookInput } from "../lib/hook-io.mjs";
 import { resolveMap } from "../lib/project-map.mjs";
-import { splitParts, splitSegments, substitutions, tokenize } from "../lib/shell-segments.mjs";
+import { shellWords, splitParts, splitSegments, substitutions, tokenize } from "../lib/shell-segments.mjs";
 import { INTERPRETER, SHELLS, readsUnreadableCode } from "../lib/shell-program-arguments.mjs";
 import { check as checkQuoted } from "./publish-quote-gate.mjs";
 import { evaluate as trackerToken, trackerHost } from "./tracker-token-gate.mjs";
@@ -189,10 +189,12 @@ export function globMatches(glob, text) {
   return true;
 }
 
+export const publishes = (segment) => PUBLISH.test(shellWords(segment));
+
 function uncoveredPublish(command, settingsFile) {
   let rules;
   for (const segment of splitSegments(command, false)) {
-    if (!PUBLISH.test(segment)) continue;
+    if (!publishes(segment)) continue;
     rules ??= loadAskRules(settingsFile);
     if (rules === null) return "tedy gate: could not read the ask rules; approve only if you have seen the exact draft.";
     if (!rules.some((glob) => globMatches(glob, segment))) return `tedy gate: no permission rule covers this publish (\`${segment.slice(0, 120)}\`); approve only if you have seen the exact draft.`;
@@ -202,7 +204,7 @@ function uncoveredPublish(command, settingsFile) {
 
 export function hiddenPublish(command) {
   for (const segment of splitSegments(command, false)) {
-    if (!PUBLISH.test(segment)) continue;
+    if (!publishes(segment)) continue;
     const tokens = tokenize(segment);
     const first = tokens.find((token) => !ENV_ASSIGNMENT.test(token));
     if (first !== "node") return segment;
@@ -377,7 +379,7 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
       continue;
     }
     if (action.kind !== "github-write") {
-      if (mentionsGhMerge(segment) || (commandTokens(segment)[0] !== "gh" && API_MERGE.test(segment) && /https?:\/\/|graphql/i.test(segment))) askFor(MERGE_REASON);
+      if (mentionsGhMerge(segment) || (commandTokens(segment)[0] !== "gh" && API_MERGE.test(shellWords(segment)) && /https?:\/\/|graphql/i.test(segment))) askFor(MERGE_REASON);
       continue;
     }
     if (action.pr && action.verbs.some((verb) => verb === "merge" || verb === "ready" || /^\$|`/.test(verb))) {
@@ -389,7 +391,7 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
       else if (action.unknown) askFor("tedy gate: this `gh` command is not one the gate knows, so it may be an alias that merges or publishes. Allow it only if the user asked for it.");
       continue;
     }
-    if (/\bgh\s+(pr|issue)\s+(merge|close|reopen|ready|edit|lock|unlock)\b/.test(segment)) {
+    if (/\bgh\s+(pr|issue)\s+(merge|close|reopen|ready|edit|lock|unlock)\b/.test(shellWords(segment))) {
       return { allow: false, reason: "tedy gate: merging, closing or editing a PR or issue belongs to the user. Tell the user what is ready and let them do it." };
     }
     return { allow: false, reason: "tedy gate: publish to GitHub through github-write.mjs after the user approves the draft. Reading with gh (view, diff, list, GET, GraphQL queries) stays open." };
@@ -435,7 +437,7 @@ function judge(input, tool) {
   const command = input.tool_input?.command ?? "";
   try {
     const gates = gateSwitches();
-    let result = CTX_TOOL.test(tool) && splitSegments(command, false).some((segment) => PUBLISH.test(segment)) ? { allow: false, reason: CTX_PUBLISH_REASON } : evaluate(command, input.cwd ?? process.cwd(), { gates, settingsFile: CLAUDE_SETTINGS });
+    let result = CTX_TOOL.test(tool) && splitSegments(command, false).some(publishes) ? { allow: false, reason: CTX_PUBLISH_REASON } : evaluate(command, input.cwd ?? process.cwd(), { gates, settingsFile: CLAUDE_SETTINGS });
     if (result.allow || result.ask) {
       const token = trackerToken(input.tool_input, trackerHost(), { cwd: input.cwd ?? process.cwd() });
       if (token) result = { allow: false, reason: token };
@@ -453,7 +455,7 @@ function judge(input, tool) {
     return result;
   } catch (error) {
     logGate({ hook: "git-gate", decision: "ask", tool, command: String(command).slice(0, 200), error: error.message });
-    return { allow: false, ask: true, reason: PUBLISH.test(command) ? `tedy gate: could not check this publish command (${error.message}). Approve only if you have seen the exact draft.` : `tedy gate: could not check this command (${error.message}). Allow it only if the user asked for it.` };
+    return { allow: false, ask: true, reason: publishes(String(command)) ? `tedy gate: could not check this publish command (${error.message}). Approve only if you have seen the exact draft.` : `tedy gate: could not check this command (${error.message}). Allow it only if the user asked for it.` };
   }
 }
 

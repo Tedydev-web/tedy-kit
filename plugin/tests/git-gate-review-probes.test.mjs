@@ -1,10 +1,34 @@
 import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { evaluate } from "../gates/git-gate.mjs";
+import { classifyAction } from "../gates/role-gate.mjs";
 import { splitSegments, tokenize } from "../lib/shell-segments.mjs";
+import { profileWith, tempDir } from "./temp-dir-for-tests.mjs";
 
 const PUSH = "git push --force origin main";
+const GATE_ENTRY = join(dirname(fileURLToPath(import.meta.url)), "../gates/git-gate.mjs");
+const EXECUTE = "mcp__plugin_context-mode_context-mode__ctx_execute";
+const EXECUTE_FILE = "mcp__plugin_context-mode_context-mode__ctx_execute_file";
+const BATCH = "mcp__context-mode__ctx_batch_execute";
+const ASK_RULES = ["post", "reply", "edit", "minimize", "resolve", "unresolve", "pr-body"].map((verb) => `Bash(*github-write.mjs*${verb}*)`)
+  .concat(["Bash(*openproject.mjs*apply*)", "Bash(*openproject.mjs*set*--apply*)", "Bash(*figma-comments.mjs*post*)", "Bash(*gdoc-comments.mjs*reply*)", "Bash(*doc-comment-file.mjs*post*--apply*)"]);
+
+function hook(toolName, toolInput, { cwd = "/tmp", projectDir } = {}) {
+  const settings = join(tempDir("tedy-settings-"), "settings.json");
+  writeFileSync(settings, JSON.stringify({ permissions: { ask: ASK_RULES } }));
+  const input = JSON.stringify({ tool_name: toolName, tool_input: toolInput, cwd });
+  const env = { ...process.env, TEDY_STATE_DIR: tempDir("tedy-state-"), TEDY_CLAUDE_SETTINGS: settings, TEDY_PROFILE_DIR: profileWith({ gates: {} }) };
+  delete env.CLAUDE_PROJECT_DIR;
+  if (projectDir) env.CLAUDE_PROJECT_DIR = projectDir;
+  const out = execFileSync("node", [GATE_ENTRY], { input, encoding: "utf8", env });
+  return out ? JSON.parse(out).hookSpecificOutput.permissionDecision : "allow";
+}
+const shell = (code) => [EXECUTE, { language: "shell", code }];
 const verdict = (command, cwd = "/w") => {
   const result = evaluate(command, cwd);
   return result.allow ? "allow" : result.ask ? "ask" : "deny";
@@ -153,4 +177,50 @@ test("obfuscation, fixed: a command word or script path with glob characters is 
 test("wrappers and runners that carry no hidden command keep their results", () => {
   const allowed = ["ssh host git pull", "find . -name \x27*.md\x27", "find . -name x -exec rg -n y {} \;", "script -q /dev/null", "busybox wget http://x", "[ -f x ] && echo y", "[[ -n x ]] && echo y", "setsid npm test", "flock /tmp/l npm test", "env FOO=1 npm test", "/usr/bin/git status", "sudo -u me ls"];
   assert.deepEqual(allowed.filter((command) => verdict(command) !== "allow"), []);
+});
+
+test("honest: a kit publish with a quoted subcommand through a context-mode tool is refused (review F1 p03 p05 p06 p08 p09 p10 p11 c38)", () => {
+  for (const [tool, input] of [
+    shell("node /k/github-write.mjs \"reply\" 7 PRRT_1 --body \x27ok\x27"),
+    shell("node /k/github-write.mjs \x27resolve\x27 PRRT_1 PRRT_2"),
+    shell("node /k/github-write.mjs \x27pr-body\x27 7"),
+    shell("node /k/openproject.mjs \x27apply\x27 d.json"),
+    shell("node /k/figma-comments.mjs \"post\" f.md"),
+    shell("node /k/gdoc-comments.mjs \x27reply\x27 d.md"),
+    shell("node /k/doc-comment-file.mjs \x27post\x27 f.md --apply"),
+    [BATCH, { commands: [{ label: "a", command: "node /k/github-write.mjs \x27resolve\x27 PRRT_1" }] }],
+  ]) {
+    assert.equal(hook(tool, input), "deny", JSON.stringify(input));
+  }
+  assert.equal(hook(...shell("node /k/github-write.mjs reply 7 PRRT_1 --body ok")), "deny");
+});
+
+test("obfuscation, fixed: a kit publish split by quotes, escapes or globs through a context-mode tool is refused (review F1 p04 p07 c33 c35)", () => {
+  for (const [tool, input] of [
+    [BATCH, { commands: ["node /k/github-write.mjs re\x27\x27ply 7 PRRT_1"] }],
+    shell("node /k/github-wr*.mjs minimize x"),
+    shell("node /k/github-writ?.mjs post d.md"),
+    shell("node /k/openproject.mjs set 12 --status Done --ap\\ply"),
+  ]) {
+    assert.equal(hook(tool, input), "deny", JSON.stringify(input));
+  }
+});
+
+test("honest: a quoted kit publish through Bash passes to the ask rule that matches its text, an unmatched one asks (review F1 p12)", () => {
+  const settingsFile = join(tempDir("tedy-settings-"), "settings.json");
+  writeFileSync(settingsFile, JSON.stringify({ permissions: { ask: ASK_RULES } }));
+  const judge = (command) => { const result = evaluate(command, "/w", { settingsFile }); return result.allow ? "allow" : result.ask ? "ask" : "deny"; };
+  assert.equal(judge("node /k/github-write.mjs \x27resolve\x27 PRRT_1"), "allow");
+  assert.equal(judge("node /k/github-write.mjs re\x27\x27ply 7 PRRT_1"), "ask");
+  assert.equal(judge("node /k/openproject.mjs set 12 --status Done --ap\\ply"), "ask");
+  assert.equal(judge("node /k/github-wr*.mjs minimize x"), "deny");
+});
+
+test("honest: role-gate classifies a kit script write with a quoted subcommand like the plain one (review F8)", () => {
+  const map = { name: "shop", paths: ["/w/shop"], repos: [{ path: "shop-fe" }], sessions: [{ name: "PM", role: "pm" }, { name: "Dev", role: "dev" }] };
+  const classify = (command, tool = "Bash") => classifyAction(tool === "Bash" ? { tool_name: "Bash", cwd: "/w/shop", tool_input: { command } } : { tool_name: EXECUTE, cwd: "/w/shop", tool_input: { language: "shell", code: command } }, map)?.kind;
+  assert.equal(classify("node x/github-write.mjs \x27pr-body\x27 7", EXECUTE), "code");
+  assert.equal(classify("node x/github-write.mjs \x27pr-body\x27 7"), "code");
+  assert.equal(classify("node x/github-write.mjs re\x27\x27solve PRRT_1"), "pr-review");
+  assert.equal(classify("node x/openproject.mjs \"apply\" d.json"), "tracker");
 });

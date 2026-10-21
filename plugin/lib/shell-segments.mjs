@@ -143,6 +143,8 @@ export function tokenize(segment) {
   return tokens;
 }
 
+export const shellWords = (segment) => tokenize(segment).join(" ");
+
 const MAX_SUBSTITUTION_DEPTH = 20;
 
 export function substitutions(command) {
