@@ -547,9 +547,17 @@ class NoteRerunTest(ReferenceBase):
         self.judge(fetch, "--rerun-notes", "1")
         self.assertEqual([r["order_rank"] for r in self.rows("reference-calibration-config-notes-1")], [1])
 
+    def test_a_decision_note_reruns_the_rows_its_cue_selects(self):
+        self.write_notes({**self.note, "criterion": "decision"})
+        fetch = FakeFetch([(needle(1), fable(label(1, "o/one")))])
+        self.judge(fetch, "--rerun-notes", "1")
+        self.assertEqual([r["order_rank"] for r in self.rows("reference-calibration-config-notes-1")], [1])
+        self.assertIn("- line 120 (decision): A paid tier alone is not a vendor stance.", (self.work / "prompts/reference-calibration-config-notes-1-1-1.md").read_text())
+
     def test_a_note_outside_the_four_field_form_is_refused_before_any_session(self):
         cases = {"a free-text field": {**self.note, "value": 1}, "a missing quote": {k: v for k, v in self.note.items() if k != "quote"},
-                 "a criterion outside the five": {**self.note, "criterion": "Date"}, "an unknown README cue": {**self.note, "cue": "objectivity:cheap"},
+                 "a criterion outside the five": {**self.note, "criterion": "Date"}, "a criterion named in another case": {**self.note, "criterion": "Decision"},
+                 "an unknown README cue": {**self.note, "cue": "objectivity:cheap"},
                  "a fact outside prefilled and evidence": {**self.note, "cue": "fact:facts.stars"}, "a line that is not a number": {**self.note, "line": "120"}}
         for case, note in cases.items():
             with self.subTest(case):

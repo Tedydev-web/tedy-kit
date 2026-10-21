@@ -25,6 +25,7 @@ JUDGES = (*SCREENING_JUDGES, *QGS_JUDGES, "audit", *REFERENCE_JUDGES)
 SETS = ("calibration", "qgs", "audit", "stage1-audit", "reference")
 BUNDLE = "reference-bundle.md"
 NOTE_KEYS = {"line", "quote", "criterion", "cue"}
+NOTE_CRITERIA = (*REFERENCE_CRITERIA, "decision")
 FACT_CUE = re.compile(r"^fact:(prefilled|evidence)\.([A-Za-z0-9_]+)$")
 
 
@@ -127,9 +128,9 @@ def note_job(work, batch, stratum, ranks):
         raise TopicError(f"{path.name} must hold a non-empty list of notes")
     for number, note in enumerate(notes, 1):
         if (not isinstance(note, dict) or set(note) != NOTE_KEYS or type(note["line"]) is not int or note["line"] < 1 or not isinstance(note["quote"], str)
-                or not note["quote"].strip() or note["criterion"] not in REFERENCE_CRITERIA or not isinstance(note["cue"], str) or not valid_cue(note["cue"])):
+                or not note["quote"].strip() or note["criterion"] not in NOTE_CRITERIA or not isinstance(note["cue"], str) or not valid_cue(note["cue"])):
             raise TopicError(f"{path.name} note {number} must hold exactly line, quote, criterion and cue: a criteria line number, its verbatim text, one of "
-                             f"{', '.join(REFERENCE_CRITERIA)}, and a frozen README cue or a fact:prefilled.<field> or fact:evidence.<field> cue")
+                             f"{', '.join(NOTE_CRITERIA)}, and a frozen README cue or a fact:prefilled.<field> or fact:evidence.<field> cue")
     inputs = {r["order_rank"]: r for r in read_jsonl(Path(work), f"reference-inputs-{stratum}.jsonl")}
     selected = [r for r in ranks if r in inputs and any(cue_selects(n["cue"], inputs[r]) for n in notes)]
     if not selected:
