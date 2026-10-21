@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { isScannedFile, newComments } from "./comment-scan.mjs";
 import { CTX_TOOL, bashInputs, classify } from "../gates/git-gate.mjs";
-import { walkParts } from "./shell-segments.mjs";
+import { walkCommands } from "./shell-segments.mjs";
 import { strings } from "../gates/tracker-token-gate.mjs";
 import { gateSwitches, logGate, readHookInput } from "./hook-io.mjs";
 
@@ -23,7 +23,7 @@ const lines = (output) => (output ?? "").split("\n").map((line) => line.trim()).
 
 export function pushTargets(command, cwd) {
   const targets = [];
-  for (const { text: segment, dir } of walkParts(command, cwd)) {
+  for (const { text: segment, dir } of walkCommands(command, cwd).parts) {
     const action = classify(segment, dir);
     if (action.kind === "push" || action.kind === "pr-create") targets.push(action.dir);
   }

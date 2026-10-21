@@ -366,6 +366,49 @@ test("honest: an interpreter whose script path comes from a variable runs as on 
   assert.equal(hook(...shell("P=/k/prd-section.mjs\nnode $P find x")), "allow");
 });
 
+test("honest: a cd behind if, then, braces, builtin or command still moves the directory a push is judged in (round 3 S1 S1b S1c S1d S1g S1h)", () => {
+  const { main, feat } = repos();
+  const forms = [
+    `if cd ${main}; then git push; fi`,
+    `if [ -d ${main} ]; then cd ${main}; git push; fi`,
+    `{ cd ${main}; git push; }`,
+    `git status && { cd ${main}; git push; }`,
+    `builtin cd ${main} && git push`,
+    `command cd ${main} && git push`,
+    `cd -- ${main} && git push`,
+    `while true; do cd ${main}; git push; break; done`,
+  ];
+  assert.deepEqual(forms.filter((command) => verdict(command, feat) !== "ask"), []);
+  assert.deepEqual(forms.filter((command) => hook(...shell(command), { cwd: feat, projectDir: feat }) !== "ask"), []);
+  assert.equal(verdict(`(cd ${main}) && git push`, feat), "allow");
+});
+
+test("honest: a push in $(…) or backticks is judged in the directory of the command around it (round 3 S2 S2b S2d S2e S2f)", () => {
+  const { main, feat } = repos();
+  const forms = [
+    `cd ${main} && out=$(git push 2>&1); echo "$out"`,
+    `cd ${main} && echo $(git push)`,
+    `cd ${main} && echo \`git push\``,
+    `cd ${main} && result=$(git push origin HEAD 2>&1) && echo "$result"`,
+    `cd ${main}\nOUT=$(git push 2>&1)\necho "$OUT"`,
+    `x=$(cd ${main}; git push)`,
+    `echo $(cd ${main} && git push)`,
+    `echo \`cd ${main}; git push\``,
+  ];
+  assert.deepEqual(forms.filter((command) => verdict(command, feat) !== "ask"), []);
+  assert.deepEqual(forms.filter((command) => hook(...shell(command), { cwd: feat, projectDir: feat }) !== "ask"), []);
+  assert.equal(verdict(`cd ${feat} && out=$(git push 2>&1)`, main), "allow");
+});
+
+test("role-gate and push-report follow a cd behind a keyword and look inside $(…) (round 3)", () => {
+  const map = { name: "shop", paths: ["/w/shop"], repos: [{ path: "shop-fe" }], sessions: [{ name: "PM", role: "pm" }, { name: "Dev", role: "dev" }] };
+  const role = (command) => classifyAction({ tool_name: "Bash", cwd: "/w/shop", tool_input: { command } }, map);
+  assert.deepEqual(role("if cd shop-fe; then git commit -m x; fi"), { kind: "code", repo: "shop-fe" });
+  assert.deepEqual(role("cd shop-fe && OUT=$(git commit -m x)"), { kind: "code", repo: "shop-fe" });
+  assert.deepEqual(pushTargets("{ cd app; git push; }", "/w"), ["/w/app"]);
+  assert.deepEqual(pushTargets("cd app && OUT=$(git push 2>&1)", "/w"), ["/w/app"]);
+});
+
 test("honest: a read-only search that names a kit script in its pattern passes (round 2 R4 n52 n53 n54 n55)", () => {
   assert.equal(hook(...shell("rg -n \"github-write.mjs reply\" plugin/skills")), "allow");
   assert.equal(hook(BATCH, { commands: ["git log --oneline --grep 'openproject.mjs apply'"] }), "allow");
@@ -378,4 +421,10 @@ test("honest: a read-only search that names a kit script in its pattern passes (
   assert.equal(hook(...shell("rg --pre node github-write.mjs post")), "deny");
   assert.equal(verdict("fd -e md -x node /k/github-write.mjs post"), "ask");
   assert.equal(verdict("echo x | node /k/github-write.mjs post d.md"), "allow");
+});
+
+test("a heredoc inside $(…) does not hide the commands after the substitution", () => {
+  assert.equal(verdict(`x=$(cat <<EOF\nbody\nEOF\n)\n${PUSH}`), "ask");
+  assert.equal(verdict(`echo "$(${PUSH})"`), "ask");
+  assert.equal(verdict(`x=$(cat <<EOF\n${PUSH}\nEOF\n)`), "allow");
 });

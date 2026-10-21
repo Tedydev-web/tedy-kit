@@ -5,7 +5,7 @@ import { basename, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ALL_GATES_ON, ask, deny, gateSwitches, logGate, readHookInput } from "../lib/hook-io.mjs";
 import { resolveMap } from "../lib/project-map.mjs";
-import { shellWords, splitSegments, substitutions, tokenize, walkParts } from "../lib/shell-segments.mjs";
+import { shellWords, splitSegments, substitutions, tokenize, walkCommands } from "../lib/shell-segments.mjs";
 import { INTERPRETER, SHELLS, readsUnreadableCode, variableScriptArguments } from "../lib/shell-program-arguments.mjs";
 import { check as checkQuoted } from "./publish-quote-gate.mjs";
 import { evaluate as trackerToken, trackerHost } from "./tracker-token-gate.mjs";
@@ -359,9 +359,9 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
   const uncovered = settingsFile ? uncoveredPublish(command, settingsFile) : null;
   if (uncovered) askFor(uncovered);
   if (command.length > MAX_COMMAND) rewriteFor(`tedy gate: this command is longer than ${MAX_COMMAND} characters, too long to check. ${REWRITE}`);
-  const nested = substitutions(command);
-  if (nested === null) rewriteFor(`tedy gate: this command nests command substitutions too deeply to check. ${REWRITE}`);
-  for (const { text: segment, piped, dir } of [...walkParts(command, cwd), ...(nested ?? []).flatMap((body) => [...walkParts(body, cwd)])]) {
+  const { parts, tooDeep } = walkCommands(command, cwd);
+  if (tooDeep || substitutions(command) === null) rewriteFor(`tedy gate: this command nests command substitutions too deeply to check. ${REWRITE}`);
+  for (const { text: segment, piped, dir } of parts) {
     const action = classify(segment, dir);
     if (action.kind === "cd") continue;
     if (unreadable(segment, piped)) rewriteFor(UNREADABLE_REASON);

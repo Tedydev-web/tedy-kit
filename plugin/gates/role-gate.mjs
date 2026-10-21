@@ -5,7 +5,7 @@ import { bashInputs, classify } from "./git-gate.mjs";
 import { route } from "../lib/handoff.mjs";
 import { ask, gateSwitches, logGate, readHookInput } from "../lib/hook-io.mjs";
 import { resolveMap } from "../lib/project-map.mjs";
-import { shellWords, walkParts } from "../lib/shell-segments.mjs";
+import { shellWords, walkCommands } from "../lib/shell-segments.mjs";
 
 const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 const SCRIPT_WRITES = [
@@ -52,7 +52,7 @@ export function classifyAction(input, map) {
   }
   for (const item of bashInputs(input).inputs ?? []) {
     if (item.tool_name !== "Bash") continue;
-    for (const { text: segment, dir } of walkParts(item.tool_input?.command ?? "", item.cwd ?? cwd)) {
+    for (const { text: segment, dir } of walkCommands(item.tool_input?.command ?? "", item.cwd ?? cwd).parts) {
       const action = classify(segment, dir);
       if (action.kind === "cd") continue;
       const script = SCRIPT_WRITES.find((write) => write.pattern.test(shellWords(segment)));
