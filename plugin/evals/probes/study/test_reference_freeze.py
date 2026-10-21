@@ -106,7 +106,9 @@ class ReferenceFreezeBase(unittest.TestCase):
     def outcomes(self, work, *rows):
         drawn = {r["id"]: r for r in self.sample["rows"]}
         write_json(work / "rubric-outcomes-calibration.json", {"rows": [{"id": i, "stratum": drawn[i]["stratum"], "order_rank": drawn[i]["order_rank"], "outcome": outcome,
-                                                                         "question": question, "notes": notes} for i, outcome, question, notes in rows]})
+                                                                         "question": question, "notes": notes,
+                                                                         "criteria": {"Objectivity": {"outcome": outcome, "question": question}}}
+                                                                        for i, outcome, question, notes in rows]})
 
     def flagged_work(self, refused=()):
         repo, work = self.copies()
@@ -244,6 +246,17 @@ class RubricOutcomeTest(ReferenceFreezeBase):
         self.assertEqual({k: rubric[k] for k in ("flagged", "rule", "asked", "contested", "rerun", "contested_rows")},
                          {"flagged": 2, "rule": 1, "asked": 1, "contested": 0, "rerun": 0, "contested_rows": []})
         self.assertEqual((rubric["flags_sha256"], rubric["outcomes_sha256"]), (sha(work / "reference-flags-calibration.json"), sha(work / "rubric-outcomes-calibration.json")))
+
+    def test_an_outcome_row_keeps_the_worksheets_outcome_per_criterion(self):
+        repo, work = self.flagged_work()
+        first = self.sample["rows"][0]
+        self.flags(work, [first["id"]])
+        row = {"id": first["id"], "stratum": first["stratum"], "order_rank": first["order_rank"], "outcome": "rule", "question": None, "notes": []}
+        write_json(work / "rubric-outcomes-calibration.json", {"rows": [row]})
+        self.refused(repo, work, "row 1 holds exactly criteria, id, notes, order_rank, outcome, question, stratum")
+        for criteria in (None, {}):
+            write_json(work / "rubric-outcomes-calibration.json", {"rows": [{**row, "criteria": criteria}]})
+            self.refused(repo, work, "is the worksheet's non-empty outcome per flagged criterion")
 
     def rerun_work(self):
         repo, work = self.flagged_work()

@@ -6,11 +6,12 @@ import shutil
 import unittest
 
 from study_calibration_set import pinned_inputs
+from study_citation_check import drawn
 from study_fixtures import FakeFetch, script, write_json, write_jsonl
-from study_v4_fixture import CRITERIA, PROBLEMS, TODAY, quiet
+from study_v4_fixture import CRITERIA, PROBLEMS, SWEEP, TODAY, quiet
 from test_calibration_set import drawn_work
 from test_reference_freeze import HOOK_TEXT, REFERENCE, SKILL_TEXT
-from test_reference_labels import packet, reply
+from test_reference_labels import SKILL, packet, reply
 from test_reference_run import fable, needle
 from test_sessions import agy_reply
 
@@ -114,6 +115,49 @@ class DecisionNoteFreezeTest(ReferencePipelineBase):
                                                                    "reference-calibration-product-notes-1"])
         self.assertEqual(freeze["labels_sha256"], sha(self.work / "calibration-labels.json"))
         self.assertEqual(freeze["rubric"]["flagged"], 0)
+
+
+class ReferencePipelineTest(ReferencePipelineBase):
+    def objectivity(self, n, value, cite):
+        made = first_reply(n, self.rows[n])
+        made["scores"]["Objectivity"] = {"v": value, "cite": cite}
+        return made
+
+    def test_the_reference_rows_go_from_the_first_run_through_the_rubric_rule_to_the_freeze_and_the_citation_check(self):
+        self.first_runs({n: self.objectivity(n, 0, FORKED) for n in (0, 2)})
+        self.derive()
+        self.cli("flag-reference-rows", "--batch", "calibration")
+        flags = json.loads((self.work / "reference-flags-calibration.json").read_text())
+        self.assertEqual(flags["rubric_rows"], [{"id": self.rows[n]["id"], "stratum": "config", "order_rank": self.rows[n]["order_rank"], "criteria": ["Objectivity"]}
+                                                for n in (0, 2)])
+        self.assertIn("1 items pending", self.derive("--worksheet"))
+        self.assertFalse((self.work / "rubric-outcomes-calibration.json").exists())
+        page = (self.work / "rubric-questions-calibration.md").read_text()
+        note = json.loads(next(line for line in page.splitlines() if line.startswith("- note: `"))[len("- note: `"):-1])
+        self.assertEqual((note["criterion"], note["cue"], note["line"]), ("Objectivity", PAID, self.line("| Objectivity |")[0]))
+        write_json(self.work / "reference-notes-calibration.json", [note])
+        for stratum, picked in (("config", (0, 2)), ("product", (61,))):
+            self.judge("reference", stratum, [(self.rows[n], self.objectivity(n, 0.5, SKILL)) for n in picked], "--rerun-notes", "1")
+        self.derive()
+        self.assertEqual([self.labels()[self.rows[n]["id"]]["Objectivity"] for n in (0, 2, 61, 4)], [0.5, 0.5, 0.5, 1])
+        self.assertIn("outcomes in rubric-outcomes-calibration.json", self.derive("--worksheet"))
+        outcomes = json.loads((self.work / "rubric-outcomes-calibration.json").read_text())["rows"]
+        self.assertEqual([(r["id"], r["outcome"], r["notes"]) for r in outcomes], [(self.rows[n]["id"], "rule", [1]) for n in (0, 2)])
+        self.cli("freeze-reference", "--batch", "calibration", "--today", TODAY)
+        freeze = self.frozen()
+        self.assertEqual({k: freeze["rubric"][k] for k in ("flagged", "rule", "asked", "rerun", "contested")}, {"flagged": 2, "rule": 2, "asked": 0, "rerun": 2, "contested": 0})
+        self.assertEqual((freeze["rubric"]["flags_sha256"], freeze["rubric"]["outcomes_sha256"]),
+                         (sha(self.work / "reference-flags-calibration.json"), sha(self.work / "rubric-outcomes-calibration.json")))
+        self.assertEqual(freeze["flaggers"][self.flagger["model"]]["answered"], 120)
+        self.assertIn("30 rows to check", self.cli("draw-citation-check", fetch=FakeFetch()))
+        checked = drawn(SWEEP, json.loads((self.work / "calibration-labels.json").read_text())["rows"])
+        answers = {r["id"]: "yes" if r["kind"] == "relevance-1" else "no" for r in checked}
+        saved = self.work / "saved-citation-check.json"
+        write_json(saved, {"sweep": SWEEP, "set_sha256": sha(self.work / "calibration-set.json"), "freeze_sha256": sha(self.work / "reference-freeze-calibration.json"),
+                           "answers": answers})
+        self.assertIn("citation-check.json: 0 of 30 unsupported", self.cli("import-citation-check", "--answers", str(saved)))
+        check = json.loads((self.work / "citation-check.json").read_text())
+        self.assertEqual((check["freeze_sha256"], check["stopped"]), (sha(self.work / "reference-freeze-calibration.json"), False))
 
 
 if __name__ == "__main__":

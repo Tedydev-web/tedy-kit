@@ -13,7 +13,7 @@ from study_stage1 import HELD_OUT
 from study_topic import TopicError, flaggers
 
 OUTCOMES = ("rule", "asked", "contested")
-OUTCOME_KEYS = {"id", "stratum", "order_rank", "outcome", "question", "notes"}
+OUTCOME_KEYS = {"id", "stratum", "order_rank", "outcome", "question", "notes", "criteria"}
 AFTER_PROTOCOL = "not run: after protocol freeze"
 
 
@@ -146,6 +146,8 @@ def outcome_rows(work, batch, ids):
             raise TopicError(f"{where}: question {question!r} is a question id or null")
         if row["outcome"] == "asked" and question is None:
             raise TopicError(f"{where}: an asked row names its question")
+        if not isinstance(row["criteria"], dict) or not row["criteria"]:
+            raise TopicError(f"{where}: criteria {row['criteria']!r} is the worksheet's non-empty outcome per flagged criterion")
         out[row["id"]] = row
     return out
 
