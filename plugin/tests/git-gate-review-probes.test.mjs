@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { evaluate } from "../gates/git-gate.mjs";
 import { classifyAction } from "../gates/role-gate.mjs";
+import { pushTargets } from "../lib/push-report.mjs";
 import { splitSegments, tokenize } from "../lib/shell-segments.mjs";
 import { profileWith, tempDir } from "./temp-dir-for-tests.mjs";
 
@@ -352,11 +353,17 @@ test("the round-2 review's everyday commands, reconstructed from its list, give 
   assert.deepEqual(wrong, []);
 });
 
-test("honest: an interpreter whose script path comes from a variable is refused (round 2 R2 n32 n33)", () => {
-  refusedToRewrite(["GW=/k/github-write.mjs; node \"$GW\" reply 7 PRRT_1 --body ok", "node $SCRIPT post d.md", "python3 \"${TOOL}\" x", "deno run -A $X", "bun ${X}", "tsx \"$X\"", "node `which x`"]);
+test("honest: an interpreter whose script path comes from a variable is refused when its arguments publish (round 2 R2 n32 n33)", () => {
+  refusedToRewrite(["GW=/k/github-write.mjs; node \"$GW\" reply 7 PRRT_1 --body ok", "node $SCRIPT post d.md", "node \"${GW}\" resolve PRRT_1", "node $S set 12 --status Done --apply", "node `which x` minimize 7", "bun ${X} pr-body 7"]);
   assert.equal(hook(...shell("GW=/k/github-write.mjs\nnode \"$GW\" reply 7 PRRT_1 --body ok")), "deny");
   const allowed = ["node scripts/check.mjs \"$ARG\"", "FOO=1 node x.mjs", "python3 x.py --out \"$HOME/o.json\"", "node -e \"console.log(process.env.HOME)\""];
   assert.deepEqual(allowed.filter((command) => verdict(command) !== "allow"), []);
+});
+
+test("honest: an interpreter whose script path comes from a variable runs as on main when it does not publish (round 3 x81 x82)", () => {
+  const allowed = ["P=/k/prd-section.mjs; D=abc; node $P find $D t.1", "P=/k/prd-section.mjs; node $P find x", "node \"$X\" view 7", "python3 \"$HOME/tools/report.py\"", "python3 \"${TOOL}\" x", "deno run -A $X", "bun ${X}", "tsx \"$X\"", "node `which x`", "node $S set 12 --status Done"];
+  assert.deepEqual(allowed.filter((command) => verdict(command) !== "allow"), []);
+  assert.equal(hook(...shell("P=/k/prd-section.mjs\nnode $P find x")), "allow");
 });
 
 test("honest: a read-only search that names a kit script in its pattern passes (round 2 R4 n52 n53 n54 n55)", () => {

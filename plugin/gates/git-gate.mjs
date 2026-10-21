@@ -6,7 +6,7 @@ import { pathToFileURL } from "node:url";
 import { ALL_GATES_ON, ask, deny, gateSwitches, logGate, readHookInput } from "../lib/hook-io.mjs";
 import { resolveMap } from "../lib/project-map.mjs";
 import { shellWords, splitSegments, substitutions, tokenize, walkParts } from "../lib/shell-segments.mjs";
-import { INTERPRETER, SHELLS, readsUnreadableCode } from "../lib/shell-program-arguments.mjs";
+import { INTERPRETER, SHELLS, readsUnreadableCode, variableScriptArguments } from "../lib/shell-program-arguments.mjs";
 import { check as checkQuoted } from "./publish-quote-gate.mjs";
 import { evaluate as trackerToken, trackerHost } from "./tracker-token-gate.mjs";
 
@@ -47,6 +47,7 @@ const WRAPPERS = new Map([
 ]);
 const WRAPPER_ARGUMENTS = new Map([["timeout", 1], ["flock", 1]]);
 const LOCAL_RUNNERS = new Set(["find", "script", "busybox"]);
+const KIT_SCRIPTS = ["github-write.mjs", "openproject.mjs", "figma-comments.mjs", "gdoc-comments.mjs", "doc-comment-file.mjs"];
 const SEARCH_TOOLS = new Set(["rg", "grep", "egrep", "fgrep", "fd", "fdfind", "ag", "ack"]);
 const SEARCH_EXEC = /^(?:-x|-X|--exec|--exec-batch|--pre|--pre-glob)(?:=|$)/;
 const FIND_EXEC = /^-(?:exec|execdir|ok|okdir)$/;
@@ -152,6 +153,8 @@ function unreadable(segment, piped = false) {
   if ((!word || /^\d*[<>]/.test(word)) && raw.some((token, index) => ["sudo", "doas"].includes(basename(token)) && raw.slice(index + 1).some((arg) => SUDO_SHELL.test(arg)))) return true;
   if (SHELLS.has(program)) return args.some((arg) => /^-[a-zA-Z]*[cs]/.test(arg) || arg === "<<<" || arg === "<") || readsUnreadableCode(program, args, piped);
   if (INTERPRETER.test(program) && readsUnreadableCode(program, args, piped)) return true;
+  const variable = INTERPRETER.test(program) ? variableScriptArguments(program, args) : null;
+  if (variable?.some((_, at) => KIT_SCRIPTS.some((name) => PUBLISH.test(`${name} ${variable.slice(at).join(" ")}`)))) return true;
   if (INTERPRETER.test(program)) return args.some((arg) => /^(-[a-zA-Z]*[ce][a-zA-Z]*|--eval|--print)$/.test(arg)) && /\bgh\b|github/i.test(segment);
   if (program === "git") {
     let index = 0;

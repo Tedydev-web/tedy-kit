@@ -33,7 +33,7 @@ export function scriptOperand(program, args) {
       continue;
     }
     if (REDIRECT.test(arg)) continue;
-    if (arg === "-") return { script: arg };
+    if (arg === "-") return { script: arg, index };
     if (rules.inline(arg)) return { inline: true };
     if (arg.startsWith("-") || (name === "shell" && arg.startsWith("+"))) {
       if (rules.value(arg)) index += 1;
@@ -44,7 +44,7 @@ export function scriptOperand(program, args) {
       continue;
     }
     if (subcommand && arg === "eval") return { inline: true };
-    return { script: arg };
+    return { script: arg, index };
   }
   return {};
 }
@@ -52,6 +52,11 @@ export function scriptOperand(program, args) {
 export function readsUnreadableCode(program, args, piped) {
   const { script, inline } = scriptOperand(program, args);
   if (inline) return false;
-  if (script !== undefined) return STDIN_SCRIPT.test(script) || GLOB.test(script) || (!SHELLS.has(program) && EXPANSION.test(script));
+  if (script !== undefined) return STDIN_SCRIPT.test(script) || GLOB.test(script);
   return SHELLS.has(program) || piped || args.some((arg) => STDIN_FEED.test(arg));
+}
+
+export function variableScriptArguments(program, args) {
+  const { script, index } = scriptOperand(program, args);
+  return script !== undefined && EXPANSION.test(script) ? args.slice(index + 1) : null;
 }
