@@ -358,3 +358,17 @@ test("honest: an interpreter whose script path comes from a variable is refused 
   const allowed = ["node scripts/check.mjs \"$ARG\"", "FOO=1 node x.mjs", "python3 x.py --out \"$HOME/o.json\"", "node -e \"console.log(process.env.HOME)\""];
   assert.deepEqual(allowed.filter((command) => verdict(command) !== "allow"), []);
 });
+
+test("honest: a read-only search that names a kit script in its pattern passes (round 2 R4 n52 n53 n54 n55)", () => {
+  assert.equal(hook(...shell("rg -n \"github-write.mjs reply\" plugin/skills")), "allow");
+  assert.equal(hook(BATCH, { commands: ["git log --oneline --grep 'openproject.mjs apply'"] }), "allow");
+  assert.equal(hook(...shell("grep -rn 'figma-comments.mjs post' plugin")), "allow");
+  assert.equal(hook(...shell("fd -e md github-write.mjs post")), "allow");
+  assert.equal(verdict("rg -n \"github-write.mjs reply\" plugin/skills"), "allow");
+  assert.equal(verdict("git log --oneline --grep 'openproject.mjs apply'"), "allow");
+  assert.equal(hook(...shell("fd -e md -x node /k/github-write.mjs post")), "deny");
+  assert.equal(hook(...shell("rg -l x | xargs node /k/github-write.mjs post")), "deny");
+  assert.equal(hook(...shell("rg --pre node github-write.mjs post")), "deny");
+  assert.equal(verdict("fd -e md -x node /k/github-write.mjs post"), "ask");
+  assert.equal(verdict("echo x | node /k/github-write.mjs post d.md"), "allow");
+});

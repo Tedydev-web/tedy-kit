@@ -13,7 +13,7 @@ import { evaluate as trackerToken, trackerHost } from "./tracker-token-gate.mjs"
 export { splitSegments, tokenize };
 
 const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
-const READ_ONLY_GIT = new Set(["status", "diff", "log", "show", "fetch", "rev-parse", "branch", "ls-files", "remote", "describe", "blame", "reflog"]);
+const READ_ONLY_GIT = new Set(["status", "diff", "log", "show", "grep", "fetch", "rev-parse", "branch", "ls-files", "remote", "describe", "blame", "reflog"]);
 const READ_ONLY_GH_ACTIONS = new Set(["view", "list", "diff", "checks", "status", "watch", "download"]);
 const READ_ONLY_GH_AREAS = new Set(["search", "status", "browse", "help", "version"]);
 const GH_HELP = new Set(["-h", "--help"]);
@@ -47,6 +47,8 @@ const WRAPPERS = new Map([
 ]);
 const WRAPPER_ARGUMENTS = new Map([["timeout", 1], ["flock", 1]]);
 const LOCAL_RUNNERS = new Set(["find", "script", "busybox"]);
+const SEARCH_TOOLS = new Set(["rg", "grep", "egrep", "fgrep", "fd", "fdfind", "ag", "ack"]);
+const SEARCH_EXEC = /^(?:-x|-X|--exec|--exec-batch|--pre|--pre-glob)(?:=|$)/;
 const FIND_EXEC = /^-(?:exec|execdir|ok|okdir)$/;
 const SUDO_SHELL = /^(?:-[a-zA-Z]*[si]|--shell|--login)$/;
 const PR_CREATE_VALUE_FLAGS = new Set(["-t", "--title", "-b", "--body", "-F", "--body-file", "-B", "--base", "-H", "--head", "-a", "--assignee", "-l", "--label", "-m", "--milestone", "-p", "--project", "-r", "--reviewer", "-T", "--template"]);
@@ -188,7 +190,13 @@ export function globMatches(glob, text) {
   return true;
 }
 
-export const publishes = (segment) => PUBLISH.test(shellWords(segment));
+function searchOnly(segment) {
+  const [program, ...args] = commandTokens(segment);
+  if (program === "git") return classify(segment, "/").kind === "read";
+  return SEARCH_TOOLS.has(program) && !args.some((arg) => SEARCH_EXEC.test(arg));
+}
+
+export const publishes = (segment) => PUBLISH.test(shellWords(segment)) && !searchOnly(segment);
 
 function uncoveredPublish(command, settingsFile) {
   let rules;
