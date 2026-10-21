@@ -1,0 +1,114 @@
+{
+  "registry": "docs/prior-art/problems-quota.md",
+  "id_prefix": "Q",
+  "frame": {
+    "label": "Kit-use lifecycle steps",
+    "steps": ["Session start", "Skill load", "Work turn", "Subagent and orchestration", "Wait and idle", "Compaction and clear", "Hand-off", "Measurement"]
+  },
+  "problems": ["Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7", "Q8", "Q9", "Q10", "Q11", "Q12", "Q13", "Q14", "Q15", "Q16", "Q17", "Q18", "Q19", "Q20", "Q21", "Q22", "Q23", "Q24", "Q25"],
+  "terms": ["prompt caching", "cache ttl", "promptCacheTtl", "cache hit", "cache miss", "cache invalidation", "prefix", "model switch", "gateway", "proxy", "usage window", "rate limit", "CLAUDE.md", "context budget", "progressive disclosure", "path-scoped rules", "skill description", "skill listing", "auto memory", "output style", "additionalContext", "UserPromptSubmit", "SubagentStart", "context window", "context rot", "long context", "parallel tool calls", "tool output", "output filter", "BASH_MAX_OUTPUT_LENGTH", "output tokens", "verbosity", "subagent", "task brief", "omitClaudeMd", "fan-out", "multi-agent", "fork", "resume subagent", "model routing", "effort", "LSP", "idle", "polling", "background agent", "cross-session", "crossSessionInbound", "hand-off", "compaction", "/compact", "/clear", "/rewind", "idle compaction", "usage tracking", "/usage", "ccusage", "statusline", "OpenTelemetry", "token accounting", "cost per task", "ablation", "eval cost", "baseline"],
+  "sweep": "261021-quota",
+  "qgs_list_topic": "claude|agent|coding|cursor|codex|copilot|llm|skill|plugin",
+  "pilot_rows": 20,
+  "sessions": {
+    "A": {"cli": "claude", "model": "claude-opus-5-5", "effort": "high"},
+    "B": {"cli": "claude", "model": "claude-sonnet-5-5", "effort": "high"}
+  },
+  "qgs_judges": {
+    "A": {"cli": "claude", "model": "claude-opus-5-5", "effort": "high"},
+    "B": {"cli": "claude", "model": "claude-sonnet-5-5", "effort": "high"}
+  },
+  "reader": {"cli": "claude", "model": "claude-opus-5-5", "effort": "high"},
+  "cross_family": {"cli": "agy", "model": "gemini-3.8-flash-high"},
+  "strata": {
+    "config": {
+      "stop_row": null,
+      "forced_repos": [],
+      "channels": {
+        "repo_queries": ["claude code token usage", "claude code prompt caching", "claude code cache ttl", "claude code context window", "claude code context engineering", "claude code cost optimization", "claude code reduce tokens", "claude code usage limits", "claude code compaction", "claude code subagents", "claude code skills progressive disclosure", "CLAUDE.md best practices", "claude code statusline", "claude code hooks context", "claude code model routing", "claude code plugin"],
+        "topics": ["claude-code", "claude-code-plugin", "claude-code-skills", "agent-skills", "claude-code-subagents", "context-engineering", "prompt-caching", "token-optimization"],
+        "code_queries": ["\"promptCacheTtl\"", "\"omitClaudeMd\"", "\"crossSessionInbound\"", "\"BASH_MAX_OUTPUT_LENGTH\"", "\"progressive disclosure\" filename:SKILL.md", "\"context budget\" filename:CLAUDE.md", "\"/compact\" filename:CLAUDE.md", "\"prompt caching\" filename:CLAUDE.md", "\"subagent\" \"token\" filename:AGENTS.md", "\"effort\" path:.claude/agents", "\"SubagentStart\" filename:hooks.json", "\"statusline\" filename:settings.json"],
+        "code_pages": 1,
+        "awesome_queries": ["awesome claude code", "awesome claude skills", "awesome agent skills", "awesome claude code plugins", "awesome context engineering", "awesome llm cost optimization"],
+        "awesome_lists_per_query": 3,
+        "marketplaces": true,
+        "academic": {
+          "arxiv": ["abs:\"prompt caching\"", "abs:\"context engineering\" AND abs:agent", "abs:\"coding agent\" AND abs:\"token\"", "abs:\"multi-agent\" AND abs:\"token cost\"", "abs:\"context compression\" AND abs:\"LLM agent\"", "abs:\"long context\" AND abs:\"coding agent\""],
+          "semantic_scholar": ["token efficiency of LLM coding agents", "prompt caching cost of LLM agents", "context management for long-running LLM agents"],
+          "max_results": 50
+        },
+        "social": {
+          "x": ["claude code prompt caching", "claude code cache ttl", "claude code token usage", "claude code quota", "claude code usage limit", "claude code context window", "claude code compaction", "claude code subagents tokens", "claude code CLAUDE.md size", "ccusage"],
+          "reddit": [["ClaudeCode", "token usage"], ["ClaudeCode", "prompt caching"], ["ClaudeCode", "usage limits"], ["ClaudeCode", "context window"], ["ClaudeCode", "compact"], ["ClaudeCode", "subagents cost"], ["ClaudeAI", "claude code usage limit"], ["ClaudeAI", "prompt caching"]],
+          "youtube": ["claude code token usage", "claude code prompt caching", "claude code context management"],
+          "facebook": ["claude code quota", "claude code token"]
+        }
+      }
+    },
+    "product": {
+      "stop_row": null,
+      "forced_repos": [],
+      "channels": {
+        "harness": "claude|ai agent|coding agent|agent skills?|llm|copilot|codex|cursor|anthropic",
+        "config_pool": true,
+        "extra_text": "token (?:usage|cost|count\\w*|budget|savings?)|cost (?:track\\w*|monitor\\w*|optimi[sz]\\w*)|quota|cach(?:e|ing) (?:hits?|miss(?:es)?|rate|writes?)|context (?:engineering|management|compression)",
+        "npm_queries": ["claude code usage", "claude code token", "claude code cost", "claude code statusline", "ccusage", "claude code cache", "prompt caching", "llm token counter", "llm context compression", "llm output filter", "keywords:claude-code", "keywords:claude-code-plugin", "keywords:token-usage", "keywords:prompt-caching"],
+        "code_fields": ["cache_creation_input_tokens", "cache_read_input_tokens"],
+        "code_terms": ["statusline", "ccusage", "OpenTelemetry", "subagent"],
+        "code_extensions": ["ts", "js", "mjs", "cjs", "py", "go", "rs", "sh"],
+        "code_pages": 10,
+        "repo_queries": ["claude code usage tracker", "claude code token usage", "claude code cost tracker", "claude code usage monitor", "claude code statusline", "claude code prompt cache", "llm prompt caching proxy", "claude code context compression", "llm tool output filter", "claude code output filter", "claude code lsp", "claude code compaction", "llm token optimization", "context engineering agent", "claude code subagent orchestration", "claude code opentelemetry"],
+        "harness_topics": ["claude-code", "claude-code-plugin", "agent-skills", "ai-agents", "coding-agent", "llm"],
+        "subject_topics": ["token-usage", "cost-tracking", "prompt-caching", "context-engineering", "opentelemetry", "statusline", "observability", "token-optimization", "compression"],
+        "social": {
+          "x": ["ccusage claude code", "claude code usage monitor", "claude code statusline cost", "claude code context compression tool"],
+          "reddit": [["ClaudeCode", "usage tracker"], ["ClaudeCode", "statusline"], ["ClaudeCode", "token saving tool"], ["ClaudeAI", "usage monitor"]],
+          "youtube": ["claude code usage monitor", "claude code token saving"],
+          "facebook": ["claude code usage"]
+        }
+      }
+    },
+    "local": {
+      "stop_row": null,
+      "forced_repos": []
+    }
+  },
+  "facets": {
+    "cache": {
+      "sweep": "261020-quota-cache",
+      "problems": ["Q1", "Q2", "Q3", "Q4", "Q5", "Q6"],
+      "terms": ["prompt caching", "cache ttl", "promptCacheTtl", "cache hit", "cache miss", "cache invalidation", "prefix", "model switch", "gateway", "proxy", "usage window", "rate limit"],
+      "strata": {"config": {"stop_row": null, "forced_repos": []}, "product": {"stop_row": null, "forced_repos": []}}
+    },
+    "footprint": {
+      "sweep": "261020-quota-footprint",
+      "problems": ["Q7", "Q8", "Q9", "Q10"],
+      "terms": ["CLAUDE.md", "context budget", "progressive disclosure", "path-scoped rules", "skill description", "skill listing", "auto memory", "output style", "additionalContext", "UserPromptSubmit", "SubagentStart"],
+      "strata": {"config": {"stop_row": null, "forced_repos": []}, "product": {"stop_row": null, "forced_repos": []}}
+    },
+    "turn": {
+      "sweep": "261020-quota-turn",
+      "problems": ["Q11", "Q12", "Q13", "Q14"],
+      "terms": ["context window", "context rot", "long context", "parallel tool calls", "tool output", "output filter", "BASH_MAX_OUTPUT_LENGTH", "output tokens", "verbosity"],
+      "strata": {"config": {"stop_row": null, "forced_repos": []}, "product": {"stop_row": null, "forced_repos": []}}
+    },
+    "orchestration": {
+      "sweep": "261020-quota-orchestration",
+      "problems": ["Q15", "Q16", "Q17", "Q18", "Q19", "Q20"],
+      "terms": ["subagent", "task brief", "omitClaudeMd", "fan-out", "multi-agent", "fork", "resume subagent", "model routing", "effort", "LSP"],
+      "strata": {"config": {"stop_row": null, "forced_repos": []}, "product": {"stop_row": null, "forced_repos": []}}
+    },
+    "idle": {
+      "sweep": "261020-quota-idle",
+      "problems": ["Q21", "Q22", "Q23"],
+      "terms": ["idle", "polling", "background agent", "cross-session", "crossSessionInbound", "hand-off", "compaction", "/compact", "/clear", "/rewind", "idle compaction"],
+      "strata": {"config": {"stop_row": null, "forced_repos": []}, "product": {"stop_row": null, "forced_repos": []}}
+    },
+    "measurement": {
+      "sweep": "261020-quota-measurement",
+      "problems": ["Q24", "Q25"],
+      "terms": ["usage tracking", "/usage", "ccusage", "statusline", "OpenTelemetry", "token accounting", "cost per task", "ablation", "eval cost", "baseline"],
+      "strata": {"config": {"stop_row": null, "forced_repos": []}, "product": {"stop_row": null, "forced_repos": []}}
+    }
+  }
+}
