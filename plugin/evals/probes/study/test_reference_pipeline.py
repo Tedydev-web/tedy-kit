@@ -8,6 +8,7 @@ import unittest
 from study_calibration_set import pinned_inputs
 from study_citation_check import drawn
 from study_fixtures import FakeFetch, script, write_json, write_jsonl
+from study_reference_flags import flagger_key
 from study_v4_fixture import CRITERIA, PROBLEMS, SWEEP, TODAY, quiet
 from test_calibration_set import drawn_work
 from test_reference_freeze import HOOK_TEXT, REFERENCE, SKILL_TEXT
@@ -149,6 +150,7 @@ class ReferencePipelineTest(ReferencePipelineBase):
         self.assertEqual((freeze["rubric"]["flags_sha256"], freeze["rubric"]["outcomes_sha256"]),
                          (sha(self.work / "reference-flags-calibration.json"), sha(self.work / "rubric-outcomes-calibration.json")))
         self.assertEqual(freeze["flaggers"][self.flagger["model"]]["answered"], 120)
+        self.assertEqual(sorted(freeze["flaggers"][self.flagger["model"]]["sessions"]), [flagger_key("calibration", s, self.flagger) for s in ("config", "product")])
         self.assertIn("30 rows to check", self.cli("draw-citation-check", fetch=FakeFetch()))
         checked = drawn(SWEEP, json.loads((self.work / "calibration-labels.json").read_text())["rows"])
         answers = {r["id"]: "yes" if r["kind"] == "relevance-1" else "no" for r in checked}
@@ -158,6 +160,10 @@ class ReferencePipelineTest(ReferencePipelineBase):
         self.assertIn("citation-check.json: 0 of 30 unsupported", self.cli("import-citation-check", "--answers", str(saved)))
         check = json.loads((self.work / "citation-check.json").read_text())
         self.assertEqual((check["freeze_sha256"], check["stopped"]), (sha(self.work / "reference-freeze-calibration.json"), False))
+
+
+class RetestPipelineTest(ReferencePipelineTest):
+    flagger = {**REFERENCE, "retest": True}
 
 
 if __name__ == "__main__":

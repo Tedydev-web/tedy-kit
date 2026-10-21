@@ -5,6 +5,7 @@ from pathlib import Path
 from study_calibration_set import BATCHES, LABELLED, anchors, set_file
 from study_protocol import FREEZE_FILE
 from study_reference_labels import NOTED, checked_notes, checked_reply, cite_holds, flags_file, notes_file, outcomes_file, packet_rows, read_session, reference_option, selects, session_key
+from study_reference_flags import flagger_key
 from study_reference_packet import bundle_text
 from study_screening_core import COPYLIKE, read_jsonl
 from study_stage1 import HELD_OUT
@@ -175,8 +176,9 @@ def write_worksheet(topic, repo, work, batch, criteria):
     strata = list(sample["rows_per_stratum"])
     packets = {s: packet_rows(work, s) for s in strata}
     firsts = {s: read_session(work, session_key(batch, s), option, packets[s]) for s in strata}
-    models = [o["model"] for o in flaggers(topic)["rubric_trigger"]]
-    blind = {(s, m): {r.get("order_rank"): r for r in read_jsonl(work, f"{session_key(batch, s)}-flagger-{m}.jsonl")} for s in strata for m in models}
+    triggers = flaggers(topic)["rubric_trigger"]
+    models = [o["model"] for o in triggers]
+    blind = {(s, o["model"]): {r.get("order_rank"): r for r in read_jsonl(work, f"{flagger_key(batch, s, o)}.jsonl")} for s in strata for o in triggers}
     drawn = {r["id"]: r for r in sample["rows"]}
     lines = (Path(repo) / criteria).read_text().splitlines()
     at, every = anchor_lines(lines), [p for s in strata for p in packets[s].values()]

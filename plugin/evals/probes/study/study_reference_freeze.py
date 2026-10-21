@@ -5,6 +5,7 @@ from pathlib import Path
 from study_calibration_set import BATCHES, labelled, labels_file, set_file
 from study_citation_check import check_holds
 from study_protocol import FREEZE_FILE as PROTOCOL_FILE
+from study_reference_flags import flagger_key
 from study_reference_labels import cites_file, flags_file, notes_file, outcomes_file, reference_option, rerun_keys, session_key
 from study_reference_packet import BUNDLE_FILE
 from study_screening_core import read_jsonl
@@ -73,7 +74,7 @@ def reference_part(topic, work, batch, sample, labels, sessions):
 def flagger_part(work, batch, sample, sessions, option, role):
     model, answered, unflagged, missing, hashes = option["model"], 0, [], [], {}
     for stratum in sample["rows_per_stratum"]:
-        key = f"{session_key(batch, stratum)}-flagger-{model}"
+        key = flagger_key(batch, stratum, option)
         rows = {r.get("order_rank") for r in read_jsonl(Path(work), f"{key}.jsonl")}
         refused = {r.get("rank") for r in (sessions.get(key) or {}).get("refused") or []}
         if key in sessions:
