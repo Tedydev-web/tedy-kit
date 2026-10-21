@@ -117,23 +117,24 @@ def valid_cue(cue):
     return bool(FACT_CUE.match(cue)) or any(group == g and word in words for g, words in README_CUES)
 
 
-def note_job(work, batch, stratum, ranks, number):
+def note_job(work, batch, stratum, ranks):
     path = Path(work) / f"reference-notes-{batch}.json"
     if not path.is_file():
         raise TopicError(f"no {path.name} in {work}; write the batch's interpretation notes first")
-    notes = json.loads(path.read_text())
-    if not isinstance(notes, list) or not 1 <= number <= len(notes):
-        raise TopicError(f"{path.name} holds {len(notes) if isinstance(notes, list) else 'no list of'} notes; --rerun-notes {number} names none of them")
-    note = notes[number - 1]
-    if (not isinstance(note, dict) or set(note) != NOTE_KEYS or type(note["line"]) is not int or note["line"] < 1 or not isinstance(note["quote"], str) or not note["quote"].strip()
-            or note["criterion"] not in REFERENCE_CRITERIA or not isinstance(note["cue"], str) or not valid_cue(note["cue"])):
-        raise TopicError(f"{path.name} note {number} must hold exactly line, quote, criterion and cue: a criteria line number, its verbatim text, one of "
-                         f"{', '.join(REFERENCE_CRITERIA)}, and a frozen README cue or a fact:prefilled.<field> or fact:evidence.<field> cue")
+    data = path.read_bytes()
+    notes = json.loads(data)
+    if not isinstance(notes, list) or not notes:
+        raise TopicError(f"{path.name} must hold a non-empty list of notes")
+    for number, note in enumerate(notes, 1):
+        if (not isinstance(note, dict) or set(note) != NOTE_KEYS or type(note["line"]) is not int or note["line"] < 1 or not isinstance(note["quote"], str)
+                or not note["quote"].strip() or note["criterion"] not in REFERENCE_CRITERIA or not isinstance(note["cue"], str) or not valid_cue(note["cue"])):
+            raise TopicError(f"{path.name} note {number} must hold exactly line, quote, criterion and cue: a criteria line number, its verbatim text, one of "
+                             f"{', '.join(REFERENCE_CRITERIA)}, and a frozen README cue or a fact:prefilled.<field> or fact:evidence.<field> cue")
     inputs = {r["order_rank"]: r for r in read_jsonl(Path(work), f"reference-inputs-{stratum}.jsonl")}
-    selected = [r for r in ranks if r in inputs and cue_selects(note["cue"], inputs[r])]
+    selected = [r for r in ranks if r in inputs and any(cue_selects(n["cue"], inputs[r]) for n in notes)]
     if not selected:
-        raise TopicError(f"note {number} ({note['cue']}) selects no {stratum} row of {batch}")
-    return [note], selected
+        raise TopicError(f"no note of {path.name} selects a {stratum} row of {batch}")
+    return notes, hashlib.sha256(data).hexdigest(), selected
 
 
 def reference_job(topic, work, stratum, judge, batch, model, note):
@@ -149,9 +150,9 @@ def reference_job(topic, work, stratum, judge, batch, model, note):
     if not path.is_file():
         raise TopicError(f"no {path.name} in {work}; --set reference labels a drawn calibration, top-up or held-out batch")
     ranks = [r["order_rank"] for r in json.loads(path.read_text())["rows"] if r["stratum"] == stratum]
-    name, notes = f"reference-{batch}-{stratum}", None
+    name, notes, notes_sha256 = f"reference-{batch}-{stratum}", None, None
     if judge == "flagger":
-        if note:
+        if note is not None:
             raise TopicError("--rerun-notes re-runs the reference; flaggers label each row once")
         if not model:
             raise TopicError("--judge flagger needs --model, one of the topic config's flaggers")
@@ -163,10 +164,13 @@ def reference_job(topic, work, stratum, judge, batch, model, note):
         if model:
             raise TopicError("--model names a flagger; the reference is the topic config's reference")
         option = reference
-        if note:
-            notes, ranks = note_job(work, batch, stratum, ranks, note)
+        if note is not None:
+            if note < 1:
+                raise TopicError(f"--rerun-notes {note} must be a round number from 1")
+            notes, notes_sha256, ranks = note_job(work, batch, stratum, ranks)
             name = f"{name}-notes-{note}"
-    return {"kind": "reference", "freeze": None, "option": option, "ranks": ranks, "name": name, "inputs": f"reference-inputs-{stratum}.jsonl", "packet": BUNDLE, "notes": notes}
+    return {"kind": "reference", "freeze": None, "option": option, "ranks": ranks, "name": name, "inputs": f"reference-inputs-{stratum}.jsonl", "packet": BUNDLE, "notes": notes,
+            "notes_sha256": notes_sha256}
 
 
 def run_reference(block, fetch, flagger):
@@ -203,8 +207,9 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
                                                  "and a prompt too long for one block is refused"}),
                            (["--batch"], {"help": "--set reference only: the drawn batch (calibration, top-up, held-out, ...) whose rows of --stratum are labelled"}),
                            (["--model"], {"help": "--judge flagger only: the flagger model, one of the topic config's rubric_trigger_flaggers or record_only_flaggers"}),
-                           (["--rerun-notes"], {"type": int, "help": "--judge reference only: re-run the rows note N (from 1) of reference-notes-<batch>.json selects, with "
-                                                                    "its criteria line under Rubric notes, as reference-<batch>-<stratum>-notes-N"}),
+                           (["--rerun-notes"], {"type": int, "help": "--judge reference only: round N (from 1) re-runs every row a note of "
+                                                                    "reference-notes-<batch>.json selects, with every note's criteria line under Rubric notes, as "
+                                                                    "reference-<batch>-<stratum>-notes-N; the derive step reads the latest round holding a row"}),
                            (["--today"], {"default": saigon_today(), "help": "run date, default today in Asia/Saigon"})).parse_args(argv)
     try:
         topic = load_topic(args.repo, args.topic)
@@ -239,7 +244,8 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
                  "ranks": job["ranks"], "inputs": job.get("inputs") or inputs_file(args.work, stratum).name,
                  "packet": job.get("packet") or f"screening-packet-{stratum}.md", "shape": job.get("shape"), "problems": topic.get("problems") or [],
                  "criteria": freeze["criteria"] if freeze else None, "frozen": freeze["strata"][stratum] if freeze else None,
-                 "bare": bool(environ.get("ANTHROPIC_API_KEY")), "today": args.today, "sweep_date": required_sweep_date(topic), "notes": job.get("notes")}
+                 "bare": bool(environ.get("ANTHROPIC_API_KEY")), "today": args.today, "sweep_date": required_sweep_date(topic), "notes": job.get("notes"),
+                 "notes_sha256": job.get("notes_sha256")}
         if args.set == "reference":
             rows, refused = run_reference(block, fetch or Fetch(), args.judge == "flagger")
             print(f"{job['name']}: {rows} rows from {option['cli']} {option['model']}" + (f"; refused twice, recorded: ranks {refused}" if refused else ""))

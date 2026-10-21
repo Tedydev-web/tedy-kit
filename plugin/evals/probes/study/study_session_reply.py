@@ -177,7 +177,7 @@ def parse_reference_reply(text, expected, topic_problems):
         issues = reference_issues(row, expected, topic_problems) + ([f"rank {rank} appears twice"] if rank in rows else [])
         problems += issues
         if not issues:
-            rows[rank] = {"order_rank": rank, "repo": expected[rank]["repo"], "sha": expected[rank].get("sha"),
+            rows[rank] = {"order_rank": rank, "repo": expected[rank]["repo"],
                           "scores": {c: {"v": row["scores"][c]["v"], "cite": row["scores"][c]["cite"]} for c in REFERENCE_CRITERIA},
                           "mechanisms": [{k: m[k] for k in ("problem", "path", "why")} for m in row["mechanisms"]], "decision": row["decision"], "decision_cite": row["decision_cite"]}
     problems += [f"rank {rank} missing from the reply" for rank in expected if rank not in rows and not any(f"rank {rank} " in p for p in problems)]

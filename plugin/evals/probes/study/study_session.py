@@ -292,7 +292,7 @@ def run_block(job, fetch):
              "mechanisms_added": [line.split(":", 1)[0] for line in fresh],
              **({"served_models": served} if served else {}), **({"fallback_reason": job["fallback_reason"]} if job.get("fallback_reason") else {}),
              **({"held_out_labels_sha256": job["held_out_labels_sha256"]} if job.get("held_out_labels_sha256") else {}),
-             **({"notes_sha256": canonical_sha256(job["notes"])} if job.get("notes") else {}), **({"agy_lists": {"before": before, "after": after}} if lists else {})}
+             **({"notes_sha256": job["notes_sha256"]} if job.get("notes_sha256") else {}),**({"agy_lists": {"before": before, "after": after}} if lists else {})}
     undo = []
 
     def commit(sessions):

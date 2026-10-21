@@ -102,9 +102,18 @@ class ReferencePromptTest(unittest.TestCase):
         noted = build_reference_prompt("# bundle\n", [{"line": 120, "quote": "A paid tier alone is not a vendor stance.", "criterion": "Objectivity", "cue": "objectivity:paid"}], [row])
         self.assertIn("# bundle\n\n## Rubric notes\n\n- line 120 (Objectivity): A paid tier alone is not a vendor stance.\n\n## Rows\n\n", noted)
 
+    def test_the_worst_case_prompt_fits_the_prompt_limit_and_the_argv_limit(self):
+        row = {"order_rank": 1, "repo": "o/one", "readme": ""}
+        row["readme"] = "x" * (100_000 - len(json.dumps(row, ensure_ascii=False).encode()))
+        self.assertEqual(len(json.dumps(row, ensure_ascii=False).encode()), 100_000)
+        notes = [{"line": 100 + i, "quote": "q" * 300, "criterion": "Objectivity", "cue": "objectivity:paid"} for i in range(5)]
+        size = len(build_reference_prompt("b" * 10_960, notes, [row]).encode())
+        self.assertLess(size, MAX_PROMPT)
+        self.assertLess(size, 131_072)
+
     def test_the_template_sha_is_pinned_and_the_format_names_every_code_and_criterion(self):
         self.assertEqual(REFERENCE_TEMPLATE_SHA256, hashlib.sha256((REFERENCE_ROWS_NOTE + "\n\n" + REFERENCE_REPLY_FORMAT).encode()).hexdigest())
-        self.assertEqual(REFERENCE_TEMPLATE_SHA256, "a93b02ab2d92f8bf76e9a9fe7af8f1b53071dd292fd325e5f1ca631002900c0f")
+        self.assertEqual(REFERENCE_TEMPLATE_SHA256, "3cc31ac1307c16700a2c204ef6f48ade3ead6c3eb978fc9681e05d3b524a86d7")
         self.assertEqual(set(REFERENCE_CODES), set(EXCLUDE_CODES))
         self.assertEqual(REFERENCE_CRITERIA, LABELLED)
         for word in (*REFERENCE_CODES, *REFERENCE_CRITERIA, "decision_cite", "path:", "readme:", "fact:"):
@@ -121,7 +130,7 @@ class ReferenceReplyTest(unittest.TestCase):
     def test_a_well_formed_row_keeps_the_contract_fields_and_the_pinned_sha(self):
         rows, problems = self.parse(note="dropped")
         self.assertEqual(problems, [])
-        self.assertEqual(rows, [{"order_rank": 1, "repo": "o/one", "sha": SHA, "scores": {c: cell() for c in REFERENCE_CRITERIA},
+        self.assertEqual(rows, [{"order_rank": 1, "repo": "o/one", "scores":{c: cell() for c in REFERENCE_CRITERIA},
                                  "mechanisms": [{"problem": "X1", "path": "hooks/gate.sh", "why": "the hook blocks a commit without a test"}], "decision": "eligible",
                                  "decision_cite": "path:hooks/gate.sh"}])
 
@@ -213,14 +222,15 @@ class ReferenceRunTest(ReferenceBase):
         self.assertEqual(len(calls), 2)
         self.assertTrue(all(c.startswith("claude -p --model claude-fable-5-1 --effort max --output-format json --tools  --setting-sources  ") for c in calls))
         self.assertEqual([r["order_rank"] for r in self.rows()], [1, 2])
-        self.assertEqual(self.rows()[0]["sha"], SHA)
+        self.assertEqual(list(self.rows()[0]), ["order_rank", "repo", "scores", "mechanisms", "decision", "decision_cite"])
+        inputs = [json.loads(line) for line in (self.work / "reference-inputs-config.jsonl").read_text().splitlines()]
         entry = self.sessions()["reference-calibration-config"]
         self.assertEqual((entry["cli"], entry["model"], entry["effort"], entry["threats"]), ("claude", "claude-fable-5-1", "max", []))
         bundle = hashlib.sha256((self.work / "reference-bundle.md").read_bytes()).hexdigest()
         self.assertEqual([(b["ranks"], b["packet_sha256"], b["template_sha256"]) for b in entry["blocks"]], [([1], bundle, REFERENCE_TEMPLATE_SHA256), ([2], bundle, REFERENCE_TEMPLATE_SHA256)])
         self.assertNotIn("criteria_sha256", entry["blocks"][0])
         self.assertNotIn("notes_sha256", entry["blocks"][0])
-        self.assertEqual(entry["blocks"][0]["row_sha256"].keys(), {"1"})
+        self.assertEqual([b["row_sha256"] for b in entry["blocks"]], [{"1": canonical_sha256(inputs[0])}, {"2": canonical_sha256(inputs[1])}])
         prompt = (self.work / "prompts/reference-calibration-config-1-1.md").read_text()
         self.assertTrue(prompt.startswith("# anchors bundle\n"))
         self.assertIn('"order_rank": 1, "repo": "o/one"', prompt)
@@ -380,16 +390,32 @@ class NoteRerunTest(ReferenceBase):
     def write_notes(self, *notes):
         write_json(self.work / "reference-notes-calibration.json", list(notes))
 
-    def test_a_note_reruns_exactly_the_rows_its_cue_selects_with_its_line_in_the_prompt(self):
-        self.write_notes({**self.note, "cue": "position:vs"}, self.note)
+    def test_a_round_reruns_exactly_the_rows_some_note_selects_with_every_note_line_in_the_prompt(self):
+        other = {**self.note, "line": 98, "quote": "Position 1: it names the alternative.", "criterion": "Position", "cue": "position:vs"}
+        self.write_notes(other, self.note)
         fetch = FakeFetch([(needle(1), fable(label(1, "o/one")))])
-        self.judge(fetch, "--rerun-notes", "2")
+        self.judge(fetch, "--rerun-notes", "1")
         self.assertEqual(len(fetch.called("claude -p")), 1)
-        name = "reference-calibration-config-notes-2"
+        name = "reference-calibration-config-notes-1"
         self.assertEqual([r["order_rank"] for r in self.rows(name)], [1])
         prompt = (self.work / f"prompts/{name}-1-1.md").read_text()
-        self.assertIn("## Rubric notes\n\n- line 120 (Objectivity): A paid tier alone is not a vendor stance.\n\n## Rows", prompt)
-        self.assertEqual(self.sessions()[name]["blocks"][0]["notes_sha256"], canonical_sha256([self.note]))
+        self.assertIn("## Rubric notes\n\n- line 98 (Position): Position 1: it names the alternative.\n- line 120 (Objectivity): A paid tier alone is not a vendor stance.\n\n"
+                      "## Rows", prompt)
+        notes_sha = hashlib.sha256((self.work / "reference-notes-calibration.json").read_bytes()).hexdigest()
+        self.assertEqual(self.sessions()[name]["blocks"][0]["notes_sha256"], notes_sha)
+        self.assertEqual([line["key"] for line in self.ledger()], [name])
+
+    def test_a_later_round_reruns_the_union_under_its_own_key(self):
+        self.write_notes(self.note)
+        self.judge(FakeFetch([(needle(1), fable(label(1, "o/one")))]), "--rerun-notes", "1")
+        self.write_notes(self.note, {**self.note, "criterion": "Methodology", "cue": "fact:prefilled.paid_tier_cues"})
+        write_jsonl(self.work / "reference-inputs-config.jsonl", [self.inputs(1, "o/one", "Pricing: the paid tier adds a gate.", released=True),
+                                                                   {**self.inputs(2, "o/two", "write the failing test first"),
+                                                                    "prefilled": {"released": False, "changelog": False, "paid_tier_cues": ["3: sponsor us"]}}])
+        fetch = FakeFetch([(needle(1), fable(label(1, "o/one"))), (needle(2), fable(label(2, "o/two")))])
+        self.judge(fetch, "--rerun-notes", "2")
+        self.assertEqual([r["order_rank"] for r in self.rows("reference-calibration-config-notes-2")], [1, 2])
+        self.assertEqual([r["order_rank"] for r in self.rows("reference-calibration-config-notes-1")], [1])
 
     def test_a_fact_cue_selects_the_rows_whose_packet_field_is_set(self):
         self.write_notes({**self.note, "criterion": "Authority", "cue": "fact:prefilled.released"})
@@ -410,10 +436,12 @@ class NoteRerunTest(ReferenceBase):
 
     def test_a_missing_note_or_a_cue_that_selects_nothing_is_refused(self):
         self.assertIn("no reference-notes-calibration.json in", self.refused(FakeFetch(), "--rerun-notes", "1"))
+        self.write_notes()
+        self.assertIn("reference-notes-calibration.json must hold a non-empty list of notes", self.refused(FakeFetch(), "--rerun-notes", "1"))
         self.write_notes(self.note)
-        self.assertIn("reference-notes-calibration.json holds 1 notes; --rerun-notes 2", self.refused(FakeFetch(), "--rerun-notes", "2"))
+        self.assertIn("--rerun-notes 0 must be a round number from 1", self.refused(FakeFetch(), "--rerun-notes", "0"))
         self.write_notes({**self.note, "cue": "objectivity:sponsor"})
-        self.assertIn("note 1 (objectivity:sponsor) selects no config row of calibration", self.refused(FakeFetch(), "--rerun-notes", "1"))
+        self.assertIn("no note of reference-notes-calibration.json selects a config row of calibration", self.refused(FakeFetch(), "--rerun-notes", "1"))
 
 
 class OtherKindsWriteNoLedgerTest(SessionBase):
