@@ -282,6 +282,39 @@ class WorksheetTest(unittest.TestCase):
         self.assertEqual([q["id"] for q in sheet["questions"]], ["Authority-1-0", "Methodology-1-0", "Objectivity-1-0", "Position-1-0", "Relevance-0-1"])
         self.assertEqual(sheet["contested"], [{"id": self.rows[8]["id"], "part": "Relevance", "reason": "beyond the 5-question cap"}])
 
+    def test_a_copy_code_question_edits_the_copy_cell_of_the_novelty_row(self):
+        repo, work = self.copies()
+        self.referenced(work)
+        self.flagged(work, {12: self.differing(12, decision="excluded: copy", decision_cite=FORKED)}, [(12, ["eligibility"])])
+        write_json(work / "rubric-wordings-calibration.json", {"decision-none-copy": {"cue": PAID, "A": "A fork with its own hooks is no copy.", "B": "A fork is a copy."}})
+        question = self.worksheet(repo, work)["questions"][0]
+        number, text = self.line(repo, "| Novelty for the kit |")
+        self.assertEqual((question["id"], question["criterion"], question["line"], question["quote"]), ("decision-none-copy", "decision", number, text))
+        quote = question["options"]["A"]["note"]["quote"]
+        self.assertEqual(quote.split(" | ")[:3], text.split(" | ")[:3])
+        self.assertTrue(quote.split(" | ")[3].startswith("A copy of another source"))
+        self.assertTrue(quote.endswith(" A fork with its own hooks is no copy. |"))
+
+    def test_a_decision_note_reruns_the_decision_on_the_rows_its_cue_selects(self):
+        repo, work = self.copies()
+        self.referenced(work, paid=(0, 61))
+        number, text = self.line(repo, "| Novelty for the kit |")
+        write_json(work / "reference-notes-calibration.json", [{"line": number, "quote": text, "criterion": "decision", "cue": PAID}])
+        rows = self.rows
+        self.session(work, "reference-calibration-config-notes-1", [base.reply(rows[0]["order_rank"], rows[0]["repo"], decision="excluded: copy", decision_cite=FORKED)],
+                     self.packets["config"])
+        self.session(work, "reference-calibration-product-notes-1", [base.reply(rows[61]["order_rank"], rows[61]["repo"], decision="excluded: copy", decision_cite=FORKED)],
+                     self.packets["product"])
+        with contextlib.redirect_stdout(io.StringIO()):
+            script("derive-reference-labels").main(["--topic", "demo", "--repo", str(repo), "--work", str(work), "--criteria", CRITERIA, "--batch", "calibration"])
+        labels = {r["id"]: r["user"] for r in json.loads((work / "calibration-labels.json").read_text())["rows"]}
+        self.assertEqual([labels[rows[n]["id"]]["decision"] for n in (0, 61, 2, 1)], ["excluded: copy", "excluded: copy", "eligible", "excluded: irrelevant"])
+        self.assertEqual([labels[rows[n]["id"]]["Relevance"] for n in (0, 61)], [1, 0])
+        cites = {r["id"]: r for r in json.loads((work / "calibration-reference-cites.json").read_text())["rows"]}
+        self.assertEqual((cites[rows[0]["id"]]["rerun"], cites[rows[0]["id"]]["cites"]["decision"]), ({"decision": "reference-calibration-config-notes-1"}, FORKED))
+        self.assertEqual(cites[rows[61]["id"]]["rerun"], {"decision": "reference-calibration-product-notes-1"})
+        self.assertNotIn("rerun", cites[rows[2]["id"]])
+
     def test_the_cli_writes_the_worksheet_and_names_the_next_step(self):
         repo, work = self.copies()
         self.objectivity_split(repo, work)
