@@ -281,3 +281,8 @@ test("honest: a push after a backgrounded command is judged as its own command",
   assert.deepEqual(splitSegments("x >out.log 2>&1 &>all.log & y |& z"), ["x >out.log 2>&1 &>all.log", "y", "z"]);
   assert.equal(verdict(`sleep 1 & ${PUSH}`), "ask");
 });
+
+test("a runner named only as an argument is not treated as running anything", () => {
+  assert.deepEqual(["mv script sh", "ls busybox git", "rg -n find -e bash"].filter((command) => verdict(command) !== "allow"), []);
+  assert.equal(verdict(`sudo find . -exec ${PUSH} \;`), "deny");
+});

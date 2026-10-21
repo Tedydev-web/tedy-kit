@@ -145,8 +145,7 @@ function unreadable(segment, piped = false) {
   const raw = tokenize(segment);
   if (raw.some((token, index) => RUNNERS.has(basename(token)) && raw.slice(index + 1).some((arg) => /\s/.test(arg) && /\bgh\b|github/i.test(arg)))) return true;
   const carries = (token) => token.split(/\s+/).some((part) => ["git", "gh"].includes(basename(part)) || SHELLS.has(basename(part)) || INTERPRETER.test(basename(part)));
-  const runs = (token) => LOCAL_RUNNERS.has(basename(token)) && (basename(token) !== "find" || raw.some((arg) => FIND_EXEC.test(arg)));
-  if (raw.some((token, index) => runs(token) && raw.slice(index + 1).some(carries))) return true;
+  if (LOCAL_RUNNERS.has(program) && (program !== "find" || args.some((arg) => FIND_EXEC.test(arg))) && args.some(carries)) return true;
   if (raw.some((token, index) => basename(token) === "flock" && raw.slice(index + 1).some((arg) => arg === "-c" || /^--command(=|$)/.test(arg)))) return true;
   if ((!word || /^\d*[<>]/.test(word)) && raw.some((token, index) => ["sudo", "doas"].includes(basename(token)) && raw.slice(index + 1).some((arg) => SUDO_SHELL.test(arg)))) return true;
   if (SHELLS.has(program)) return args.some((arg) => /^-[a-zA-Z]*[cs]/.test(arg) || arg === "<<<" || arg === "<") || readsUnreadableCode(program, args, piped);
