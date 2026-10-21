@@ -547,9 +547,28 @@ class NoteRerunTest(ReferenceBase):
         self.judge(fetch, "--rerun-notes", "1")
         self.assertEqual([r["order_rank"] for r in self.rows("reference-calibration-config-notes-1")], [1])
 
+    def test_a_decision_note_reruns_the_rows_its_cue_selects(self):
+        self.write_notes({**self.note, "criterion": "decision"})
+        fetch = FakeFetch([(needle(1), fable(label(1, "o/one")))])
+        self.judge(fetch, "--rerun-notes", "1")
+        self.assertEqual([r["order_rank"] for r in self.rows("reference-calibration-config-notes-1")], [1])
+        self.assertIn("- line 120 (decision): A paid tier alone is not a vendor stance.", (self.work / "prompts/reference-calibration-config-notes-1-1-1.md").read_text())
+
+    def test_a_rerun_is_refused_after_the_protocol_freeze_or_the_batchs_reference_freeze(self):
+        self.write_notes(self.note)
+        for name, text in (("protocol-freeze.json", "protocol-freeze.json exists; no note re-runs a row after the protocol freeze"),
+                           ("reference-freeze-calibration.json", "reference-freeze-calibration.json exists; nothing after the freeze changes a label")):
+            with self.subTest(name):
+                write_json(self.work / name, {})
+                fetch = FakeFetch([("claude -p", fable(label(1, "o/one")))])
+                self.assertIn(text, self.refused(fetch, "--rerun-notes", "1"))
+                self.assertEqual(fetch.called("claude -p"), [])
+                (self.work / name).unlink()
+
     def test_a_note_outside_the_four_field_form_is_refused_before_any_session(self):
         cases = {"a free-text field": {**self.note, "value": 1}, "a missing quote": {k: v for k, v in self.note.items() if k != "quote"},
-                 "a criterion outside the five": {**self.note, "criterion": "Date"}, "an unknown README cue": {**self.note, "cue": "objectivity:cheap"},
+                 "a criterion outside the five": {**self.note, "criterion": "Date"}, "a criterion named in another case": {**self.note, "criterion": "Decision"},
+                 "an unknown README cue": {**self.note, "cue": "objectivity:cheap"},
                  "a fact outside prefilled and evidence": {**self.note, "cue": "fact:facts.stars"}, "a line that is not a number": {**self.note, "line": "120"}}
         for case, note in cases.items():
             with self.subTest(case):

@@ -13,6 +13,7 @@ from study_judges import AUDIT_FILE, QGS_JUDGES, SCREENING_JUDGES, SHAPES, audit
 from study_protocol import FREEZE_FILE
 from study_qgs import INPUTS, JUDGE_FILES, PACKET, candidates, cross_family, cross_name, dropped, read_cross, read_verdicts, reader_queue, whole_topic
 from study_reference_flags import agy_window, flagger_key
+from study_reference_freeze import freeze_file, require_frozen
 from study_screening_core import read_jsonl
 from study_screening_input import inputs_file
 from study_session import ReplyRefused, model_family, record_refusal, run_block, run_blocks
@@ -27,6 +28,7 @@ JUDGES = (*SCREENING_JUDGES, *QGS_JUDGES, "audit", *REFERENCE_JUDGES)
 SETS = ("calibration", "qgs", "audit", "stage1-audit", "reference")
 BUNDLE = "reference-bundle.md"
 NOTE_KEYS = {"line", "quote", "criterion", "cue"}
+NOTE_CRITERIA = (*REFERENCE_CRITERIA, "decision")
 FACT_CUE = re.compile(r"^fact:(prefilled|evidence)\.([A-Za-z0-9_]+)$")
 
 
@@ -84,7 +86,7 @@ def stratum_job(topic, work, stratum, judge, which_set, run):
     freeze = read_freeze(work) if kind == "screening" else None
     option = {k: v for k, v in roster(topic, freeze)[judge].items() if k != "kind"}
     return {"kind": kind, "freeze": freeze, "option": option, "ranks": calibration_ranks(work, stratum), "name": run_name(stratum, judge, option, run), "shape": SHAPES[kind],
-            **({"packet": PACKET} if kind == "qgs" else {})}
+            "reference_freeze_sha256": require_frozen(topic, work, judged_batches(work)), **({"packet": PACKET} if kind == "qgs" else {})}
 
 
 def qgs_job(topic, work, judge):
@@ -129,9 +131,9 @@ def note_job(work, batch, stratum, ranks):
         raise TopicError(f"{path.name} must hold a non-empty list of notes")
     for number, note in enumerate(notes, 1):
         if (not isinstance(note, dict) or set(note) != NOTE_KEYS or type(note["line"]) is not int or note["line"] < 1 or not isinstance(note["quote"], str)
-                or not note["quote"].strip() or note["criterion"] not in REFERENCE_CRITERIA or not isinstance(note["cue"], str) or not valid_cue(note["cue"])):
+                or not note["quote"].strip() or note["criterion"] not in NOTE_CRITERIA or not isinstance(note["cue"], str) or not valid_cue(note["cue"])):
             raise TopicError(f"{path.name} note {number} must hold exactly line, quote, criterion and cue: a criteria line number, its verbatim text, one of "
-                             f"{', '.join(REFERENCE_CRITERIA)}, and a frozen README cue or a fact:prefilled.<field> or fact:evidence.<field> cue")
+                             f"{', '.join(NOTE_CRITERIA)}, and a frozen README cue or a fact:prefilled.<field> or fact:evidence.<field> cue")
     inputs = {r["order_rank"]: r for r in read_jsonl(Path(work), f"reference-inputs-{stratum}.jsonl")}
     selected = [r for r in ranks if r in inputs and any(cue_selects(n["cue"], inputs[r]) for n in notes)]
     if not selected:
@@ -170,6 +172,10 @@ def reference_job(topic, work, stratum, judge, batch, model, note):
         if note is not None:
             if note < 1:
                 raise TopicError(f"--rerun-notes {note} must be a round number from 1")
+            if (Path(work) / FREEZE_FILE).is_file():
+                raise TopicError(f"{FREEZE_FILE} exists; no note re-runs a row after the protocol freeze, a flagged row stays contested")
+            if (Path(work) / freeze_file(batch)).is_file():
+                raise TopicError(f"{freeze_file(batch)} exists; nothing after the freeze changes a label, so no note re-runs its rows")
             notes, notes_sha256, ranks = note_job(work, batch, stratum, ranks)
             name = f"{name}-notes-{note}"
     return {"kind": "reference", "freeze": None, "option": option, "ranks": ranks, "name": name, "inputs": f"reference-inputs-{stratum}.jsonl", "packet": BUNDLE, "notes": notes,
@@ -252,7 +258,7 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
                  "packet": job.get("packet") or f"screening-packet-{stratum}.md", "shape": job.get("shape"), "problems": topic.get("problems") or [],
                  "criteria": freeze["criteria"] if freeze else None, "frozen": freeze["strata"][stratum] if freeze else None,
                  "bare": bool(environ.get("ANTHROPIC_API_KEY")), "today": args.today, "sweep_date": required_sweep_date(topic), "notes": job.get("notes"),
-                 "notes_sha256": job.get("notes_sha256")}
+                 "notes_sha256": job.get("notes_sha256"), "reference_freeze_sha256": job.get("reference_freeze_sha256")}
         if args.set == "reference":
             fetch = fetch or Fetch()
             with agy_window(fetch) if args.agy_window else contextlib.nullcontext():
