@@ -40,11 +40,11 @@ class CalibrationSetTest(unittest.TestCase):
         cls.sample = json.loads((cls.work / "calibration-set.json").read_text())
         cls.page = (cls.work / "calibration.html").read_text()
 
-    def labels_file(self, labels, set_sha=None):
+    def labels_file(self, labels, set_sha=None, extra=None):
         path = Path(tempfile.mkdtemp(prefix="study-labels-")) / "calibration-labels-261020-demo.json"
         self.addCleanup(shutil.rmtree, path.parent)
         sha = set_sha or hashlib.sha256((self.work / "calibration-set.json").read_bytes()).hexdigest()
-        path.write_text(json.dumps({"sweep": SWEEP, "set_sha256": sha, "labels": labels}))
+        path.write_text(json.dumps({"sweep": SWEEP, "set_sha256": sha, "labels": labels, **(extra or {})}))
         return path
 
     def importing(self, path, work=None):
@@ -162,12 +162,13 @@ class CalibrationSetTest(unittest.TestCase):
             self.assertNotIn(leak, self.page)
 
     def test_a_topic_without_an_eligibility_definition_renders_the_page_byte_identical_to_before_the_field(self):
-        self.assertEqual(hashlib.sha256(self.page.encode()).hexdigest(), "26c9f1c35e97f391be8c378d314246fe88371c3e04da602ccecb1ea8775f3237")
+        self.assertEqual(hashlib.sha256(self.page.encode()).hexdigest(), "e1b1037c5e9afefa2fbfd83155e2c35e66c8d3ad93f01506ae332458032fd6ea")
         self.assertNotIn('id="eligibility"', self.page)
 
     def test_removing_the_highlight_note_style_and_marks_gives_back_the_page_byte_identical_to_before_the_highlight(self):
         bare = re.sub(r"<p>Tô sáng theo [^<]*</p>", "", self.page, count=1).replace(".hit{background:#ffe08a;font-weight:600}", "")
         bare = re.sub(r'<span class="hit">([^<]*)</span>', r"\1", bare).replace("<details open><summary>Danh sách thư mục gốc", "<details><summary>Danh sách thư mục gốc")
+        bare = re.sub(r' data-highlight="[0-9a-f]{64}"', "", bare, count=1).replace(" highlight_sha256: document.body.dataset.highlight,", "")
         self.assertEqual(hashlib.sha256(bare.encode()).hexdigest(), "07a08fa6bc8cdc3e94eef0aa5d4d4a78b19dfefd6fb6ed6ad8111eb333a5ac13")
 
     def test_the_topic_eligibility_definition_tops_the_page_escaped_and_leaves_the_set_and_the_draw_unchanged(self):
@@ -205,6 +206,35 @@ class CalibrationSetTest(unittest.TestCase):
         self.assertIsInstance(HIGHLIGHT_PATTERNS, tuple)
         self.assertEqual([p for p in HIGHLIGHT_PATTERNS if p != p.lower() or "/" in p], [])
         self.assertEqual(len(set(HIGHLIGHT_PATTERNS)), len(HIGHLIGHT_PATTERNS))
+        self.assertNotIn("skills", HIGHLIGHT_PATTERNS)
+        self.assertTrue({"skill.md", ".claude", ".claude-plugin"} <= set(HIGHLIGHT_PATTERNS))
+        self.assertEqual(highlight_sha256(), "a0b78ed86b8a7fa25451a757db477ee0d1d372f219af8dd1fc0c14dcd577d304")
+
+    def test_the_page_saves_the_pattern_list_sha256_with_the_labels_it_downloads(self):
+        from study_calibration_set import highlight_sha256
+        self.assertIn(f'data-highlight="{highlight_sha256()}"', re.search(r"<body [^>]*>", self.page).group(0))
+        self.assertIn("JSON.stringify({ sweep: SWEEP, batch: BATCH, set_sha256: SET, highlight_sha256: document.body.dataset.highlight, labels }, null, 1)", self.page)
+
+    def test_the_import_keeps_a_valid_pattern_list_sha256_and_refuses_a_malformed_one(self):
+        from study_calibration_set import highlight_sha256
+        labels = user_labels(self.sample)
+        work = Path(tempfile.mkdtemp(prefix="study-labels-work-"))
+        self.addCleanup(shutil.rmtree, work)
+        shutil.copytree(self.work, work, dirs_exist_ok=True)
+        self.frozen(work)
+        for bad in ("A" * 64, "0" * 63, 7, None):
+            with self.assertRaisesRegex(SystemExit, r"highlight_sha256 .* is not a sha256 of 64 lowercase hex characters"):
+                self.importing(self.labels_file(labels, extra={"highlight_sha256": bad}), work)
+        for sha in (highlight_sha256(), "0" * 64):
+            self.importing(self.labels_file(labels, extra={"highlight_sha256": sha}), work)
+            self.assertEqual(json.loads((work / "calibration-labels.json").read_text())["highlight_sha256"], sha)
+        self.importing(self.labels_file(labels), work)
+        self.assertNotIn("highlight_sha256", json.loads((work / "calibration-labels.json").read_text()))
+        from study_calibration_set import labelled
+        kept = json.loads((work / "calibration-labels.json").read_text())
+        (work / "calibration-labels.json").write_text(json.dumps({**kept, "highlight_sha256": "x"}))
+        with self.assertRaisesRegex(TopicError, r"calibration-labels.json holds highlight_sha256 'x', not a sha256 of 64 lowercase hex characters"):
+            labelled(work)
 
     def test_the_page_header_states_the_pattern_list_sha256_and_that_a_highlight_is_no_verdict(self):
         from study_calibration_set import highlight_sha256
@@ -230,6 +260,49 @@ class CalibrationSetTest(unittest.TestCase):
             page = (work / "calibration.html").read_text()
             self.assertNotEqual(page, self.page)
             self.assertEqual(key_parts(page), key_parts(self.page))
+
+    def copied_work(self):
+        work = Path(tempfile.mkdtemp(prefix="study-rebuild-"))
+        self.addCleanup(shutil.rmtree, work, ignore_errors=True)
+        shutil.copytree(self.work, work, dirs_exist_ok=True)
+        return work
+
+    def test_rebuild_page_writes_only_the_page_from_the_drawn_set_and_its_pinned_inputs(self):
+        work = self.copied_work()
+        (work / "calibration.html").write_text("stale page")
+        before = {p.relative_to(work): p.read_bytes() for p in work.rglob("*") if p.is_file() and p.name != "calibration.html"}
+        draw(self.repo, work, "--rebuild-page")
+        self.assertEqual({p.relative_to(work): p.read_bytes() for p in work.rglob("*") if p.is_file() and p.name != "calibration.html"}, before)
+        self.assertEqual((work / "calibration.html").read_text(), self.page)
+
+    def test_rebuild_page_refuses_a_set_without_its_draw_other_inputs_other_criteria_or_another_sweep(self):
+        work = self.copied_work()
+        with self.assertRaisesRegex(SystemExit, r"no top-up-set.json in .*; a page is rebuilt only for a drawn batch"):
+            draw(self.repo, work, "--rebuild-page", "top-up")
+        with self.assertRaisesRegex(SystemExit, "--rebuild-page rewrites the page of a drawn batch; it takes no --top-up"):
+            draw(self.repo, work, "--rebuild-page", "--top-up", "30")
+        drawn = (work / "calibration-draw.json").read_text()
+        write_json(work / "calibration-draw.json", {**json.loads(drawn), "set_sha256": "0" * 64})
+        with self.assertRaisesRegex(SystemExit, "calibration-draw.json was written for another calibration set; the draw records the hash of the set it wrote"):
+            draw(self.repo, work, "--rebuild-page")
+        (work / "calibration-draw.json").write_text(drawn)
+        name = "config-screening-inputs.jsonl"
+        inputs = (work / name).read_text()
+        first = next(r for r in self.sample["rows"] if r["stratum"] == "config")
+        rows = [json.loads(line) for line in inputs.splitlines()]
+        write_jsonl(work / name, [{**r, "readme": "changed"} if r["order_rank"] == first["order_rank"] else r for r in rows])
+        with self.assertRaisesRegex(SystemExit, rf"{first['id']}: {name} no longer holds the inputs the set pinned for rank {first['order_rank']}"):
+            draw(self.repo, work, "--rebuild-page")
+        (work / name).write_text(inputs)
+        repo = v4_repo()
+        (repo / CRITERIA).write_text((repo / CRITERIA).read_text() + "\nchanged\n")
+        with self.assertRaisesRegex(SystemExit, f"{CRITERIA} is not the criteria file calibration-set.json was drawn under"):
+            draw(repo, work, "--rebuild-page")
+        path = repo / "docs/prior-art/topics/demo.json"
+        write_json(path, {**json.loads(path.read_text()), "sweep": "261021-demo"})
+        with self.assertRaisesRegex(SystemExit, "calibration-set.json belongs to sweep 261020-demo, not 261021-demo"):
+            draw(repo, work, "--rebuild-page")
+        self.assertEqual((work / "calibration.html").read_text(), self.page)
 
     def test_the_topic_validator_accepts_an_eligibility_definition_only_as_vietnamese_and_english_texts(self):
         repo = v4_repo()

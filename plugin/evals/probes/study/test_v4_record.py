@@ -91,10 +91,18 @@ class V4RecordTest(unittest.TestCase):
                                                 rf"problem"):
             self.render(repo)
 
-    def test_the_calibration_section_states_the_labelling_page_highlight_pattern_list_sha256(self):
+    def test_the_calibration_section_states_per_batch_the_pattern_list_the_labels_were_saved_under(self):
         from study_calibration_set import highlight_sha256
-        self.assertIn(f"- labelling page: root listing entries matching a fixed path pattern list are highlighted (no AI), pattern list sha256 `{highlight_sha256()}`; "
-                      "a highlight is not a verdict, and a missing highlight does not mean no mechanism", section(self.text, "Calibration").splitlines())
+        from study_v4_record import highlight_line
+        calibration = section(self.text, "Calibration").splitlines()
+        self.assertIn("- calibration labelling page: labelled without highlighting; the saved labels carry no pattern list sha256", calibration)
+        self.assertFalse([line for line in calibration if "fixed path pattern list" in line])
+        current = highlight_sha256()
+        said = ("- calibration labelling page: root listing entries matching a fixed path pattern list were highlighted (no AI), pattern list sha256 `{}`; "
+                "a highlight is not a verdict, and a missing highlight does not mean no mechanism")
+        self.assertEqual(highlight_line("calibration", {"highlight_sha256": current}), said.format(current))
+        self.assertEqual(highlight_line("calibration", {"highlight_sha256": "0" * 64}), said.format("0" * 64) + f"; not the toolchain's current pattern list (sha256 `{current}`)")
+        self.assertEqual(highlight_line("top-up", {}), "- top-up labelling page: labelled without highlighting; the saved labels carry no pattern list sha256")
 
     def test_stage_1_states_the_frozen_ladder_the_rung_used_the_rungs_tried_and_the_audit_bounds(self):
         stage1 = section(self.text, "Stage 1")

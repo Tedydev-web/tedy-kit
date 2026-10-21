@@ -293,10 +293,18 @@ def batch_lines(topic, folder, strata):
             facets = {f: sum(drawn[r["id"]]["facet"] == f for r in rows) for f in facet_names(topic)}
             lines.append(f"- {batch} {stratum}: {len(rows)} rows ({sample['purpose']}), drawn per facet " + ", ".join(f"{f} {n}" for f, n in facets.items())
                          + f"; likely positives {sum(drawn[r['id']]['class'] != 'random' for r in rows)}; the user labelled {eligible} eligible")
+        lines.append(highlight_line(batch, labels))
     lines.append(f"- positives pooled over the batches the rung was chosen on: {pooled}")
-    lines.append(f"- labelling page: root listing entries matching a fixed path pattern list are highlighted (no AI), pattern list sha256 `{highlight_sha256()}`; "
-                 "a highlight is not a verdict, and a missing highlight does not mean no mechanism")
     return lines
+
+
+def highlight_line(batch, labels):
+    sha = labels.get("highlight_sha256")
+    if sha is None:
+        return f"- {batch} labelling page: labelled without highlighting; the saved labels carry no pattern list sha256"
+    line = (f"- {batch} labelling page: root listing entries matching a fixed path pattern list were highlighted (no AI), pattern list sha256 `{sha}`; "
+            "a highlight is not a verdict, and a missing highlight does not mean no mechanism")
+    return line if sha == highlight_sha256() else line + f"; not the toolchain's current pattern list (sha256 `{highlight_sha256()}`)"
 
 
 def sensitivity_text(s):

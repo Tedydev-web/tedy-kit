@@ -2,7 +2,7 @@ import json
 import sys
 from pathlib import Path
 
-from study_calibration_set import draw_batch, set_file
+from study_calibration_set import draw_batch, rebuild_page, set_file
 from study_fetch import Fetch, NetworkRefused
 from study_topic import TopicError, load_topic, saigon_today, topic_arguments
 
@@ -14,12 +14,23 @@ def main(argv=None, fetch=None):
                            (["--work"], {"required": True, "help": "the topic's working folder, holding the pool orders, the stage-1 inputs and the QGS candidates"}),
                            (["--criteria"], {"required": True, "help": "criteria file whose anchors the page shows, relative to the repository"}),
                            (["--top-up"], {"type": int, "help": "draw the top-up batch of this many enriched rows (30-40); refused unless a trigger fired"}),
+                           (["--rebuild-page"], {"nargs": "?", "const": "calibration", "metavar": "BATCH",
+                                                 "help": "rewrite only the labelling page of an already drawn batch (default calibration) from its set file and the inputs "
+                                                         "the set pinned; the set and draw files are read, never written"}),
                            (["--today"], {"default": saigon_today(), "help": "draw date, default today in Asia/Saigon; the calibration set is drawn on the date the sweep is named for"})).parse_args(argv)
+    if args.rebuild_page is not None and args.top_up is not None:
+        sys.exit("draw-calibration-set: --rebuild-page rewrites the page of a drawn batch; it takes no --top-up")
+    work = Path(args.work)
     try:
-        batch, text, provenance, page = draw_batch(load_topic(args.repo, args.topic), args.repo, args.work, args.criteria, fetch or Fetch(), args.top_up, args.today)
+        topic = load_topic(args.repo, args.topic)
+        if args.rebuild_page is not None:
+            page = rebuild_page(topic, args.repo, work, args.rebuild_page, args.criteria)
+            (work / f"{args.rebuild_page}.html").write_text(page)
+            print(f"rewrote {work / f'{args.rebuild_page}.html'} from {work / set_file(args.rebuild_page)}; the set and draw files are unchanged")
+            return
+        batch, text, provenance, page = draw_batch(topic, args.repo, work, args.criteria, fetch or Fetch(), args.top_up, args.today)
     except (TopicError, NetworkRefused) as error:
         sys.exit(f"draw-calibration-set: {error}")
-    work = Path(args.work)
     (work / set_file(batch)).write_text(text)
     (work / f"{batch}-draw.json").write_text(json.dumps(provenance, indent=1) + "\n")
     (work / f"{batch}.html").write_text(page)

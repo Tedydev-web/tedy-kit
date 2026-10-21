@@ -22,8 +22,7 @@ EXCLUDE_CODES = {"irrelevant": "không liên quan", "below-threshold": "dưới 
                  "aggregator": "danh sách tổng hợp"}
 RATINGS = (1, 0.5, 0)
 SET_FILE, DRAW_FILE, LABELS_FILE, PAGE_FILE = "calibration-set.json", "calibration-draw.json", "calibration-labels.json", "calibration.html"
-HIGHLIGHT_PATTERNS = (".github", "codeowners", ".husky", ".pre-commit-config.yaml", ".claude", ".claude-plugin", "hooks", "hooks.json", "settings.json", "skills", "skill.md",
-                      "agents.md", "claude.md", "*.schema.json", "schema", "schemas", ".eslintrc*", "eslint.config.*", "biome.json*", ".markdownlint*", "commitlint*",
+HIGHLIGHT_PATTERNS = (".github", "codeowners", ".husky", ".pre-commit-config.yaml", ".claude", ".claude-plugin", "hooks", "hooks.json", "settings.json", "skill.md", "agents.md", "claude.md", "*.schema.json", "schema", "schemas", ".eslintrc*", "eslint.config.*", "biome.json*", ".markdownlint*", "commitlint*",
                       ".commitlintrc*", "contributing*", "changelog*", "adr", "decisions", "migrations", "evals", "tests", "test", "renovate.json*", ".release*",
                       "release-please*")
 
@@ -34,6 +33,10 @@ def highlight_sha256():
 
 def highlighted(name):
     return any(fnmatch.fnmatchcase(name.lower(), p) for p in HIGHLIGHT_PATTERNS)
+
+
+def sha256_text(value):
+    return isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value) is not None
 
 
 def set_file(batch):
@@ -200,6 +203,8 @@ def labelled(folder, batches=("calibration",)):
         labels = json.loads(path.read_text())
         if labels.get("set_sha256") != hashlib.sha256((Path(folder) / set_file(batch)).read_bytes()).hexdigest():
             raise TopicError(f"{path.name} was imported for another {batch} set; import the labels again")
+        if "highlight_sha256" in labels and not sha256_text(labels["highlight_sha256"]):
+            raise TopicError(f"{path.name} holds highlight_sha256 {labels['highlight_sha256']!r}, not a sha256 of 64 lowercase hex characters")
         freeze = Path(folder) / FREEZE_FILE
         if not freeze.is_file() or labels.get("stage1_freeze_sha256") != hashlib.sha256(freeze.read_bytes()).hexdigest():
             raise TopicError(f"{path.name} was not imported under the current {FREEZE_FILE}; the ladder is frozen before any label is read")
@@ -310,6 +315,34 @@ def draw_batch(topic, repo, work, criteria, fetch, top_up=None, today=None):
     return batch, text, draw, page(topic, batch, set_sha, shown, anchor)
 
 
+def rebuild_page(topic, repo, work, batch, criteria):
+    work = Path(work)
+    if batch not in BATCHES[:2] and not HELD_OUT.match(batch):
+        raise TopicError(f"batch {batch!r} is not calibration, top-up or a held-out batch")
+    path = work / set_file(batch)
+    if not path.is_file():
+        raise TopicError(f"no {path.name} in {work}; a page is rebuilt only for a drawn batch")
+    set_sha = hashlib.sha256(path.read_bytes()).hexdigest()
+    draw_path = work / f"{batch}-draw.json"
+    if not draw_path.is_file() or json.loads(draw_path.read_text()).get("set_sha256") != set_sha:
+        raise TopicError(f"{draw_path.name} was written for another {batch} set; the draw records the hash of the set it wrote")
+    sample = json.loads(path.read_text())
+    if sample.get("sweep") != topic["sweep"]:
+        raise TopicError(f"{path.name} belongs to sweep {sample.get('sweep')}, not {topic['sweep']}")
+    criteria_path = Path(repo) / criteria
+    if criteria != sample.get("criteria") or not criteria_path.is_file() or hashlib.sha256(criteria_path.read_bytes()).hexdigest() != sample.get("criteria_sha256"):
+        raise TopicError(f"{criteria} is not the criteria file {path.name} was drawn under ({sample.get('criteria')}, sha256 {str(sample.get('criteria_sha256'))[:16]})")
+    inputs = {s: {r["order_rank"]: r for r in read_jsonl(work, inputs_file(work, s).name)} for s in sample["rows_per_stratum"]}
+    shown = []
+    for row in sample["rows"]:
+        held = inputs[row["stratum"]].get(row["order_rank"])
+        if held is None or canonical_sha256(held) != row["inputs_sha256"]:
+            raise TopicError(f"{row['id']}: {inputs_file(work, row['stratum']).name} no longer holds the inputs the set pinned for rank {row['order_rank']}; "
+                             "the page shows exactly the inputs every judge reads")
+        shown.append((row["id"], row["stratum"], held))
+    return page(topic, batch, set_sha, shown, anchors(criteria_path.read_text()))
+
+
 def pre(value):
     return f"<pre>{html.escape(value if isinstance(value, str) else json.dumps(value, indent=1, ensure_ascii=False))}</pre>"
 
@@ -392,7 +425,7 @@ SCRIPT = """(() => {
     save();
   });
   document.getElementById("download").addEventListener("click", () => {
-    const blob = new Blob([JSON.stringify({ sweep: SWEEP, batch: BATCH, set_sha256: SET, labels }, null, 1)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify({ sweep: SWEEP, batch: BATCH, set_sha256: SET, highlight_sha256: document.body.dataset.highlight, labels }, null, 1)], { type: "application/json" });
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = BATCH + "-labels-" + SWEEP + ".json";
@@ -448,7 +481,7 @@ def page(topic, batch, set_sha, shown, anchor):
     return "\n".join(['<!DOCTYPE html>', '<html lang="vi">', "<head>", '<meta charset="utf-8">',
                       "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'\">",
                       f"<title>{TITLES[batch]} {html.escape(topic['sweep'])}</title>", f"<style>{STYLE}</style>", "</head>",
-                      f'<body data-set="{set_sha}" data-sweep="{html.escape(topic["sweep"])}" data-batch="{batch}">',
+                      f'<body data-set="{set_sha}" data-sweep="{html.escape(topic["sweep"])}" data-batch="{batch}" data-highlight="{sha}">',
                       f"<header><h1>{TITLES[batch]} · {html.escape(topic['sweep'])}</h1><p>{html.escape(note)}</p><p>{html.escape(intro)}</p>"
                       "<p id=\"progress\"></p>",
                       '<button id="download" type="button">Tải nhãn về (JSON)</button> <label>Mở file nhãn đã lưu <input id="restore" type="file" accept="application/json"></label></header>',
@@ -496,12 +529,16 @@ def import_labels(topic, work, saved, batch="calibration"):
     labels = saved.get("labels")
     if not isinstance(labels, dict):
         raise TopicError("the labels file holds no labels object")
+    highlight = {"highlight_sha256": saved["highlight_sha256"]} if "highlight_sha256" in saved else {}
+    if highlight and not sha256_text(highlight["highlight_sha256"]):
+        raise TopicError(f"the labels file's highlight_sha256 {highlight['highlight_sha256']!r} is not a sha256 of 64 lowercase hex characters")
     unknown = sorted(set(labels) - {r["id"] for r in sample["rows"]})
     if unknown:
         raise TopicError(f"the labels file names rows the set does not hold: {unknown[:10]}")
     kept = {key: checked_label(key, value, topic.get("problems") or []) for key, value in labels.items()}
     rows = [{**{k: r[k] for k in ("id", "stratum", "order_rank", "repo", "inputs_sha256", "qgs_sha256")}, "user": kept.get(r["id"])} for r in sample["rows"]]
     complete = sum(1 for r in rows if r["user"] and all(f in r["user"] for f in FIELDS))
-    out = {"batch": batch, "set_sha256": set_sha, "stage1_freeze_sha256": hashlib.sha256((work / FREEZE_FILE).read_bytes()).hexdigest(), "complete": complete, "rows": rows}
+    out = {"batch": batch, "set_sha256": set_sha, "stage1_freeze_sha256": hashlib.sha256((work / FREEZE_FILE).read_bytes()).hexdigest(), **highlight,
+           "complete": complete, "rows": rows}
     (work / labels_file(batch)).write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n")
     return complete, len(rows)
