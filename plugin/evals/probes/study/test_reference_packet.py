@@ -120,6 +120,52 @@ class ReferencePacketTest(unittest.TestCase):
         self.assertEqual([(a["path"], len(a["text"])) for a in row["assets"]], [(f"agents/a{i}.md", 6000) for i in range(10)])
         self.assertNotIn("assets", " ".join(row["truncated"]))
 
+    def crowded_tree(self, commands):
+        assets = {f"zz/skills/s{i:02}/SKILL.md": "s" * 6000 for i in range(10)}
+        tests = {f"tests/test_{i:02}.py": "t\n" for i in range(10)}
+        files = ["README.md", "CHANGELOG.md", "package.json", *assets, *tests, *(f".claude/commands/c{i:04}.md" for i in range(commands))]
+        dirs = {"/".join(p.split("/")[:n]) for p in files for n in range(1, p.count("/") + 1)}
+        self.tree("o/one", sorted([*files, *dirs]))
+        return assets, tests, dirs
+
+    def assert_every_shown_path_is_in_the_tree(self, row, dirs):
+        shown = [x["path"] for part in ("assets", "tests", "manifests") for x in row[part]]
+        self.assertEqual((len(row["assets"]), len(row["tests"]), [m["path"] for m in row["manifests"]]), (10, 10, ["package.json"]))
+        self.assertEqual([p for p in shown + ["README.md", "CHANGELOG.md"] if p not in row["tree"]], [])
+        self.assertEqual(sorted(d for d in dirs if any(p.startswith(d + "/") for p in shown) and d not in row["tree"]), [])
+        self.assertEqual(row["truncated"]["tree"]["after"], row_size(row["tree"]))
+
+    def test_the_byte_cap_trim_keeps_every_shown_path_and_its_listed_folders(self):
+        assets, tests, dirs = self.crowded_tree(400)
+        self.build(FakeFetch(self.files("o/one", {"README.md": "r" * 40000, "CHANGELOG.md": "c", "package.json": "{}", **assets, **tests})))
+        row = self.rows()[7]
+        self.assert_every_shown_path_is_in_the_tree(row, dirs)
+        self.assertEqual(len(row["tree"]), 100)
+        self.assertEqual(row["tree"][:64], [".claude/commands", *(f".claude/commands/c{i:04}.md" for i in range(63))])
+        self.assertLessEqual(row_size(row), ROW_CAP)
+
+    def test_the_tree_path_limit_keeps_every_shown_path_without_a_byte_trim(self):
+        assets, tests, dirs = self.crowded_tree(1600)
+        self.build(FakeFetch(self.files("o/one", {"README.md": "short", "CHANGELOG.md": "c", "package.json": "{}", **{p: "s" for p in assets}, **tests})))
+        row = self.rows()[7]
+        self.assert_every_shown_path_is_in_the_tree(row, dirs)
+        self.assertEqual(len(row["tree"]), 1500)
+        self.assertEqual(text_size(row["readme"]), 5)
+
+    def test_shown_paths_over_the_budget_are_all_kept(self):
+        assets = {f"skills/s{i}/SKILL.md": "x" * 7000 for i in range(10)}
+        deep = "/".join(f"l{n:02}" for n in range(12))
+        tests = {f"p{i}/{deep}/tests/test_{i}.py": "t" for i in range(10)}
+        files = ["README.md", *assets, *tests, *(f"src/f{i:05}.py" for i in range(3000))]
+        dirs = {"/".join(p.split("/")[:n]) for p in files for n in range(1, p.count("/") + 1)}
+        self.tree("o/one", sorted([*files, *dirs]))
+        self.build(FakeFetch(self.files("o/one", {"README.md": "r" * 40000, **assets, **tests})))
+        row = self.rows()[7]
+        shown = {"README.md", *assets, *tests, *(d for d in dirs if any(p.startswith(d + "/") for p in [*assets, *tests]))}
+        self.assertGreater(len(shown), 100)
+        self.assertEqual(set(row["tree"]), shown)
+        self.assertLessEqual(row_size(row), ROW_CAP)
+
     def test_the_worst_case_stays_within_the_cap(self):
         nasty = ("x" * 60 + '"\\é\n') * 400
         assets = {f"skills/s{i:02}/SKILL.md": nasty for i in range(12)}

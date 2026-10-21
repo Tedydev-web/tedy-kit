@@ -122,6 +122,15 @@ def tree_order(paths):
     return sorted(paths, key=lambda p: 0 if ASSET.search(p) else 1 if tested(p) or documented(p) else 2)
 
 
+def shown_paths(paths, files):
+    return {"/".join(parts[:i]) for parts in (p.split("/") for p in files) for i in range(1, len(parts) + 1)} & set(paths)
+
+
+def kept_tree(ordered, shown, budget):
+    kept = shown | set([p for p in ordered if p not in shown][:max(0, budget - len(shown))])
+    return [p for p in ordered if p in kept]
+
+
 def released(evidence):
     counts = [(evidence.get(k) or {}).get("count") for k in ("releases", "tags")]
     return any(c not in (None, 0) for c in counts) or any(isinstance(p, dict) and bool(p.get("published")) for p in (evidence.get("package") or {}).values())
@@ -167,14 +176,16 @@ def reference_row(fetch, work, held, sha):
     changelog = read("changelog", changelog_path, CHANGELOG_BYTES) if changelog_path else None
     manifests = listed("manifests", [m for m in MANIFESTS if m in set(files)][:MANIFEST_FILES], MANIFEST_BYTES)
     ordered = tree_order(paths)
-    if len(ordered) > TREE_PATHS:
-        truncated["tree"] = {"before": size(ordered), "after": size(ordered[:TREE_PATHS])}
+    shown = shown_paths(paths, [p for p in (readme_path, changelog_path, *(x["path"] for x in assets + tests + manifests)) if p])
+    tree = kept_tree(ordered, shown, TREE_PATHS)
+    if len(tree) < len(ordered):
+        truncated["tree"] = {"before": size(ordered), "after": size(tree)}
     cues = [f"{path}:{line}"[:CUE_CHARS] for path in (readme_path, *(m["path"] for m in manifests)) if path in full for line in cue_lines(full[path], OBJECTIVITY_CUES)]
-    row = {**{k: held[k] for k in ("order_rank", "repo", "sha", "facts", "evidence")}, "readme": readme or "", "tree": ordered[:TREE_PATHS], "assets": assets,
+    row = {**{k: held[k] for k in ("order_rank", "repo", "sha", "facts", "evidence")}, "readme": readme or "", "tree": tree, "assets": assets,
            "tests": tests, "changelog": changelog, "manifests": manifests,
            "prefilled": {"released": released(held["evidence"]), "changelog": changelog_path, "paid_tier_cues": cues}, "truncated": truncated,
            **({"missing": missing} if missing else {})}
-    return capped(row, where)
+    return capped(row, where, shown)
 
 
 def cut(row, part, value, measure):
@@ -183,17 +194,18 @@ def cut(row, part, value, measure):
     row["truncated"][part] = {"before": before, "after": measure(value)}
 
 
-def capped(row, where):
+def capped(row, where, shown):
     trimmed = False
-    if size(row) > ROW_CAP and len(row["tree"]) > TRIMMED_TREE:
-        cut(row, "tree", row["tree"][:TRIMMED_TREE], size)
+    tree = kept_tree(row["tree"], shown, TRIMMED_TREE) if size(row) > ROW_CAP else row["tree"]
+    if len(tree) < len(row["tree"]):
+        cut(row, "tree", tree, size)
         trimmed = True
     if size(row) > ROW_CAP and text_size(row["readme"]) > TRIMMED_README:
         cut(row, "readme", clip(row["readme"], TRIMMED_README), text_size)
         trimmed = True
     if size(row) > ROW_CAP:
-        raise TopicError(f"{where}: {size(row)} bytes, over the {ROW_CAP}-byte cap after both trims (tree to {TRIMMED_TREE} paths, README to {TRIMMED_README} bytes); "
-                         "asset files are never trimmed")
+        raise TopicError(f"{where}: {size(row)} bytes, over the {ROW_CAP}-byte cap after both trims (tree to {TRIMMED_TREE} paths plus every path the row shows, README "
+                         f"to {TRIMMED_README} bytes); asset files are never trimmed")
     return row, trimmed
 
 
