@@ -428,3 +428,14 @@ test("a heredoc inside $(…) does not hide the commands after the substitution"
   assert.equal(verdict(`echo "$(${PUSH})"`), "ask");
   assert.equal(verdict(`x=$(cat <<EOF\n${PUSH}\nEOF\n)`), "allow");
 });
+
+test("honest: a script path whose file name is literal runs as on main, even under a variable directory (round 4 R4-1)", () => {
+  const allowed = ["P=/k/plugin; node $P/scripts/project-map.mjs resolve x", "node \"$P/scripts/project-map.mjs\" resolve /w", "python3 \"$T/x.py\" post", "node ${ROOT}/scripts/profile.mjs doctor"];
+  assert.deepEqual(allowed.filter((command) => verdict(command) !== "allow"), []);
+  assert.equal(hook(...shell("P=/k/plugin\nnode $P/scripts/project-map.mjs resolve x")), "allow");
+  refusedToRewrite(["node $GW reply 7 PRRT_1", "node $P/$S reply 7"]);
+  const settingsFile = join(tempDir("tedy-settings-"), "settings.json");
+  writeFileSync(settingsFile, JSON.stringify({ permissions: { ask: [] } }));
+  assert.equal(evaluate("node $P/github-write.mjs reply 7 PRRT_1", "/w", { settingsFile }).ask, true);
+  assert.equal(hook(...shell("node $P/github-write.mjs reply 7 PRRT_1")), "deny");
+});

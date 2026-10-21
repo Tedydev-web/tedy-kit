@@ -58,5 +58,5 @@ export function readsUnreadableCode(program, args, piped) {
 
 export function variableScriptArguments(program, args) {
   const { script, index } = scriptOperand(program, args);
-  return script !== undefined && EXPANSION.test(script) ? args.slice(index + 1) : null;
+  return script !== undefined && EXPANSION.test(script.split("/").at(-1)) ? args.slice(index + 1) : null;
 }
