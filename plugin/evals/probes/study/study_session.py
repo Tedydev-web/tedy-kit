@@ -1,4 +1,5 @@
 import bisect
+import contextlib
 import fcntl
 import hashlib
 import json
@@ -11,7 +12,7 @@ from pathlib import Path
 from study_screening_core import read_jsonl
 from study_screening_input import inputs_file, repo_level
 from study_session_prompt import (QGS_TEMPLATE_SHA256, REFERENCE_TEMPLATE_SHA256, STAGE1_TEMPLATE_SHA256, build_prompt, build_qgs_prompt, build_reference_prompt,
-                                  build_stage1_prompt, criteria_version, template_sha256, with_computed_date)
+                                  build_stage1_prompt, criteria_version, reference_prompt_parts, template_sha256, with_computed_date)
 from study_session_reply import parse_qgs_reply, parse_reference_reply, parse_reply, reply_body, reply_text
 from study_topic import TopicError
 
@@ -22,6 +23,7 @@ NO_BARE_THREAT = "plugin hooks not excluded (no --bare)"
 AGY_THREAT = "agy MCP servers, hooks and user settings not excluded"
 CLAUDE_ISOLATION = ("--tools", "", "--setting-sources", "", "--strict-mcp-config", "--no-session-persistence", "--disable-slash-commands", "--max-turns", "1")
 AGY_ISOLATION = ("--disable-slash-commands",)
+CACHED_PREFIX = ("--exclude-dynamic-system-prompt-sections", "--append-system-prompt")
 SESSION_FIELDS = ("cli", "model", "effort", "isolation", "served")
 LEDGER = "claude-spend-ledger.jsonl"
 
@@ -46,23 +48,29 @@ def claude_flags(bare):
     return ("--bare", *CLAUDE_ISOLATION) if bare else CLAUDE_ISOLATION
 
 
-def isolation(cli, bare):
-    flags = claude_flags(bare) if cli == "claude" else AGY_ISOLATION
-    return " ".join(f or "''" for f in flags) + "; empty temporary working folder; stdin closed"
+def isolation(cli, bare, shared=False):
+    flags = (*claude_flags(bare), *((*CACHED_PREFIX, "<everything before the first row>") if shared else ())) if cli == "claude" else AGY_ISOLATION
+    folder = "a fixed empty working folder per session key, emptied before each call" if shared else "empty temporary working folder"
+    return " ".join(f or "''" for f in flags) + f"; {folder}; stdin closed"
 
 
-def session_command(option, prompt, bare):
+def session_command(option, prompt, bare, system=None):
     if option["cli"] == "claude":
         effort = ["--effort", option["effort"]] if option.get("effort") else []
-        return ["claude", "-p", "--model", option["model"], *effort, "--output-format", "json", *claude_flags(bare), "--", prompt]
+        cached = [*CACHED_PREFIX, system] if system is not None else []
+        return ["claude", "-p", "--model", option["model"], *effort, "--output-format", "json", *claude_flags(bare), *cached, "--", prompt]
     return ["agy", "--model", option["model"], "--output-format", "stream-json", "--print-timeout", AGY_TIMEOUT, *AGY_ISOLATION, "--print", prompt]
 
 
-def session_header(option, bare):
+def session_header(option, bare, shared=False):
     effort = option.get("effort") or ("default" if option["cli"] == "claude" else "set by the model id")
     served = "modelUsage must name only the requested model" if option["cli"] == "claude" else "requested only: agy reports no served model"
     threats = [] if option["cli"] == "claude" else [AGY_THREAT]
-    return {"cli": option["cli"], "model": option["model"], "effort": effort, "isolation": isolation(option["cli"], bare), "served": served, "threats": threats}
+    return {"cli": option["cli"], "model": option["model"], "effort": effort, "isolation": isolation(option["cli"], bare, shared), "served": served, "threats": threats}
+
+
+def session_folder(work, key):
+    return Path(tempfile.gettempdir()) / f"study-session-{sha256_bytes(f'{Path(work).resolve()}:{key}'.encode())[:16]}"
 
 
 def update_sessions(work, change, undo=None):
@@ -126,7 +134,7 @@ def add_block(sessions, key, header, block):
 
 
 def record_refusal(job, rank, reason):
-    header = session_header(job["option"], job["bare"])
+    header = session_header(job["option"], job["bare"], job.get("kind") == "reference")
 
     def change(sessions):
         check_header(sessions, job["key"], header, [])
@@ -136,13 +144,33 @@ def record_refusal(job, rank, reason):
     update_sessions(job["work"], change)
 
 
-def call_isolated(fetch, cmd):
-    cwd = Path(tempfile.mkdtemp(prefix="screening-session-"))
-    try:
+@contextlib.contextmanager
+def working_folder(folder):
+    if folder is None:
+        cwd = Path(tempfile.mkdtemp(prefix="screening-session-"))
+        try:
+            yield cwd
+        finally:
+            shutil.rmtree(cwd)
+        return
+    with open(folder.with_name(folder.name + ".lock"), "w") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise TopicError(f"another session holds {folder}; one session key runs one call at a time") from None
+        if folder.exists():
+            shutil.rmtree(folder)
+        folder.mkdir()
+        try:
+            yield folder
+        finally:
+            shutil.rmtree(folder)
+
+
+def call_isolated(fetch, cmd, folder=None):
+    with working_folder(folder) as cwd:
         out, status, _ = fetch.run(cmd, timeout=1800, cwd=str(cwd))
         left = sorted(p.name for p in cwd.iterdir())
-    finally:
-        shutil.rmtree(cwd)
     if left:
         raise TopicError(f"the session wrote {left} into its empty working folder; a screening session has no tools")
     return out, status
@@ -249,7 +277,8 @@ def run_block(job, fetch):
     if status != "ok":
         raise TopicError(f"{option['cli']} --version: {status}")
     cli_version = version.strip().splitlines()[0] if version.strip() else "unknown"
-    header = session_header(option, job["bare"])
+    reference = kind == "reference"
+    header = session_header(option, job["bare"], reference)
     update_sessions(work, lambda sessions: check_header(sessions, job["key"], header, list(expected)))
     if job.get("pilot"):
         snapshot = work / f"screening-packet-{stratum}-pilot-{hashes['packet_sha256'][:12]}.md"
@@ -264,9 +293,10 @@ def run_block(job, fetch):
     prompts.mkdir(exist_ok=True)
     stem = f"{name}-{first}-{last}"
     (prompts / f"{stem}.md").write_text(prompt)
-    lists = kind == "reference" and option["cli"] == "agy"
+    lists = reference and option["cli"] == "agy"
     before = agy_lists(fetch) if lists else None
-    out, status = call_isolated(fetch, session_command(option, prompt, job["bare"]))
+    system, own = reference_prompt_parts(packet.read_text(), job.get("notes") or [], list(expected.values())) if reference and option["cli"] == "claude" else (None, prompt)
+    out, status = call_isolated(fetch, session_command(option, own, job["bare"], system), session_folder(work, job["key"]) if reference else None)
     after = agy_lists(fetch) if lists else None
 
     def refusal(reason):

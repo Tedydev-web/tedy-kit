@@ -1,3 +1,4 @@
+import fcntl
 import hashlib
 import json
 import re
@@ -9,8 +10,8 @@ from pathlib import Path
 from study_calibration_set import EXCLUDE_CODES, LABELLED
 from study_fixtures import FakeFetch, script, topic_repo, write_json, write_jsonl
 from study_reference_labels import cite_holds
-from study_session import MAX_PROMPT, canonical_sha256
-from study_session_prompt import REFERENCE_REPLY_FORMAT, REFERENCE_ROWS_NOTE, REFERENCE_TEMPLATE_SHA256, build_reference_prompt
+from study_session import MAX_PROMPT, canonical_sha256, session_folder
+from study_session_prompt import REFERENCE_REPLY_FORMAT, REFERENCE_ROWS_NOTE, REFERENCE_TEMPLATE_SHA256, build_reference_prompt, reference_prompt_parts
 from study_session_reply import REFERENCE_CODES, REFERENCE_CRITERIA, parse_reference_reply
 from study_stage1 import LADDER
 from study_topic import TopicError, flaggers, load_topic, reference_option
@@ -43,6 +44,18 @@ def fable(text, models=("claude-fable-5-1",), turns=1, denials=(), cost=0.42):
 
 def needle(rank):
     return f'"order_rank": {rank}, "repo"'
+
+
+class Recorder(FakeFetch):
+    def __init__(self, rules=()):
+        super().__init__(rules)
+        self.argvs, self.folders = [], []
+
+    def run(self, cmd, timeout=180, cwd=None):
+        if cwd:
+            self.argvs.append(list(cmd))
+            self.folders.append((cwd, sorted(p.name for p in Path(cwd).iterdir())))
+        return super().run(cmd, timeout, cwd)
 
 
 class ReferenceBase(unittest.TestCase):
@@ -119,6 +132,17 @@ class ReferencePromptTest(unittest.TestCase):
         size = len(build_reference_prompt("b" * 10_960, notes, [row]).encode())
         self.assertLess(size, MAX_PROMPT)
         self.assertLess(size, 131_072)
+        shared, own = reference_prompt_parts("b" * 10_960, notes, [row])
+        self.assertEqual(len(shared.encode()) + 2 + len(own.encode()), size)
+        self.assertLess(max(len(shared.encode()), len(own.encode())), 131_072)
+
+    def test_the_shared_part_is_everything_before_the_first_row_and_the_parts_join_to_the_prompt(self):
+        notes = [{"line": 120, "quote": "A paid tier alone is not a vendor stance.", "criterion": "Objectivity", "cue": "objectivity:paid"}]
+        for rows in ([{"order_rank": 1, "repo": "o/one"}], [{"order_rank": 2, "repo": "o/two", "readme": "other"}]):
+            shared, own = reference_prompt_parts("# bundle\n", notes, rows)
+            self.assertEqual(shared + "\n\n" + own, build_reference_prompt("# bundle\n", notes, rows))
+            self.assertEqual(shared, "# bundle\n\n## Rubric notes\n\n- line 120 (Objectivity): A paid tier alone is not a vendor stance.\n\n## Rows\n\n" + REFERENCE_ROWS_NOTE)
+            self.assertEqual(own, "```json\n" + json.dumps(rows[0]) + "\n```\n\n" + REFERENCE_REPLY_FORMAT + "\n")
 
     def test_the_template_sha_is_pinned_and_the_format_names_every_code_and_criterion(self):
         self.assertEqual(REFERENCE_TEMPLATE_SHA256, hashlib.sha256((REFERENCE_ROWS_NOTE + "\n\n" + REFERENCE_REPLY_FORMAT).encode()).hexdigest())
@@ -313,6 +337,38 @@ class ReferenceRunTest(ReferenceBase):
         self.assertIn("wrote ['notes.txt']", self.refused(Writer([("claude -p", fable(label(1, "o/one")))]), "--rows", "1-1"))
         self.nothing_written()
 
+    def test_two_rows_send_a_byte_identical_system_part_from_one_fixed_empty_folder(self):
+        folder = session_folder(self.work, "reference-calibration-config")
+        folder.mkdir(exist_ok=True)
+        (folder / "stale.txt").write_text("left by a killed run")
+        self.addCleanup(shutil.rmtree, folder, True)
+        fetch = Recorder([(needle(1), fable(label(1, "o/one"))), (needle(2), fable(label(2, "o/two")))])
+        self.judge(fetch)
+        first, second = fetch.argvs
+        head = first[:first.index("--")]
+        self.assertEqual(head, second[:second.index("--")])
+        inputs = [json.loads(line) for line in (self.work / "reference-inputs-config.jsonl").read_text().splitlines()]
+        bundle = (self.work / "reference-bundle.md").read_text()
+        shared = reference_prompt_parts(bundle, [], inputs[:1])[0]
+        self.assertEqual(shared, reference_prompt_parts(bundle, [], inputs[1:])[0])
+        self.assertEqual(head[-3:], ["--exclude-dynamic-system-prompt-sections", "--append-system-prompt", shared])
+        self.assertEqual([first[-1], second[-1]], [reference_prompt_parts(bundle, [], [row])[1] for row in inputs])
+        self.assertEqual((self.work / "prompts/reference-calibration-config-1-1.md").read_text(), shared + "\n\n" + first[-1])
+        self.assertEqual(fetch.folders, [(str(folder), [])] * 2)
+        self.assertFalse(folder.exists())
+        isolation = self.sessions()["reference-calibration-config"]["isolation"]
+        self.assertIn("--max-turns 1 --exclude-dynamic-system-prompt-sections --append-system-prompt <everything before the first row>; "
+                      "a fixed empty working folder per session key, emptied before each call; stdin closed", isolation)
+
+    def test_a_second_run_of_the_same_key_is_refused_while_the_first_holds_the_folder(self):
+        folder = session_folder(self.work, "reference-calibration-config")
+        with open(folder.with_name(folder.name + ".lock"), "w") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            fetch = FakeFetch([("claude -p", fable(label(1, "o/one")))])
+            self.assertIn(f"another session holds {folder}", self.refused(fetch, "--rows", "1-1"))
+        self.assertEqual(fetch.called("claude -p"), [])
+        self.nothing_written()
+
     def test_a_malformed_row_is_kept_in_prompts_and_refused(self):
         bad = label(1, "o/one", decision="excluded: vendor")
         message = self.refused(FakeFetch([("claude -p", fable(bad))]), "--rows", "1-1")
@@ -353,13 +409,16 @@ class FlaggerRunTest(ReferenceBase):
         return [("agy mcp list", MCP_LIST), ("agy plugin list", PLUGIN_LIST)]
 
     def test_a_flagger_labels_blind_through_agy_and_records_its_agy_lists(self):
-        fetch = FakeFetch([*self.lists(), (needle(1), agy_reply(label(1, "o/one"))), (needle(2), agy_reply(label(2, "o/two")))])
+        fetch = Recorder([*self.lists(), (needle(1), agy_reply(label(1, "o/one"))), (needle(2), agy_reply(label(2, "o/two")))])
         self.judge(fetch, "--model", "gemini-3.8-flash-high", judge="flagger")
         name = "reference-calibration-config-flagger-gemini-3.8-flash-high"
         self.assertEqual([r["order_rank"] for r in self.rows(name)], [1, 2])
         [call] = [c for c in fetch.called("agy --model") if needle(1) in c]
         self.assertTrue(call.startswith("agy --model gemini-3.8-flash-high --output-format stream-json "))
-        self.assertIn("# anchors bundle", call)
+        self.assertTrue(fetch.argvs[0][-1].startswith("# anchors bundle"))
+        self.assertNotIn("--append-system-prompt", fetch.argvs[0])
+        self.assertEqual(fetch.folders, [(str(session_folder(self.work, name)), [])] * 2)
+        self.assertIn("a fixed empty working folder per session key, emptied before each call", self.sessions()[name]["isolation"])
         snapshot = {"mcp_sha256": hashlib.sha256(MCP_LIST.encode()).hexdigest(), "plugins_sha256": hashlib.sha256(PLUGIN_LIST.encode()).hexdigest(),
                     "context_mode_enabled": True, "ponytail_enabled": True}
         entry = self.sessions()[name]

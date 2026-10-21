@@ -108,10 +108,14 @@ def build_stage1_prompt(packet, worked, rows):
     return "\n\n".join([packet.rstrip(), "## Worked examples", worked, "## Rows", STAGE1_ROWS_NOTE, *blocks, STAGE1_REPLY_FORMAT]) + "\n"
 
 
-def build_reference_prompt(bundle, notes, rows):
+def reference_prompt_parts(bundle, notes, rows):
     blocks = ["```json\n" + json.dumps(r, ensure_ascii=False) + "\n```" for r in rows]
     noted = ["## Rubric notes", "\n".join(f"- line {n['line']} ({n['criterion']}): {n['quote']}" for n in notes)] if notes else []
-    return "\n\n".join([bundle.rstrip(), *noted, "## Rows", REFERENCE_ROWS_NOTE, *blocks, REFERENCE_REPLY_FORMAT]) + "\n"
+    return "\n\n".join([bundle.rstrip(), *noted, "## Rows", REFERENCE_ROWS_NOTE]), "\n\n".join([*blocks, REFERENCE_REPLY_FORMAT]) + "\n"
+
+
+def build_reference_prompt(bundle, notes, rows):
+    return "\n\n".join(reference_prompt_parts(bundle, notes, rows))
 
 
 def build_qgs_prompt(packet, rows):
