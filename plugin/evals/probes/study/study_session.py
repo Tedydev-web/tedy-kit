@@ -145,15 +145,16 @@ def record_refusal(job, rank, reason):
 
 
 @contextlib.contextmanager
-def working_folder(folder):
-    if folder is None:
+def working_folder(work=None, key=None):
+    if key is None:
         cwd = Path(tempfile.mkdtemp(prefix="screening-session-"))
         try:
             yield cwd
         finally:
             shutil.rmtree(cwd)
         return
-    with open(folder.with_name(folder.name + ".lock"), "w") as lock:
+    folder = session_folder(work, key)
+    with open(Path(work) / f"{key}.session.lock", "w") as lock:
         try:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
@@ -167,8 +168,8 @@ def working_folder(folder):
             shutil.rmtree(folder)
 
 
-def call_isolated(fetch, cmd, folder=None):
-    with working_folder(folder) as cwd:
+def call_isolated(fetch, cmd, work=None, key=None):
+    with working_folder(work, key) as cwd:
         out, status, _ = fetch.run(cmd, timeout=1800, cwd=str(cwd))
         left = sorted(p.name for p in cwd.iterdir())
     return out, status, left
@@ -294,7 +295,7 @@ def run_block(job, fetch):
     lists = reference and option["cli"] == "agy"
     before = agy_lists(fetch) if lists else None
     system, own = reference_prompt_parts(packet.read_text(), job.get("notes") or [], list(expected.values())) if reference and option["cli"] == "claude" else (None, prompt)
-    out, status, left = call_isolated(fetch, session_command(option, own, job["bare"], system), session_folder(work, job["key"]) if reference else None)
+    out, status, left = call_isolated(fetch, session_command(option, own, job["bare"], system), *((work, job["key"]) if reference else ()))
 
     def spend(reason=None):
         if reference:

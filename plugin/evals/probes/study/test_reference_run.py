@@ -378,7 +378,7 @@ class ReferenceRunTest(ReferenceBase):
 
     def test_a_second_run_of_the_same_key_is_refused_while_the_first_holds_the_folder(self):
         folder = session_folder(self.work, "reference-calibration-config")
-        with open(folder.with_name(folder.name + ".lock"), "w") as lock:
+        with open(self.work / "reference-calibration-config.session.lock", "w") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             fetch = FakeFetch([("claude -p", fable(label(1, "o/one")))])
             self.assertIn(f"another session holds {folder}", self.refused(fetch, "--rows", "1-1"))
