@@ -9,7 +9,7 @@ from pathlib import Path
 
 from study_calibration_set import pinned_inputs
 from study_fixtures import FakeFetch, script, write_json, write_jsonl
-from study_reference_flags import agy_window, differs, flagger_key
+from study_reference_flags import agy_window, differs, flagger_key, rubric_criteria
 from study_session import canonical_sha256, session_header
 from study_stage1 import LADDER
 from study_topic import TopicError, flaggers, load_topic
@@ -51,6 +51,14 @@ class FlagRuleTest(unittest.TestCase):
     def test_an_eligibility_difference_flags(self):
         self.assertEqual(differs(scored(), scored(decision="excluded: below-threshold")), ["eligibility"])
         self.assertEqual(differs(scored(decision="excluded: irrelevant"), scored(decision="excluded: below-threshold")), [])
+
+    def test_rubric_criteria_fold_problems_into_relevance_and_name_a_lone_eligibility_difference_the_decision(self):
+        self.assertEqual(rubric_criteria(["problems"]), ["Relevance"])
+        self.assertEqual(rubric_criteria(["eligibility", "problems", "Relevance"]), ["Relevance"])
+        self.assertEqual(rubric_criteria(["eligibility", "Authority"]), ["Authority"])
+        self.assertEqual(rubric_criteria(["eligibility"]), ["decision"])
+        self.assertEqual(rubric_criteria(["Position", "Authority"]), ["Authority", "Position"])
+        self.assertEqual(rubric_criteria([]), [])
 
 
 class FlaggerTopicTest(ReferenceBase):
@@ -270,7 +278,7 @@ class FlagsFileTest(unittest.TestCase):
         self.assertEqual(flags["batch"], "calibration")
         self.assertEqual(flags["set_sha256"], hashlib.sha256((work / "calibration-set.json").read_bytes()).hexdigest())
         self.assertEqual(flags["routed"], True)
-        self.assertEqual(flags["rubric_rows"], [{"id": r["id"], "stratum": r["stratum"], "order_rank": r["order_rank"], "criteria": ["problems"]}
+        self.assertEqual(flags["rubric_rows"], [{"id": r["id"], "stratum": r["stratum"], "order_rank": r["order_rank"], "criteria": ["Relevance"]}
                                                 for n, r in enumerate(rows) if n % 10 == 0])
         gemini, gpt_oss = flags["flaggers"]
         self.assertEqual((gemini["model"], gemini["role"], gemini["same_family"], gemini["answered"]), ("gemini-3.8-flash-high", "rubric_trigger", False, 119))
@@ -314,7 +322,17 @@ class FlagsFileTest(unittest.TestCase):
         self.assertIn("test-retest", retest["family"])
         self.assertEqual([gemini["not_run"], gpt_oss["not_run"]], ["no session recorded"] * 2)
         row = self.sample["rows"][2]
-        self.assertEqual(flags["rubric_rows"], [{"id": row["id"], "stratum": row["stratum"], "order_rank": row["order_rank"], "criteria": ["eligibility", "problems", "Relevance"]}])
+        self.assertEqual(flags["rubric_rows"], [{"id": row["id"], "stratum": row["stratum"], "order_rank": row["order_rank"], "criteria": ["Relevance"]}])
+        self.assertEqual([f for f, on in flags["rows"][2]["criteria"].items() if on], ["eligibility", "problems", "Relevance"])
+
+    def test_a_lone_eligibility_difference_from_a_decision_code_asks_about_the_decision(self):
+        repo, work = self.copies()
+        copied = lambda n, r: {**reply(r), "decision": "excluded: copy", "decision_cite": SKILL} if n == 5 else reply(r)
+        self.session(work, "flagger", GEMINI, copied)
+        flags, _ = self.flag(repo, work)
+        row = self.sample["rows"][5]
+        self.assertEqual(flags["rubric_rows"], [{"id": row["id"], "stratum": row["stratum"], "order_rank": row["order_rank"], "criteria": ["decision"]}])
+        self.assertEqual([f for f, on in flags["rows"][5]["criteria"].items() if on], ["eligibility"])
 
     def test_a_flagger_run_left_half_done_is_refused(self):
         repo, work = self.copies()

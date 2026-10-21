@@ -34,6 +34,11 @@ def differs(reference, flagger):
     return [f for f in FIELDS if f in changed]
 
 
+def rubric_criteria(fields):
+    named = {"Relevance" if f == "problems" else f for f in fields if f != "eligibility"}
+    return [c for c in LABELLED if c in named] or (["decision"] if "eligibility" in fields else [])
+
+
 def agy_switch(fetch, kind, name, state):
     status = fetch.run(["agy", kind, state, name], timeout=60)[1]
     if status != "ok":
@@ -118,7 +123,7 @@ def write_flags(topic, work, batch):
         raise TopicError(f"no reference reply for {missing[:10]}; flags compare against the reference's first run, so run run-judge.py --judge reference first")
     reference = {"model": option["model"], "sessions": [session_key(batch, s) for s in sample["rows_per_stratum"]], "labels": labels}
     entries, trigger = [], {r["id"]: {f: False for f in FIELDS} for r in sample["rows"]}
-    unflagged = {r["id"]: [] for r in sample["rows"]}
+    unflagged, asked = {r["id"]: [] for r in sample["rows"]}, {r["id"]: set() for r in sample["rows"]}
     for role, listed in flaggers(topic, [m for rung in LADDER for m in rung["models"]]).items():
         for flagger in listed:
             run = {k: v for k, v in flagger.items() if k != "retest"}
@@ -133,13 +138,14 @@ def write_flags(topic, work, batch):
             if role == "rubric_trigger":
                 for row in entry["rows"]:
                     trigger[row["id"]].update({f: True for f in row["fields"]})
+                    asked[row["id"]].update(rubric_criteria(row["fields"]))
                 for row_id in entry["unflagged_by_refusal"]:
                     unflagged[row_id].append(flagger["model"])
     routed = not (work / FREEZE_FILE).is_file()
     rows = [{"id": r["id"], "stratum": r["stratum"], "order_rank": r["order_rank"], "criteria": trigger[r["id"]],
              **({"unflagged_by_refusal": unflagged[r["id"]]} if unflagged[r["id"]] else {})} for r in sample["rows"]]
-    rubric = [{"id": r["id"], "stratum": r["stratum"], "order_rank": r["order_rank"], "criteria": [f for f in FIELDS if r["criteria"][f]]}
-              for r in rows if any(r["criteria"].values())]
+    rubric = [{"id": r["id"], "stratum": r["stratum"], "order_rank": r["order_rank"], "criteria": [c for c in (*LABELLED, "decision") if c in asked[r["id"]]]}
+              for r in sample["rows"] if asked[r["id"]]]
     out = {"batch": batch, "set_sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "reference": {k: reference[k] for k in ("model", "sessions")}, "fields": list(FIELDS),
            "routed": routed, **({} if routed else {"for_the_record": f"{FREEZE_FILE} exists and no rubric wording enters after it; these flags are reported, never routed"}),
            "flaggers": entries, "rows": rows, "rubric_rows": rubric if routed else []}
