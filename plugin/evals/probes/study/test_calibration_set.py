@@ -8,6 +8,7 @@ from pathlib import Path
 
 from study_fixtures import script, write_json, write_jsonl
 from study_session import canonical_sha256, qgs_shape
+from study_topic import TopicError, load_topic
 from study_v4_fixture import CRITERIA, SECRET, SWEEP, TODAY, drawn_and_labelled, inputs_fetch, quiet, screening_row, user_labels, v4_repo, v4_work
 
 
@@ -15,15 +16,26 @@ def draw(repo, work, *extra, today=TODAY):
     script("draw-calibration-set").main(["--topic", "demo", "--repo", str(repo), "--work", str(work), "--criteria", CRITERIA, "--today", today, *extra], fetch=inputs_fetch())
 
 
+ELIGIBILITY = {"vi": "Câu hỏi <b>giám khảo</b>.\nCâu thứ hai.", "en": "The judges' <b>question</b>.\nThe second line."}
+
+
+def drawn_work(**topic_fields):
+    repo = v4_repo()
+    if topic_fields:
+        path = repo / "docs/prior-art/topics/demo.json"
+        write_json(path, {**json.loads(path.read_text()), **topic_fields})
+    work = v4_work(repo)
+    order = [json.loads(line) for line in (work / "config-screening-order.jsonl").read_text().splitlines()]
+    write_jsonl(work / "config-screen-A.jsonl", [screening_row(r) for r in order[:5]])
+    write_json(work / "meta.json", {"sessions": {"judge-config-screening-A-claude-opus-5-5-run1": {"blocks": [{"note": SECRET}]}}})
+    draw(repo, work)
+    return repo, work
+
+
 class CalibrationSetTest(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.repo = v4_repo()
-        cls.work = v4_work(cls.repo)
-        order = [json.loads(line) for line in (cls.work / "config-screening-order.jsonl").read_text().splitlines()]
-        write_jsonl(cls.work / "config-screen-A.jsonl", [screening_row(r) for r in order[:5]])
-        write_json(cls.work / "meta.json", {"sessions": {"judge-config-screening-A-claude-opus-5-5-run1": {"blocks": [{"note": SECRET}]}}})
-        draw(cls.repo, cls.work)
+        cls.repo, cls.work = drawn_work()
         cls.sample = json.loads((cls.work / "calibration-set.json").read_text())
         cls.page = (cls.work / "calibration.html").read_text()
 
@@ -147,6 +159,36 @@ class CalibrationSetTest(unittest.TestCase):
         self.assertEqual(self.page.count('<section class="row"'), 120)
         for leak in (SECRET, "qgs candidate", "top-ranked", "random", "facet_rank", "calibration-draw"):
             self.assertNotIn(leak, self.page)
+
+    def test_a_topic_without_an_eligibility_definition_renders_the_page_byte_identical_to_before_the_field(self):
+        self.assertEqual(hashlib.sha256(self.page.encode()).hexdigest(), "07a08fa6bc8cdc3e94eef0aa5d4d4a78b19dfefd6fb6ed6ad8111eb333a5ac13")
+        self.assertNotIn('id="eligibility"', self.page)
+
+    def test_the_topic_eligibility_definition_tops_the_page_escaped_and_leaves_the_set_and_the_draw_unchanged(self):
+        _, work = drawn_work(eligibility=ELIGIBILITY)
+        for name in ("calibration-set.json", "calibration-draw.json"):
+            self.assertEqual((work / name).read_bytes(), (self.work / name).read_bytes())
+        page = (work / "calibration.html").read_text()
+        start, end = page.index('<aside id="eligibility"'), page.index("</aside>\n") + len("</aside>\n")
+        self.assertEqual(page[:start] + page[end:], self.page)
+        self.assertLess(page.index("</header>"), start)
+        self.assertLess(end, page.index('<section class="row"'))
+        block = page[start:end]
+        for text in ("Định nghĩa đủ điều kiện của giám khảo stage-1", "<p>Câu hỏi &lt;b&gt;giám khảo&lt;/b&gt;.</p>", "<p>Câu thứ hai.</p>",
+                     '<div lang="en">', "<p>The judges&#x27; &lt;b&gt;question&lt;/b&gt;.</p>", "<p>The second line.</p>"):
+            self.assertIn(text, block)
+        self.assertNotIn("<b>", block)
+
+    def test_the_topic_validator_accepts_an_eligibility_definition_only_as_vietnamese_and_english_texts(self):
+        repo = v4_repo()
+        path = repo / "docs/prior-art/topics/demo.json"
+        topic = json.loads(path.read_text())
+        write_json(path, {**topic, "eligibility": ELIGIBILITY})
+        self.assertEqual(load_topic(repo, "demo:alpha")["eligibility"], ELIGIBILITY)
+        for bad in ("text", {"vi": "x"}, {"vi": "x", "en": ""}, {"vi": "x", "en": "y", "note": "z"}, {"vi": 1, "en": "y"}):
+            write_json(path, {**topic, "eligibility": bad})
+            with self.assertRaisesRegex(TopicError, "eligibility must hold exactly vi and en, each a non-empty string"):
+                load_topic(repo, "demo")
 
     def test_labels_are_imported_only_after_the_stage1_freeze_for_this_set_and_with_valid_values(self):
         labels = user_labels(self.sample)

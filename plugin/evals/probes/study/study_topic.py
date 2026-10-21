@@ -46,6 +46,9 @@ def load_topic(repo, name):
     for stratum, rule in strata.items():
         if not isinstance(rule, dict):
             raise TopicError(f"{path}: strata.{stratum} must be an object")
+    eligibility = topic.get("eligibility", {"vi": "-", "en": "-"})
+    if not isinstance(eligibility, dict) or set(eligibility) != {"vi", "en"} or not all(isinstance(v, str) and v for v in eligibility.values()):
+        raise TopicError(f"{path}: eligibility must hold exactly vi and en, each a non-empty string")
     if "facets" in topic:
         check_facets(topic, path)
     if facet:
