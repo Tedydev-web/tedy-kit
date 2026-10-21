@@ -10,9 +10,9 @@ from pathlib import Path
 
 from study_screening_core import read_jsonl
 from study_screening_input import inputs_file, repo_level
-from study_session_prompt import (QGS_TEMPLATE_SHA256, STAGE1_TEMPLATE_SHA256, build_prompt, build_qgs_prompt, build_stage1_prompt, criteria_version, template_sha256,
-                                  with_computed_date)
-from study_session_reply import parse_qgs_reply, parse_reply, reply_text
+from study_session_prompt import (QGS_TEMPLATE_SHA256, REFERENCE_TEMPLATE_SHA256, STAGE1_TEMPLATE_SHA256, build_prompt, build_qgs_prompt, build_reference_prompt,
+                                  build_stage1_prompt, criteria_version, template_sha256, with_computed_date)
+from study_session_reply import parse_qgs_reply, parse_reference_reply, parse_reply, reply_text
 from study_topic import TopicError
 
 MAX_PROMPT = 120_000
@@ -23,6 +23,13 @@ AGY_THREAT = "agy MCP servers, hooks and user settings not excluded"
 CLAUDE_ISOLATION = ("--tools", "", "--setting-sources", "", "--strict-mcp-config", "--no-session-persistence", "--disable-slash-commands", "--max-turns", "1")
 AGY_ISOLATION = ("--disable-slash-commands",)
 SESSION_FIELDS = ("cli", "model", "effort", "isolation", "served")
+LEDGER = "claude-spend-ledger.jsonl"
+
+
+class ReplyRefused(TopicError):
+    pass
+
+
 def model_family(model):
     return re.split(r"[-.]", model.lower(), maxsplit=1)[0]
 
@@ -54,7 +61,7 @@ def session_command(option, prompt, bare):
 def session_header(option, bare):
     effort = option.get("effort") or ("default" if option["cli"] == "claude" else "set by the model id")
     served = "modelUsage must name only the requested model" if option["cli"] == "claude" else "requested only: agy reports no served model"
-    threats = ([NO_BARE_THREAT] if not bare else []) if option["cli"] == "claude" else [AGY_THREAT]
+    threats = [] if option["cli"] == "claude" else [AGY_THREAT]
     return {"cli": option["cli"], "model": option["model"], "effort": effort, "isolation": isolation(option["cli"], bare), "served": served, "threats": threats}
 
 
@@ -114,7 +121,19 @@ def check_header(sessions, key, header, ranks):
 
 def add_block(sessions, key, header, block):
     check_header(sessions, key, header, block["ranks"])
-    sessions[key] = {**header, "blocks": sessions.get(key, {}).get("blocks", []) + [block]}
+    existing = sessions.get(key, {})
+    sessions[key] = {**header, "blocks": existing.get("blocks", []) + [block], **({"refused": existing["refused"]} if "refused" in existing else {})}
+
+
+def record_refusal(job, rank, reason):
+    header = session_header(job["option"], job["bare"])
+
+    def change(sessions):
+        check_header(sessions, job["key"], header, [])
+        entry = sessions.setdefault(job["key"], {**header, "blocks": []})
+        entry.setdefault("refused", []).append({"rank": rank, "reason": reason, "date": job["today"]})
+
+    update_sessions(job["work"], change)
 
 
 def call_isolated(fetch, cmd):
@@ -160,7 +179,28 @@ def block_prompt(job, rows):
         return build_prompt(packet, job["criteria"], (Path(job["repo"]) / job["criteria"]).read_text(), known, rows, job["sweep_date"])
     if kind == "stage1":
         return build_stage1_prompt(packet, job["examples"], rows)
+    if kind == "reference":
+        return build_reference_prompt(packet, job.get("notes") or [], rows)
     return build_qgs_prompt(packet, rows)
+
+
+def agy_lists(fetch):
+    outs = {}
+    for name in ("mcp", "plugin"):
+        out, status, _ = fetch.run(["agy", name, "list"], timeout=60)
+        if status != "ok":
+            raise TopicError(f"agy {name} list: {status}")
+        outs[name] = out
+    return {"mcp_sha256": sha256_bytes(outs["mcp"].encode()), "plugins_sha256": sha256_bytes(outs["plugin"].encode()),
+            "context_mode_enabled": any(line.split()[:1] == ["context-mode"] and "enabled" in line.split() for line in outs["mcp"].splitlines()),
+            "ponytail_enabled": re.search(r"^- ponytail \(enabled\b", outs["plugin"], re.M) is not None}
+
+
+def spend_line(job, out, prompt):
+    body = json.loads(out) if job["option"]["cli"] == "claude" else {}
+    return json.dumps({"date": job["today"], "key": job["key"], "ranks": job["ranks"], "model": job["option"]["model"], "effort": job["option"].get("effort"),
+                       "total_cost_usd": body.get("total_cost_usd"), "usage": body.get("usage"), "duration_ms": body.get("duration_ms"), "prompt_bytes": len(prompt.encode())},
+                      ensure_ascii=False) + "\n"
 
 
 def run_blocks(job, ranks, fetch, most=STAGE1_BATCH_MAX):
@@ -197,7 +237,7 @@ def run_block(job, fetch):
     if not packet.is_file():
         raise TopicError(f"no {packet.name} in {work}")
     criteria = Path(job["repo"]) / job["criteria"] if screening else None
-    template = {"screening": template_sha256(job.get("criteria")), "qgs": QGS_TEMPLATE_SHA256, "stage1": STAGE1_TEMPLATE_SHA256}[kind]
+    template = {"screening": template_sha256(job.get("criteria")), "qgs": QGS_TEMPLATE_SHA256, "stage1": STAGE1_TEMPLATE_SHA256, "reference": REFERENCE_TEMPLATE_SHA256}[kind]
     hashes = {"packet_sha256": sha256_bytes(packet.read_bytes()), **({"criteria_sha256": sha256_bytes(criteria.read_bytes())} if screening else {}),
               **({"examples_sha256": sha256_bytes(job["examples"].encode())} if kind == "stage1" else {})}
     frozen = job.get("frozen")
@@ -223,15 +263,24 @@ def run_block(job, fetch):
     prompts.mkdir(exist_ok=True)
     stem = f"{name}-{first}-{last}"
     (prompts / f"{stem}.md").write_text(prompt)
-    text, served = reply_text(option, *call_isolated(fetch, session_command(option, prompt, job["bare"])))
+    lists = kind == "reference" and option["cli"] == "agy"
+    before = agy_lists(fetch) if lists else None
+    out, status = call_isolated(fetch, session_command(option, prompt, job["bare"]))
+    after = agy_lists(fetch) if lists else None
+    try:
+        text, served = reply_text(option, out, status)
+    except TopicError as error:
+        raise ReplyRefused(str(error)) from error
     if screening:
         rows, mechanisms, problems = parse_reply(text, expected, (job.get("problems") or []) if criteria_version(job.get("criteria")) >= 4 else None)
         rows = [with_computed_date(r, expected[r["order_rank"]], job["sweep_date"]) for r in rows]
+    elif kind == "reference":
+        (rows, problems), mechanisms = parse_reference_reply(text, expected, job["problems"]), []
     else:
         (rows, problems), mechanisms = parse_qgs_reply(text, expected, job["problems"], ("yes", "unsure", "no"), kind == "qgs"), []
     if problems:
         (prompts / f"{stem}.response.txt").write_text(text)
-        raise TopicError(f"{name} ranks {first}-{last}: {'; '.join(problems)}; reply kept in prompts/{stem}.response.txt, nothing written")
+        raise ReplyRefused(f"{name} ranks {first}-{last}: {'; '.join(problems)}; reply kept in prompts/{stem}.response.txt, nothing written")
     names, fresh = {line.split(":", 1)[0] for line in known.splitlines()}, []
     for n, d in mechanisms:
         if n not in names:
@@ -242,12 +291,14 @@ def run_block(job, fetch):
              "row_sha256": {str(r): canonical_sha256(row) for r, row in expected.items()}, "cli_version": cli_version, "date": job["today"],
              "mechanisms_added": [line.split(":", 1)[0] for line in fresh],
              **({"served_models": served} if served else {}), **({"fallback_reason": job["fallback_reason"]} if job.get("fallback_reason") else {}),
-             **({"held_out_labels_sha256": job["held_out_labels_sha256"]} if job.get("held_out_labels_sha256") else {})}
+             **({"held_out_labels_sha256": job["held_out_labels_sha256"]} if job.get("held_out_labels_sha256") else {}),
+             **({"notes_sha256": job["notes_sha256"]} if job.get("notes_sha256") else {}),**({"agy_lists": {"before": before, "after": after}} if lists else {})}
     undo = []
 
     def commit(sessions):
         add_block(sessions, job["key"], header, block)
-        files = {work / f"{name}.jsonl": "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), **({mech_file: "".join(fresh)} if screening else {})}
+        files = {work / f"{name}.jsonl": "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows), **({mech_file: "".join(fresh)} if screening else {}),
+                 **({work / LEDGER: spend_line({**job, "ranks": list(expected)}, out, prompt)} if kind == "reference" else {})}
         undo.append(append_lines(files))
 
     update_sessions(work, commit, lambda: undo and undo[0]())

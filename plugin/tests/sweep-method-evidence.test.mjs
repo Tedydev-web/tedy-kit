@@ -157,10 +157,16 @@ test("sessions of one model family need the same model family threat", () => {
   assert.match(sweep.errors(sweep.text.replace(/^- same model family: .*\n/gm, "")).join("\n"), /config: sessions A and B are both claude models/);
 });
 
-test("claude sessions run without --bare need the plugin hook threat", () => {
+test("only a session whose recorded threats hold the plugin hook threat needs its line", () => {
   const sweep = methodSweep("--no-bare");
+  assert.doesNotMatch(sweep.text, /plugin hooks not excluded/);
   assert.deepEqual(sweep.errors(), []);
-  assert.match(sweep.errors(sweep.text.replace(/^- plugin hooks not excluded \(no --bare\): .*\n/m, "")).join("\n"), /config-A ran claude without --bare and the record names no plugin hooks threat/);
+  const meta = sweep.meta();
+  meta.sessions["config-A"].threats = ["plugin hooks not excluded (no --bare)"];
+  sweep.writeMeta(meta);
+  assert.match(sweep.errors().join("\n"), /config-A recorded the threat "plugin hooks not excluded \(no --bare\)" and the record does not name it/);
+  const named = sweep.text.replace("\n## Threats\n\n", "\n## Threats\n\n- plugin hooks not excluded (no --bare): config-A ran without --bare\n");
+  assert.doesNotMatch(sweep.errors(named).join("\n"), /plugin hooks/);
 });
 
 test("the academic channel needs the papers-not-screened threat", () => {

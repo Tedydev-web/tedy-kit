@@ -205,10 +205,17 @@ class MethodRecordTest(unittest.TestCase):
         threats = self.section(self.text(), "Threats")
         self.assertIn("- agy MCP servers, hooks and user settings not excluded: config-B, config-pilot-B-gemini-3.8-flash-high, product-B, product-pilot-B-gemini-3.8-flash-high ran through agy", threats)
 
-    def test_claude_sessions_without_bare_carry_the_plugin_hook_threat(self):
+    def test_only_sessions_that_recorded_the_plugin_hook_threat_carry_it(self):
         self.assertNotIn("plugin hooks not excluded", self.text())
-        threats = self.section(self.text(bare=False), "Threats")
-        self.assertIn("- plugin hooks not excluded (no --bare): config-A, config-pilot-A, product-A, product-pilot-A ran without --bare because no API-key auth source was set", threats)
+        repo = self.build(bare=False)
+        self.assertNotIn("plugin hooks not excluded", render(repo, load_topic(repo, "demo"))[0])
+        def recorded(sessions):
+            for key in ("config-A", "product-pilot-A"):
+                sessions[key]["threats"] = ["plugin hooks not excluded (no --bare)"]
+
+        self.edit_meta(recorded)
+        threats = self.section(render(repo, load_topic(repo, "demo"))[0], "Threats")
+        self.assertIn("- plugin hooks not excluded (no --bare): config-A, product-pilot-A ran without --bare because no API-key auth source was set", threats)
 
     def test_an_unrated_calibration_sample_is_an_llm_only_threat(self):
         self.assertIn("- LLM-only screening: no calibration sample was drawn", self.section(self.text(), "Threats"))
