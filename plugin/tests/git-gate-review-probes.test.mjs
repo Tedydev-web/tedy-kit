@@ -439,3 +439,10 @@ test("honest: a script path whose file name is literal runs as on main, even und
   assert.equal(evaluate("node $P/github-write.mjs reply 7 PRRT_1", "/w", { settingsFile }).ask, true);
   assert.equal(hook(...shell("node $P/github-write.mjs reply 7 PRRT_1")), "deny");
 });
+
+test("honest: a cd behind time or time -p still moves the directory a push is judged in (round 4 R4-3)", () => {
+  const { main, feat } = repos();
+  assert.equal(verdict(`time cd ${main} && git push`, feat), "ask");
+  assert.equal(verdict(`time -p cd ${main} && git push`, feat), "ask");
+  assert.equal(hook(...shell(`time cd ${main} && git push`), { cwd: feat, projectDir: feat }), "ask");
+});

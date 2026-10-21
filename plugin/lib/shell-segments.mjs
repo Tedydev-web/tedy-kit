@@ -151,7 +151,13 @@ export function* walkParts(command, cwd, unwrap = true) {
     }
     const tokens = tokenize(part.text);
     let at = 0;
-    while (at < tokens.length && (ASSIGNMENT.test(tokens[at]) || LEADING_WORDS.has(tokens[at]))) at += 1;
+    for (;;) {
+      if (at < tokens.length && (ASSIGNMENT.test(tokens[at]) || LEADING_WORDS.has(tokens[at]))) at += 1;
+      else if (tokens[at] === "time") {
+        at += 1;
+        while (tokens[at]?.startsWith("-")) at += 1;
+      } else break;
+    }
     const [word, ...args] = tokens.slice(at);
     const target = args.find((arg) => !/^[-+<>]|^\d+[<>]/.test(arg));
     const changesDir = word === "cd" || word === "popd" || (word === "pushd" && target !== undefined);
