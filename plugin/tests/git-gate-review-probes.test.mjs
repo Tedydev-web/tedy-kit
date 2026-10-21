@@ -261,3 +261,23 @@ test("honest: a heredoc or stdin form through a context-mode tool is refused lik
   assert.equal(hook(...shell(`bash<<EOF\n${PUSH}\nEOF`)), "deny");
   assert.equal(hook(BATCH, { commands: [`bash /dev/stdin <<<\x27${PUSH}\x27`] }), "deny");
 });
+
+test("listed (design): an interpreter one-liner that pushes without mentioning gh is allowed (review F7 h47 h48 c42)", () => {
+  assert.equal(verdict(`node -e \x27require("child_process").execSync("${PUSH}")\x27`), "allow");
+  assert.equal(verdict(`python3 -c \x27import os; os.system("${PUSH}")\x27`), "allow");
+  assert.equal(hook(...shell(`node -e \x27require("child_process").execSync("${PUSH}")\x27`)), "allow");
+});
+
+test("obfuscation, listed: a renamed copy or symlink of a kit script is not seen as a publish (review c41)", () => {
+  assert.equal(hook(...shell("node /tmp/gw.mjs reply 7 PRRT_1 --body ok")), "allow");
+});
+
+test("listed: a batch command given as one quoted JSON string runs as a single word, which fails, and is allowed (review I2)", () => {
+  assert.equal(hook(BATCH, { commands: JSON.stringify(PUSH) }), "allow");
+});
+
+test("honest: a push after a backgrounded command is judged as its own command", () => {
+  assert.deepEqual(splitSegments("npm run dev & git push --force origin main"), ["npm run dev", "git push --force origin main"]);
+  assert.deepEqual(splitSegments("x >out.log 2>&1 &>all.log & y |& z"), ["x >out.log 2>&1 &>all.log", "y", "z"]);
+  assert.equal(verdict(`sleep 1 & ${PUSH}`), "ask");
+});

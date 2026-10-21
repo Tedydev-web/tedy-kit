@@ -69,6 +69,14 @@ export function splitParts(command, unwrap = true) {
       piped = false;
       continue;
     }
+    if (char === "&" && command[index - 1] === "|") continue;
+    if (char === "&" && !/[<>]/.test(command[index - 1] ?? "") && command[index + 1] !== ">") {
+      line += char;
+      segments.push({ text: current, piped });
+      current = "";
+      piped = false;
+      continue;
+    }
     if (char === ";" || char === "|") {
       line += char;
       segments.push({ text: current, piped });
