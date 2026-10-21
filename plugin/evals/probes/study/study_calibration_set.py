@@ -439,6 +439,7 @@ SCRIPT = """(() => {
   const total = (label, date) => RATED.reduce((sum, c) => sum + label[c], date + 1);
   const why = (label, date) => [[label.decision === "eligible" && label.Relevance !== 1, "Đủ điều kiện cần Relevance = 1"], [label.Relevance === 1 && Array.isArray(label.problems) && !label.problems.length, "Relevance = 1 cần ít nhất một mã vấn đề"], [label.decision === "eligible" && label.Relevance === 1 && Array.isArray(label.problems) && label.problems.length > 0 && RATED.every((c) => label[c] !== undefined) && total(label, date) < TOTAL, "Đủ điều kiện cần Authority + Methodology + Objectivity + Date + Position + Novelty ≥ " + TOTAL + " (Novelty = 1 khi có cơ chế), dòng này có " + total(label, date)]].filter(([broken]) => broken).map(([, reason]) => reason);
   const valid = (label, date) => !why(label, date).length;
+  const stamp = (label, field, now) => { label.timing = label.timing || {}; if (label.timing[field] === undefined) label.timing[field] = now; };
   const complete = (label, date) => Boolean(label) && valid(label, date) && FIELDS.every((f) => f === "problems" ? label.problems !== undefined || label.Relevance === 0 : label[f] !== undefined);
   const show = (extra) => {
     const broken = ids.filter((id) => labels[id] && !valid(labels[id], dates[id]));
@@ -467,6 +468,7 @@ SCRIPT = """(() => {
     } else {
       labels[id][field] = field === "decision" ? input.value : Number(input.value);
     }
+    stamp(labels[id], field, Date.now());
     save();
   });
   document.getElementById("download").addEventListener("click", () => {
@@ -539,9 +541,12 @@ def page(topic, batch, set_sha, shown, anchor):
 def checked_label(key, label, problems, date):
     if not isinstance(label, dict):
         raise TopicError(f"label {key}: must be an object of the five criteria, the problem ids and the decision")
-    unknown = sorted(set(label) - set(FIELDS))
+    unknown = sorted(set(label) - set(FIELDS) - {"timing"})
     if unknown:
         raise TopicError(f"label {key}: unknown fields {unknown}")
+    timing = label.get("timing", {})
+    if not isinstance(timing, dict) or not set(timing) <= set(FIELDS) or any(isinstance(v, bool) or not isinstance(v, int) or v < 0 for v in timing.values()):
+        raise TopicError(f"label {key}: timing {timing!r} is not an object of non-negative integer epoch milliseconds keyed by the label's fields")
     bad = {c: label[c] for c in LABELLED if c in label and (isinstance(label[c], bool) or label[c] not in RATINGS)}
     if bad:
         raise TopicError(f"label {key}: {bad}; ratings are 1, 0.5 or 0")
@@ -564,6 +569,8 @@ def checked_label(key, label, problems, date):
     kept = {f: label[f] for f in FIELDS if f in label}
     if "problems" not in kept and label.get("Relevance") == 0:
         kept["problems"] = []
+    if "timing" in label:
+        kept["timing"] = timing
     return kept
 
 

@@ -104,6 +104,21 @@ class V4RecordTest(unittest.TestCase):
         self.assertEqual(highlight_line("calibration", {"highlight_sha256": "0" * 64}), said.format("0" * 64) + f"; not the toolchain's current aid list (sha256 `{current}`)")
         self.assertEqual(highlight_line("top-up", {}), "- top-up labelling page: labelled without highlighting; the saved labels carry no aid list sha256")
 
+    def test_the_record_never_prints_the_label_timings(self):
+        repo, folder = self.copy()
+        path = folder / "calibration-labels.json"
+        labels = json.loads(path.read_text())
+        for n, row in enumerate(labels["rows"]):
+            row["user"]["timing"] = {"Authority": 1761030000000 + 7919 * n, "decision": 1761030004243 + 7919 * n}
+        path.write_text(json.dumps(labels, indent=1, ensure_ascii=False) + "\n")
+        rung = json.loads((folder / "stage1-rung.json").read_text())
+        rung["labels_sha256"]["calibration"] = hashlib.sha256(path.read_bytes()).hexdigest()
+        (folder / "stage1-rung.json").write_text(json.dumps(rung, indent=1) + "\n")
+        text = self.render(repo)
+        self.assertNotIn("timing", text)
+        self.assertNotIn("176103", text)
+        self.assertEqual(section(text, "Calibration"), section(self.text, "Calibration"))
+
     def test_stage_1_states_the_frozen_ladder_the_rung_used_the_rungs_tried_and_the_audit_bounds(self):
         stage1 = section(self.text, "Stage 1")
         self.assertIn("- chosen: rung 1 after 1 rungs tried", stage1)

@@ -116,7 +116,8 @@ class CalibrationSetTest(unittest.TestCase):
                  ({k: v for k, v in full.items() if k != "problems"}, 1), ({**{k: v for k, v in full.items() if k != "problems"}, "Relevance": 0, "decision": "excluded: irrelevant"}, 1),
                  ({**full, "Relevance": 0, "decision": "eligible", "problems": []}, 1), ({k: v for k, v in full.items() if k != "decision"}, 1),
                  (full, 0), (low, 1), ({**low, "decision": "excluded: below-threshold"}, 1), ({**full, "decision": "excluded: copy"}, 1), (edge, 0.5), (edge, 0), (edge, 1),
-                 ({k: v for k, v in low.items() if k != "problems"}, 1), ({k: v for k, v in low.items() if k != "Position"}, 0)]
+                 ({k: v for k, v in low.items() if k != "problems"}, 1), ({k: v for k, v in low.items() if k != "Position"}, 0),
+                 ({**full, "timing": {"Authority": 1761030000000, "decision": 0}}, 1)]
 
         def imported(label, date):
             try:
@@ -130,8 +131,69 @@ class CalibrationSetTest(unittest.TestCase):
         code = f"{functions}\nconsole.log(JSON.stringify({json.dumps(cases)}.map(([label, date]) => [valid(label, date), complete(label, date)])));"
         page = json.loads(subprocess.run(["node", "-e", code], capture_output=True, text=True, check=True).stdout)
         self.assertEqual(page, [imported(*c) for c in cases])
-        self.assertEqual([c for _, c in page], [True, False, False, True, False, True, False, False, True, False, True, True, True, False, True, False, False])
-        self.assertEqual([v for v, _ in page], [True, False, False, True, True, True, False, True, True, False, True, True, True, False, True, True, True])
+        self.assertEqual([c for _, c in page], [True, False, False, True, False, True, False, False, True, False, True, True, True, False, True, False, False, True])
+        self.assertEqual([v for v, _ in page], [True, False, False, True, True, True, False, True, True, False, True, True, True, False, True, True, True, True])
+
+    def test_the_page_stamps_the_time_each_field_was_first_set_into_the_saved_label(self):
+        import subprocess
+        script_text = re.search(r"<script>(.*)</script>", self.page, re.S).group(1)
+        functions = "\n".join(re.findall(r"^  const stamp = .*$", script_text, re.M))
+        code = f'{functions}\nconst label = {{}};\nstamp(label, "Authority", 5);\nstamp(label, "Authority", 9);\nstamp(label, "decision", 7);\nconsole.log(JSON.stringify(label));'
+        self.assertEqual(json.loads(subprocess.run(["node", "-e", code], capture_output=True, text=True, check=True).stdout), {"timing": {"Authority": 5, "decision": 7}})
+        handler = script_text[script_text.index('document.addEventListener("change"'):script_text.index('document.getElementById("download")')]
+        self.assertIn("    stamp(labels[id], field, Date.now());\n    save();", handler)
+        self.assertIn("localStorage.setItem(KEY, JSON.stringify(labels))", script_text)
+
+    def test_the_import_keeps_first_set_timings_and_refuses_malformed_ones(self):
+        labels = user_labels(self.sample)
+        work = Path(tempfile.mkdtemp(prefix="study-labels-work-"))
+        self.addCleanup(shutil.rmtree, work)
+        shutil.copytree(self.work, work, dirs_exist_ok=True)
+        self.frozen(work)
+        first = self.sample["rows"][0]["id"]
+        for bad in ([], "x", {"Novelty": 1}, {"Authority": -1}, {"Authority": 1.5}, {"Authority": True}, {"Authority": "1"}, {"timing": 1}):
+            with self.assertRaisesRegex(SystemExit, rf"label {first}: timing .* is not an object of non-negative integer epoch milliseconds keyed by the label's fields"):
+                self.importing(self.labels_file({**labels, first: {**labels[first], "timing": bad}}), work)
+        timing = {"Authority": 1761030000000, "problems": 1761030004000, "decision": 0}
+        self.importing(self.labels_file({**labels, first: {**labels[first], "timing": timing}}), work)
+        kept = json.loads((work / "calibration-labels.json").read_text())
+        self.assertEqual((kept["complete"], kept["rows"][0]["user"]), (120, {**labels[first], "timing": timing}))
+        from study_calibration_set import labelled
+        self.assertEqual(labelled(work)[0]["user"]["timing"], timing)
+
+    def test_calibration_timing_reports_median_seconds_and_the_share_on_the_four_rated_criteria_for_the_first_rows(self):
+        import contextlib
+        import io
+        work = Path(tempfile.mkdtemp(prefix="study-timing-"))
+        self.addCleanup(shutil.rmtree, work)
+        full = {"Authority": 1, "Methodology": 1, "Objectivity": 1, "Position": 1, "Relevance": 1, "problems": ["X1"], "decision": "eligible"}
+
+        def timed(start, gaps):
+            fields = ("Authority", "Methodology", "Objectivity", "Position", "Relevance", "problems", "decision")
+            return {f: start + sum(gaps[:i + 1]) for i, f in enumerate(fields)}
+
+        rows = [{"id": "c", "user": {**full, "timing": timed(41000, [0, 1000, 1000, 1000, 1000, 1000, 1000])}},
+                {"id": "a", "user": {**full, "timing": timed(1000, [0, 2000, 1000, 1000, 1000, 1000, 4000])}},
+                {"id": "n", "user": full}, {"id": "p", "user": {k: v for k, v in full.items() if k != "decision"} | {"timing": {"Authority": 2000}}},
+                {"id": "b", "user": {**full, "timing": timed(21000, [0, 1000, 1000, 1000, 2000, 1000, 4000])}}, {"id": "u", "user": None}]
+        write_json(work / "calibration-labels.json", {"batch": "calibration", "rows": rows})
+
+        def report(*args):
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                script("calibration-timing").main(["--work", str(work), *args])
+            return out.getvalue().strip()
+
+        self.assertEqual(report("--rows", "2"), "calibration: first 2 of 3 timed complete rows by completion time: median 15.0 s per row; Authority, Methodology, "
+                                                "Objectivity and Position took 56.7% of the time, the other fields 43.3%")
+        self.assertEqual(report("--rows", "10"), "calibration: first 3 of 3 timed complete rows by completion time: median 16.0 s per row; Authority, Methodology, "
+                                                 "Objectivity and Position took 65.2% of the time, the other fields 34.8%")
+        for args, message in ((("--rows", "0"), "--rows must be at least 1"), (("--rows", "2", "--batch", "top-up"), "no top-up-labels.json in")):
+            with self.assertRaisesRegex(SystemExit, message):
+                report(*args)
+        write_json(work / "calibration-labels.json", {"batch": "calibration", "rows": [{"id": "n", "user": full}]})
+        with self.assertRaisesRegex(SystemExit, "calibration-labels.json holds no complete row with timings"):
+            report("--rows", "2")
 
     def test_the_page_names_each_broken_row_and_why_in_vietnamese(self):
         import subprocess
@@ -183,14 +245,14 @@ class CalibrationSetTest(unittest.TestCase):
             self.assertNotIn(leak, self.page)
 
     def test_a_topic_without_an_eligibility_definition_renders_the_page_byte_identical_to_before_the_field(self):
-        self.assertEqual(hashlib.sha256(self.page.encode()).hexdigest(), "dfeb054e5c52de7b83f01555a3f317458081eae75e438bd2c379db779e48316e")
+        self.assertEqual(hashlib.sha256(self.page.encode()).hexdigest(), "25e0a3cd7d36affcc064ea2c36b5f8d634b8e10e333fc41ea625fa5b435cff6b")
         self.assertNotIn('id="eligibility"', self.page)
 
     def test_removing_the_highlight_note_style_and_marks_gives_back_the_page_byte_identical_to_before_the_highlight(self):
         bare = re.sub(r"<p>Tô sáng theo [^<]*</p>", "", self.page, count=1).replace(".hit{background:#ffe08a;font-weight:600}", "")
         bare = re.sub(r'<span class="hit">([^<]*)</span>', r"\1", bare).replace("<details open><summary>Danh sách thư mục gốc", "<details><summary>Danh sách thư mục gốc")
         bare = re.sub(r' data-highlight="[0-9a-f]{64}"', "", bare, count=1).replace(" highlight_sha256: document.body.dataset.highlight,", "")
-        self.assertEqual(hashlib.sha256(bare.encode()).hexdigest(), "a238a2b58244dd571445ba4a8d1ac815030025dfa490ef1495c0b455b91899f2")
+        self.assertEqual(hashlib.sha256(bare.encode()).hexdigest(), "e3343aefc177adf873254901d30eaf2c58926d46196284f07d646d6cf5c14aa3")
 
     def test_the_topic_eligibility_definition_tops_the_page_escaped_and_leaves_the_set_and_the_draw_unchanged(self):
         _, work = drawn_work(eligibility=ELIGIBILITY)
