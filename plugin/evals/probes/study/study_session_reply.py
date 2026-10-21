@@ -31,7 +31,7 @@ def reply_text(option, out, status):
         return body.get("result") or "", served
 
 
-def agy_reply(where, out):
+def agy_events(out):
     events = []
     for line in out.splitlines():
         try:
@@ -40,7 +40,27 @@ def agy_reply(where, out):
             continue
         if isinstance(event, dict):
             events.append(event)
-    results = [e["result"] for e in events if e.get("event") == "result" and isinstance(e.get("result"), dict)]
+    return events
+
+
+def agy_results(events):
+    return [e["result"] for e in events if e.get("event") == "result" and isinstance(e.get("result"), dict)]
+
+
+def reply_body(cli, out):
+    if cli == "agy":
+        results = agy_results(agy_events(out))
+        return results[-1] if results else {}
+    try:
+        body = json.loads(out)
+    except ValueError:
+        return {}
+    return body if isinstance(body, dict) else {}
+
+
+def agy_reply(where, out):
+    events = agy_events(out)
+    results = agy_results(events)
     if not results:
         raise TopicError(f"{where}: the stream-json reply holds no result event")
     result = results[-1]

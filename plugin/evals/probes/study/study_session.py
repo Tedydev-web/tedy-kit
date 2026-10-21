@@ -12,7 +12,7 @@ from study_screening_core import read_jsonl
 from study_screening_input import inputs_file, repo_level
 from study_session_prompt import (QGS_TEMPLATE_SHA256, REFERENCE_TEMPLATE_SHA256, STAGE1_TEMPLATE_SHA256, build_prompt, build_qgs_prompt, build_reference_prompt,
                                   build_stage1_prompt, criteria_version, template_sha256, with_computed_date)
-from study_session_reply import parse_qgs_reply, parse_reference_reply, parse_reply, reply_text
+from study_session_reply import parse_qgs_reply, parse_reference_reply, parse_reply, reply_body, reply_text
 from study_topic import TopicError
 
 MAX_PROMPT = 120_000
@@ -196,11 +196,12 @@ def agy_lists(fetch):
             "ponytail_enabled": re.search(r"^- ponytail \(enabled\b", outs["plugin"], re.M) is not None}
 
 
-def spend_line(job, out, prompt):
-    body = json.loads(out) if job["option"]["cli"] == "claude" else {}
+def spend_line(job, out, prompt, refused=None):
+    body = reply_body(job["option"]["cli"], out)
+    served = sorted(body["modelUsage"]) if isinstance(body.get("modelUsage"), dict) else None
     return json.dumps({"date": job["today"], "key": job["key"], "ranks": job["ranks"], "model": job["option"]["model"], "effort": job["option"].get("effort"),
-                       "total_cost_usd": body.get("total_cost_usd"), "usage": body.get("usage"), "duration_ms": body.get("duration_ms"), "prompt_bytes": len(prompt.encode())},
-                      ensure_ascii=False) + "\n"
+                       "total_cost_usd": body.get("total_cost_usd"), "usage": body.get("usage"), "duration_ms": body.get("duration_ms"), "num_turns": body.get("num_turns"),
+                       "served_models": served, "prompt_bytes": len(prompt.encode()), **({"refused": refused} if refused else {})}, ensure_ascii=False) + "\n"
 
 
 def run_blocks(job, ranks, fetch, most=STAGE1_BATCH_MAX):
@@ -267,10 +268,16 @@ def run_block(job, fetch):
     before = agy_lists(fetch) if lists else None
     out, status = call_isolated(fetch, session_command(option, prompt, job["bare"]))
     after = agy_lists(fetch) if lists else None
+
+    def refusal(reason):
+        if kind == "reference":
+            append_lines({work / LEDGER: spend_line({**job, "ranks": list(expected)}, out, prompt, reason)})
+        return ReplyRefused(reason)
+
     try:
         text, served = reply_text(option, out, status)
     except TopicError as error:
-        raise ReplyRefused(str(error)) from error
+        raise refusal(str(error)) from error
     if screening:
         rows, mechanisms, problems = parse_reply(text, expected, (job.get("problems") or []) if criteria_version(job.get("criteria")) >= 4 else None)
         rows = [with_computed_date(r, expected[r["order_rank"]], job["sweep_date"]) for r in rows]
@@ -280,7 +287,7 @@ def run_block(job, fetch):
         (rows, problems), mechanisms = parse_qgs_reply(text, expected, job["problems"], ("yes", "unsure", "no"), kind == "qgs"), []
     if problems:
         (prompts / f"{stem}.response.txt").write_text(text)
-        raise ReplyRefused(f"{name} ranks {first}-{last}: {'; '.join(problems)}; reply kept in prompts/{stem}.response.txt, nothing written")
+        raise refusal(f"{name} ranks {first}-{last}: {'; '.join(problems)}; reply kept in prompts/{stem}.response.txt, no row written")
     names, fresh = {line.split(":", 1)[0] for line in known.splitlines()}, []
     for n, d in mechanisms:
         if n not in names:

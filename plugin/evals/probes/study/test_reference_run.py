@@ -95,6 +95,13 @@ class ReferenceBase(unittest.TestCase):
         self.assertEqual((self.rows(), self.ledger()), ([], []))
         self.assertEqual(self.sessions().get("reference-calibration-config", {}).get("blocks", []), [])
 
+    def only_spend_written(self, message, cost=0.42, turns=1, served=("claude-fable-5-1",)):
+        [line] = self.ledger()
+        self.assertIn(message, line["refused"])
+        self.assertEqual((line["ranks"], line["total_cost_usd"], line["num_turns"], line["served_models"]), ([1], cost, turns, list(served) if served is not None else None))
+        self.assertEqual(self.rows(), [])
+        self.assertEqual(self.sessions().get("reference-calibration-config", {}).get("blocks", []), [])
+
 
 class ReferencePromptTest(unittest.TestCase):
     def test_the_prompt_holds_the_bundle_the_rubric_notes_one_row_and_the_reply_format(self):
@@ -259,7 +266,8 @@ class ReferenceRunTest(ReferenceBase):
         self.judge(fetch)
         prompts = [len((self.work / f"prompts/reference-calibration-config-{r}-{r}.md").read_bytes()) for r in (1, 2)]
         self.assertEqual(self.ledger(), [{"date": "2026-10-21", "key": "reference-calibration-config", "ranks": [r], "model": "claude-fable-5-1", "effort": "max",
-                                          "total_cost_usd": cost, "usage": {"input_tokens": 25000, "output_tokens": 9500}, "duration_ms": 61000, "prompt_bytes": size}
+                                          "total_cost_usd": cost, "usage": {"input_tokens": 25000, "output_tokens": 9500}, "duration_ms": 61000, "num_turns": 1,
+                                          "served_models": ["claude-fable-5-1"], "prompt_bytes": size}
                                          for r, cost, size in ((1, 0.42, prompts[0]), (2, None, prompts[1]))])
 
     def test_a_resumed_run_skips_the_ranks_already_labelled(self):
@@ -270,7 +278,8 @@ class ReferenceRunTest(ReferenceBase):
         self.judge(fetch)
         self.assertEqual(len(fetch.called("claude -p")), 1)
         self.assertEqual([r["order_rank"] for r in self.rows()], [1, 2])
-        self.assertEqual(len(self.ledger()), 2)
+        self.assertEqual([(line["ranks"], line.get("refused"), line["total_cost_usd"]) for line in self.ledger()],
+                         [([1], None, 0.42), ([2], "claude claude-fable-5-1: exit 1: rate limited", None), ([2], None, 0.42)])
 
     def test_a_prompt_over_the_limit_is_refused_before_any_session(self):
         write_jsonl(self.work / "reference-inputs-config.jsonl", [self.inputs(1, "o/one", "x" * MAX_PROMPT), self.inputs(2, "o/two", "short")])
@@ -279,13 +288,20 @@ class ReferenceRunTest(ReferenceBase):
         self.assertEqual(fetch.called("claude -p"), [])
         self.nothing_written()
 
-    def test_a_reply_with_two_turns_a_denial_or_another_served_model_is_refused_and_nothing_is_written(self):
-        cases = {"2 turns": fable(label(1, "o/one"), turns=2), "permission denials ['Bash']": fable(label(1, "o/one"), denials=["Bash"]),
-                 "served ['claude-fable-5-1', 'claude-haiku-5-5']": fable(label(1, "o/one"), models=("claude-fable-5-1", "claude-haiku-5-5"))}
-        for message, reply in cases.items():
+    def test_a_reply_with_two_turns_a_denial_or_another_served_model_is_refused_with_only_its_spend_written(self):
+        cases = {"2 turns": (fable(label(1, "o/one"), turns=2), 2, ["claude-fable-5-1"]),
+                 "permission denials ['Bash']": (fable(label(1, "o/one"), denials=["Bash"]), 1, ["claude-fable-5-1"]),
+                 "served ['claude-fable-5-1', 'claude-haiku-5-5']": (fable(label(1, "o/one"), models=("claude-fable-5-1", "claude-haiku-5-5")), 1,
+                                                                    ["claude-fable-5-1", "claude-haiku-5-5"])}
+        for message, (reply, turns, served) in cases.items():
             with self.subTest(message):
+                (self.work / "claude-spend-ledger.jsonl").unlink(missing_ok=True)
                 self.assertIn(message, self.refused(FakeFetch([("claude -p", reply)]), "--rows", "1-1"))
-                self.nothing_written()
+                self.only_spend_written(message, turns=turns, served=served)
+
+    def test_a_reply_that_is_not_json_is_refused_with_a_null_spend_line(self):
+        self.assertIn("reply is not JSON", self.refused(FakeFetch([("claude -p", "Error: overloaded")]), "--rows", "1-1"))
+        self.only_spend_written("reply is not JSON", cost=None, turns=None, served=None)
 
     def test_a_session_that_leaves_a_file_behind_is_refused(self):
         class Writer(FakeFetch):
@@ -300,9 +316,9 @@ class ReferenceRunTest(ReferenceBase):
     def test_a_malformed_row_is_kept_in_prompts_and_refused(self):
         bad = label(1, "o/one", decision="excluded: vendor")
         message = self.refused(FakeFetch([("claude -p", fable(bad))]), "--rows", "1-1")
-        self.assertIn("reply kept in prompts/reference-calibration-config-1-1.response.txt, nothing written", message)
+        self.assertIn("reply kept in prompts/reference-calibration-config-1-1.response.txt, no row written", message)
         self.assertEqual((self.work / "prompts/reference-calibration-config-1-1.response.txt").read_text(), bad)
-        self.nothing_written()
+        self.only_spend_written("rank 1 needs a decision")
 
     def test_the_cli_refuses_what_the_reference_set_cannot_run(self):
         cases = [("--set reference needs --batch", ["--judge", "reference", "--set", "reference", "--stratum", "config"]),
@@ -349,7 +365,7 @@ class FlaggerRunTest(ReferenceBase):
         entry = self.sessions()[name]
         self.assertEqual([b["agy_lists"] for b in entry["blocks"]], [{"before": snapshot, "after": snapshot}] * 2)
         self.assertNotIn("refused", entry)
-        self.assertEqual([line["total_cost_usd"] for line in self.ledger()], [None, None])
+        self.assertEqual([(line["total_cost_usd"], line["num_turns"], line["served_models"]) for line in self.ledger()], [(None, 1, None), (None, 1, None)])
 
     def test_disabled_agy_lists_are_recorded_as_disabled(self):
         mcp, plugins = MCP_LIST.replace("  enabled  ", "  disabled  "), PLUGIN_LIST.replace("(enabled,", "(disabled,")
@@ -375,6 +391,7 @@ class FlaggerRunTest(ReferenceBase):
         [refusal] = entry["refused"]
         self.assertEqual((refusal["rank"], refusal["date"]), (1, "2026-10-21"))
         self.assertIn("step types ['tool'] beyond user_input and agent_response", refusal["reason"])
+        self.assertEqual([(line["ranks"], "step types ['tool']" in line.get("refused", "")) for line in self.ledger()], [([1], True), ([1], True), ([2], False)])
 
     def test_a_malformed_flagger_reply_refused_twice_is_recorded_and_a_retry_that_answers_is_not(self):
         fetch = FakeFetch([*self.lists(), (needle(1), agy_reply(label(1, "o/one", decision="maybe"))), (needle(2), agy_reply(label(2, "o/two")))])
@@ -383,6 +400,7 @@ class FlaggerRunTest(ReferenceBase):
         entry = self.sessions()[name]
         self.assertEqual((entry["blocks"], [r["rank"] for r in entry["refused"]]), ([], [1]))
         self.assertEqual(entry["model"], "gpt-oss-120b-medium")
+        self.assertEqual([(line["model"], "rank 1 needs a decision" in line["refused"]) for line in self.ledger()], [("gpt-oss-120b-medium", True)] * 2)
 
         class Flaky(FakeFetch):
             def run(self, cmd, timeout=180, cwd=None):
