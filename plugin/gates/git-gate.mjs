@@ -41,11 +41,17 @@ const WRAPPERS = new Map([
   ["stdbuf", ["-i", "-o", "-e"]],
   ["xargs", ["-I", "-n", "-P", "-L", "-d", "-E", "-s", "-a"]],
   ["env", ["-u", "-C", "-S", "--unset", "--chdir", "--split-string"]],
+  ["setsid", []],
+  ["flock", ["-w", "--timeout", "-E", "--conflict-exit-code"]],
+  ["npx", ["-p", "--package"]],
 ]);
-const WRAPPER_ARGUMENTS = new Map([["timeout", 1]]);
+const WRAPPER_ARGUMENTS = new Map([["timeout", 1], ["flock", 1]]);
+const LOCAL_RUNNERS = new Set(["find", "script", "busybox"]);
+const FIND_EXEC = /^-(?:exec|execdir|ok|okdir)$/;
+const SUDO_SHELL = /^(?:-[a-zA-Z]*[si]|--shell|--login)$/;
 const PR_CREATE_VALUE_FLAGS = new Set(["-t", "--title", "-b", "--body", "-F", "--body-file", "-B", "--base", "-H", "--head", "-a", "--assignee", "-l", "--label", "-m", "--milestone", "-p", "--project", "-r", "--reviewer", "-T", "--template"]);
 const EVAL_WORDS = new Set(["eval", "source", ".", "alias", "function"]);
-const NOT_LITERAL = /[$`(*?,{]|^\[(?!\[?$)|.}/;
+const NOT_LITERAL = /[$`(*?,{]|^\[(?!\[?$)|.}|[^[]\[/;
 const RUNNERS = new Set(["env", "script", "ssh", "su", "runuser", "sg", "setsid", "flock", "watch", "parallel", "tmux", "screen", "expect", "unbuffer", "at", "batch", "chroot", "systemd-run", "nsenter", "unshare", "firejail", "bwrap"]);
 const API_MERGE = /pulls\/\d+\/merge\b|mergePullRequest|markPullRequestReadyForReview|enablePullRequestAutoMerge/;
 const MAX_COMMAND = 10_000;
@@ -114,9 +120,9 @@ function strippedTokens(segment) {
   for (;;) {
     while (at < all.length && (ENV_ASSIGNMENT.test(all[at]) || /^[({!]+$/.test(all[at]))) at += 1;
     if (at < all.length) all[at] = all[at].replace(/^[({!]+/, "");
-    const flags = WRAPPERS.get(all[at]);
+    const flags = WRAPPERS.get(basename(all[at] ?? ""));
     if (!flags) break;
-    let positionals = WRAPPER_ARGUMENTS.get(all[at]) ?? 0;
+    let positionals = WRAPPER_ARGUMENTS.get(basename(all[at])) ?? 0;
     at += 1;
     while (at < all.length) {
       if (ENV_ASSIGNMENT.test(all[at])) at += 1;
@@ -138,6 +144,11 @@ function unreadable(segment, piped = false) {
   if (/\$'[^']*\\/.test(segment)) return true;
   const raw = tokenize(segment);
   if (raw.some((token, index) => RUNNERS.has(basename(token)) && raw.slice(index + 1).some((arg) => /\s/.test(arg) && /\bgh\b|github/i.test(arg)))) return true;
+  const carries = (token) => token.split(/\s+/).some((part) => ["git", "gh"].includes(basename(part)) || SHELLS.has(basename(part)) || INTERPRETER.test(basename(part)));
+  const runs = (token) => LOCAL_RUNNERS.has(basename(token)) && (basename(token) !== "find" || raw.some((arg) => FIND_EXEC.test(arg)));
+  if (raw.some((token, index) => runs(token) && raw.slice(index + 1).some(carries))) return true;
+  if (raw.some((token, index) => basename(token) === "flock" && raw.slice(index + 1).some((arg) => arg === "-c" || /^--command(=|$)/.test(arg)))) return true;
+  if ((!word || /^\d*[<>]/.test(word)) && raw.some((token, index) => ["sudo", "doas"].includes(basename(token)) && raw.slice(index + 1).some((arg) => SUDO_SHELL.test(arg)))) return true;
   if (SHELLS.has(program)) return args.some((arg) => /^-[a-zA-Z]*[cs]/.test(arg) || arg === "<<<" || arg === "<") || readsUnreadableCode(program, args, piped);
   if (INTERPRETER.test(program) && readsUnreadableCode(program, args, piped)) return true;
   if (INTERPRETER.test(program)) return args.some((arg) => /^(-[a-zA-Z]*[ce][a-zA-Z]*|--eval|--print)$/.test(arg)) && /\bgh\b|github/i.test(segment);

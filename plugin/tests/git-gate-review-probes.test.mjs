@@ -110,3 +110,47 @@ test("the review's regression probes keep their results", () => {
   assert.equal(verdict("bash /tmp/s.sh < /tmp/in.txt"), "deny");
   assert.equal(verdict("bash /tmp/s.sh -s"), "deny");
 });
+
+test("honest: a shell reached through env, setsid, npx or an absolute path is still judged (review F3 h05 h10 h45)", () => {
+  refusedToRewrite([`/usr/bin/env bash <<EOF\n${PUSH}\nEOF`, `setsid bash <<EOF\n${PUSH}\nEOF`, "npx tsx <<EOF\nconsole.log(1)\nEOF", `/bin/bash <<EOF\n${PUSH}\nEOF`]);
+});
+
+test("obfuscation, fixed: sudo -s, busybox sh and rbash reading a heredoc are refused (review F3 h09 h29 h30)", () => {
+  refusedToRewrite([`sudo -s <<EOF\n${PUSH}\nEOF`, `sudo -u root -i <<EOF\n${PUSH}\nEOF`, `busybox sh <<EOF\n${PUSH}\nEOF`, `rbash <<EOF\n${PUSH}\nEOF`]);
+});
+
+test("honest: a readable push under a wrapper or an absolute path asks like the plain push (review F4 h49 h50 h54)", () => {
+  for (const command of [
+    `setsid ${PUSH}`,
+    `flock /tmp/l ${PUSH}`,
+    `flock -w 5 /tmp/l ${PUSH}`,
+    `/usr/bin/sudo ${PUSH}`,
+    `sudo -u me ${PUSH}`,
+    `/usr/bin/git push --force origin main`,
+    `/usr/bin/env ${PUSH}`,
+    `env FOO=1 -u BAR ${PUSH}`,
+    `nice -n 5 ${PUSH}`,
+    `stdbuf -o0 ${PUSH}`,
+    `timeout 30 ${PUSH}`,
+    `time ${PUSH}`,
+    `command ${PUSH}`,
+    `exec ${PUSH}`,
+    `nohup ${PUSH}`,
+    "echo main | xargs -I{} git push --force origin {}",
+  ]) {
+    assert.equal(verdict(command), "ask", command);
+  }
+});
+
+test("obfuscation, fixed: runners whose inner command the gate cannot read are refused when they carry git, gh, a shell or an interpreter (review F4 h51 h53)", () => {
+  refusedToRewrite([`find . -maxdepth 0 -exec ${PUSH} \;`, `find . -execdir bash -c x \;`, `script -qc \x27${PUSH}\x27 /dev/null`, `flock -c \x27${PUSH}\x27 /tmp/l`, `flock /tmp/l -c \x27${PUSH}\x27`, "busybox python3 x.py"]);
+});
+
+test("obfuscation, fixed: a command word or script path with glob characters is refused", () => {
+  refusedToRewrite(["gi[t] push --force origin main", "/usr/bin/gi? push --force origin main", "g*t push", "bash scr*.sh", "node /k/github-wr*.mjs minimize x"]);
+});
+
+test("wrappers and runners that carry no hidden command keep their results", () => {
+  const allowed = ["ssh host git pull", "find . -name \x27*.md\x27", "find . -name x -exec rg -n y {} \;", "script -q /dev/null", "busybox wget http://x", "[ -f x ] && echo y", "[[ -n x ]] && echo y", "setsid npm test", "flock /tmp/l npm test", "env FOO=1 npm test", "/usr/bin/git status", "sudo -u me ls"];
+  assert.deepEqual(allowed.filter((command) => verdict(command) !== "allow"), []);
+});
