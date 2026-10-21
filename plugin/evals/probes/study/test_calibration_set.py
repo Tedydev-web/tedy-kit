@@ -110,23 +110,44 @@ class CalibrationSetTest(unittest.TestCase):
         from study_calibration_set import FIELDS, checked_label
         from study_topic import TopicError
         full = {"Authority": 1, "Methodology": 1, "Objectivity": 1, "Position": 1, "Relevance": 1, "problems": ["X1"], "decision": "eligible"}
-        cases = [full, {**full, "Relevance": 0.5}, {**full, "problems": []}, {**full, "Relevance": 0.5, "decision": "excluded: below-threshold", "problems": []},
-                 {k: v for k, v in full.items() if k != "problems"}, {**{k: v for k, v in full.items() if k != "problems"}, "Relevance": 0, "decision": "excluded: irrelevant"},
-                 {**full, "Relevance": 0, "decision": "eligible", "problems": []}, {k: v for k, v in full.items() if k != "decision"}]
+        low = {**full, "Authority": 0.5, "Methodology": 0.5, "Objectivity": 0.5, "Position": 0.5}
+        edge = {**full, "Objectivity": 0.5, "Position": 0.5}
+        cases = [(full, 1), ({**full, "Relevance": 0.5}, 1), ({**full, "problems": []}, 1), ({**full, "Relevance": 0.5, "decision": "excluded: below-threshold", "problems": []}, 1),
+                 ({k: v for k, v in full.items() if k != "problems"}, 1), ({**{k: v for k, v in full.items() if k != "problems"}, "Relevance": 0, "decision": "excluded: irrelevant"}, 1),
+                 ({**full, "Relevance": 0, "decision": "eligible", "problems": []}, 1), ({k: v for k, v in full.items() if k != "decision"}, 1),
+                 (full, 0), (low, 1), ({**low, "decision": "excluded: below-threshold"}, 1), ({**full, "decision": "excluded: copy"}, 1), (edge, 0.5), (edge, 0), (edge, 1),
+                 ({k: v for k, v in low.items() if k != "problems"}, 1), ({k: v for k, v in low.items() if k != "Position"}, 0)]
 
-        def imported(label):
+        def imported(label, date):
             try:
-                kept = checked_label("row", label, ["X1", "X2", "X3", "X4"])
+                kept = checked_label("row", label, ["X1", "X2", "X3", "X4"], date)
             except TopicError:
-                return False
-            return all(f in kept for f in FIELDS)
+                return [False, False]
+            return [True, all(f in kept for f in FIELDS)]
 
         script_text = re.search(r"<script>(.*)</script>", self.page, re.S).group(1)
-        functions = "\n".join(re.findall(r"^  const (?:FIELDS|valid|complete) = .*$", script_text, re.M))
-        code = f"{functions}\nconsole.log(JSON.stringify({json.dumps(cases)}.map((label) => complete(label))));"
+        functions = "\n".join(re.findall(r"^  const (?:FIELDS|RATED|TOTAL|total|why|valid|complete) = .*$", script_text, re.M))
+        code = f"{functions}\nconsole.log(JSON.stringify({json.dumps(cases)}.map(([label, date]) => [valid(label, date), complete(label, date)])));"
         page = json.loads(subprocess.run(["node", "-e", code], capture_output=True, text=True, check=True).stdout)
-        self.assertEqual(page, [imported(c) for c in cases])
-        self.assertEqual(page, [True, False, False, True, False, True, False, False])
+        self.assertEqual(page, [imported(*c) for c in cases])
+        self.assertEqual([c for _, c in page], [True, False, False, True, False, True, False, False, True, False, True, True, True, False, True, False, False])
+        self.assertEqual([v for v, _ in page], [True, False, False, True, True, True, False, True, True, False, True, True, True, False, True, True, True])
+
+    def test_the_page_names_each_broken_row_and_why_in_vietnamese(self):
+        import subprocess
+        script_text = re.search(r"<script>(.*)</script>", self.page, re.S).group(1)
+        functions = "\n".join(re.findall(r"^  const (?:RATED|TOTAL|total|why) = .*$", script_text, re.M))
+        full = {"Authority": 1, "Methodology": 1, "Objectivity": 1, "Position": 1, "Relevance": 1, "problems": ["X1"], "decision": "eligible"}
+        cases = [({**full, "Authority": 0.5, "Methodology": 0.5, "Objectivity": 0.5, "Position": 0.5}, 1), ({**full, "Relevance": 0.5}, 1), ({**full, "problems": []}, 1), (full, 0)]
+        code = f"{functions}\nconsole.log(JSON.stringify({json.dumps(cases)}.map(([label, date]) => why(label, date))));"
+        reasons = json.loads(subprocess.run(["node", "-e", code], capture_output=True, text=True, check=True).stdout)
+        self.assertEqual(reasons, [["Đủ điều kiện cần Authority + Methodology + Objectivity + Date + Position + Novelty ≥ 4.5 (Novelty = 1 khi có cơ chế), dòng này có 4"],
+                                   ["Đủ điều kiện cần Relevance = 1"], ["Relevance = 1 cần ít nhất một mã vấn đề"], []])
+        self.assertIn('broken.map((id) => id + " (" + why(labels[id], dates[id]).join("; ") + ")").join(", ")', script_text)
+        self.assertIn("; \" + broken.length + \" dòng trái quy tắc: ", script_text)
+        first = self.sample["rows"][0]["id"]
+        self.assertIn(f'<section class="row" id="{first}" data-id="{first}" data-date="1">', self.page)
+        self.assertIn("  const TOTAL = 4.5;", script_text)
 
     def test_repositories_used_as_stage1_worked_examples_are_never_drawn(self):
         repo = v4_repo()
@@ -162,14 +183,14 @@ class CalibrationSetTest(unittest.TestCase):
             self.assertNotIn(leak, self.page)
 
     def test_a_topic_without_an_eligibility_definition_renders_the_page_byte_identical_to_before_the_field(self):
-        self.assertEqual(hashlib.sha256(self.page.encode()).hexdigest(), "e1b1037c5e9afefa2fbfd83155e2c35e66c8d3ad93f01506ae332458032fd6ea")
+        self.assertEqual(hashlib.sha256(self.page.encode()).hexdigest(), "5482a04eb5a995fce9e1766e21a7788eb6f12b9916059bf189c1274dd5f696a4")
         self.assertNotIn('id="eligibility"', self.page)
 
     def test_removing_the_highlight_note_style_and_marks_gives_back_the_page_byte_identical_to_before_the_highlight(self):
         bare = re.sub(r"<p>Tô sáng theo [^<]*</p>", "", self.page, count=1).replace(".hit{background:#ffe08a;font-weight:600}", "")
         bare = re.sub(r'<span class="hit">([^<]*)</span>', r"\1", bare).replace("<details open><summary>Danh sách thư mục gốc", "<details><summary>Danh sách thư mục gốc")
         bare = re.sub(r' data-highlight="[0-9a-f]{64}"', "", bare, count=1).replace(" highlight_sha256: document.body.dataset.highlight,", "")
-        self.assertEqual(hashlib.sha256(bare.encode()).hexdigest(), "07a08fa6bc8cdc3e94eef0aa5d4d4a78b19dfefd6fb6ed6ad8111eb333a5ac13")
+        self.assertEqual(hashlib.sha256(bare.encode()).hexdigest(), "853e20599a59e707d86d0ddee06ae28c43e36b195909e996dc84e5e015f8f060")
 
     def test_the_topic_eligibility_definition_tops_the_page_escaped_and_leaves_the_set_and_the_draw_unchanged(self):
         _, work = drawn_work(eligibility=ELIGIBILITY)
@@ -331,9 +352,16 @@ class CalibrationSetTest(unittest.TestCase):
                                      (first, {"decision": "maybe"}, "eligible or excluded: <code>"), (first, {"decision": "excluded: lazy"}, "eligible or excluded: <code>"),
                                      (eligible, {"Relevance": 0, "problems": []}, "eligible needs Relevance 1, the label gives 0"),
                                      (eligible, {"problems": []}, "Relevance 1 names the problem it carries a mechanism for; tick at least one problem id"),
-                                     (eligible, {"problems": ["X9"]}, r"problems \['X9'\] are not a list of the topic's problem ids")):
+                                     (eligible, {"problems": ["X9"]}, r"problems \['X9'\] are not a list of the topic's problem ids"),
+                                     (eligible, {"Authority": 0.5, "Methodology": 0.5, "Objectivity": 0.5, "Position": 0.5},
+                                      rf"label {eligible}: eligible needs Authority \+ Methodology \+ Objectivity \+ Date \+ Position \+ Novelty >= 4.5 with Novelty 1 for a row with a "
+                                      r"mechanism, the rule the judges' decisions are derived with; the label gives 4 \(Date 1\)")):
             with self.assertRaisesRegex(SystemExit, message):
                 self.importing(self.labels_file({**labels, key: {**labels[key], **change}}), work)
+        for change in ({"Authority": 1, "Methodology": 0.5, "Objectivity": 0.5, "Position": 0.5}, {"decision": "excluded: copy"},
+                       {"Authority": 0, "Methodology": 0, "Objectivity": 0, "Position": 0, "decision": "excluded: below-threshold"}):
+            self.importing(self.labels_file({**labels, eligible: {**labels[eligible], **change}}), work)
+            self.assertEqual(next(r for r in json.loads((work / "calibration-labels.json").read_text())["rows"] if r["id"] == eligible)["user"], {**labels[eligible], **change})
         with self.assertRaisesRegex(SystemExit, "names rows the set does not hold"):
             self.importing(self.labels_file({**labels, "calibration-config-999": labels[first]}), work)
         partial = dict(labels)

@@ -6,8 +6,9 @@ import re
 from pathlib import Path
 
 from study_calibration import CALIBRATED_STRATA
+from study_protocol import EMPTY_TABLE
 from study_qgs import candidates_file
-from study_screening_core import read_jsonl
+from study_screening_core import ELIGIBLE_TOTAL, JUDGED, MechanismTable, derive, read_jsonl
 from study_screening_input import fetch_inputs, inputs_file
 from study_session import canonical_sha256, qgs_shape
 from study_session_prompt import date_cell, required_sweep_date
@@ -18,6 +19,7 @@ SET_SIZE, LIKELY_TOP, TOP_UP_MIN, TOP_UP_MAX = 60, 10, 30, 40
 BATCHES = ("calibration", "top-up", "held-out")
 LABELLED = ("Authority", "Methodology", "Objectivity", "Position", "Relevance")
 FIELDS = (*LABELLED, "problems", "decision")
+RATED = tuple(c for c in JUDGED if c != "Date")
 EXCLUDE_CODES = {"irrelevant": "không liên quan", "below-threshold": "dưới ngưỡng", "copy": "bản sao của nguồn khác", "dead": "không đọc được: repository hoặc commit đã mất",
                  "aggregator": "danh sách tổng hợp"}
 RATINGS = (1, 0.5, 0)
@@ -332,15 +334,24 @@ def rebuild_page(topic, repo, work, batch, criteria):
     criteria_path = Path(repo) / criteria
     if criteria != sample.get("criteria") or not criteria_path.is_file() or hashlib.sha256(criteria_path.read_bytes()).hexdigest() != sample.get("criteria_sha256"):
         raise TopicError(f"{criteria} is not the criteria file {path.name} was drawn under ({sample.get('criteria')}, sha256 {str(sample.get('criteria_sha256'))[:16]})")
+    held = pinned_inputs(work, sample)
+    return page(topic, batch, set_sha, [(row["id"], row["stratum"], held[row["id"]]) for row in sample["rows"]], anchors(criteria_path.read_text()))
+
+
+def pinned_inputs(work, sample):
     inputs = {s: {r["order_rank"]: r for r in read_jsonl(work, inputs_file(work, s).name)} for s in sample["rows_per_stratum"]}
-    shown = []
+    pinned = {}
     for row in sample["rows"]:
         held = inputs[row["stratum"]].get(row["order_rank"])
         if held is None or canonical_sha256(held) != row["inputs_sha256"]:
             raise TopicError(f"{row['id']}: {inputs_file(work, row['stratum']).name} no longer holds the inputs the set pinned for rank {row['order_rank']}; "
                              "the page shows exactly the inputs every judge reads")
-        shown.append((row["id"], row["stratum"], held))
-    return page(topic, batch, set_sha, shown, anchors(criteria_path.read_text()))
+        pinned[row["id"]] = held
+    return pinned
+
+
+def row_date(held, when):
+    return date_cell((held.get("facts") or {}).get("pushed"), when)
 
 
 def pre(value):
@@ -348,8 +359,8 @@ def pre(value):
 
 
 def row_section(index, total, key, stratum, held, anchor, when, problems):
-    date = date_cell((held.get("facts") or {}).get("pushed"), when)
-    parts = [f'<section class="row" id="{html.escape(key)}" data-id="{html.escape(key)}">',
+    date = row_date(held, when)
+    parts = [f'<section class="row" id="{html.escape(key)}" data-id="{html.escape(key)}" data-date="{date["v"]:g}">',
              f"<h2>{index}/{total} · {html.escape(stratum)} · {html.escape(held['repo'])}</h2>",
              f"<p>commit {html.escape(str(held.get('sha', '-')))}</p>",
              f"<p class=\"date\">Date do công cụ tính sẵn, không chấm: {date['v']:g} ({html.escape(date['why'])})</p>",
@@ -389,16 +400,21 @@ STYLE = ("body{font:15px/1.5 system-ui,sans-serif;margin:0 auto;max-width:1100px
 SCRIPT = """(() => {
   const SET = document.body.dataset.set, SWEEP = document.body.dataset.sweep, BATCH = document.body.dataset.batch, KEY = "calibration:" + SET;
   const FIELDS = %s;
+  const RATED = %s;
+  const TOTAL = %s;
   const ids = Array.from(document.querySelectorAll("section.row")).map((s) => s.dataset.id);
+  const dates = Object.fromEntries(Array.from(document.querySelectorAll("section.row")).map((s) => [s.dataset.id, Number(s.dataset.date)]));
   const status = document.getElementById("progress");
   let labels = {};
   try { labels = JSON.parse(localStorage.getItem(KEY) || "{}"); } catch (error) { status.textContent = "Không đọc được tiến độ đã lưu: " + error.message; }
-  const valid = (label) => !(label.decision === "eligible" && label.Relevance !== 1) && !(label.Relevance === 1 && Array.isArray(label.problems) && !label.problems.length);
-  const complete = (label) => Boolean(label) && valid(label) && FIELDS.every((f) => f === "problems" ? label.problems !== undefined || label.Relevance === 0 : label[f] !== undefined);
+  const total = (label, date) => RATED.reduce((sum, c) => sum + label[c], date + 1);
+  const why = (label, date) => [[label.decision === "eligible" && label.Relevance !== 1, "Đủ điều kiện cần Relevance = 1"], [label.Relevance === 1 && Array.isArray(label.problems) && !label.problems.length, "Relevance = 1 cần ít nhất một mã vấn đề"], [label.decision === "eligible" && label.Relevance === 1 && Array.isArray(label.problems) && label.problems.length > 0 && RATED.every((c) => label[c] !== undefined) && total(label, date) < TOTAL, "Đủ điều kiện cần Authority + Methodology + Objectivity + Date + Position + Novelty ≥ " + TOTAL + " (Novelty = 1 khi có cơ chế), dòng này có " + total(label, date)]].filter(([broken]) => broken).map(([, reason]) => reason);
+  const valid = (label, date) => !why(label, date).length;
+  const complete = (label, date) => Boolean(label) && valid(label, date) && FIELDS.every((f) => f === "problems" ? label.problems !== undefined || label.Relevance === 0 : label[f] !== undefined);
   const show = (extra) => {
-    const broken = ids.filter((id) => labels[id] && !valid(labels[id]));
-    status.textContent = "Đã gán đủ nhãn " + ids.filter((id) => complete(labels[id])).length + "/" + ids.length + " dòng"
-      + (broken.length ? "; " + broken.length + " dòng trái quy tắc (Đủ điều kiện cần Relevance = 1; Relevance = 1 cần ít nhất một mã vấn đề): " + broken.join(", ") : "") + (extra || "");
+    const broken = ids.filter((id) => labels[id] && !valid(labels[id], dates[id]));
+    status.textContent = "Đã gán đủ nhãn " + ids.filter((id) => complete(labels[id], dates[id])).length + "/" + ids.length + " dòng"
+      + (broken.length ? "; " + broken.length + " dòng trái quy tắc: " + broken.map((id) => id + " (" + why(labels[id], dates[id]).join("; ") + ")").join(", ") : "") + (extra || "");
   };
   const apply = () => {
     document.querySelectorAll("input").forEach((input) => {
@@ -485,10 +501,10 @@ def page(topic, batch, set_sha, shown, anchor):
                       f"<header><h1>{TITLES[batch]} · {html.escape(topic['sweep'])}</h1><p>{html.escape(note)}</p><p>{html.escape(intro)}</p>"
                       "<p id=\"progress\"></p>",
                       '<button id="download" type="button">Tải nhãn về (JSON)</button> <label>Mở file nhãn đã lưu <input id="restore" type="file" accept="application/json"></label></header>',
-                      *eligibility, "<main>", *sections, "</main>", f"<script>{SCRIPT % json.dumps(list(FIELDS))}</script>", "</body>", "</html>", ""])
+                      *eligibility, "<main>", *sections, "</main>", f"<script>{SCRIPT % (json.dumps(list(FIELDS)), json.dumps(list(RATED)), json.dumps(ELIGIBLE_TOTAL))}</script>", "</body>", "</html>", ""])
 
 
-def checked_label(key, label, problems):
+def checked_label(key, label, problems, date):
     if not isinstance(label, dict):
         raise TopicError(f"label {key}: must be an object of the five criteria, the problem ids and the decision")
     unknown = sorted(set(label) - set(FIELDS))
@@ -507,6 +523,12 @@ def checked_label(key, label, problems):
         raise TopicError(f"label {key}: eligible needs Relevance 1, the label gives {label['Relevance']}")
     if label.get("Relevance") == 1 and "problems" in label and not ids:
         raise TopicError(f"label {key}: Relevance 1 names the problem it carries a mechanism for; tick at least one problem id")
+    if decision == "eligible" and label.get("Relevance") == 1 and ids and all(c in label for c in RATED):
+        found = derive(MechanismTable(EMPTY_TABLE), "user", {"A": {}, "B": {}}, "A",
+                       {"order_rank": key, "scores": {**{c: {"v": label[c]} for c in RATED}, "Date": {"v": date}}, "mechanisms": ids, "decision": "eligible"})
+        if found["decision"] != "eligible":
+            raise TopicError(f"label {key}: eligible needs Authority + Methodology + Objectivity + Date + Position + Novelty >= {ELIGIBLE_TOTAL:g} with Novelty 1 for a row with a "
+                             f"mechanism, the rule the judges' decisions are derived with; the label gives {found['total']:g} (Date {date:g})")
     kept = {f: label[f] for f in FIELDS if f in label}
     if "problems" not in kept and label.get("Relevance") == 0:
         kept["problems"] = []
@@ -535,7 +557,9 @@ def import_labels(topic, work, saved, batch="calibration"):
     unknown = sorted(set(labels) - {r["id"] for r in sample["rows"]})
     if unknown:
         raise TopicError(f"the labels file names rows the set does not hold: {unknown[:10]}")
-    kept = {key: checked_label(key, value, topic.get("problems") or []) for key, value in labels.items()}
+    when = required_sweep_date(topic)
+    held = pinned_inputs(work, sample)
+    kept = {key: checked_label(key, value, topic.get("problems") or [], row_date(held[key], when)["v"]) for key, value in labels.items()}
     rows = [{**{k: r[k] for k in ("id", "stratum", "order_rank", "repo", "inputs_sha256", "qgs_sha256")}, "user": kept.get(r["id"])} for r in sample["rows"]]
     complete = sum(1 for r in rows if r["user"] and all(f in r["user"] for f in FIELDS))
     out = {"batch": batch, "set_sha256": set_sha, "stage1_freeze_sha256": hashlib.sha256((work / FREEZE_FILE).read_bytes()).hexdigest(), **highlight,
