@@ -288,6 +288,13 @@ class ReferenceLabelsTest(unittest.TestCase):
         write_json(topic, {k: v for k, v in json.loads(topic.read_text()).items() if k != "reference"})
         self.refused(repo, work, "names no reference", "--batch", "calibration")
 
+    def test_a_reference_that_is_also_an_index_judge_or_a_ladder_model_is_refused(self):
+        repo, work = self.copies()
+        self.referenced(work)
+        topic = repo / "docs/prior-art/topics/demo.json"
+        write_json(topic, {**json.loads(topic.read_text()), "reference": {**REFERENCE, "model": "claude-opus-5-5"}})
+        self.refused(repo, work, "reference claude-opus-5-5 is also sessions.A, qgs_judges.A, reader, the stage-1 ladder; the reference is never a judge", "--batch", "calibration")
+
     def test_the_user_import_is_refused_for_a_reference_topic(self):
         repo, work = self.copies()
         path = saved_labels(work, "calibration")

@@ -8,8 +8,8 @@ from study_protocol import EMPTY_TABLE
 from study_screening_core import COPYLIKE, MechanismTable, derive, read_jsonl
 from study_session import canonical_sha256, session_header
 from study_session_prompt import date_cell, required_sweep_date
-from study_stage1 import HELD_OUT
-from study_topic import TopicError, screened_strata, session_option
+from study_stage1 import HELD_OUT, LADDER
+from study_topic import TopicError, reference_option as topic_reference_option, screened_strata
 
 REPLY_KEYS = ("order_rank", "repo", "scores", "mechanisms", "decision", "decision_cite")
 MECHANISM_KEYS = ("problem", "path", "why")
@@ -25,9 +25,10 @@ MISSING = object()
 
 
 def reference_option(topic):
-    if topic.get("reference") is None:
+    option = topic_reference_option(topic, [m for rung in LADDER for m in rung["models"]])
+    if option is None:
         raise TopicError(f"topic {topic['name']} names no reference; its labels are the user's, kept by import-calibration-labels.py")
-    return session_option(topic, "reference", topic["reference"])
+    return option
 
 
 def session_key(batch, stratum, rerun=None):
