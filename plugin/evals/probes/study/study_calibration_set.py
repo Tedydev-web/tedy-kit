@@ -578,8 +578,12 @@ def checked_label(key, label, problems, date):
     return kept
 
 
-def import_labels(topic, work, saved, batch="calibration"):
+def import_labels(topic, work, saved, batch="calibration", labeller=None):
     work = Path(work)
+    if topic.get("reference") is not None and labeller is None:
+        raise TopicError(f"topic {topic['name']} takes its labels from its reference; derive-reference-labels.py writes them, a user's labels are not imported")
+    if topic.get("reference") is None and labeller is not None:
+        raise TopicError(f"topic {topic['name']} names no reference; its labels are the user's and carry no labeller")
     if batch not in BATCHES[:2] and not HELD_OUT.match(batch):
         raise TopicError(f"batch {batch!r} is not calibration, top-up or a held-out batch")
     if not (work / FREEZE_FILE).is_file():
@@ -606,6 +610,6 @@ def import_labels(topic, work, saved, batch="calibration"):
     rows = [{**{k: r[k] for k in ("id", "stratum", "order_rank", "repo", "inputs_sha256", "qgs_sha256")}, "user": kept.get(r["id"])} for r in sample["rows"]]
     complete = sum(1 for r in rows if r["user"] and all(f in r["user"] for f in FIELDS))
     out = {"batch": batch, "set_sha256": set_sha, "stage1_freeze_sha256": hashlib.sha256((work / FREEZE_FILE).read_bytes()).hexdigest(), **highlight,
-           "complete": complete, "rows": rows}
+           **({"labeller": labeller} if labeller is not None else {}), "complete": complete, "rows": rows}
     (work / labels_file(batch)).write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n")
     return complete, len(rows)
