@@ -56,6 +56,8 @@ const MERGE_REASON = "tedy gate: merging or marking a PR ready belongs to the us
 const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve|unresolve|pr-body)|openproject\.mjs["']?\s+apply|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor|edit|delete))\b|^(?=[\s\S]*--apply\b)[\s\S]*?(?:openproject\.mjs["']?\s+(?:set|comment|comment-edit|relation|relation-delete|rollback)|doc-comment-file\.mjs["']?\s+post)\b/;
 export const CLAUDE_SETTINGS = process.env.TEDY_CLAUDE_SETTINGS ?? join(homedir(), ".claude", "settings.json");
 const REWRITING_PUSH = /^(-f|--force|--force-with-lease(=.*)?|--force-if-includes|--mirror|--all|--prune|-d|--delete)$/;
+const CTX_TOOL = /__ctx_(execute|execute_file|batch_execute)$/;
+const CTX_LANGUAGES = new Set(["javascript", "typescript", "python", "ruby", "go", "rust", "php", "perl", "r", "elixir", "csharp"]);
 
 function graphQuery(args) {
   for (let index = 0; index < args.length; index += 1) {
@@ -383,8 +385,41 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
   return rewrite ?? asked ?? { allow: true };
 }
 
-export function run() {
-  const input = readHookInput({ askOnFailure: true });
+function batchCommands(commands) {
+  let list = commands;
+  if (typeof list === "string") {
+    if (!list.trim()) return null;
+    try {
+      list = JSON.parse(list);
+    } catch {
+      list = [list];
+    }
+    if (!Array.isArray(list)) list = [commands];
+  }
+  if (!Array.isArray(list) || !list.length) return null;
+  const read = list.map((item) => (typeof item === "string" ? item : item?.command));
+  return read.every((command) => typeof command === "string") ? read : null;
+}
+
+export function bashInputs(input) {
+  const tool = String(input.tool_name ?? "").match(CTX_TOOL)?.[1];
+  if (!tool) return { inputs: [input] };
+  const toolInput = input.tool_input;
+  if (!toolInput || typeof toolInput !== "object") return { malformed: "no tool input" };
+  if (toolInput.cwd !== undefined && typeof toolInput.cwd !== "string") return { malformed: "`cwd` is not a string" };
+  const cwd = toolInput.cwd === undefined ? input.cwd : resolve(input.cwd ?? process.cwd(), toolInput.cwd);
+  const shell = (command) => ({ ...input, cwd, tool_input: { command } });
+  if (tool === "batch_execute") {
+    const commands = batchCommands(toolInput.commands);
+    return commands ? { inputs: commands.map(shell) } : { malformed: "`commands` is not a non-empty list of commands" };
+  }
+  if (typeof toolInput.language !== "string" || typeof toolInput.code !== "string") return { malformed: "`language` or `code` is not a string" };
+  if (toolInput.language === "shell") return { inputs: [shell(toolInput.code)] };
+  if (CTX_LANGUAGES.has(toolInput.language)) return { inputs: [] };
+  return { malformed: `language \`${toolInput.language.slice(0, 40)}\` is not one the gate knows` };
+}
+
+function judge(input) {
   const command = input.tool_input?.command ?? "";
   try {
     const gates = gateSwitches();
@@ -402,13 +437,27 @@ export function run() {
       }
       if (quoted && (!quoted.ask || result.allow)) result = { allow: false, ...quoted };
     }
-    if (!result.allow) logGate({ hook: "git-gate", decision: result.ask ? "ask" : "deny", command: command.slice(0, 200), cwd: input.cwd, reason: result.reason });
-    if (result.ask) ask(result.reason);
-    else if (!result.allow) deny(result.reason);
+    if (!result.allow) logGate({ hook: "git-gate", decision: result.ask ? "ask" : "deny", tool: input.tool_name, command: command.slice(0, 200), cwd: input.cwd, reason: result.reason });
+    return result;
   } catch (error) {
-    logGate({ hook: "git-gate", decision: "ask", command: String(command).slice(0, 200), error: error.message });
-    ask(PUBLISH.test(command) ? `tedy gate: could not check this publish command (${error.message}). Approve only if you have seen the exact draft.` : `tedy gate: could not check this command (${error.message}). Allow it only if the user asked for it.`);
+    logGate({ hook: "git-gate", decision: "ask", tool: input.tool_name, command: String(command).slice(0, 200), error: error.message });
+    return { allow: false, ask: true, reason: PUBLISH.test(command) ? `tedy gate: could not check this publish command (${error.message}). Approve only if you have seen the exact draft.` : `tedy gate: could not check this command (${error.message}). Allow it only if the user asked for it.` };
   }
+}
+
+export function run() {
+  const input = readHookInput({ askOnFailure: true });
+  const { inputs, malformed } = bashInputs(input);
+  if (malformed) {
+    const reason = `tedy gate: could not read this context-mode call (${malformed}), so it is refused unchecked. Send shell code as \`code\` with \`language: "shell"\`, or batch commands as a list of \`{ label, command }\`.`;
+    logGate({ hook: "git-gate", decision: "deny", tool: input.tool_name, cwd: input.cwd, reason });
+    deny(reason);
+    return;
+  }
+  const results = inputs.map(judge);
+  const result = results.find((item) => !item.allow && !item.ask) ?? results.find((item) => item.ask);
+  if (result?.ask) ask(result.reason);
+  else if (result) deny(result.reason);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();

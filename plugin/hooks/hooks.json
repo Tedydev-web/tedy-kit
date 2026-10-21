@@ -14,7 +14,7 @@
         ]
       },
       {
-        "matcher": "Bash",
+        "matcher": "^Bash$|^mcp__.*context-mode.*__ctx_(execute|execute_file|batch_execute)$",
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/git-gate.mjs\"", "timeout": 60, "onFailure": "block" }
         ]
