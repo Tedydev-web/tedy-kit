@@ -407,6 +407,14 @@ SCRIPT = """(() => {
 TITLES = {"calibration": "Bộ hiệu chuẩn", "top-up": "Lô bổ sung", "held-out": "Lô kiểm chứng giữ riêng"}
 
 
+def eligibility_block(eligibility):
+    def paragraphs(text):
+        return "".join(f"<p>{html.escape(line)}</p>" for line in text.splitlines() if line.strip())
+    return "\n".join(['<aside id="eligibility" style="background:#fff8e6;border:2px solid #8a4b00;border-radius:6px;margin:20px 0;padding:8px 16px">',
+                      "<h2>Định nghĩa đủ điều kiện của giám khảo stage-1: câu hỏi mọi giám khảo stage-1 trả lời cho từng repository</h2>",
+                      paragraphs(eligibility["vi"]), f'<div lang="en"><h3>Bản gốc tiếng Anh trong packet stage-1</h3>{paragraphs(eligibility["en"])}</div>', "</aside>"])
+
+
 def page(topic, batch, set_sha, shown, anchor):
     when = required_sweep_date(topic)
     batch = "held-out" if HELD_OUT.match(batch) else batch
@@ -417,13 +425,14 @@ def page(topic, batch, set_sha, shown, anchor):
              "là mới, như cách chấm giám khảo. Tiến độ tự lưu trong trình duyệt; bấm «Tải nhãn về (JSON)» để lưu file, rồi chạy import-calibration-labels.py với file đó.")
     problems = topic.get("problems") or []
     sections = [row_section(i, len(shown), key, stratum, held, anchor, when, problems) for i, (key, stratum, held) in enumerate(shown, 1)]
+    eligibility = [eligibility_block(topic["eligibility"])] if "eligibility" in topic else []
     return "\n".join(['<!DOCTYPE html>', '<html lang="vi">', "<head>", '<meta charset="utf-8">',
                       "<meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'\">",
                       f"<title>{TITLES[batch]} {html.escape(topic['sweep'])}</title>", f"<style>{STYLE}</style>", "</head>",
                       f'<body data-set="{set_sha}" data-sweep="{html.escape(topic["sweep"])}" data-batch="{batch}">',
                       f"<header><h1>{TITLES[batch]} · {html.escape(topic['sweep'])}</h1><p>{html.escape(intro)}</p><p id=\"progress\"></p>",
                       '<button id="download" type="button">Tải nhãn về (JSON)</button> <label>Mở file nhãn đã lưu <input id="restore" type="file" accept="application/json"></label></header>',
-                      "<main>", *sections, "</main>", f"<script>{SCRIPT % json.dumps(list(FIELDS))}</script>", "</body>", "</html>", ""])
+                      *eligibility, "<main>", *sections, "</main>", f"<script>{SCRIPT % json.dumps(list(FIELDS))}</script>", "</body>", "</html>", ""])
 
 
 def checked_label(key, label, problems):
