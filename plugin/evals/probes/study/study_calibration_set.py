@@ -27,13 +27,16 @@ SET_FILE, DRAW_FILE, LABELS_FILE, PAGE_FILE = "calibration-set.json", "calibrati
 HIGHLIGHT_PATTERNS = (".github", "codeowners", ".husky", ".pre-commit-config.yaml", ".claude", ".claude-plugin", "hooks", "hooks.json", "settings.json", "skill.md", "agents.md", "claude.md", "*.schema.json", "schema", "schemas", ".eslintrc*", "eslint.config.*", "biome.json*", ".markdownlint*", "commitlint*",
                       ".commitlintrc*", "contributing*", "changelog*", "adr", "decisions", "migrations", "evals", "tests", "test", "renovate.json*", ".release*",
                       "release-please*")
-README_CUES = (("objectivity", ("affiliate", "course", "courses", "enterprise", "paid", "premium", "pricing", "sponsor", "sponsored", "subscribe", "subscription")),
-               ("position", ("alternative", "vs", "versus", "compared to", "instead of", "unlike")))
+README_CUES = (("objectivity", ("affiliate", "affiliates", "course", "courses", "enterprise", "enterprises", "paid", "premium", "premiums", "pricing", "sponsor", "sponsors",
+                                "sponsored", "subscribe", "subscribes")),
+               ("position", ("alternative", "alternatives", "vs", "versus", "compared to", "instead of", "unlike")))
+NOT_CUES = ("vs code",)
 FACT_AIDS = (("facts", "stars"), ("evidence", "releases"), ("evidence", "tags"))
 
 
 def aid_list():
-    return HIGHLIGHT_PATTERNS + tuple(f"{group}:{word}" for group, words in README_CUES for word in words) + tuple(f"fact:{source}.{name}" for source, name in FACT_AIDS)
+    return (HIGHLIGHT_PATTERNS + tuple(f"{group}:{word}" for group, words in README_CUES for word in words) + tuple(f"not:{phrase}" for phrase in NOT_CUES)
+            + tuple(f"fact:{source}.{name}" for source, name in FACT_AIDS))
 
 
 def highlight_sha256():
@@ -41,7 +44,8 @@ def highlight_sha256():
 
 
 def cue_lines(readme, words):
-    pattern = re.compile(r"\b(?:" + "|".join(re.escape(w).replace(r"\ ", r"\s+") for w in words) + r")\b", re.I)
+    skipped = "".join(r"(?!" + re.escape(p).replace(r"\ ", r"[\s-]*") + r"\b)" for p in NOT_CUES)
+    pattern = re.compile(r"\b" + skipped + r"(?:" + "|".join(re.escape(w).replace(r"\ ", r"\s+") for w in words) + r")\b", re.I)
     return [f"{number}: {line}" for number, line in enumerate(readme.splitlines() if isinstance(readme, str) else [], 1) if pattern.search(line)]
 
 

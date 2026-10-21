@@ -245,7 +245,7 @@ class CalibrationSetTest(unittest.TestCase):
             self.assertNotIn(leak, self.page)
 
     def test_a_topic_without_an_eligibility_definition_renders_no_eligibility_block_and_the_pinned_page(self):
-        self.assertEqual(hashlib.sha256(self.page.encode()).hexdigest(), "25e0a3cd7d36affcc064ea2c36b5f8d634b8e10e333fc41ea625fa5b435cff6b")
+        self.assertEqual(hashlib.sha256(self.page.encode()).hexdigest(), "e6ef96b5ddb6942764868c41ed36014cdddc3544ef8c735039d0003ae4a1f38e")
         self.assertNotIn('id="eligibility"', self.page)
 
     def test_removing_the_highlight_note_style_and_marks_gives_the_pinned_unhighlighted_page(self):
@@ -291,14 +291,14 @@ class CalibrationSetTest(unittest.TestCase):
         self.assertEqual(len(set(HIGHLIGHT_PATTERNS)), len(HIGHLIGHT_PATTERNS))
         self.assertNotIn("skills", HIGHLIGHT_PATTERNS)
         self.assertTrue({"skill.md", ".claude", ".claude-plugin"} <= set(HIGHLIGHT_PATTERNS))
-        self.assertEqual(README_CUES, (("objectivity", ("affiliate", "course", "courses", "enterprise", "paid", "premium", "pricing", "sponsor", "sponsored", "subscribe",
-                                                        "subscription")),
-                                       ("position", ("alternative", "vs", "versus", "compared to", "instead of", "unlike"))))
+        self.assertEqual(README_CUES, (("objectivity", ("affiliate", "affiliates", "course", "courses", "enterprise", "enterprises", "paid", "premium", "premiums", "pricing",
+                                                        "sponsor", "sponsors", "sponsored", "subscribe", "subscribes")),
+                                       ("position", ("alternative", "alternatives", "vs", "versus", "compared to", "instead of", "unlike"))))
         cues = tuple(f"{group}:{word}" for group, words in README_CUES for word in words)
-        self.assertEqual(aid_list(), HIGHLIGHT_PATTERNS + cues + ("fact:facts.stars", "fact:evidence.releases", "fact:evidence.tags"))
+        self.assertEqual(aid_list(), HIGHLIGHT_PATTERNS + cues + ("not:vs code", "fact:facts.stars", "fact:evidence.releases", "fact:evidence.tags"))
         self.assertEqual([a for a in aid_list() if a != a.lower()], [])
         self.assertEqual(len(set(aid_list())), len(aid_list()))
-        self.assertEqual(highlight_sha256(), "d9fb0877671d30e2be28728d33fb42991ef6db36550ae1bf72fe5c04a57840b9")
+        self.assertEqual(highlight_sha256(), "dfac1a192a80c1bfa07d2f025406f684d48a55b3bd516d719427f85de6b7c2c0")
 
     def test_readme_lines_matching_the_frozen_keywords_are_shown_verbatim_with_line_numbers_per_group(self):
         from study_calibration_set import row_section
@@ -308,8 +308,10 @@ class CalibrationSetTest(unittest.TestCase):
             section = row_section(1, 1, "k", "config", {"repo": "o/r", "readme": readme}, anchor, date(2026, 10, 20), [])
             return re.search(r"<details( open)?><summary>Dòng README khớp danh sách từ khóa cố định</summary><pre>(.*?)</pre></details>", section, re.S).groups()
 
-        readme = "# Tool\nA paid <b>Pricing</b> page\nunpaid work and coursework\nCompared  to X, unlike Y\nVS Code extension\nversusX alternatives\nSponsored by Z"
-        self.assertEqual(cues(readme), (" open", "Objectivity\n2: A paid &lt;b&gt;Pricing&lt;/b&gt; page\n7: Sponsored by Z\n\nPosition\n4: Compared  to X, unlike Y\n5: VS Code extension"))
+        readme = ("# Tool\nA paid <b>Pricing</b> page\nunpaid work and coursework\nCompared  to X, unlike Y\nVS Code extension, vscode, VS-Code and vs  code\nversusX alternatives\n"
+                  "Sponsored by Z\nour sponsors and subscription\nIn VS Code: X vs Y\nvs codex")
+        self.assertEqual(cues(readme), (" open", "Objectivity\n2: A paid &lt;b&gt;Pricing&lt;/b&gt; page\n7: Sponsored by Z\n8: our sponsors and subscription\n\n"
+                                                 "Position\n4: Compared  to X, unlike Y\n6: versusX alternatives\n9: In VS Code: X vs Y\n10: vs codex"))
         none = (None, "Objectivity\n(không có dòng khớp)\n\nPosition\n(không có dòng khớp)")
         for empty in ("# Tool\nunpaid", "", None):
             self.assertEqual(cues(empty), none)
