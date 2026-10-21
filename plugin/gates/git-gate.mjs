@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ALL_GATES_ON, ask, deny, gateSwitches, logGate, readHookInput } from "../lib/hook-io.mjs";
 import { resolveMap } from "../lib/project-map.mjs";
@@ -61,7 +61,7 @@ const MERGE_REASON = "tedy gate: merging or marking a PR ready belongs to the us
 const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve|unresolve|pr-body)|openproject\.mjs["']?\s+apply|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor|edit|delete))\b|^(?=[\s\S]*--apply\b)[\s\S]*?(?:openproject\.mjs["']?\s+(?:set|comment|comment-edit|relation|relation-delete|rollback)|doc-comment-file\.mjs["']?\s+post)\b/;
 export const CLAUDE_SETTINGS = process.env.TEDY_CLAUDE_SETTINGS ?? join(homedir(), ".claude", "settings.json");
 const REWRITING_PUSH = /^(-f|--force|--force-with-lease(=.*)?|--force-if-includes|--mirror|--all|--prune|-d|--delete)$/;
-const CTX_TOOL = /__ctx_(execute|execute_file|batch_execute)$/;
+export const CTX_TOOL = /__ctx_(execute|execute_file|batch_execute)$/;
 const CTX_PUBLISH_REASON = "tedy gate: this publishes through a kit script from a context-mode tool, where the user's permission rules never ask. Run the publish as a plain Bash command of its own, so the permission rule asks the user before it goes out.";
 const CTX_LANGUAGES = new Set(["javascript", "typescript", "python", "ruby", "go", "rust", "php", "perl", "r", "elixir", "csharp"]);
 
@@ -420,8 +420,10 @@ export function bashInputs(input) {
   if (!tool) return { inputs: [input] };
   const toolInput = input.tool_input;
   if (!toolInput || typeof toolInput !== "object") return { malformed: "no tool input" };
-  if (toolInput.cwd !== undefined && typeof toolInput.cwd !== "string") return { malformed: "`cwd` is not a string" };
-  const cwd = toolInput.cwd === undefined ? input.cwd : resolve(input.cwd ?? process.cwd(), toolInput.cwd);
+  const own = tool === "execute_file" ? undefined : toolInput.cwd;
+  if (own !== undefined && typeof own !== "string") return { malformed: "`cwd` is not a string" };
+  if (own !== undefined && !isAbsolute(own)) return { malformed: "`cwd` is relative, and context-mode resolves it against its own install directory, which the gate cannot see; pass an absolute `cwd`" };
+  const cwd = own ?? process.env.CLAUDE_PROJECT_DIR ?? input.cwd;
   const shell = (command) => ({ ...input, tool_name: "Bash", cwd, tool_input: { command } });
   if (tool === "batch_execute") {
     const commands = batchCommands(toolInput.commands);

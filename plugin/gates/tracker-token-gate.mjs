@@ -18,7 +18,7 @@ const WRITE_VERB = /\b(POST|PATCH|PUT|DELETE)\b|(^|\s)(-X|--request)\b|method\s*
 export const REASON =
   "tedy gate: the OpenProject token stays inside the kit's tracker scripts, and every tracker write goes through `openproject.mjs` (preview/apply, set, comment) so it gets the form check, lock, sidecar and read-back (pm/references/tracker-openproject.md). If the script lacks what you need, stop and tell the user; never write around it.";
 
-function strings(value) {
+export function strings(value) {
   if (typeof value === "string") return [value];
   if (Array.isArray(value)) return value.flatMap(strings);
   if (value && typeof value === "object") return Object.values(value).flatMap(strings);

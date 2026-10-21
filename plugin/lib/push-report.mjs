@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { pathToFileURL } from "node:url";
 import { isScannedFile, newComments } from "./comment-scan.mjs";
-import { classify, splitSegments } from "../gates/git-gate.mjs";
+import { CTX_TOOL, bashInputs, classify, splitSegments } from "../gates/git-gate.mjs";
+import { strings } from "../gates/tracker-token-gate.mjs";
 import { gateSwitches, logGate, readHookInput } from "./hook-io.mjs";
 
 const BASE_CANDIDATES = ["origin/dev", "origin/develop", "origin/main", "origin/master"];
@@ -72,11 +73,13 @@ export function reportText(dir, { dirty, comments }) {
 
 export function run() {
   const input = readHookInput();
-  const command = input.tool_input?.command ?? "";
+  const { inputs = [] } = bashInputs(input);
+  const command = inputs.map((item) => item.tool_input?.command ?? "").join("\n");
   try {
-    const targets = pushTargets(command, input.cwd ?? process.cwd());
+    const targets = [...new Set(inputs.flatMap((item) => pushTargets(item.tool_input?.command ?? "", item.cwd ?? process.cwd())))];
     if (!targets.length) process.exit(0);
-    if (pushFailed(`${input.tool_response?.stdout ?? ""}\n${input.tool_response?.stderr ?? ""}`)) {
+    const output = CTX_TOOL.test(String(input.tool_name ?? "")) ? strings(input.tool_response).join("\n") : `${input.tool_response?.stdout ?? ""}\n${input.tool_response?.stderr ?? ""}`;
+    if (pushFailed(output)) {
       logGate({ hook: "push-report", decision: "skipped-failed-push", command: command.slice(0, 200), cwd: input.cwd });
       process.exit(0);
     }

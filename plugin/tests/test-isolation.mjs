@@ -12,3 +12,4 @@ Object.assign(process.env, {
   TEDY_CLAUDE_MD: join(scratch, "CLAUDE.md"),
   TEDY_KNOWN_MARKETPLACES: join(scratch, "known_marketplaces.json"),
 });
+delete process.env.CLAUDE_PROJECT_DIR;

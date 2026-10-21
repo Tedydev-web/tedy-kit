@@ -224,3 +224,40 @@ test("honest: role-gate classifies a kit script write with a quoted subcommand l
   assert.equal(classify("node x/github-write.mjs re\x27\x27solve PRRT_1"), "pr-review");
   assert.equal(classify("node x/openproject.mjs \"apply\" d.json"), "tracker");
 });
+
+function repos() {
+  const root = tempDir("tedy-ctx-cwd-");
+  const make = (name, branch) => {
+    const work = join(root, name);
+    const git = (...args) => execFileSync("git", ["-C", work, ...args], { stdio: "ignore" });
+    execFileSync("git", ["init", "-q", "--bare", "-b", branch, join(root, `${name}.git`)]);
+    execFileSync("git", ["clone", "-q", join(root, `${name}.git`), work], { stdio: "ignore" });
+    writeFileSync(join(work, "a.txt"), "a\n");
+    git("add", "-A");
+    git("-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm", "init");
+    git("push", "-q", "-u", "origin", branch);
+    return work;
+  };
+  return { main: make("repo-main", "master"), feat: make("repo-feat", "feat-x") };
+}
+
+test("honest: ctx commands are judged in the directory context-mode runs them in (review F2 c24 c27)", () => {
+  const { main, feat } = repos();
+  assert.equal(hook(...shell("git push"), { cwd: feat, projectDir: main }), "ask");
+  assert.equal(hook(EXECUTE_FILE, { path: "x", language: "shell", code: "git push", cwd: feat }, { cwd: main, projectDir: main }), "ask");
+  assert.equal(hook(BATCH, { commands: ["git push"] }, { cwd: feat, projectDir: main }), "ask");
+  assert.equal(hook(EXECUTE, { language: "shell", code: "git push", cwd: feat }, { cwd: main, projectDir: main }), "allow");
+  assert.equal(hook(...shell("git push"), { cwd: feat }), "allow");
+  assert.equal(hook(...shell("git push"), { cwd: main }), "ask");
+});
+
+test("honest: a relative ctx cwd, which the server resolves against its own install directory, is refused (review F2 c28)", () => {
+  const { main } = repos();
+  assert.equal(hook(EXECUTE, { language: "shell", code: "git push", cwd: "../repo-feat" }, { cwd: main, projectDir: main }), "deny");
+  assert.equal(hook(BATCH, { commands: ["git status"], cwd: "sub" }, { cwd: main, projectDir: main }), "deny");
+});
+
+test("honest: a heredoc or stdin form through a context-mode tool is refused like Bash (review F3 h58 h59)", () => {
+  assert.equal(hook(...shell(`bash<<EOF\n${PUSH}\nEOF`)), "deny");
+  assert.equal(hook(BATCH, { commands: [`bash /dev/stdin <<<\x27${PUSH}\x27`] }), "deny");
+});

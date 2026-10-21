@@ -94,3 +94,23 @@ test("with the comment gate off a push is checked for uncommitted files only", (
   assert.equal(pushFindings(repo).comments.length, 1);
   assert.deepEqual(pushFindings(repo, { comments: false }).comments, []);
 });
+
+test("a push sent through a context-mode tool is reported like a Bash push, and a failed one is not", () => {
+  const repo = makeRepo();
+  git(repo, "checkout", "-qb", "feat");
+  writeFileSync(join(repo, "src", "e.ts"), "export const e = 1;\n");
+  git(repo, "add", "-A");
+  git(repo, "commit", "-qm", "e");
+  git(repo, "push", "-q", "-u", "origin", "feat");
+  writeFileSync(join(repo, "src", "e.ts"), "export const e = 2;\n");
+  const run = (tool_name, tool_input, text) => {
+    const input = { tool_name, cwd: "/tmp", tool_input, tool_response: [{ type: "text", text }] };
+    const env = { ...process.env, TEDY_STATE_DIR: tempDir("tedy-state-"), TEDY_PROFILE_DIR: tempDir("tedy-profile-") };
+    return execFileSync("node", [new URL("../lib/push-report.mjs", import.meta.url).pathname], { input: JSON.stringify(input), encoding: "utf8", env });
+  };
+  const pushed = "To remote\n   1a2b3c4..5d6e7f8  feat -> feat";
+  assert.match(run("mcp__plugin_context-mode_context-mode__ctx_execute", { language: "shell", code: "git push", cwd: repo }, pushed), /left uncommitted[\s\S]*src\/e\.ts/);
+  assert.match(run("mcp__context-mode__ctx_batch_execute", { commands: [{ label: "p", command: `git -C ${repo} push` }] }, pushed), /left uncommitted/);
+  assert.equal(run("mcp__plugin_context-mode_context-mode__ctx_execute", { language: "shell", code: "git push", cwd: repo }, "error: failed to push some refs"), "");
+  assert.equal(run("mcp__plugin_context-mode_context-mode__ctx_execute", { language: "python", code: "print(1)" }, "1"), "");
+});

@@ -50,7 +50,7 @@ test("a refusal in any batch command wins over an ask in another", () => {
 test("an allowed plain command through ctx_execute passes and is read from the code field", () => {
   assert.equal(hook(EXECUTE, { language: "shell", code: "git status" }), null);
   assert.equal(hook(BATCH, { commands: [{ label: "log", command: "git log -1" }, { label: "diff", command: "git diff" }] }), null);
-  const input = { tool_name: EXECUTE, tool_input: { language: "shell", code: "git status", cwd: "sub" }, cwd: "/w", transcript_path: "/t.jsonl" };
+  const input = { tool_name: EXECUTE, tool_input: { language: "shell", code: "git status", cwd: "/w/sub" }, cwd: "/w", transcript_path: "/t.jsonl" };
   assert.deepEqual(bashInputs(input), { inputs: [{ ...input, tool_name: "Bash", cwd: "/w/sub", tool_input: { command: "git status" } }] });
 });
 
