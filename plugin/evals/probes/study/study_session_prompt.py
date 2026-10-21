@@ -48,6 +48,18 @@ STAGE1_ROWS_NOTE = ("Each row below is one repository: its name and description 
 STAGE1_REPLY_FORMAT = ("## Reply format\n\nReply with nothing but these lines. One JSON object per row, on one line, in order_rank order, with the fields order_rank, repo, "
                        "verdict (\"yes\", \"unsure\" or \"no\"), problems (the ids of the problems it may address; at least one for a yes) and why (one short sentence).")
 STAGE1_TEMPLATE_SHA256 = hashlib.sha256((STAGE1_ROWS_NOTE + "\n\n" + STAGE1_REPLY_FORMAT).encode()).hexdigest()
+REFERENCE_ROWS_NOTE = ("Each row below is one JSON object read at its pinned commit: the repository facts and the evidence the anchors score on, the README, the tree "
+                       "(agent-asset paths first), up to ten asset files, the first lines of up to ten test files, the CHANGELOG head, up to two manifests, the prefilled "
+                       "facts (released, changelog, paid_tier_cues) and, under truncated, the bytes each part held before and after its cap. Label only from these inputs; "
+                       "you have no tools. A file listed under missing could not be read at the pinned commit and counts as absent. Date is not asked: the toolchain "
+                       "computes it.")
+REFERENCE_REPLY_FORMAT = ("## Reply format\n\nReply with nothing but these lines. One JSON object per row, on one line, in order_rank order, with the fields order_rank, repo, "
+                          "scores (an object of the five criteria Authority, Methodology, Objectivity, Position and Relevance, each {\"v\": 1 | 0.5 | 0, \"cite\": \"...\"}), "
+                          "mechanisms (a list of {\"problem\": \"<registry problem id>\", \"path\": \"<tree path of the file that carries the mechanism>\", "
+                          "\"why\": \"<one sentence>\"}; empty when the repository carries none), decision (eligible, or excluded: <code> with the code irrelevant, "
+                          "below-threshold, copy, dead or aggregator) and decision_cite. Every cite is path:<a path from tree>, readme:<a verbatim README quote of at most "
+                          "200 characters> or fact:<a field of the row, such as prefilled.released>.")
+REFERENCE_TEMPLATE_SHA256 = hashlib.sha256((REFERENCE_ROWS_NOTE + "\n\n" + REFERENCE_REPLY_FORMAT).encode()).hexdigest()
 
 
 def sweep_date(topic):
@@ -91,6 +103,12 @@ def build_prompt(packet, criteria_path, criteria_text, mechanisms_text, rows, wh
 def build_stage1_prompt(packet, worked, rows):
     blocks = ["```json\n" + json.dumps(r, ensure_ascii=False) + "\n```" for r in rows]
     return "\n\n".join([packet.rstrip(), "## Worked examples", worked, "## Rows", STAGE1_ROWS_NOTE, *blocks, STAGE1_REPLY_FORMAT]) + "\n"
+
+
+def build_reference_prompt(bundle, notes, rows):
+    blocks = ["```json\n" + json.dumps(r, ensure_ascii=False) + "\n```" for r in rows]
+    noted = ["## Rubric notes", "\n".join(f"- line {n['line']} ({n['criterion']}): {n['quote']}" for n in notes)] if notes else []
+    return "\n\n".join([bundle.rstrip(), *noted, "## Rows", REFERENCE_ROWS_NOTE, *blocks, REFERENCE_REPLY_FORMAT]) + "\n"
 
 
 def build_qgs_prompt(packet, rows):

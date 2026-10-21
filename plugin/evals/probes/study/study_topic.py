@@ -12,6 +12,7 @@ DEFAULT_PILOT_ROWS = 20
 SESSION_CLIS = ("claude", "agy")
 SAIGON = timezone(timedelta(hours=7))
 KEBAB = r"[a-z0-9]+(?:-[a-z0-9]+)*"
+FLAGGERS = {"rubric_trigger": [{"cli": "agy", "model": "gemini-3.8-flash-high"}], "record_only": [{"cli": "agy", "model": "gpt-oss-120b-medium"}]}
 
 
 class TopicError(ValueError):
@@ -227,6 +228,44 @@ def session_b(topic):
 def session_b_options(topic):
     primary, fallback, also = session_b(topic)
     return [primary] + ([fallback] if fallback else []) + also
+
+
+def named_models(topic):
+    sessions = topic.get("sessions") if isinstance(topic.get("sessions"), dict) else {}
+    b = sessions.get("B") if isinstance(sessions.get("B"), dict) else {}
+    qgs = topic.get("qgs_judges") if isinstance(topic.get("qgs_judges"), dict) else {}
+    also = b.get("pilot_also") if isinstance(b.get("pilot_also"), list) else []
+    named = {"sessions.A": sessions.get("A"), "sessions.B": b, "sessions.B.fallback": b.get("fallback"), **{f"sessions.B.pilot_also[{i}]": o for i, o in enumerate(also)},
+             **{f"qgs_judges.{side}": o for side, o in qgs.items()}, "reader": topic.get("reader"), "cross_family": topic.get("cross_family")}
+    return {where: o["model"] for where, o in named.items() if isinstance(o, dict) and isinstance(o.get("model"), str)}
+
+
+def reference_option(topic, ladder=()):
+    if topic.get("reference") is None:
+        return None
+    option = session_option(topic, "reference", topic["reference"])
+    roles = [where for where, model in named_models(topic).items() if model == option["model"]] + (["the stage-1 ladder"] if option["model"] in ladder else [])
+    if roles:
+        raise TopicError(f"{topic['path']}: reference {option['model']} is also {', '.join(roles)}; the reference is never a judge, a stage-1 model or a replacement")
+    return option
+
+
+def flaggers(topic):
+    out = {}
+    for role, default in FLAGGERS.items():
+        key = f"{role}_flaggers"
+        listed = topic.get(key, default)
+        if not isinstance(listed, list):
+            raise TopicError(f"{topic['path']}: {key} must be a list")
+        out[role] = [session_option(topic, f"{key}[{i}]", o) for i, o in enumerate(listed)]
+    models = [o["model"] for options in out.values() for o in options]
+    twice = sorted({m for m in models if models.count(m) > 1})
+    if twice:
+        raise TopicError(f"{topic['path']}: flagger {', '.join(twice)} listed twice; a flagger has one role")
+    reference = topic.get("reference") if isinstance(topic.get("reference"), dict) else {}
+    if reference.get("model") in models:
+        raise TopicError(f"{topic['path']}: flagger {reference['model']} is the reference; a flagger labels blind of it")
+    return out
 
 
 def topic_arguments(description, *extra):

@@ -127,6 +127,63 @@ def problem_ids(row, topic_problems):
     return []
 
 
+REFERENCE_CRITERIA = ("Authority", "Methodology", "Objectivity", "Position", "Relevance")
+REFERENCE_CODES = ("irrelevant", "below-threshold", "copy", "dead", "aggregator")
+CITE = re.compile(r"^(path|readme|fact):(.*\S.*)$", re.S)
+DECISION = re.compile(r"^(?:eligible|excluded: (?:" + "|".join(REFERENCE_CODES) + r"))$")
+
+
+def cite_ok(value):
+    found = CITE.match(value) if isinstance(value, str) else None
+    return bool(found) and (found.group(1) != "readme" or len(found.group(2)) <= 200)
+
+
+def reference_issues(row, expected, topic_problems):
+    rank, issues = row["order_rank"], []
+    if str(row.get("repo", "")).lower() != expected[rank]["repo"].lower():
+        issues.append(f"rank {rank} names {row.get('repo')!r}, not {expected[rank]['repo']}")
+    scores = row.get("scores")
+    if not isinstance(scores, dict) or set(scores) != set(REFERENCE_CRITERIA) or not all(
+            isinstance(s, dict) and type(s.get("v")) is not bool and s.get("v") in (0, 0.5, 1) and cite_ok(s.get("cite")) for s in scores.values()):
+        issues.append(f"rank {rank} needs scores of exactly {', '.join(REFERENCE_CRITERIA)}, each a 1 / 0.5 / 0 value with a path:, readme: or fact: cite")
+    mechanisms = row.get("mechanisms")
+    if not isinstance(mechanisms, list) or not all(isinstance(m, dict) and all(isinstance(m.get(k), str) and m[k].strip() for k in ("problem", "path", "why")) for m in mechanisms):
+        issues.append(f"rank {rank} needs mechanisms as a list of problem, path and why")
+    else:
+        outside = sorted({m["problem"] for m in mechanisms} - set(topic_problems))
+        if outside:
+            issues.append(f"rank {rank} names problems {outside} outside the topic")
+    if not isinstance(row.get("decision"), str) or not DECISION.match(row["decision"]):
+        issues.append(f"rank {rank} needs a decision of eligible or excluded: <{' | '.join(REFERENCE_CODES)}>")
+    if not cite_ok(row.get("decision_cite")):
+        issues.append(f"rank {rank} needs a decision_cite of path:, readme: or fact:")
+    return issues
+
+
+def parse_reference_reply(text, expected, topic_problems):
+    rows, problems = {}, []
+    for line in (raw.strip() for raw in text.splitlines()):
+        if not line.startswith("{"):
+            continue
+        try:
+            row = json.loads(line)
+        except ValueError:
+            problems.append(f"unparsable row line {line[:80]!r}")
+            continue
+        rank = row.get("order_rank") if isinstance(row, dict) else None
+        if type(rank) is not int or rank not in expected:
+            problems.append(f"row {rank!r} was not asked for")
+            continue
+        issues = reference_issues(row, expected, topic_problems) + ([f"rank {rank} appears twice"] if rank in rows else [])
+        problems += issues
+        if not issues:
+            rows[rank] = {"order_rank": rank, "repo": expected[rank]["repo"], "sha": expected[rank].get("sha"),
+                          "scores": {c: {"v": row["scores"][c]["v"], "cite": row["scores"][c]["cite"]} for c in REFERENCE_CRITERIA},
+                          "mechanisms": [{k: m[k] for k in ("problem", "path", "why")} for m in row["mechanisms"]], "decision": row["decision"], "decision_cite": row["decision_cite"]}
+    problems += [f"rank {rank} missing from the reply" for rank in expected if rank not in rows and not any(f"rank {rank} " in p for p in problems)]
+    return [rows[r] for r in sorted(rows)], problems
+
+
 def parse_reply(text, expected, topic_problems=None):
     rows, mechanisms, problems = {}, [], []
     for line in (raw.strip() for raw in text.splitlines()):

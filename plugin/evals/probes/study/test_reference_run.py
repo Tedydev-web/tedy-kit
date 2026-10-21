@@ -1,0 +1,426 @@
+import hashlib
+import json
+import shutil
+import tempfile
+import unittest
+from pathlib import Path
+
+from study_calibration_set import EXCLUDE_CODES, LABELLED
+from study_fixtures import FakeFetch, script, topic_repo, write_json, write_jsonl
+from study_session import MAX_PROMPT, canonical_sha256
+from study_session_prompt import REFERENCE_REPLY_FORMAT, REFERENCE_ROWS_NOTE, REFERENCE_TEMPLATE_SHA256, build_reference_prompt
+from study_session_reply import REFERENCE_CODES, REFERENCE_CRITERIA, parse_reference_reply
+from study_stage1 import LADDER
+from study_topic import TopicError, flaggers, load_topic, reference_option
+from test_sessions import SessionBase, agy_reply, claude_reply, reply_row
+
+KIT = Path(__file__).resolve().parents[4]
+SHA = "c" * 40
+REFERENCE = {"cli": "claude", "model": "claude-fable-5-1", "effort": "max"}
+LADDER_MODELS = [m for rung in LADDER for m in rung["models"]]
+MCP_LIST = "NAME          TYPE   STATUS   COMMAND/URL\ncontext-mode  stdio  enabled  context-mode\n"
+PLUGIN_LIST = "Installed plugins:\n- ponytail (enabled, 4.10.3)\n    Source:     antigravity\n"
+
+
+def cell(value=1, cite="path:hooks/gate.sh"):
+    return {"v": value, "cite": cite}
+
+
+def label(rank, repo, **change):
+    row = {"order_rank": rank, "repo": repo, "scores": {c: cell() for c in REFERENCE_CRITERIA},
+           "mechanisms": [{"problem": "X1", "path": "hooks/gate.sh", "why": "the hook blocks a commit without a test"}], "decision": "eligible",
+           "decision_cite": "path:hooks/gate.sh"}
+    return json.dumps({**row, **change})
+
+
+def fable(text, models=("claude-fable-5-1",), turns=1, denials=(), cost=0.42):
+    body = {"type": "result", "is_error": False, "num_turns": turns, "permission_denials": list(denials), "result": text, "modelUsage": {m: {} for m in models},
+            "usage": {"input_tokens": 25000, "output_tokens": 9500}, "duration_ms": 61000}
+    return json.dumps({**body, **({"total_cost_usd": cost} if cost is not None else {})})
+
+
+def needle(rank):
+    return f'"order_rank": {rank}, "repo"'
+
+
+class ReferenceBase(unittest.TestCase):
+    def setUp(self):
+        self.repo = topic_repo(strata={"config": {"stop_row": None, "forced_repos": [], "channels": {}}, "product": {"stop_row": None, "forced_repos": [], "channels": {}}})
+        self.work = Path(tempfile.mkdtemp(prefix="study-reference-"))
+        self.addCleanup(shutil.rmtree, self.work)
+        self.addCleanup(shutil.rmtree, self.repo)
+        self.write_topic()
+        write_json(self.work / "calibration-set.json", {"rows": [{"stratum": "config", "order_rank": 1}, {"stratum": "product", "order_rank": 7}, {"stratum": "config", "order_rank": 2}]})
+        write_jsonl(self.work / "reference-inputs-config.jsonl", [self.inputs(1, "o/one", "Pricing: the paid tier adds a gate.", released=True),
+                                                                   self.inputs(2, "o/two", "write the failing test first")])
+        (self.work / "reference-bundle.md").write_text("# anchors bundle\n\nAuthority 1: maintained by a known owner.\n")
+
+    def inputs(self, rank, repo, readme, released=False):
+        return {"order_rank": rank, "repo": repo, "sha": SHA, "facts": {"pushed": "2026-09-30"}, "evidence": {}, "readme": readme, "tree": ["README.md", "hooks/gate.sh"],
+                "assets": [], "tests": [], "changelog": "", "manifests": [], "prefilled": {"released": released, "changelog": False, "paid_tier_cues": []}, "truncated": {}}
+
+    def write_topic(self, **change):
+        path = self.repo / "docs/prior-art/topics/demo.json"
+        topic = json.loads(path.read_text())
+        write_json(path, {**topic, "problems": ["X1", "X2"], "sessions": {"A": {"cli": "claude", "model": "claude-opus-5-5", "effort": "high"},
+                                                                          "B": {"cli": "claude", "model": "claude-sonnet-5-5", "effort": "high"}},
+                          "qgs_judges": {"A": {"cli": "claude", "model": "claude-opus-5-5", "effort": "high"}, "B": {"cli": "claude", "model": "claude-sonnet-5-5", "effort": "high"}},
+                          "reader": {"cli": "claude", "model": "claude-opus-5-5", "effort": "high"}, "cross_family": {"cli": "agy", "model": "gemini-3.8-flash-high"},
+                          "reference": REFERENCE, **change})
+
+    def judge(self, fetch, *args, judge="reference"):
+        return script("run-judge").main(["--topic", "demo", "--repo", str(self.repo), "--work", str(self.work), "--judge", judge, "--set", "reference", "--batch", "calibration",
+                                         "--stratum", "config", *args, "--today", "2026-10-21"], fetch=fetch, which=lambda cli: True, environ={})
+
+    def refused(self, fetch, *args, judge="reference"):
+        with self.assertRaises(SystemExit) as raised:
+            self.judge(fetch, *args, judge=judge)
+        return str(raised.exception)
+
+    def rows(self, name="reference-calibration-config"):
+        path = self.work / f"{name}.jsonl"
+        return [json.loads(line) for line in path.read_text().splitlines()] if path.is_file() else []
+
+    def sessions(self):
+        path = self.work / "meta.json"
+        return json.loads(path.read_text()).get("sessions", {}) if path.is_file() else {}
+
+    def ledger(self):
+        path = self.work / "claude-spend-ledger.jsonl"
+        return [json.loads(line) for line in path.read_text().splitlines()] if path.is_file() else []
+
+    def nothing_written(self):
+        self.assertEqual((self.rows(), self.ledger()), ([], []))
+        self.assertEqual(self.sessions().get("reference-calibration-config", {}).get("blocks", []), [])
+
+
+class ReferencePromptTest(unittest.TestCase):
+    def test_the_prompt_holds_the_bundle_the_rubric_notes_one_row_and_the_reply_format(self):
+        row = {"order_rank": 1, "repo": "o/one"}
+        prompt = build_reference_prompt("# bundle\n", [], [row])
+        self.assertEqual(prompt, "# bundle\n\n## Rows\n\n" + REFERENCE_ROWS_NOTE + "\n\n```json\n" + json.dumps(row) + "\n```\n\n" + REFERENCE_REPLY_FORMAT + "\n")
+        noted = build_reference_prompt("# bundle\n", [{"line": 120, "quote": "A paid tier alone is not a vendor stance.", "criterion": "Objectivity", "cue": "objectivity:paid"}], [row])
+        self.assertIn("# bundle\n\n## Rubric notes\n\n- line 120 (Objectivity): A paid tier alone is not a vendor stance.\n\n## Rows\n\n", noted)
+
+    def test_the_template_sha_is_pinned_and_the_format_names_every_code_and_criterion(self):
+        self.assertEqual(REFERENCE_TEMPLATE_SHA256, hashlib.sha256((REFERENCE_ROWS_NOTE + "\n\n" + REFERENCE_REPLY_FORMAT).encode()).hexdigest())
+        self.assertEqual(REFERENCE_TEMPLATE_SHA256, "a93b02ab2d92f8bf76e9a9fe7af8f1b53071dd292fd325e5f1ca631002900c0f")
+        self.assertEqual(set(REFERENCE_CODES), set(EXCLUDE_CODES))
+        self.assertEqual(REFERENCE_CRITERIA, LABELLED)
+        for word in (*REFERENCE_CODES, *REFERENCE_CRITERIA, "decision_cite", "path:", "readme:", "fact:"):
+            self.assertIn(word, REFERENCE_REPLY_FORMAT)
+        self.assertNotIn("Date", REFERENCE_REPLY_FORMAT)
+
+
+class ReferenceReplyTest(unittest.TestCase):
+    expected = {1: {"repo": "o/one", "sha": SHA}}
+
+    def parse(self, **change):
+        return parse_reference_reply(label(1, "o/one", **change), self.expected, ["X1", "X2"])
+
+    def test_a_well_formed_row_keeps_the_contract_fields_and_the_pinned_sha(self):
+        rows, problems = self.parse(note="dropped")
+        self.assertEqual(problems, [])
+        self.assertEqual(rows, [{"order_rank": 1, "repo": "o/one", "sha": SHA, "scores": {c: cell() for c in REFERENCE_CRITERIA},
+                                 "mechanisms": [{"problem": "X1", "path": "hooks/gate.sh", "why": "the hook blocks a commit without a test"}], "decision": "eligible",
+                                 "decision_cite": "path:hooks/gate.sh"}])
+
+    def test_a_path_the_tree_lacks_is_left_to_the_citation_check(self):
+        self.assertEqual(self.parse(decision_cite="path:not/in/the/tree.md")[1], [])
+
+    def test_every_malformed_field_is_refused(self):
+        scores = {c: cell() for c in REFERENCE_CRITERIA}
+        cases = {"a bool score": {"scores": {**scores, "Authority": cell(True)}},
+                 "a score of 2": {"scores": {**scores, "Authority": cell(2)}},
+                 "a missing criterion": {"scores": {c: v for c, v in scores.items() if c != "Relevance"}},
+                 "a Date cell": {"scores": {**scores, "Date": cell()}},
+                 "an unknown cite kind": {"scores": {**scores, "Position": cell(1, "url:https://example.org")}},
+                 "a README quote over 200 characters": {"scores": {**scores, "Position": cell(1, "readme:" + "x" * 201)}},
+                 "an empty cite": {"scores": {**scores, "Position": cell(1, "path:")}},
+                 "an unknown problem": {"mechanisms": [{"problem": "X9", "path": "hooks/gate.sh", "why": "w"}]},
+                 "a mechanism without a path": {"mechanisms": [{"problem": "X1", "why": "w"}]},
+                 "mechanism names": {"mechanisms": ["gate"]},
+                 "an unknown exclude code": {"decision": "excluded: vendor"},
+                 "the screening exclude form": {"decision": "exclude: copy"},
+                 "no decision cite": {"decision_cite": None}}
+        for case, change in cases.items():
+            with self.subTest(case):
+                rows, problems = self.parse(**change)
+                self.assertEqual(rows, [])
+                self.assertTrue(problems)
+        self.assertEqual(parse_reference_reply(label(1, "o/other"), self.expected, ["X1"])[1], ["rank 1 names 'o/other', not o/one"])
+        readme_200 = self.parse(scores={**scores, "Position": cell(1, "readme:" + "x" * 200)})
+        self.assertEqual(readme_200[1], [])
+
+    def test_a_missing_or_doubled_rank_is_refused(self):
+        self.assertEqual(parse_reference_reply("", self.expected, ["X1"])[1], ["rank 1 missing from the reply"])
+        doubled = label(1, "o/one") + "\n" + label(1, "o/one")
+        self.assertEqual(parse_reference_reply(doubled, self.expected, ["X1"])[1], ["rank 1 appears twice"])
+        self.assertEqual(parse_reference_reply(label(3, "o/three"), self.expected, ["X1"])[1], ["row 3 was not asked for", "rank 1 missing from the reply"])
+
+
+class ReferenceTopicTest(ReferenceBase):
+    def topic(self):
+        return load_topic(self.repo, "demo")
+
+    def test_the_reference_is_never_a_roster_or_ladder_model(self):
+        self.assertEqual(reference_option(self.topic(), LADDER_MODELS), REFERENCE)
+        for model, role in (("claude-opus-5-5", "sessions.A, qgs_judges.A, reader, the stage-1 ladder"),("gemini-3.8-flash-high", "cross_family")):
+            with self.subTest(model):
+                self.write_topic(reference={"cli": "claude" if model.startswith("claude") else "agy", "model": model})
+                with self.assertRaisesRegex(TopicError, f"reference {model} is also {role}; the reference is never a judge, a stage-1 model or a replacement"):
+                    reference_option(self.topic(), LADDER_MODELS)
+        self.write_topic(reference={"cli": "claude", "model": "claude-haiku-5-5"})
+        self.assertEqual(reference_option(self.topic()), {"cli": "claude", "model": "claude-haiku-5-5"})
+        with self.assertRaisesRegex(TopicError, "reference claude-haiku-5-5 is also the stage-1 ladder"):
+            reference_option(self.topic(), ["claude-haiku-5-5"])
+        self.write_topic(reference={"cli": "claude"})
+        with self.assertRaisesRegex(TopicError, "reference needs a cli"):
+            reference_option(self.topic())
+
+    def test_a_topic_without_a_reference_has_none(self):
+        topic = self.topic()
+        del topic["reference"]
+        self.assertIsNone(reference_option(topic, LADDER_MODELS))
+
+    def test_flaggers_default_by_role_and_are_validated(self):
+        self.assertEqual(flaggers(self.topic()), {"rubric_trigger": [{"cli": "agy", "model": "gemini-3.8-flash-high"}],
+                                                  "record_only": [{"cli": "agy", "model": "gpt-oss-120b-medium"}]})
+        self.write_topic(rubric_trigger_flaggers=[{"cli": "agy", "model": "gemini-3.8-flash-high"}, {"cli": "agy", "model": "gpt-oss-120b-medium"}], record_only_flaggers=[])
+        self.assertEqual(flaggers(self.topic())["record_only"], [])
+        cases = {"listed twice; a flagger has one role": {"record_only_flaggers": [{"cli": "agy", "model": "gemini-3.8-flash-high"}]},
+                 "is the reference; a flagger labels blind of it": {"record_only_flaggers": [REFERENCE]},
+                 "record_only_flaggers must be a list": {"record_only_flaggers": {"cli": "agy", "model": "gpt-oss-120b-medium"}},
+                 r"agy takes no effort": {"record_only_flaggers": [{"cli": "agy", "model": "gpt-oss-120b-medium", "effort": "high"}]}}
+        for message, change in cases.items():
+            with self.subTest(message):
+                self.write_topic(**change)
+                with self.assertRaisesRegex(TopicError, message):
+                    flaggers(self.topic())
+
+    def test_the_canon_topic_names_its_reference_and_both_flagger_roles(self):
+        topic = load_topic(KIT, "canon")
+        self.assertEqual(reference_option(topic, LADDER_MODELS), REFERENCE)
+        self.assertEqual(flaggers(topic), {"rubric_trigger": [{"cli": "agy", "model": "gemini-3.8-flash-high"}], "record_only": [{"cli": "agy", "model": "gpt-oss-120b-medium"}]})
+        self.assertEqual(json.loads((KIT / "docs/prior-art/topics/canon.json").read_text())["rubric_trigger_flaggers"], [{"cli": "agy", "model": "gemini-3.8-flash-high"}])
+
+
+class ReferenceRunTest(ReferenceBase):
+    def test_the_reference_labels_the_batch_rows_of_the_stratum_one_row_per_isolated_block(self):
+        fetch = FakeFetch([(needle(1), fable(label(1, "o/one"))), (needle(2), fable(label(2, "o/two"), cost=None))])
+        self.judge(fetch)
+        calls = fetch.called("claude -p")
+        self.assertEqual(len(calls), 2)
+        self.assertTrue(all(c.startswith("claude -p --model claude-fable-5-1 --effort max --output-format json --tools  --setting-sources  ") for c in calls))
+        self.assertEqual([r["order_rank"] for r in self.rows()], [1, 2])
+        self.assertEqual(self.rows()[0]["sha"], SHA)
+        entry = self.sessions()["reference-calibration-config"]
+        self.assertEqual((entry["cli"], entry["model"], entry["effort"], entry["threats"]), ("claude", "claude-fable-5-1", "max", []))
+        bundle = hashlib.sha256((self.work / "reference-bundle.md").read_bytes()).hexdigest()
+        self.assertEqual([(b["ranks"], b["packet_sha256"], b["template_sha256"]) for b in entry["blocks"]], [([1], bundle, REFERENCE_TEMPLATE_SHA256), ([2], bundle, REFERENCE_TEMPLATE_SHA256)])
+        self.assertNotIn("criteria_sha256", entry["blocks"][0])
+        self.assertNotIn("notes_sha256", entry["blocks"][0])
+        self.assertEqual(entry["blocks"][0]["row_sha256"].keys(), {"1"})
+        prompt = (self.work / "prompts/reference-calibration-config-1-1.md").read_text()
+        self.assertTrue(prompt.startswith("# anchors bundle\n"))
+        self.assertIn('"order_rank": 1, "repo": "o/one"', prompt)
+        self.assertNotIn('"order_rank": 2,', prompt)
+        self.assertTrue(prompt.endswith(REFERENCE_REPLY_FORMAT + "\n"))
+        self.assertNotIn("Date", json.dumps(self.rows()[0]["scores"]))
+
+    def test_one_ledger_line_per_reference_block_with_a_missing_cost_as_null(self):
+        fetch = FakeFetch([(needle(1), fable(label(1, "o/one"))), (needle(2), fable(label(2, "o/two"), cost=None))])
+        self.judge(fetch)
+        prompts = [len((self.work / f"prompts/reference-calibration-config-{r}-{r}.md").read_bytes()) for r in (1, 2)]
+        self.assertEqual(self.ledger(), [{"date": "2026-10-21", "key": "reference-calibration-config", "ranks": [r], "model": "claude-fable-5-1", "effort": "max",
+                                          "total_cost_usd": cost, "usage": {"input_tokens": 25000, "output_tokens": 9500}, "duration_ms": 61000, "prompt_bytes": size}
+                                         for r, cost, size in ((1, 0.42, prompts[0]), (2, None, prompts[1]))])
+
+    def test_a_resumed_run_skips_the_ranks_already_labelled(self):
+        with self.assertRaises(SystemExit):
+            self.judge(FakeFetch([(needle(1), fable(label(1, "o/one"))), (needle(2), ("", "exit 1: rate limited"))]))
+        self.assertEqual([r["order_rank"] for r in self.rows()], [1])
+        fetch = FakeFetch([(needle(2), fable(label(2, "o/two")))])
+        self.judge(fetch)
+        self.assertEqual(len(fetch.called("claude -p")), 1)
+        self.assertEqual([r["order_rank"] for r in self.rows()], [1, 2])
+        self.assertEqual(len(self.ledger()), 2)
+
+    def test_a_prompt_over_the_limit_is_refused_before_any_session(self):
+        write_jsonl(self.work / "reference-inputs-config.jsonl", [self.inputs(1, "o/one", "x" * MAX_PROMPT), self.inputs(2, "o/two", "short")])
+        fetch = FakeFetch([("claude -p", fable(label(1, "o/one")))])
+        self.assertIn(f"over {MAX_PROMPT}; run a smaller block", self.refused(fetch))
+        self.assertEqual(fetch.called("claude -p"), [])
+        self.nothing_written()
+
+    def test_a_reply_with_two_turns_a_denial_or_another_served_model_is_refused_and_nothing_is_written(self):
+        cases = {"2 turns": fable(label(1, "o/one"), turns=2), "permission denials ['Bash']": fable(label(1, "o/one"), denials=["Bash"]),
+                 "served ['claude-fable-5-1', 'claude-haiku-5-5']": fable(label(1, "o/one"), models=("claude-fable-5-1", "claude-haiku-5-5"))}
+        for message, reply in cases.items():
+            with self.subTest(message):
+                self.assertIn(message, self.refused(FakeFetch([("claude -p", reply)]), "--rows", "1-1"))
+                self.nothing_written()
+
+    def test_a_session_that_leaves_a_file_behind_is_refused(self):
+        class Writer(FakeFetch):
+            def run(self, cmd, timeout=180, cwd=None):
+                if cwd:
+                    (Path(cwd) / "notes.txt").write_text("x")
+                return super().run(cmd, timeout, cwd)
+
+        self.assertIn("wrote ['notes.txt']", self.refused(Writer([("claude -p", fable(label(1, "o/one")))]), "--rows", "1-1"))
+        self.nothing_written()
+
+    def test_a_malformed_row_is_kept_in_prompts_and_refused(self):
+        bad = label(1, "o/one", decision="excluded: vendor")
+        message = self.refused(FakeFetch([("claude -p", fable(bad))]), "--rows", "1-1")
+        self.assertIn("reply kept in prompts/reference-calibration-config-1-1.response.txt, nothing written", message)
+        self.assertEqual((self.work / "prompts/reference-calibration-config-1-1.response.txt").read_text(), bad)
+        self.nothing_written()
+
+    def test_the_cli_refuses_what_the_reference_set_cannot_run(self):
+        cases = [("--set reference needs --batch", ["--judge", "reference", "--set", "reference", "--stratum", "config"]),
+                 ("no top-up-set.json in", ["--judge", "reference", "--set", "reference", "--batch", "top-up", "--stratum", "config"]),
+                 ("--batch '../x' must be kebab-case", ["--judge", "reference", "--set", "reference", "--batch", "../x", "--stratum", "config"]),
+                 ("--judge flagger needs --model", ["--judge", "flagger", "--set", "reference", "--batch", "calibration", "--stratum", "config"]),
+                 ("claude-opus-5-5 is in neither rubric_trigger_flaggers nor record_only_flaggers", ["--judge", "flagger", "--model", "claude-opus-5-5", "--set", "reference",
+                                                                                                       "--batch", "calibration", "--stratum", "config"]),
+                 ("--model names a flagger", ["--judge", "reference", "--model", "gpt-oss-120b-medium", "--set", "reference", "--batch", "calibration", "--stratum", "config"]),
+                 ("--set reference runs --judge reference or flagger", ["--judge", "qgs-A", "--set", "reference", "--batch", "calibration", "--stratum", "config"]),
+                 ("--judge reference runs on --set reference", ["--judge", "reference", "--set", "calibration", "--stratum", "config", "--run", "1"]),
+                 ("--batch and --model belong to --set reference", ["--judge", "qgs-A", "--set", "calibration", "--batch", "calibration", "--stratum", "config", "--run", "1"]),
+                 ("--rerun-notes re-runs the reference", ["--judge", "flagger", "--model", "gpt-oss-120b-medium", "--rerun-notes", "1", "--set", "reference", "--batch",
+                                                          "calibration", "--stratum", "config"])]
+        for message, args in cases:
+            with self.subTest(message):
+                with self.assertRaises(SystemExit) as raised:
+                    script("run-judge").main(["--topic", "demo", "--repo", str(self.repo), "--work", str(self.work), *args, "--today", "2026-10-21"], fetch=FakeFetch(),
+                                             which=lambda cli: True, environ={})
+                self.assertIn(message, str(raised.exception))
+
+    def test_a_topic_without_a_reference_cannot_run_one(self):
+        path = self.repo / "docs/prior-art/topics/demo.json"
+        topic = json.loads(path.read_text())
+        del topic["reference"]
+        write_json(path, topic)
+        self.assertIn("names no reference", self.refused(FakeFetch()))
+
+
+class FlaggerRunTest(ReferenceBase):
+    def lists(self):
+        return [("agy mcp list", MCP_LIST), ("agy plugin list", PLUGIN_LIST)]
+
+    def test_a_flagger_labels_blind_through_agy_and_records_its_agy_lists(self):
+        fetch = FakeFetch([*self.lists(), (needle(1), agy_reply(label(1, "o/one"))), (needle(2), agy_reply(label(2, "o/two")))])
+        self.judge(fetch, "--model", "gemini-3.8-flash-high", judge="flagger")
+        name = "reference-calibration-config-flagger-gemini-3.8-flash-high"
+        self.assertEqual([r["order_rank"] for r in self.rows(name)], [1, 2])
+        [call] = [c for c in fetch.called("agy --model") if needle(1) in c]
+        self.assertTrue(call.startswith("agy --model gemini-3.8-flash-high --output-format stream-json "))
+        self.assertIn("# anchors bundle", call)
+        snapshot = {"mcp_sha256": hashlib.sha256(MCP_LIST.encode()).hexdigest(), "plugins_sha256": hashlib.sha256(PLUGIN_LIST.encode()).hexdigest(),
+                    "context_mode_enabled": True, "ponytail_enabled": True}
+        entry = self.sessions()[name]
+        self.assertEqual([b["agy_lists"] for b in entry["blocks"]], [{"before": snapshot, "after": snapshot}] * 2)
+        self.assertNotIn("refused", entry)
+        self.assertEqual([line["total_cost_usd"] for line in self.ledger()], [None, None])
+
+    def test_disabled_agy_lists_are_recorded_as_disabled(self):
+        mcp, plugins = MCP_LIST.replace("  enabled  ", "  disabled  "), PLUGIN_LIST.replace("(enabled,", "(disabled,")
+        self.judge(FakeFetch([("agy mcp list", mcp), ("agy plugin list", plugins), ("agy --model", agy_reply(label(1, "o/one")))]), "--model", "gemini-3.8-flash-high",
+                   "--rows", "1-1", judge="flagger")
+        lists = self.sessions()["reference-calibration-config-flagger-gemini-3.8-flash-high"]["blocks"][0]["agy_lists"]["before"]
+        self.assertEqual((lists["context_mode_enabled"], lists["ponytail_enabled"]), (False, False))
+
+    def test_an_agy_list_that_fails_stops_the_run_unretried(self):
+        fetch = FakeFetch([("agy mcp list", ("", "exit 1: no config")), ("agy plugin list", PLUGIN_LIST), ("agy --model", agy_reply(label(1, "o/one")))])
+        self.assertIn("agy mcp list: exit 1: no config", self.refused(fetch, "--model", "gemini-3.8-flash-high", judge="flagger"))
+        self.assertEqual(fetch.called("agy --model"), [])
+
+    def test_a_refused_flagger_row_is_retried_once_then_recorded_and_the_run_goes_on(self):
+        tool = agy_reply(label(1, "o/one")).replace('"step_type": "agent_response"', '"step_type": "tool"')
+        fetch = FakeFetch([*self.lists(), (needle(1), tool), (needle(2), agy_reply(label(2, "o/two")))])
+        self.judge(fetch, "--model", "gpt-oss-120b-medium", judge="flagger")
+        name = "reference-calibration-config-flagger-gpt-oss-120b-medium"
+        self.assertEqual(len([c for c in fetch.called("agy --model") if needle(1) in c]), 2)
+        self.assertEqual([r["order_rank"] for r in self.rows(name)], [2])
+        entry = self.sessions()[name]
+        self.assertEqual([b["ranks"] for b in entry["blocks"]], [[2]])
+        [refusal] = entry["refused"]
+        self.assertEqual((refusal["rank"], refusal["date"]), (1, "2026-10-21"))
+        self.assertIn("step types ['tool'] beyond user_input and agent_response", refusal["reason"])
+
+    def test_a_malformed_flagger_reply_refused_twice_is_recorded_and_a_retry_that_answers_is_not(self):
+        fetch = FakeFetch([*self.lists(), (needle(1), agy_reply(label(1, "o/one", decision="maybe"))), (needle(2), agy_reply(label(2, "o/two")))])
+        self.judge(fetch, "--model", "gpt-oss-120b-medium", "--rows", "1-1", judge="flagger")
+        name = "reference-calibration-config-flagger-gpt-oss-120b-medium"
+        entry = self.sessions()[name]
+        self.assertEqual((entry["blocks"], [r["rank"] for r in entry["refused"]]), ([], [1]))
+        self.assertEqual(entry["model"], "gpt-oss-120b-medium")
+
+        class Flaky(FakeFetch):
+            def run(self, cmd, timeout=180, cwd=None):
+                line = " ".join(cmd)
+                if line.startswith("agy --model") and not self.called("agy --model"):
+                    self.calls.append(line)
+                    self.cwds.append(cwd)
+                    return "", "exit 1: quota", 0
+                return super().run(cmd, timeout, cwd)
+
+        retry = Flaky([*self.lists(), (needle(1), agy_reply(label(1, "o/one")))])
+        self.judge(retry, "--model", "gpt-oss-120b-medium", "--rows", "1-1", judge="flagger")
+        entry = self.sessions()[name]
+        self.assertEqual(([b["ranks"] for b in entry["blocks"]], [r["rank"] for r in entry["refused"]]), ([[1]], [1]))
+        self.assertEqual([r["order_rank"] for r in self.rows(name)], [1])
+
+
+class NoteRerunTest(ReferenceBase):
+    note = {"line": 120, "quote": "A paid tier alone is not a vendor stance.", "criterion": "Objectivity", "cue": "objectivity:pricing"}
+
+    def write_notes(self, *notes):
+        write_json(self.work / "reference-notes-calibration.json", list(notes))
+
+    def test_a_note_reruns_exactly_the_rows_its_cue_selects_with_its_line_in_the_prompt(self):
+        self.write_notes({**self.note, "cue": "position:vs"}, self.note)
+        fetch = FakeFetch([(needle(1), fable(label(1, "o/one")))])
+        self.judge(fetch, "--rerun-notes", "2")
+        self.assertEqual(len(fetch.called("claude -p")), 1)
+        name = "reference-calibration-config-notes-2"
+        self.assertEqual([r["order_rank"] for r in self.rows(name)], [1])
+        prompt = (self.work / f"prompts/{name}-1-1.md").read_text()
+        self.assertIn("## Rubric notes\n\n- line 120 (Objectivity): A paid tier alone is not a vendor stance.\n\n## Rows", prompt)
+        self.assertEqual(self.sessions()[name]["blocks"][0]["notes_sha256"], canonical_sha256([self.note]))
+
+    def test_a_fact_cue_selects_the_rows_whose_packet_field_is_set(self):
+        self.write_notes({**self.note, "criterion": "Authority", "cue": "fact:prefilled.released"})
+        fetch = FakeFetch([(needle(1), fable(label(1, "o/one")))])
+        self.judge(fetch, "--rerun-notes", "1")
+        self.assertEqual([r["order_rank"] for r in self.rows("reference-calibration-config-notes-1")], [1])
+
+    def test_a_note_outside_the_four_field_form_is_refused_before_any_session(self):
+        cases = {"a free-text field": {**self.note, "value": 1}, "a missing quote": {k: v for k, v in self.note.items() if k != "quote"},
+                 "a criterion outside the five": {**self.note, "criterion": "Date"}, "an unknown README cue": {**self.note, "cue": "objectivity:cheap"},
+                 "a fact outside prefilled and evidence": {**self.note, "cue": "fact:facts.stars"}, "a line that is not a number": {**self.note, "line": "120"}}
+        for case, note in cases.items():
+            with self.subTest(case):
+                self.write_notes(note)
+                fetch = FakeFetch([("claude -p", fable(label(1, "o/one")))])
+                self.assertIn("reference-notes-calibration.json note 1 must hold exactly line, quote, criterion and cue", self.refused(fetch, "--rerun-notes", "1"))
+                self.assertEqual(fetch.called("claude -p"), [])
+
+    def test_a_missing_note_or_a_cue_that_selects_nothing_is_refused(self):
+        self.assertIn("no reference-notes-calibration.json in", self.refused(FakeFetch(), "--rerun-notes", "1"))
+        self.write_notes(self.note)
+        self.assertIn("reference-notes-calibration.json holds 1 notes; --rerun-notes 2", self.refused(FakeFetch(), "--rerun-notes", "2"))
+        self.write_notes({**self.note, "cue": "objectivity:sponsor"})
+        self.assertIn("note 1 (objectivity:sponsor) selects no config row of calibration", self.refused(FakeFetch(), "--rerun-notes", "1"))
+
+
+class OtherKindsWriteNoLedgerTest(SessionBase):
+    def test_a_screening_block_appends_no_ledger_line(self):
+        self.pilot(FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one")))]))
+        self.assertFalse((self.work / "claude-spend-ledger.jsonl").exists())
+
+
+if __name__ == "__main__":
+    unittest.main()

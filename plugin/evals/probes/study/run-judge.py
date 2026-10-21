@@ -1,23 +1,31 @@
 import hashlib
 import json
 import os
+import re
 import shutil
 import sys
 from pathlib import Path
 
-from study_calibration_set import calibrated, set_file
+from study_calibration_set import README_CUES, cue_lines, calibrated, set_file
 from study_fetch import Fetch, NetworkRefused
 from study_judges import AUDIT_FILE, QGS_JUDGES, SCREENING_JUDGES, SHAPES, audit_option, criteria_version, judged_batches, require_qualified, roster, run_name
 from study_protocol import FREEZE_FILE
 from study_qgs import INPUTS, JUDGE_FILES, PACKET, candidates, cross_family, cross_name, dropped, read_cross, read_verdicts, reader_queue, whole_topic
+from study_screening_core import read_jsonl
 from study_screening_input import inputs_file
-from study_session import model_family, run_block, run_blocks
+from study_session import ReplyRefused, model_family, record_refusal, run_block, run_blocks
 from study_session_prompt import required_sweep_date
+from study_session_reply import REFERENCE_CRITERIA
+from study_stage1 import LADDER
 from study_stage1_audit import read_audit, screener_name
-from study_topic import TopicError, load_topic, require_screened, saigon_today, topic_arguments
+from study_topic import KEBAB, TopicError, flaggers, load_topic, reference_option, require_screened, saigon_today, topic_arguments
 
-JUDGES = (*SCREENING_JUDGES, *QGS_JUDGES, "audit")
-SETS = ("calibration", "qgs", "audit", "stage1-audit")
+REFERENCE_JUDGES = ("reference", "flagger")
+JUDGES = (*SCREENING_JUDGES, *QGS_JUDGES, "audit", *REFERENCE_JUDGES)
+SETS = ("calibration", "qgs", "audit", "stage1-audit", "reference")
+BUNDLE = "reference-bundle.md"
+NOTE_KEYS = {"line", "quote", "criterion", "cue"}
+FACT_CUE = re.compile(r"^fact:(prefilled|evidence)\.([A-Za-z0-9_]+)$")
 
 
 def read_freeze(work):
@@ -96,11 +104,95 @@ def qgs_job(topic, work, judge):
     return {"kind": "qgs", "freeze": None, "option": option, "ranks": ranks, "name": JUDGE_FILES[judge], "inputs": INPUTS, "packet": PACKET, "shape": "thin"}
 
 
+def cue_selects(cue, row):
+    fact = FACT_CUE.match(cue)
+    if fact:
+        source = row.get(fact.group(1))
+        return bool(source.get(fact.group(2))) if isinstance(source, dict) else False
+    return bool(cue_lines(row.get("readme"), [cue.partition(":")[2]]))
+
+
+def valid_cue(cue):
+    group, _, word = cue.partition(":")
+    return bool(FACT_CUE.match(cue)) or any(group == g and word in words for g, words in README_CUES)
+
+
+def note_job(work, batch, stratum, ranks, number):
+    path = Path(work) / f"reference-notes-{batch}.json"
+    if not path.is_file():
+        raise TopicError(f"no {path.name} in {work}; write the batch's interpretation notes first")
+    notes = json.loads(path.read_text())
+    if not isinstance(notes, list) or not 1 <= number <= len(notes):
+        raise TopicError(f"{path.name} holds {len(notes) if isinstance(notes, list) else 'no list of'} notes; --rerun-notes {number} names none of them")
+    note = notes[number - 1]
+    if (not isinstance(note, dict) or set(note) != NOTE_KEYS or type(note["line"]) is not int or note["line"] < 1 or not isinstance(note["quote"], str) or not note["quote"].strip()
+            or note["criterion"] not in REFERENCE_CRITERIA or not isinstance(note["cue"], str) or not valid_cue(note["cue"])):
+        raise TopicError(f"{path.name} note {number} must hold exactly line, quote, criterion and cue: a criteria line number, its verbatim text, one of "
+                         f"{', '.join(REFERENCE_CRITERIA)}, and a frozen README cue or a fact:prefilled.<field> or fact:evidence.<field> cue")
+    inputs = {r["order_rank"]: r for r in read_jsonl(Path(work), f"reference-inputs-{stratum}.jsonl")}
+    selected = [r for r in ranks if r in inputs and cue_selects(note["cue"], inputs[r])]
+    if not selected:
+        raise TopicError(f"note {number} ({note['cue']}) selects no {stratum} row of {batch}")
+    return [note], selected
+
+
+def reference_job(topic, work, stratum, judge, batch, model, note):
+    require_screened(topic, stratum)
+    reference = reference_option(topic, [m for rung in LADDER for m in rung["models"]])
+    if reference is None:
+        raise TopicError(f"{topic['path']} names no reference; a topic without one keeps the user's labels")
+    if not batch:
+        raise TopicError("--set reference needs --batch, the drawn batch whose rows the reference labels")
+    if not re.fullmatch(KEBAB, batch):
+        raise TopicError(f"--batch {batch!r} must be kebab-case")
+    path = Path(work) / set_file(batch)
+    if not path.is_file():
+        raise TopicError(f"no {path.name} in {work}; --set reference labels a drawn calibration, top-up or held-out batch")
+    ranks = [r["order_rank"] for r in json.loads(path.read_text())["rows"] if r["stratum"] == stratum]
+    name, notes = f"reference-{batch}-{stratum}", None
+    if judge == "flagger":
+        if note:
+            raise TopicError("--rerun-notes re-runs the reference; flaggers label each row once")
+        if not model:
+            raise TopicError("--judge flagger needs --model, one of the topic config's flaggers")
+        found = [o for options in flaggers(topic).values() for o in options if o["model"] == model]
+        if not found:
+            raise TopicError(f"{model} is in neither rubric_trigger_flaggers nor record_only_flaggers of {topic['path']}")
+        option, name = found[0], f"{name}-flagger-{model}"
+    else:
+        if model:
+            raise TopicError("--model names a flagger; the reference is the topic config's reference")
+        option = reference
+        if note:
+            notes, ranks = note_job(work, batch, stratum, ranks, note)
+            name = f"{name}-notes-{note}"
+    return {"kind": "reference", "freeze": None, "option": option, "ranks": ranks, "name": name, "inputs": f"reference-inputs-{stratum}.jsonl", "packet": BUNDLE, "notes": notes}
+
+
+def run_reference(block, fetch, flagger):
+    done = {r["order_rank"] for r in read_jsonl(Path(block["work"]), f"{block['name']}.jsonl")}
+    left = [r for r in block["ranks"] if r not in done]
+    if not flagger:
+        return run_blocks(block, left, fetch, most=1)[0], []
+    written, refused = 0, []
+    for rank in left:
+        for attempt in (1, 2):
+            try:
+                written += run_block({**block, "ranks": [rank]}, fetch)
+                break
+            except ReplyRefused as error:
+                if attempt == 2:
+                    record_refusal(block, rank, str(error))
+                    refused.append(rank)
+    return written, refused
+
+
 def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
     args = topic_arguments("Run one judge, isolated, on the calibration rows (twice, --run 1 and 2, on the input shape its production runs read), on the topic's QGS "
                            "candidates or the reader's queue (--set qgs, once it qualified), the cross-family model on them (--judge audit --set qgs, any --rows block), "
                            "on the stage-1 audit rows (--judge screening-A --set stage1-audit), or the "
-                           "cross-family model on the audit sample (--judge audit --set audit), and record every block in meta.json.",
+                           "cross-family model on the audit sample (--judge audit --set audit), or the topic's reference or one blind flagger on a drawn batch, one row "
+                           "per block (--judge reference|flagger --set reference --batch), and record every block in meta.json.",
                            (["--work"], {"required": True, "help": "the topic's working folder"}),
                            (["--stratum"], {"help": "stratum to judge; not used with --set qgs"}),
                            (["--judge"], {"required": True, "choices": list(JUDGES), "help": "which judge of the roster runs"}),
@@ -109,13 +201,26 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
                            (["--rows"], {"help": "first-last positions, from 1, of the rows to judge within the set's rows; default every row. --set stage1-audit splits "
                                                  "them in rank order into blocks of at most 100 rows whose prompt fits the limit; every other set runs them as one block, "
                                                  "and a prompt too long for one block is refused"}),
+                           (["--batch"], {"help": "--set reference only: the drawn batch (calibration, top-up, held-out, ...) whose rows of --stratum are labelled"}),
+                           (["--model"], {"help": "--judge flagger only: the flagger model, one of the topic config's rubric_trigger_flaggers or record_only_flaggers"}),
+                           (["--rerun-notes"], {"type": int, "help": "--judge reference only: re-run the rows note N (from 1) of reference-notes-<batch>.json selects, with "
+                                                                    "its criteria line under Rubric notes, as reference-<batch>-<stratum>-notes-N"}),
                            (["--today"], {"default": saigon_today(), "help": "run date, default today in Asia/Saigon"})).parse_args(argv)
     try:
         topic = load_topic(args.repo, args.topic)
         whole_topic(topic, "a judge")
         if (args.set == "qgs") == bool(args.stratum):
             raise TopicError("--set qgs judges the topic's candidates and takes no --stratum; every other set needs --stratum")
-        job = qgs_job(topic, args.work, args.judge) if args.set == "qgs" else stratum_job(topic, args.work, args.stratum, args.judge, args.set, args.run)
+        if args.set == "reference" and args.judge not in REFERENCE_JUDGES:
+            raise TopicError("--set reference runs --judge reference or flagger")
+        if args.set != "reference" and args.judge in REFERENCE_JUDGES:
+            raise TopicError(f"--judge {args.judge} runs on --set reference")
+        if args.set != "reference" and (args.batch or args.model or args.rerun_notes is not None):
+            raise TopicError("--batch and --model belong to --set reference, --rerun-notes to --judge reference")
+        if args.set == "reference":
+            job = reference_job(topic, args.work, args.stratum, args.judge, args.batch, args.model, args.rerun_notes)
+        else:
+            job = qgs_job(topic, args.work, args.judge) if args.set == "qgs" else stratum_job(topic, args.work, args.stratum, args.judge, args.set, args.run)
         if args.rows:
             first, _, last = args.rows.partition("-")
             if not (first.isdigit() and last.isdigit() and 1 <= int(first) <= int(last)):
@@ -134,7 +239,11 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
                  "ranks": job["ranks"], "inputs": job.get("inputs") or inputs_file(args.work, stratum).name,
                  "packet": job.get("packet") or f"screening-packet-{stratum}.md", "shape": job.get("shape"), "problems": topic.get("problems") or [],
                  "criteria": freeze["criteria"] if freeze else None, "frozen": freeze["strata"][stratum] if freeze else None,
-                 "bare": bool(environ.get("ANTHROPIC_API_KEY")), "today": args.today, "sweep_date": required_sweep_date(topic)}
+                 "bare": bool(environ.get("ANTHROPIC_API_KEY")), "today": args.today, "sweep_date": required_sweep_date(topic), "notes": job.get("notes")}
+        if args.set == "reference":
+            rows, refused = run_reference(block, fetch or Fetch(), args.judge == "flagger")
+            print(f"{job['name']}: {rows} rows from {option['cli']} {option['model']}" + (f"; refused twice, recorded: ranks {refused}" if refused else ""))
+            return
         rows = run_blocks(block, job["ranks"], fetch or Fetch())[0] if args.set == "stage1-audit" else run_block(block, fetch or Fetch())
         print(f"{job['name']}: {rows} rows from {option['cli']} {option['model']} (family {model_family(option['model'])})")
     except (TopicError, NetworkRefused) as error:
