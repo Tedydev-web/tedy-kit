@@ -5,7 +5,7 @@ from pathlib import Path
 from study_calibration_set import BATCHES, labelled, labels_file, set_file
 from study_citation_check import check_holds
 from study_protocol import FREEZE_FILE as PROTOCOL_FILE
-from study_reference_labels import cites_file, notes_file, reference_option, rerun_keys, session_key
+from study_reference_labels import cites_file, flags_file, notes_file, outcomes_file, reference_option, rerun_keys, session_key
 from study_reference_packet import BUNDLE_FILE
 from study_screening_core import read_jsonl
 from study_session import canonical_sha256
@@ -19,14 +19,6 @@ AFTER_PROTOCOL = "not run: after protocol freeze"
 
 def freeze_file(batch):
     return f"reference-freeze-{batch}.json"
-
-
-def flags_file(batch):
-    return f"reference-flags-{batch}.json"
-
-
-def outcomes_file(batch):
-    return f"rubric-outcomes-{batch}.json"
 
 
 def sha256_file(path):

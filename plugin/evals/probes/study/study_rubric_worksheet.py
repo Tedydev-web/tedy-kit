@@ -4,7 +4,7 @@ from pathlib import Path
 
 from study_calibration_set import BATCHES, LABELLED, anchors, set_file
 from study_protocol import FREEZE_FILE
-from study_reference_labels import NOTED, checked_notes, checked_reply, cite_holds, notes_file, packet_rows, read_session, reference_option, selects, session_key
+from study_reference_labels import NOTED, checked_notes, checked_reply, cite_holds, flags_file, notes_file, outcomes_file, packet_rows, read_session, reference_option, selects, session_key
 from study_reference_packet import bundle_text
 from study_screening_core import COPYLIKE, read_jsonl
 from study_stage1 import HELD_OUT
@@ -22,20 +22,12 @@ UNANCHORED = {"problems": "the problem ids differ under the same Relevance; no c
               "eligibility": "the eligibility differs with no criterion or decision code apart; no criteria line anchors it"}
 
 
-def flags_file(batch):
-    return f"reference-flags-{batch}.json"
-
-
 def questions_file(batch):
     return f"rubric-questions-{batch}.md"
 
 
 def wordings_file(batch):
     return f"rubric-wordings-{batch}.json"
-
-
-def outcomes_file(batch):
-    return f"rubric-outcomes-{batch}.json"
 
 
 def batch_freeze_file(batch):

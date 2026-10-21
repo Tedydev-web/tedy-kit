@@ -6,7 +6,7 @@ from pathlib import Path
 from study_agreement import cohen_kappa, rounded
 from study_calibration_set import LABELLED, pinned_inputs, row_date, set_file
 from study_protocol import FREEZE_FILE
-from study_reference_labels import checked_reply, packet_rows, read_session, reference_option, row_label, session_key
+from study_reference_labels import checked_reply, flags_file, packet_rows, read_session, reference_option, row_label, session_key
 from study_session import agy_lists, model_family
 from study_session_prompt import required_sweep_date
 from study_stage1 import LADDER
@@ -17,10 +17,6 @@ STEP = {"Relevance": 0.5}
 AGY_EXTENSIONS = (("mcp", "context-mode", "context_mode_enabled"), ("plugin", "ponytail", "ponytail_enabled"))
 RETEST_FAMILY = ("same family as the reference: a second independent pass of it (test-retest) catches its stochastic errors, not its systematic same-family "
                  "errors")
-
-
-def flags_file(batch):
-    return f"reference-flags-{batch}.json"
 
 
 def flagger_key(batch, stratum, option):

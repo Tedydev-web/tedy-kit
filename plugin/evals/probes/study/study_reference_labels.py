@@ -42,6 +42,14 @@ def cites_file(batch):
     return f"{batch}-reference-cites.json"
 
 
+def flags_file(batch):
+    return f"reference-flags-{batch}.json"
+
+
+def outcomes_file(batch):
+    return f"rubric-outcomes-{batch}.json"
+
+
 def purpose_file(purpose):
     return f"{purpose}-reference-labels.json"
 
