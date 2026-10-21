@@ -7,11 +7,12 @@ import shutil
 import sys
 from pathlib import Path
 
-from study_calibration_set import README_CUES, cue_lines, calibrated, set_file
+from study_calibration_set import calibrated, set_file
 from study_fetch import Fetch, NetworkRefused
 from study_judges import AUDIT_FILE, QGS_JUDGES, SCREENING_JUDGES, SHAPES, audit_option, criteria_version, judged_batches, require_qualified, roster, run_name
 from study_protocol import FREEZE_FILE
 from study_qgs import INPUTS, JUDGE_FILES, PACKET, candidates, cross_family, cross_name, dropped, read_cross, read_verdicts, reader_queue, whole_topic
+from study_reference_cues import cue_selects, valid_cue
 from study_reference_flags import agy_window, flagger_key
 from study_reference_freeze import freeze_file, require_frozen
 from study_screening_core import read_jsonl
@@ -29,7 +30,6 @@ SETS = ("calibration", "qgs", "audit", "stage1-audit", "reference")
 BUNDLE = "reference-bundle.md"
 NOTE_KEYS = {"line", "quote", "criterion", "cue"}
 NOTE_CRITERIA = (*REFERENCE_CRITERIA, "decision")
-FACT_CUE = re.compile(r"^fact:(prefilled|evidence)\.([A-Za-z0-9_]+)$")
 
 
 def read_freeze(work):
@@ -108,19 +108,6 @@ def qgs_job(topic, work, judge):
     return {"kind": "qgs", "freeze": None, "option": option, "ranks": ranks, "name": JUDGE_FILES[judge], "inputs": INPUTS, "packet": PACKET, "shape": "thin"}
 
 
-def cue_selects(cue, row):
-    fact = FACT_CUE.match(cue)
-    if fact:
-        source = row.get(fact.group(1))
-        return bool(source.get(fact.group(2))) if isinstance(source, dict) else False
-    return bool(cue_lines(row.get("readme"), [cue.partition(":")[2]]))
-
-
-def valid_cue(cue):
-    group, _, word = cue.partition(":")
-    return bool(FACT_CUE.match(cue)) or any(group == g and word in words for g, words in README_CUES)
-
-
 def note_job(work, batch, stratum, ranks):
     path = Path(work) / f"reference-notes-{batch}.json"
     if not path.is_file():
@@ -131,7 +118,7 @@ def note_job(work, batch, stratum, ranks):
         raise TopicError(f"{path.name} must hold a non-empty list of notes")
     for number, note in enumerate(notes, 1):
         if (not isinstance(note, dict) or set(note) != NOTE_KEYS or type(note["line"]) is not int or note["line"] < 1 or not isinstance(note["quote"], str)
-                or not note["quote"].strip() or note["criterion"] not in NOTE_CRITERIA or not isinstance(note["cue"], str) or not valid_cue(note["cue"])):
+                or not note["quote"].strip() or note["criterion"] not in NOTE_CRITERIA or not valid_cue(note["cue"])):
             raise TopicError(f"{path.name} note {number} must hold exactly line, quote, criterion and cue: a criteria line number, its verbatim text, one of "
                              f"{', '.join(NOTE_CRITERIA)}, and a frozen README cue or a fact:prefilled.<field> or fact:evidence.<field> cue")
     inputs = {r["order_rank"]: r for r in read_jsonl(Path(work), f"reference-inputs-{stratum}.jsonl")}

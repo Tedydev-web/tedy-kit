@@ -3,8 +3,9 @@ import json
 import re
 from pathlib import Path
 
-from study_calibration_set import BATCHES, EXCLUDE_CODES, LABELLED, RATINGS, README_CUES, checked_label, cue_lines, import_labels, labels_file, pinned_inputs, row_date, set_file
+from study_calibration_set import BATCHES, EXCLUDE_CODES, LABELLED, RATINGS, checked_label, import_labels, labels_file, pinned_inputs, row_date, set_file
 from study_protocol import EMPTY_TABLE
+from study_reference_cues import MISSING, README_CUE_NAMES, cue_selects, field, valid_cue
 from study_screening_core import COPYLIKE, MechanismTable, derive, read_jsonl
 from study_session import canonical_sha256, session_header
 from study_session_prompt import date_cell, required_sweep_date
@@ -17,11 +18,8 @@ NOTE_KEYS = ("line", "quote", "criterion", "cue")
 NOTED = (*LABELLED, "decision")
 CITE = re.compile(r"(path|readme|fact):(.*)", re.S)
 CITE_MAX = 200
-FACT_CUE = re.compile(r"fact:((?:prefilled|evidence)\.[A-Za-z0-9_]+)")
-README_CUE_NAMES = {f"{group}:{word}": word for group, words in README_CUES for word in words}
 PURPOSE = re.compile(r"exclusion-audit-[1-9][0-9]*|stage1-flags|adjudication")
 RERUN = re.compile(r"[1-9][0-9]*")
-MISSING = object()
 
 
 def reference_option(topic):
@@ -53,15 +51,6 @@ def outcomes_file(batch):
 
 def purpose_file(purpose):
     return f"{purpose}-reference-labels.json"
-
-
-def field(row, dotted):
-    value = row
-    for part in dotted.split("."):
-        if not isinstance(value, dict) or part not in value:
-            return MISSING
-        value = value[part]
-    return value
 
 
 def normalised(text):
@@ -158,15 +147,13 @@ def checked_notes(notes, lines, packets):
             raise TopicError(f"{where}: line {line!r} with its quote is not a verbatim non-empty line of the criteria file")
         if note["criterion"] not in NOTED:
             raise TopicError(f"{where}: criterion {note['criterion']!r} is not one of {', '.join(NOTED)}")
-        fact = FACT_CUE.fullmatch(note["cue"]) if isinstance(note["cue"], str) else None
-        if note["cue"] not in README_CUE_NAMES and not (fact and any(field(p, fact.group(1)) is not MISSING for p in packets)):
-            raise TopicError(f"{where}: cue {note['cue']!r} is neither a frozen README cue nor a prefilled or evidence field of the packet rows")
+        cue = note["cue"]
+        if not valid_cue(cue) or (cue not in README_CUE_NAMES and all(field(p, cue[5:]) is MISSING for p in packets)):
+            raise TopicError(f"{where}: cue {cue!r} is neither a frozen README cue nor a prefilled or evidence field of the packet rows")
 
 
 def selects(note, packet):
-    if note["cue"] in README_CUE_NAMES:
-        return bool(cue_lines(packet.get("readme"), (README_CUE_NAMES[note["cue"]],)))
-    return field(packet, note["cue"][5:]) not in (MISSING, None, False, "", [], {})
+    return cue_selects(note["cue"], packet)
 
 
 def read_session(work, key, option, packets):
