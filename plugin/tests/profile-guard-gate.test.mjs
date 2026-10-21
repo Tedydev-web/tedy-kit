@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { evaluate } from "../gates/profile-guard-gate.mjs";
+import { REASON, evaluate } from "../gates/profile-guard-gate.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const GATE_ENTRY = join(dirname(fileURLToPath(import.meta.url)), "../gates/profile-guard-gate.mjs");
@@ -38,6 +38,17 @@ test("writes to the profile config or rules and checkouts in the release worktre
   ]) {
     assert.ok(check("Bash", { command }), command);
   }
+});
+
+test("shell sent through the context-mode tools is guarded like the same Bash command", () => {
+  const { profile, release } = places();
+  const check = (tool, tool_input) => evaluate({ tool_name: `mcp__plugin_context-mode_context-mode__${tool}`, tool_input, cwd: "/" }, { profile, release });
+  assert.equal(check("ctx_execute", { language: "shell", code: `sed -i s/a/b/ ${join(profile, "rules.md")}` }), REASON);
+  assert.equal(check("ctx_execute", { language: "shell", code: "git checkout v0.0.9", cwd: release }), REASON);
+  assert.equal(check("ctx_execute_file", { path: "x", language: "shell", code: `git -C ${release} reset --hard x` }), REASON);
+  assert.equal(check("ctx_batch_execute", { commands: [{ label: "a", command: "ls" }, { label: "b", command: `cd ${profile} && mv x config.json` }] }), REASON);
+  assert.equal(check("ctx_execute", { language: "shell", code: `git -C ${release} status` }), null);
+  assert.equal(check("ctx_execute", { language: "python", code: `open(${JSON.stringify(join(profile, "rules.md"))}, "w")` }), null);
 });
 
 test("reads, other profile files and read-only git in the release worktree pass", () => {

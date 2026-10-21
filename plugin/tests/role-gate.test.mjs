@@ -57,6 +57,16 @@ test("writes through the tracker, Doc, Figma and review scripts are classified; 
   assert.equal(bash("node /k/scripts/github-write.mjs reply 701 123 --body-file r.txt"), null);
 });
 
+test("shell sent through the context-mode tools is classified like the same Bash command", () => {
+  const ctx = (tool, tool_input) => classifyAction({ tool_name: `mcp__plugin_context-mode_context-mode__${tool}`, cwd: "/w/acme", tool_input }, map);
+  assert.deepEqual(ctx("ctx_execute", { language: "shell", code: "cd acme-shop-fe && git commit -m x" }), { kind: "code", repo: "acme-shop-fe" });
+  assert.deepEqual(ctx("ctx_execute", { language: "shell", code: "git commit -m x", cwd: "/w/acme/acme-shop-fe" }), { kind: "code", repo: "acme-shop-fe" });
+  assert.deepEqual(ctx("ctx_execute_file", { path: "x", language: "shell", code: "git -C /w/acme/acme-shop-admin-be push" }), { kind: "code", repo: "acme-shop-admin-be" });
+  assert.equal(ctx("ctx_batch_execute", { commands: [{ label: "a", command: "git status" }, { label: "b", command: "node /k/scripts/openproject.mjs apply d.json" }] }).kind, "tracker");
+  assert.equal(ctx("ctx_execute", { language: "python", code: "import os" }), null);
+  assert.equal(ctx("ctx_batch_execute", { commands: [{ label: "a", command: "git status" }] }), null);
+});
+
 test("commits and pushes count as code only inside a mapped repository", () => {
   assert.deepEqual(bash("cd acme-shop-fe && git add -A && git commit -m x"), { kind: "code", repo: "acme-shop-fe" });
   assert.deepEqual(bash("git -C /w/acme/acme-shop-admin-be push -u origin feat/x"), { kind: "code", repo: "acme-shop-admin-be" });

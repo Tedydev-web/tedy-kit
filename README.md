@@ -47,6 +47,8 @@ Run `/tedy:setup` in a project. On the first run it creates your profile: it ask
 
 ## Gates
 
+The gates keep an honest but careless agent from publishing, merging, rewriting history or pushing to an integration branch without the user. They do not stop an agent set on getting around them: deliberate obfuscation is out of scope, and the forms still known to pass are listed under the table.
+
 | Gate | Default | What it does |
 |---|---|---|
 | Integration-branch push | always on | Asks before a push to `main`, `master`, `dev`, `develop`, `production` or `staging`, unless the repository is in `gates.pushExempt` |
@@ -54,7 +56,8 @@ Run `/tedy:setup` in a project. On the first run it creates your profile: it ask
 | PR merge and ready | always on | Asks before `gh pr merge`, `gh pr ready` and the equivalent `gh api` calls, in any form the gate can read |
 | Work package in the PR body | always on in a project whose map has a `tracker` | Refuses `gh pr create` whose body does not carry `OP#<id>` |
 | Unchecked publish | always on | Asks before a `node <script>` publish that no `permissions.ask` rule covers, or whose draft the gate could not read |
-| Unreadable command | always on | Refuses, without asking the user, a command the gate cannot read (a command word built at run time, `eval`, a shell reading code from stdin or `-c`, over 10,000 characters, or nested too deep), and tells the agent to rewrite it as plain commands or a script file in the system temp directory run with `python3` or `node`, keeping every push, merge and GitHub write a plain command of its own. The gate does not read script files, so a push or merge placed inside one is not checked |
+| Unreadable command | always on | Refuses, without asking the user, a command the gate cannot read (a command word built at run time or holding glob characters, `eval`, a shell or interpreter reading code from stdin, a heredoc, a pipe, `-`, `/dev/stdin` or a process substitution, a shell given `-c`, a globbed script path, an interpreter script path held in a variable whose arguments carry a kit publish verb, `find -exec`, `script`, `busybox` or `flock -c` carrying git, gh, a shell or an interpreter, over 10,000 characters, or nested too deep), and tells the agent to rewrite it as plain commands or a script file in the system temp directory run with `python3` or `node`, keeping every push, merge and GitHub write a plain command of its own. The gate reads quoted and escaped words the way the shell does, looks through wrappers such as `env`, `sudo`, `setsid`, `flock`, `timeout`, `nohup`, `xargs` and `npx` and through absolute paths such as `/usr/bin/git`, checks each command after a `;`, `&&`, `||`, `|` or `&` and inside a `( … )` subshell, and judges it in the directory that `cd`, `pushd` and `popd` leave it in. It does not read script files, so a push or merge placed inside one is not checked |
+| Context-mode shell | always on | Checks shell code sent through any MCP server's `ctx_execute`, `ctx_execute_file` or `ctx_batch_execute` exactly like a Bash command, so every row above, the profile guard, `gates.roleGate` and the post-push report apply: `code` with `language: "shell"`, and every command in a batch. Each command is judged where context-mode runs it: in an absolute `cwd` (which `ctx_execute_file` ignores, as context-mode does), otherwise in `CLAUDE_PROJECT_DIR`; a relative `cwd` is refused, because context-mode resolves it against its own install directory. Code in another language there is not read, like a `python3 <file>` script. A kit-script publish sent this way is refused and the agent told to run it as a plain Bash command, because the `permissions.ask` rules ask only on Bash. A call whose fields the gate cannot read is refused |
 | Tracker token | always on | Refuses any tool call that reads the tracker token file or writes to the tracker host around `openproject.mjs` |
 | Profile guard | always on | Asks before a write to the profile's `config.json` or `rules.md`, and before a checkout, reset or pull in the release worktree |
 | `gates.noComments` | off | Blocks edits that add code comments and reports comments a push carries |
@@ -64,6 +67,21 @@ Run `/tedy:setup` in a project. On the first run it creates your profile: it ask
 | `gates.publishQuote` | off | Refuses a `github-write.mjs` post, reply or edit until the exact body was quoted to the user after its last change |
 
 A broken `config.json`, or a profile with `rules.md` and no `config.json`, turns every personal gate on and is reported at session start until `profile.mjs doctor` reports it ok. The five PreToolUse gates run with `onFailure: "block"`: a gate that cannot start, crashes or times out stops the tool call. A gate that catches its own error allows, except git-gate on a publish command and the profile guard, which ask.
+
+Known limitations, by design or left out by the threat model:
+
+- An interpreter one-liner (`node -e`, `python3 -c`) is read only for `gh`, so a push inside one passes.
+- A script file is not read, and a renamed copy or a symlink of a kit script is not seen as a publish.
+- `bash <script> < file`, `bash <script> -s` and `bash <script> -c <arg>` are refused, although the script, not stdin, holds the code.
+- A directory change other than `cd`, `pushd` and `popd` (`git --git-dir=…`, `GIT_DIR=…`, `env -C …`) is not followed, and a branch name built by brace expansion or read from stdin (`git push origin {main,}`, `echo main | xargs git push origin`) is not seen.
+- Runners such as `su -c`, `ssh`, `watch` and `parallel` are refused only when their text mentions `gh` or `github`; a git push through them passes.
+- The gates match any MCP server's `ctx_execute`, `ctx_execute_file` and `ctx_batch_execute`; a future server with those names and another input shape would be refused as malformed.
+- role-gate still counts a search whose text names a kit script and a write verb as that write.
+- A function defined as `f () { … }`, with a space before `()`, is not refused the way `f() { … }` is.
+- The profile guard reads a plain `git` command word only, not one behind a wrapper or an absolute path.
+- Value-taking flags are known for the shells, python and node only; another interpreter's flag that takes a separate value can hide a `-` after it.
+- `env -S` strings are not unwrapped.
+- Whether Claude Code's own `permissions.ask` matching sees a quoted subcommand was not tested; the gate asks when the raw text matches no rule.
 
 ## Approval prompts
 

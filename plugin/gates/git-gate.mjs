@@ -1,18 +1,19 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, join, resolve } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ALL_GATES_ON, ask, deny, gateSwitches, logGate, readHookInput } from "../lib/hook-io.mjs";
 import { resolveMap } from "../lib/project-map.mjs";
-import { splitSegments, substitutions, tokenize } from "../lib/shell-segments.mjs";
+import { shellWords, splitSegments, tokenize, walkCommands } from "../lib/shell-segments.mjs";
+import { INTERPRETER, SHELLS, readsUnreadableCode, variableScriptArguments } from "../lib/shell-program-arguments.mjs";
 import { check as checkQuoted } from "./publish-quote-gate.mjs";
 import { evaluate as trackerToken, trackerHost } from "./tracker-token-gate.mjs";
 
 export { splitSegments, tokenize };
 
 const ENV_ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
-const READ_ONLY_GIT = new Set(["status", "diff", "log", "show", "fetch", "rev-parse", "branch", "ls-files", "remote", "describe", "blame", "reflog"]);
+const READ_ONLY_GIT = new Set(["status", "diff", "log", "show", "grep", "fetch", "rev-parse", "branch", "ls-files", "remote", "describe", "blame", "reflog"]);
 const READ_ONLY_GH_ACTIONS = new Set(["view", "list", "diff", "checks", "status", "watch", "download"]);
 const READ_ONLY_GH_AREAS = new Set(["search", "status", "browse", "help", "version"]);
 const GH_HELP = new Set(["-h", "--help"]);
@@ -40,22 +41,32 @@ const WRAPPERS = new Map([
   ["stdbuf", ["-i", "-o", "-e"]],
   ["xargs", ["-I", "-n", "-P", "-L", "-d", "-E", "-s", "-a"]],
   ["env", ["-u", "-C", "-S", "--unset", "--chdir", "--split-string"]],
+  ["setsid", []],
+  ["flock", ["-w", "--timeout", "-E", "--conflict-exit-code"]],
+  ["npx", ["-p", "--package"]],
 ]);
-const WRAPPER_ARGUMENTS = new Map([["timeout", 1]]);
+const WRAPPER_ARGUMENTS = new Map([["timeout", 1], ["flock", 1]]);
+const LOCAL_RUNNERS = new Set(["find", "script", "busybox"]);
+const KIT_SCRIPTS = ["github-write.mjs", "openproject.mjs", "figma-comments.mjs", "gdoc-comments.mjs", "doc-comment-file.mjs"];
+const SEARCH_TOOLS = new Set(["rg", "grep", "egrep", "fgrep", "fd", "fdfind", "ag", "ack"]);
+const SEARCH_EXEC = /^(?:-x|-X|--exec|--exec-batch|--pre|--pre-glob)(?:=|$)/;
+const FIND_EXEC = /^-(?:exec|execdir|ok|okdir)$/;
+const SUDO_SHELL = /^(?:-[a-zA-Z]*[si]|--shell|--login)$/;
 const PR_CREATE_VALUE_FLAGS = new Set(["-t", "--title", "-b", "--body", "-F", "--body-file", "-B", "--base", "-H", "--head", "-a", "--assignee", "-l", "--label", "-m", "--milestone", "-p", "--project", "-r", "--reviewer", "-T", "--template"]);
-const SHELLS = new Set(["bash", "sh", "zsh", "dash", "ksh", "fish"]);
-const INTERPRETER = /^(?:python|node|perl|ruby|deno|bun)[\d.]*$/;
 const EVAL_WORDS = new Set(["eval", "source", ".", "alias", "function"]);
-const NOT_LITERAL = /[$`(*?,{]|^\[(?!\[?$)|.}/;
+const NOT_LITERAL = /[$`(*?,{]|^\[(?!\[?$)|.}|[^[]\[/;
 const RUNNERS = new Set(["env", "script", "ssh", "su", "runuser", "sg", "setsid", "flock", "watch", "parallel", "tmux", "screen", "expect", "unbuffer", "at", "batch", "chroot", "systemd-run", "nsenter", "unshare", "firejail", "bwrap"]);
 const API_MERGE = /pulls\/\d+\/merge\b|mergePullRequest|markPullRequestReadyForReview|enablePullRequestAutoMerge/;
 const MAX_COMMAND = 10_000;
 const REWRITE = "Rewrite it so every command word is literal: split it into plain commands, or put the code in a script file in the system temp directory (never inside the repository) with the Write tool and run it as `python3 <file>` or `node <file>`, with no eval, no `bash -c`, no heredoc code and no command word in a variable. Never put a git push, a merge or a GitHub write inside a script: run it as a plain command of its own so the gate can check it. The user is not asked, because they cannot check this form either.";
-const UNREADABLE_REASON = `tedy gate: this command runs code the gate cannot read (a command word built at run time, eval, a shell reading code from stdin or -c, an interpreter one-liner that mentions gh, or git -c alias/core). ${REWRITE}`;
+const UNREADABLE_REASON = `tedy gate: this command runs code the gate cannot read (a command word built at run time, eval, a shell or interpreter reading code from stdin, a heredoc, a pipe or a process substitution, a shell given -c, an interpreter one-liner that mentions gh, or git -c alias/core). ${REWRITE}`;
 const MERGE_REASON = "tedy gate: merging or marking a PR ready belongs to the user. Allow it only if the user asked for this exact PR in this turn.";
 const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve|unresolve|pr-body)|openproject\.mjs["']?\s+apply|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor|edit|delete))\b|^(?=[\s\S]*--apply\b)[\s\S]*?(?:openproject\.mjs["']?\s+(?:set|comment|comment-edit|relation|relation-delete|rollback)|doc-comment-file\.mjs["']?\s+post)\b/;
 export const CLAUDE_SETTINGS = process.env.TEDY_CLAUDE_SETTINGS ?? join(homedir(), ".claude", "settings.json");
 const REWRITING_PUSH = /^(-f|--force|--force-with-lease(=.*)?|--force-if-includes|--mirror|--all|--prune|-d|--delete)$/;
+export const CTX_TOOL = /__ctx_(execute|execute_file|batch_execute)$/;
+const CTX_PUBLISH_REASON = "tedy gate: this publishes through a kit script from a context-mode tool, where the user's permission rules never ask. Run the publish as a plain Bash command of its own, so the permission rule asks the user before it goes out.";
+const CTX_LANGUAGES = new Set(["javascript", "typescript", "python", "ruby", "go", "rust", "php", "perl", "r", "elixir", "csharp"]);
 
 function graphQuery(args) {
   for (let index = 0; index < args.length; index += 1) {
@@ -112,9 +123,9 @@ function strippedTokens(segment) {
   for (;;) {
     while (at < all.length && (ENV_ASSIGNMENT.test(all[at]) || /^[({!]+$/.test(all[at]))) at += 1;
     if (at < all.length) all[at] = all[at].replace(/^[({!]+/, "");
-    const flags = WRAPPERS.get(all[at]);
+    const flags = WRAPPERS.get(basename(all[at] ?? ""));
     if (!flags) break;
-    let positionals = WRAPPER_ARGUMENTS.get(all[at]) ?? 0;
+    let positionals = WRAPPER_ARGUMENTS.get(basename(all[at])) ?? 0;
     at += 1;
     while (at < all.length) {
       if (ENV_ASSIGNMENT.test(all[at])) at += 1;
@@ -128,7 +139,7 @@ function strippedTokens(segment) {
   return all.slice(at);
 }
 
-function unreadable(segment) {
+function unreadable(segment, piped = false) {
   const tokens = strippedTokens(segment);
   const [word = "", ...args] = tokens;
   if (NOT_LITERAL.test(word) || EVAL_WORDS.has(word)) return true;
@@ -136,7 +147,14 @@ function unreadable(segment) {
   if (/\$'[^']*\\/.test(segment)) return true;
   const raw = tokenize(segment);
   if (raw.some((token, index) => RUNNERS.has(basename(token)) && raw.slice(index + 1).some((arg) => /\s/.test(arg) && /\bgh\b|github/i.test(arg)))) return true;
-  if (SHELLS.has(program)) return args.some((arg) => /^-[a-zA-Z]*[cs]/.test(arg) || arg === "<<<" || arg === "<") || !args.some((arg) => !arg.startsWith("-"));
+  const carries = (token) => token.split(/\s+/).some((part) => ["git", "gh"].includes(basename(part)) || SHELLS.has(basename(part)) || INTERPRETER.test(basename(part)));
+  if (LOCAL_RUNNERS.has(program) && (program !== "find" || args.some((arg) => FIND_EXEC.test(arg))) && args.some(carries)) return true;
+  if (raw.some((token, index) => basename(token) === "flock" && raw.slice(index + 1).some((arg) => arg === "-c" || /^--command(=|$)/.test(arg)))) return true;
+  if ((!word || /^\d*[<>]/.test(word)) && raw.some((token, index) => ["sudo", "doas"].includes(basename(token)) && raw.slice(index + 1).some((arg) => SUDO_SHELL.test(arg)))) return true;
+  if (SHELLS.has(program)) return args.some((arg) => /^-[a-zA-Z]*[cs]/.test(arg) || arg === "<<<" || arg === "<") || readsUnreadableCode(program, args, piped);
+  if (INTERPRETER.test(program) && readsUnreadableCode(program, args, piped)) return true;
+  const variable = INTERPRETER.test(program) ? variableScriptArguments(program, args) : null;
+  if (variable?.some((_, at) => KIT_SCRIPTS.some((name) => PUBLISH.test(`${name} ${variable.slice(at).join(" ")}`)))) return true;
   if (INTERPRETER.test(program)) return args.some((arg) => /^(-[a-zA-Z]*[ce][a-zA-Z]*|--eval|--print)$/.test(arg)) && /\bgh\b|github/i.test(segment);
   if (program === "git") {
     let index = 0;
@@ -175,10 +193,18 @@ export function globMatches(glob, text) {
   return true;
 }
 
+function searchOnly(segment) {
+  const [program, ...args] = commandTokens(segment);
+  if (program === "git") return classify(segment, "/").kind === "read";
+  return SEARCH_TOOLS.has(program) && !args.some((arg) => SEARCH_EXEC.test(arg));
+}
+
+export const publishes = (segment) => PUBLISH.test(shellWords(segment)) && !searchOnly(segment);
+
 function uncoveredPublish(command, settingsFile) {
   let rules;
   for (const segment of splitSegments(command, false)) {
-    if (!PUBLISH.test(segment)) continue;
+    if (!publishes(segment)) continue;
     rules ??= loadAskRules(settingsFile);
     if (rules === null) return "tedy gate: could not read the ask rules; approve only if you have seen the exact draft.";
     if (!rules.some((glob) => globMatches(glob, segment))) return `tedy gate: no permission rule covers this publish (\`${segment.slice(0, 120)}\`); approve only if you have seen the exact draft.`;
@@ -188,7 +214,7 @@ function uncoveredPublish(command, settingsFile) {
 
 export function hiddenPublish(command) {
   for (const segment of splitSegments(command, false)) {
-    if (!PUBLISH.test(segment)) continue;
+    if (!publishes(segment)) continue;
     const tokens = tokenize(segment);
     const first = tokens.find((token) => !ENV_ASSIGNMENT.test(token));
     if (first !== "node") return segment;
@@ -320,6 +346,7 @@ function mentionsGhMerge(segment) {
 }
 
 export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, settingsFile } = {}) {
+  if (command.length > MAX_COMMAND) return { allow: false, reason: `tedy gate: this command is longer than ${MAX_COMMAND} characters, too long to check. ${REWRITE}` };
   let asked = null;
   let rewrite = null;
   const askFor = (reason) => {
@@ -332,17 +359,12 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
   if (hidden) askFor(`tedy gate: this publishes through a kit script in a form the permission rules do not match (\`${hidden.slice(0, 120)}\`). Allow it only if the user approved this exact publish; otherwise run it as a plain \`node <script> …\` command.`);
   const uncovered = settingsFile ? uncoveredPublish(command, settingsFile) : null;
   if (uncovered) askFor(uncovered);
-  if (command.length > MAX_COMMAND) rewriteFor(`tedy gate: this command is longer than ${MAX_COMMAND} characters, too long to check. ${REWRITE}`);
-  const nested = substitutions(command);
-  if (nested === null) rewriteFor(`tedy gate: this command nests command substitutions too deeply to check. ${REWRITE}`);
-  let dir = cwd;
-  for (const segment of [...splitSegments(command), ...(nested ?? []).flatMap((body) => splitSegments(body))]) {
+  const { parts, tooDeep } = walkCommands(command, cwd);
+  if (tooDeep) rewriteFor(`tedy gate: this command nests command substitutions too deeply to check. ${REWRITE}`);
+  for (const { text: segment, piped, dir } of parts) {
     const action = classify(segment, dir);
-    if (action.kind === "cd") {
-      dir = action.dir;
-      continue;
-    }
-    if (unreadable(segment)) rewriteFor(UNREADABLE_REASON);
+    if (action.kind === "cd") continue;
+    if (unreadable(segment, piped)) rewriteFor(UNREADABLE_REASON);
     if (action.kind === "push") {
       const risk = pushRisk(action.args, action.dir, gates.pushExempt);
       if (risk) askFor(`tedy gate: ${risk}, which belongs to the user. Allow it only if the user asked for this push.`);
@@ -363,7 +385,7 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
       continue;
     }
     if (action.kind !== "github-write") {
-      if (mentionsGhMerge(segment) || (commandTokens(segment)[0] !== "gh" && API_MERGE.test(segment) && /https?:\/\/|graphql/i.test(segment))) askFor(MERGE_REASON);
+      if (mentionsGhMerge(segment) || (commandTokens(segment)[0] !== "gh" && API_MERGE.test(shellWords(segment)) && /https?:\/\/|graphql/i.test(segment))) askFor(MERGE_REASON);
       continue;
     }
     if (action.pr && action.verbs.some((verb) => verb === "merge" || verb === "ready" || /^\$|`/.test(verb))) {
@@ -375,7 +397,7 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
       else if (action.unknown) askFor("tedy gate: this `gh` command is not one the gate knows, so it may be an alias that merges or publishes. Allow it only if the user asked for it.");
       continue;
     }
-    if (/\bgh\s+(pr|issue)\s+(merge|close|reopen|ready|edit|lock|unlock)\b/.test(segment)) {
+    if (/\bgh\s+(pr|issue)\s+(merge|close|reopen|ready|edit|lock|unlock)\b/.test(shellWords(segment))) {
       return { allow: false, reason: "tedy gate: merging, closing or editing a PR or issue belongs to the user. Tell the user what is ready and let them do it." };
     }
     return { allow: false, reason: "tedy gate: publish to GitHub through github-write.mjs after the user approves the draft. Reading with gh (view, diff, list, GET, GraphQL queries) stays open." };
@@ -383,12 +405,47 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
   return rewrite ?? asked ?? { allow: true };
 }
 
-export function run() {
-  const input = readHookInput({ askOnFailure: true });
+function batchCommands(commands) {
+  let list = commands;
+  if (typeof list === "string") {
+    if (!list.trim()) return null;
+    try {
+      list = JSON.parse(list);
+    } catch {
+      list = [list];
+    }
+    if (!Array.isArray(list)) list = [commands];
+  }
+  if (!Array.isArray(list) || !list.length) return null;
+  const read = list.map((item) => (typeof item === "string" ? item : item?.command));
+  return read.every((command) => typeof command === "string") ? read : null;
+}
+
+export function bashInputs(input) {
+  const tool = String(input.tool_name ?? "").match(CTX_TOOL)?.[1];
+  if (!tool) return { inputs: [input] };
+  const toolInput = input.tool_input;
+  if (!toolInput || typeof toolInput !== "object") return { malformed: "no tool input" };
+  const own = tool === "execute_file" ? undefined : toolInput.cwd;
+  if (own !== undefined && typeof own !== "string") return { malformed: "`cwd` is not a string" };
+  if (own !== undefined && !isAbsolute(own)) return { malformed: "`cwd` is relative, and context-mode resolves it against its own install directory, which the gate cannot see; pass an absolute `cwd`" };
+  const cwd = own ?? process.env.CLAUDE_PROJECT_DIR ?? input.cwd;
+  const shell = (command) => ({ ...input, tool_name: "Bash", cwd, tool_input: { command } });
+  if (tool === "batch_execute") {
+    const commands = batchCommands(toolInput.commands);
+    return commands ? { inputs: commands.map(shell) } : { malformed: "`commands` is not a non-empty list of commands" };
+  }
+  if (typeof toolInput.language !== "string" || typeof toolInput.code !== "string") return { malformed: "`language` or `code` is not a string" };
+  if (toolInput.language === "shell") return { inputs: [shell(toolInput.code)] };
+  if (CTX_LANGUAGES.has(toolInput.language)) return { inputs: [] };
+  return { malformed: `language \`${toolInput.language.slice(0, 40)}\` is not one the gate knows` };
+}
+
+function judge(input, tool) {
   const command = input.tool_input?.command ?? "";
   try {
     const gates = gateSwitches();
-    let result = evaluate(command, input.cwd ?? process.cwd(), { gates, settingsFile: CLAUDE_SETTINGS });
+    let result = CTX_TOOL.test(tool) && splitSegments(command, false).some(publishes) ? { allow: false, reason: CTX_PUBLISH_REASON } : evaluate(command, input.cwd ?? process.cwd(), { gates, settingsFile: CLAUDE_SETTINGS });
     if (result.allow || result.ask) {
       const token = trackerToken(input.tool_input, trackerHost(), { cwd: input.cwd ?? process.cwd() });
       if (token) result = { allow: false, reason: token };
@@ -402,13 +459,27 @@ export function run() {
       }
       if (quoted && (!quoted.ask || result.allow)) result = { allow: false, ...quoted };
     }
-    if (!result.allow) logGate({ hook: "git-gate", decision: result.ask ? "ask" : "deny", command: command.slice(0, 200), cwd: input.cwd, reason: result.reason });
-    if (result.ask) ask(result.reason);
-    else if (!result.allow) deny(result.reason);
+    if (!result.allow) logGate({ hook: "git-gate", decision: result.ask ? "ask" : "deny", tool, command: command.slice(0, 200), cwd: input.cwd, reason: result.reason });
+    return result;
   } catch (error) {
-    logGate({ hook: "git-gate", decision: "ask", command: String(command).slice(0, 200), error: error.message });
-    ask(PUBLISH.test(command) ? `tedy gate: could not check this publish command (${error.message}). Approve only if you have seen the exact draft.` : `tedy gate: could not check this command (${error.message}). Allow it only if the user asked for it.`);
+    logGate({ hook: "git-gate", decision: "ask", tool, command: String(command).slice(0, 200), error: error.message });
+    return { allow: false, ask: true, reason: publishes(String(command)) ? `tedy gate: could not check this publish command (${error.message}). Approve only if you have seen the exact draft.` : `tedy gate: could not check this command (${error.message}). Allow it only if the user asked for it.` };
   }
+}
+
+export function run() {
+  const input = readHookInput({ askOnFailure: true });
+  const { inputs, malformed } = bashInputs(input);
+  if (malformed) {
+    const reason = `tedy gate: could not read this context-mode call (${malformed}), so it is refused unchecked. Send shell code as \`code\` with \`language: "shell"\`, or batch commands as a list of \`{ label, command }\`.`;
+    logGate({ hook: "git-gate", decision: "deny", tool: input.tool_name, cwd: input.cwd, reason });
+    deny(reason);
+    return;
+  }
+  const results = inputs.map((item) => judge(item, String(input.tool_name ?? "")));
+  const result = results.find((item) => !item.allow && !item.ask) ?? results.find((item) => item.ask);
+  if (result?.ask) ask(result.reason);
+  else if (result) deny(result.reason);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();
