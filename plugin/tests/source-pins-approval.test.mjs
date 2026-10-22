@@ -130,6 +130,55 @@ test("a moved pin's notice is printed, never posted, so the ticket binds exactly
   assert.equal(doc.writes().filter((line) => line.startsWith("docs.googleapis.com POST")).length, 1);
 });
 
+test("a write refused for a missing sources record leaves its approval ticket unused", async () => {
+  const TAB = "Crypto takes the price in USDT and the fee in GRAM from the payer\n";
+  const ITEM = { group: "A", epic: "09", where: "UC_SW_13 BR1", quote: "Crypto takes the price in USDT", comment: "Which wallet pays the fee?" };
+  const own = { id: "c2", content: "Old question?", resolved: false, author: { me: true, displayName: "me" }, replies: [], createdTime: "2026-10-01T00:00:00Z" };
+  const cases = [
+    ["github-write", ["edit", "5", "--body-file", "b.md", "--repo", "o/r"], "The label is still wrong.", { gh: { write: { id: 5, html_url: "u", body: "x" } } }],
+    ["figma-comments", ["post", "1:2", "--body-file", "b.md", "--file", "F"], "@lam Màn này thiếu trạng thái rỗng.", { web: { figma: [] } }],
+    ["gdoc-comments", ["anchor", "--tab", "t.1", "--quote", "the fee in GRAM", "--body-file", "b.md", "--doc", "D"], "Which wallet pays the fee?", { web: { drive: [], document: textDoc(TAB) } }],
+    ["gdoc-comments", ["edit", "c2", "--body-file", "b.md", "--doc", "D"], "Which wallet pays the fee?", { web: { drive: [own], document: textDoc(TAB) } }],
+    ["doc-comment-file", ["post", "items.json", "--html", "out.html", "--apply", "--doc", "D"], null, { web: { tabs: { "t.1": TAB }, document: textDoc(TAB) }, map: { name: "p", repos: [{ path: ".", role: "FE" }], language: { pr_review: "en", doc_figma: "en" }, prd: { doc: "D", tabs: { "09": { tab: "t.1" } } } } }],
+  ];
+  for (const [script, args, body, options] of cases) {
+    const w = world(options);
+    if (body) w.file("b.md", `${body}\n`);
+    else w.file("items.json", JSON.stringify({ title: "PRD", items: [ITEM] }));
+    w.approve([body ?? `EPIC 09 · tab t.1 · UC_SW_13 BR1\nquote: ${ITEM.quote}\n${ITEM.comment}`, w.line(script, args)].join("\n"));
+    const result = await w.run(script, args);
+    assert.notEqual(result.code, 0, `${script} ${args[0]}`);
+    assert.match(result.out, /refused: (?:b\.md|items\.json) has no pinned sources/, `${script} ${args[0]}: ${result.out}`);
+    assert.equal(w.tickets(), 1, `${script} ${args[0]}`);
+    assert.deepEqual(w.writes(), [], `${script} ${args[0]}`);
+  }
+});
+
+test("a moved pin's notice is printed only once the approval is spent", async () => {
+  const { w, sibling } = reviewWorld();
+  const args = ["post", "d.md", "--repo", "o/r"];
+  const pins = await lint(w, "draft-lint", ["pr-comment", "d.md"]);
+  sibling.push("src/b.ts", "b2\n", "chore: unrelated");
+  const unapproved = await w.run("github-write", args);
+  assert.match(unapproved.out, /no unused approval matches this write/);
+  assert.doesNotMatch(unapproved.out, /notice:/);
+  w.approve([DRAFT, ...pins, w.line("github-write", args)].join("\n"));
+  const posted = await w.run("github-write", args);
+  assert.equal(posted.code, 0, posted.out);
+  assert.ok(posted.out.indexOf("notice:") > posted.out.indexOf("WRITE →"), posted.out);
+
+  const TAB = "Crypto takes the price in USDT and the fee in GRAM from the payer\n";
+  const ITEM = { group: "A", epic: "09", where: "UC_SW_13 BR1", quote: "Crypto takes the price in USDT", comment: "Which wallet pays the fee?" };
+  const doc = world({ web: { tabs: { "t.1": TAB }, document: textDoc(TAB) }, map: { name: "p", repos: [{ path: ".", role: "FE" }], language: { pr_review: "en", doc_figma: "en" }, prd: { doc: "D", tabs: { "09": { tab: "t.1" } } } } });
+  doc.file("items.json", JSON.stringify({ title: "PRD", items: [ITEM] }));
+  await lint(doc, "doc-comment-file", ["items.json"]);
+  doc.file("web.json", JSON.stringify({ ...WEB, tabs: { "t.1": TAB }, document: textDoc(`${TAB}A new paragraph\n`) }));
+  const docArgs = ["post", "items.json", "--html", "out.html", "--apply", "--doc", "D"];
+  const refused = await doc.run("doc-comment-file", docArgs);
+  assert.match(refused.out, /no unused approval matches this write/);
+  assert.doesNotMatch(refused.out, /notice:|every highlighted passage/);
+});
+
 test("several Doc replies and anchors in one batch do not refuse each other, because a comment changes no text", async () => {
   const TAB = "Crypto takes the price in USDT and the fee in GRAM from the payer\n";
   const thread = { id: "c1", content: "Which wallet?", resolved: false, author: { me: false, displayName: "PM" }, replies: [], createdTime: "2026-10-01T00:00:00Z" };

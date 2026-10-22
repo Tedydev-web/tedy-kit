@@ -92,21 +92,22 @@ async function linkPins(text) {
   return pins;
 }
 
-async function linksRefused(file) {
+async function recheckLinks(file) {
   const { sources, refusal } = pinnedSources(file, `openproject.mjs preview ${file}`);
   if (refusal) {
     console.log(refusal);
-    return true;
+    return null;
   }
+  const notices = [];
   for (const pin of sources) {
     const verdict = pin.kind === "figma" ? await recheckFigma(figmaClient({ file: pin.file }), pin, pin.nodes ?? []) : await recheckGdoc(await session({ doc: pin.doc }), pin);
-    if (verdict.notice) console.log(verdict.notice);
     if (verdict.refusal) {
       console.log(verdict.refusal);
-      return true;
+      return null;
     }
+    if (verdict.notice) notices.push(verdict.notice);
   }
-  return false;
+  return notices;
 }
 
 async function apply(client, project, drafts, file) {
@@ -125,8 +126,10 @@ async function apply(client, project, drafts, file) {
     for (const [slug] of moved) console.log(`refused: ${slug} changed in OpenProject since the preview; read its activity, then preview again`);
     return 1;
   }
-  if (await linksRefused(file)) return 1;
+  const notices = await recheckLinks(file);
+  if (!notices) return 1;
   consumeApproval(process.argv, drafts.map((draft, index) => renderWorkPackageDraft(draft, plan[index])));
+  for (const notice of notices) console.log(notice);
   const path = sidecarPath(client.host, project);
   const created = {};
   const expected = {};

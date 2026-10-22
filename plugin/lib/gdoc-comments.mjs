@@ -8,7 +8,7 @@ import { logPostedText } from "./edit-log.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { notBefore, sinceTime } from "./since.mjs";
-import { applyVerdict, requirePin, versionCheck } from "./source-pins.mjs";
+import { applyVerdict, requirePin, sayNotice, versionCheck } from "./source-pins.mjs";
 
 const DRIVE = "https://www.googleapis.com/drive/v3";
 const DOCS = "https://docs.googleapis.com/v1";
@@ -189,8 +189,11 @@ async function main([command, target, ...rest]) {
     const body = readBody(flags);
     const google = await session(flags, command === "anchor");
     if (alreadyPosted(await listComments(google), command, target, body)) throw new Error(`the Doc already has this ${command === "reply" ? `reply in thread ${target}` : "comment"}; nothing posted`);
-    await recheckDocPin(google, flags["body-file"], `draft-lint.mjs doc-comment ${flags["body-file"]}`);
-    const approve = () => consumeApproval(process.argv, [body]);
+    const notice = await recheckDocPin(google, flags["body-file"], `draft-lint.mjs doc-comment ${flags["body-file"]}`);
+    const approve = () => {
+      consumeApproval(process.argv, [body]);
+      sayNotice(notice);
+    };
     let id;
     if (command === "reply") {
       console.log(`WRITE → Google Doc ${google.doc} thread ${target} : 1 reply`);
@@ -212,10 +215,11 @@ async function main([command, target, ...rest]) {
     const google = await session(flags);
     const item = editTarget(await listComments(google), target, flags.reply);
     if (squash(item.content) === squash(body)) throw new Error("the posted text already matches the body file; nothing edited");
-    await recheckDocPin(google, flags["body-file"], `draft-lint.mjs doc-comment ${flags["body-file"]}`);
+    const notice = await recheckDocPin(google, flags["body-file"], `draft-lint.mjs doc-comment ${flags["body-file"]}`);
     const path = `${DRIVE}/files/${google.doc}/comments/${target}${flags.reply ? `/replies/${flags.reply}` : ""}?fields=id,content`;
     console.log(`WRITE → Google Doc ${google.doc} thread ${target}${flags.reply ? ` reply ${flags.reply}` : ""} : edit 1 ${flags.reply ? "reply" : "comment"}`);
     consumeApproval(process.argv, [body]);
+    sayNotice(notice);
     await google.request(path, { method: "PATCH", body: { content: body } });
     const after = editTarget(await listComments(google), target, flags.reply);
     if (after.content.trim() !== body) throw new Error("the edited text could not be read back unchanged");

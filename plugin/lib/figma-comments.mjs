@@ -9,7 +9,7 @@ import { subtreeHash } from "./figma-read.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { notBefore, sinceTime } from "./since.mjs";
-import { applyVerdict, requirePin, versionCheck } from "./source-pins.mjs";
+import { applyVerdict, requirePin, sayNotice, versionCheck } from "./source-pins.mjs";
 
 const API = "https://api.figma.com/v1";
 
@@ -68,7 +68,7 @@ export async function recheckFigma(figma, pin, nodes) {
 async function recheckPinned(figma, flags, node) {
   const file = flags["body-file"];
   const pin = requirePin(file, `draft-lint.mjs figma-comment ${file}`, (candidate) => candidate.kind === "figma" && candidate.file === figma.file, `Figma version of ${figma.file}`);
-  applyVerdict(await recheckFigma(figma, pin, node ? [node] : []));
+  return applyVerdict(await recheckFigma(figma, pin, node ? [node] : []));
 }
 
 const readBody = (flags) => {
@@ -108,9 +108,10 @@ async function main([command, target, ...rest]) {
     if (!box) throw new Error(`node ${node} not found in ${figma.file}`);
     const twin = duplicateOnNode((await figma.request(`/files/${figma.file}/comments`)).comments, node, body);
     if (twin) throw new Error(`comment ${twin.id} on node ${node} already says this; nothing posted`);
-    await recheckPinned(figma, flags, node);
+    const notice = await recheckPinned(figma, flags, node);
     console.log(`WRITE → Figma ${figma.file} node ${node} : 1 comment`);
     consumeApproval(process.argv, [body]);
+    sayNotice(notice);
     const created = await figma.request(`/files/${figma.file}/comments`, { method: "POST", body: { message: body, client_meta: { node_id: node, node_offset: pinOffset(box) } } });
     await verify(figma, created.id, body);
     logPostedText("figma-comment", flags["body-file"], created.id, body);
@@ -122,9 +123,10 @@ async function main([command, target, ...rest]) {
     const root = rootOf(comments, target);
     const twin = duplicateReply(comments, root.id, body);
     if (twin) throw new Error(`reply ${twin.id} in thread ${root.id} already says this; nothing posted`);
-    await recheckPinned(figma, flags, root.client_meta?.node_id ?? null);
+    const notice = await recheckPinned(figma, flags, root.client_meta?.node_id ?? null);
     console.log(`WRITE → Figma ${figma.file} thread ${root.id} : 1 reply`);
     consumeApproval(process.argv, [body]);
+    sayNotice(notice);
     const created = await figma.request(`/files/${figma.file}/comments`, { method: "POST", body: { message: body, comment_id: root.id } });
     await verify(figma, created.id, body);
     logPostedText("figma-reply", flags["body-file"], created.id, body);

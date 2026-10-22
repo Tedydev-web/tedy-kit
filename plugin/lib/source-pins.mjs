@@ -137,5 +137,9 @@ export function requirePin(file, relint, find, what) {
 
 export function applyVerdict({ notice, refusal }) {
   if (refusal) throw new Error(refusal);
-  if (notice) console.log(notice);
+  return notice ?? null;
 }
+
+export const sayNotice = (notice) => {
+  if (notice) console.log(notice);
+};
