@@ -1,5 +1,8 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { STATE_DIR } from "./hook-io.mjs";
 import { addSlugs, buildPayload, foreignActivity, forgetSlugs, loadConfig, loadRefs, mergePayload, planWrites, readSidecar, recordLastApply, setPayload, sidecarPath, workPackageFilters, workPackageLine, writeSidecar } from "./openproject-client.mjs";
 import { client as figmaClient, figmaPin, recheckFigma } from "./figma-comments.mjs";
 import { gdocPin, recheckGdoc, session } from "./gdoc-comments.mjs";
@@ -210,6 +213,20 @@ async function quickSet(client, id, flags) {
 }
 
 export const prBodyFrom = (wp) => [`OP#${wp.id}`, "", `Task read at ${wp.updatedAt}`, "", `## ${wp.subject}`, "", (wp.description?.raw ?? "").trim()].join("\n").trim() + "\n";
+
+const prBodyRecord = (body) => join(STATE_DIR, "pr-bodies", createHash("sha256").update(body.trim()).digest("hex"));
+
+export function recordPrBody(body) {
+  const path = prBodyRecord(body);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, body.match(/^OP#(\d+)/)[1]);
+}
+
+export const generatedPrBodyOp = (body) => {
+  const path = prBodyRecord(body);
+  return existsSync(path) ? readFileSync(path, "utf8").trim() : null;
+};
+
 export const sameComment = (activities, body) => activities.find((activity) => (activity.comment?.raw ?? "").trim() === body.trim()) ?? null;
 
 async function comment(client, id, flags) {
@@ -363,7 +380,9 @@ async function main([command, target, ...rest]) {
   if (command === "relation" && /^\d+$/.test(target ?? "") && /^\d+$/.test(rest[0] ?? "")) return setRelation(client, Number(target), Number(rest[0]), flags);
   if (command === "relation-delete" && /^\d+$/.test(target ?? "")) return deleteRelation(client, Number(target), flags);
   if (command === "pr-body" && /^\d+$/.test(target ?? "")) {
-    process.stdout.write(prBodyFrom(await client.request(`/api/v3/work_packages/${target}`)));
+    const body = prBodyFrom(await client.request(`/api/v3/work_packages/${target}`));
+    recordPrBody(body);
+    process.stdout.write(body);
     return 0;
   }
   if (command === "rollback") return rollback(client, projectOf(flags), flags);

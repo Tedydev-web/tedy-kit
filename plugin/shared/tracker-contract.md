@@ -60,7 +60,7 @@ Read-only without `--apply`: shows the relation. With `--apply` it removes it an
 
 ### `pr-body <id>`
 
-Read-only. Prints a pull request body built from the item: `OP#<id>` as the first line, the time it was read, the goal, checklist and acceptance criteria.
+Read-only on the tracker. Prints a pull request body built from the item: `OP#<id>` as the first line, the time it was read, the goal, checklist and acceptance criteria. It records the body's SHA-256 in the kit's state directory, so `github-write.mjs pr-body` can tell this output from a hand-written body: a ready PR of the user's takes only an unedited body for the work package it already points to.
 
 ### `rollback [--delete]`
 

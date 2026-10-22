@@ -101,12 +101,28 @@ test("a PR body built from a work package starts with OP#<id> and records when t
   assert.ok(body.endsWith("- [ ] Y\n"));
 });
 
-test("pr-body writes only to the user's own draft PR and keeps the OP link", () => {
-  const draft = { number: 744, isDraft: true, author: { login: "tedy" } };
-  assert.equal(prBodyRefusal(draft, "tedy", "OP#21453\n\nbody"), null);
-  assert.match(prBodyRefusal(draft, "tedy", "no link"), /OP#<id>/);
-  assert.match(prBodyRefusal({ ...draft, isDraft: false }, "tedy", "OP#1"), /not a draft/);
-  assert.match(prBodyRefusal({ ...draft, author: { login: "tin" } }, "tedy", "OP#1"), /belongs to tin/);
+test("pr-body writes only to the user's PR: a draft takes any OP-linked body, a ready PR only the unedited pr-body output for its own work package", () => {
+  const draft = { number: 744, isDraft: true, author: { login: "tedy" }, body: "OP#21453\n\nold" };
+  const ready = { ...draft, isDraft: false };
+  assert.equal(prBodyRefusal(draft, "tedy", "OP#21453\n\nbody", null), null);
+  assert.match(prBodyRefusal(draft, "tedy", "no link", null), /OP#<id>/);
+  assert.match(prBodyRefusal(ready, "tedy", "no link", null), /OP#<id>/);
+  assert.match(prBodyRefusal({ ...draft, author: { login: "tin" } }, "tedy", "OP#1", "1"), /belongs to tin/);
+  assert.match(prBodyRefusal({ ...ready, author: { login: "tin" } }, "tedy", "OP#21453", "21453"), /belongs to tin/);
+  assert.equal(prBodyRefusal(ready, "tedy", "OP#21453\n\nnew", "21453"), null);
+  assert.equal(prBodyRefusal(ready, "tedy", "OP#21453\n\nhand-edited", null), "#744 is ready; its body is replaced only with the unedited output of openproject.mjs pr-body 21453");
+  assert.equal(prBodyRefusal(ready, "tedy", "OP#999\n\nother", "999"), "#744 is ready and points to OP#21453, not OP#999; a ready PR keeps its work package");
+  assert.equal(prBodyRefusal({ ...ready, body: "" }, "tedy", "OP#21453", "21453"), "#744 is ready and points to no work package, not OP#21453; a ready PR keeps its work package");
+});
+
+test("openproject pr-body records what it generated, so a hand-edited body is told apart", async () => {
+  const { generatedPrBodyOp, recordPrBody } = await import("../lib/openproject.mjs");
+  const body = prBodyFrom({ id: 21453, updatedAt: "2026-10-22T07:00:00Z", subject: "Record test", description: { raw: "goal" } });
+  assert.equal(generatedPrBodyOp(body), null);
+  recordPrBody(body);
+  assert.equal(generatedPrBodyOp(body), "21453");
+  assert.equal(generatedPrBodyOp(`${body}\n\n`), "21453");
+  assert.equal(generatedPrBodyOp(body.replace("goal", "goal, edited")), null);
 });
 
 test("pr-body is the dev session's write; the review and PM sessions are asked first", () => {

@@ -152,3 +152,21 @@ test("--dry-run is refused on a verb that does not support it, and a valued --dr
     assert.equal(result.writes.length, 0, args.join(" "));
   }
 });
+
+test("pr-body refreshes a ready PR only with the recorded pr-body output for the same work package", async () => {
+  const { prBodyFrom, recordPrBody } = await import("../lib/openproject.mjs");
+  const dir = tempDir("tedy-ghcwd-");
+  const body = prBodyFrom({ id: 21453, updatedAt: "2026-10-22T07:00:00Z", subject: "Ready refresh", description: { raw: "- [ ] goal" } });
+  writeFileSync(join(dir, "b.md"), body);
+  const fixture = { prView: { number: 744, isDraft: false, author: { login: "tedy" }, body: "OP#21453\n\nTask read at earlier" }, login: "tedy" };
+  const args = ["pr-body", "744", "--repo", "o/r", "--body-file", "b.md", "--dry-run"];
+  const options = { fixture, cwd: dir, stateDir: process.env.TEDY_STATE_DIR };
+  const handWritten = run(args, options);
+  assert.equal(handWritten.status, 1);
+  assert.match(handWritten.out, /^refused: #744 is ready; its body is replaced only with the unedited output of openproject\.mjs pr-body 21453$/m);
+  recordPrBody(body);
+  const generated = run(args, options);
+  assert.equal(generated.status, 0, generated.out);
+  assert.match(generated.out, /^WRITE → o\/r#744 : PR body$/m);
+  assert.equal(generated.writes.length, 0);
+});

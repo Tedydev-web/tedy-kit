@@ -6,6 +6,7 @@ import { GITHUB_WRITE_DRY_RUN_VERBS, githubWriteDryRun, parseFlags } from "./cli
 import { lintComment, lintDraft, mapLanguage, parseDraft, readDiff, snapshotPath } from "./draft-lint.mjs";
 import { appendEditLog, labelText } from "./edit-log.mjs";
 import { fetchTab, indexTab, quoteInText, UC_ID } from "./prd-section.mjs";
+import { generatedPrBodyOp } from "./openproject.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { mapRepos, pinnedSources, recheckRepos } from "./source-pins.mjs";
@@ -252,10 +253,16 @@ function reply(pr, id, flags) {
   return 0;
 }
 
-export function prBodyRefusal(pr, me, body) {
-  if (!/\bOP#\d+\b/.test(body)) return "the body has no OP#<id>";
-  if (!pr.isDraft) return `#${pr.number} is not a draft; a ready PR belongs to the user`;
+const opOf = (text) => text?.match(/\bOP#(\d+)\b/)?.[1];
+
+export function prBodyRefusal(pr, me, body, generatedFor) {
+  const op = opOf(body);
+  if (!op) return "the body has no OP#<id>";
   if (pr.author?.login !== me) return `#${pr.number} belongs to ${pr.author?.login}, not ${me}`;
+  if (pr.isDraft) return null;
+  const current = opOf(pr.body);
+  if (current !== op) return `#${pr.number} is ready and points to ${current ? `OP#${current}` : "no work package"}, not OP#${op}; a ready PR keeps its work package`;
+  if (generatedFor !== op) return `#${pr.number} is ready; its body is replaced only with the unedited output of openproject.mjs pr-body ${op}`;
   return null;
 }
 
@@ -265,7 +272,7 @@ function prBody(number, flags) {
   const body = readFileSync(flags["body-file"], "utf8").trim();
   const view = () => JSON.parse(gh(["pr", "view", String(number), "--repo", repo, "--json", "number,isDraft,author,body"]));
   const pr = view();
-  const refusal = prBodyRefusal(pr, gh(["api", "user", "-q", ".login"]).trim(), body);
+  const refusal = prBodyRefusal(pr, gh(["api", "user", "-q", ".login"]).trim(), body, generatedPrBodyOp(body));
   if (refusal) {
     console.log(`refused: ${refusal}`);
     return 1;
