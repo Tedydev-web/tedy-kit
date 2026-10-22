@@ -84,6 +84,14 @@ export function versionCheck(source, before, now, { kept, changed } = {}) {
   return { refusal: `refused: ${moved}${changed ? ` and ${changed}` : ""}; ${RECHECK}` };
 }
 
+export async function takePin(what, take) {
+  try {
+    return await take();
+  } catch (error) {
+    throw new Error(`cannot pin ${what}: ${error.message}; fix that, then run the lint or preview again. Nothing was written.`);
+  }
+}
+
 export const describePin = (pin) =>
   pin.kind === "git"
     ? `pinned: ${pin.repo} ${pin.ref}@${pin.sha.slice(0, 8)} · ${pin.paths.join(", ")}`

@@ -10,7 +10,7 @@ import { fetchTab, quoteCount } from "./prd-section.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { approvalLines, renderDocComment } from "./publish-approval-render.mjs";
-import { describePin, writeSources } from "./source-pins.mjs";
+import { describePin, takePin, writeSources } from "./source-pins.mjs";
 
 const GROUPS = ["A", "B"];
 
@@ -147,7 +147,7 @@ async function main([itemsFile, ...rest]) {
     console.error(`doc-comment-file: no file written; fix these first:\n${problems.map((problem) => `- ${problem}`).join("\n")}`);
     return 1;
   }
-  const pin = await gdocPin(await session({ doc: map.prd.doc }));
+  const pin = await takePin(`Google Doc ${map.prd.doc}`, async () => gdocPin(await session({ doc: map.prd.doc })));
   writeSources(itemsFile, [pin], text);
   console.log(describePin(pin));
   const dir = join(map.paths[0], "plans", "drafts");

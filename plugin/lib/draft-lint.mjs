@@ -6,7 +6,7 @@ import { STATE_DIR } from "./hook-io.mjs";
 import { UC_ID } from "./prd-section.mjs";
 import { chatLanguage } from "./labels.mjs";
 import { resolveMap } from "./project-map.mjs";
-import { cites, describePin, mapRepos, pinRepos, writeSources } from "./source-pins.mjs";
+import { cites, describePin, mapRepos, pinRepos, takePin, writeSources } from "./source-pins.mjs";
 
 export const MAX_BODY = 360;
 export const MAX_CHAT = 600;
@@ -183,12 +183,12 @@ async function chatPins(kind, flag) {
     const file = flag("--file") ?? map?.figma?.file;
     if (!file) return [];
     const { client, figmaPin } = await import("./figma-comments.mjs");
-    return [await figmaPin(client({ file }))];
+    return [await takePin(`Figma file ${file}`, async () => figmaPin(client({ file })))];
   }
   const doc = flag("--doc") ?? map?.prd?.doc;
   if (!doc) return [];
   const { gdocPin, session } = await import("./gdoc-comments.mjs");
-  return [await gdocPin(await session({ doc }))];
+  return [await takePin(`Google Doc ${doc}`, async () => gdocPin(await session({ doc })))];
 }
 
 function record(file, text, pins, none, freeze = true) {
@@ -205,8 +205,9 @@ async function main([kind, file, ...flags]) {
     const problems = lintChatComment(text, kind.replace("-comment", ""), mapLanguage("doc_figma"));
     for (const problem of problems) console.log(problem);
     if (problems.length) return 1;
+    const pins = await chatPins(kind, flag);
     console.log(`clean: ${kind}`);
-    record(file, text, await chatPins(kind, flag), kind === "figma-comment" ? "no Figma file in the project map" : "no PRD doc in the project map");
+    record(file, text, pins, kind === "figma-comment" ? "no Figma file in the project map" : "no PRD doc in the project map");
     return 0;
   }
   if (kind === "pr-reply" && file) {

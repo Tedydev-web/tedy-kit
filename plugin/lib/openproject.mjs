@@ -14,7 +14,7 @@ import { approvalLines, renderRollbackItem, renderWorkPackageDraft } from "./pub
 import { snapshotOnce, snapshotPath } from "./draft-lint.mjs";
 import { appendEditLog, frozenOriginal, labelText } from "./edit-log.mjs";
 import { chatLanguage } from "./labels.mjs";
-import { describePin, linkedDocs, pinnedSources, writeSources } from "./source-pins.mjs";
+import { describePin, linkedDocs, pinnedSources, takePin, writeSources } from "./source-pins.mjs";
 import { countWords, lintDrafts, lintWorkPackage, readiness, readinessLine } from "./task-lint.mjs";
 
 function projectOf(flags) {
@@ -84,14 +84,12 @@ async function check(client, project, drafts) {
 
 const locksPath = (file) => `${snapshotPath(file)}.locks.json`;
 
-async function pinLinks(file) {
-  const text = readFileSync(file, "utf8");
+async function linkPins(text) {
   const { figma, docs } = linkedDocs(text);
   const pins = [];
-  for (const { file: key, nodes } of figma) pins.push({ ...(await figmaPin(figmaClient({ file: key }))), nodes });
-  for (const doc of docs) pins.push(await gdocPin(await session({ doc })));
-  writeSources(file, pins, text);
-  for (const pin of pins) console.log(describePin(pin));
+  for (const { file: key, nodes } of figma) pins.push({ ...(await takePin(`Figma file ${key}`, async () => figmaPin(figmaClient({ file: key })))), nodes });
+  for (const doc of docs) pins.push(await takePin(`Google Doc ${doc}`, async () => gdocPin(await session({ doc }))));
+  return pins;
 }
 
 async function linksRefused(file) {
@@ -392,11 +390,15 @@ async function main([command, target, ...rest]) {
     const project = projectOf(flags);
     if (command === "preview") {
       const { failed, locks, plan } = await check(client, project, drafts);
-      if (!failed && snapshotOnce(target, readFileSync(target, "utf8"))) console.log("original drafts frozen for the edit log");
-      if (!failed) writeFileSync(locksPath(target), JSON.stringify(locks));
-      if (!failed) await pinLinks(target);
-      if (!failed) console.log(approvalLines(drafts.map((draft, index) => renderWorkPackageDraft(draft, plan[index]))));
-      return failed ? 1 : 0;
+      if (failed) return 1;
+      const text = readFileSync(target, "utf8");
+      const pins = await linkPins(text);
+      if (snapshotOnce(target, text)) console.log("original drafts frozen for the edit log");
+      writeFileSync(locksPath(target), JSON.stringify(locks));
+      writeSources(target, pins, text);
+      for (const pin of pins) console.log(describePin(pin));
+      console.log(approvalLines(drafts.map((draft, index) => renderWorkPackageDraft(draft, plan[index]))));
+      return 0;
     }
     const original = frozenOriginal(target);
     const originals = original ? Object.fromEntries(JSON.parse(original).map((draft) => [draft.slug, draft])) : {};
