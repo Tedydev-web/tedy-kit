@@ -73,7 +73,9 @@ test("a profile file overrides the engine file of the same relative path, and pa
 test("init creates the config and rules from the template, and never overwrites them", () => {
   const dir = join(tempDir("tedy-profile-init-"), "profile");
   assert.deepEqual(initProfile(dir), { created: ["config.json", "rules.md", "projects/"], kept: [] });
-  assert.deepEqual(JSON.parse(readFileSync(join(dir, "config.json"), "utf8")), DEFAULT_CONFIG);
+  const written = JSON.parse(readFileSync(join(dir, "config.json"), "utf8"));
+  assert.equal("publishApproval" in written.gates, false);
+  assert.deepEqual(loadConfig(dir), DEFAULT_CONFIG);
   assert.equal(readFileSync(join(dir, "rules.md"), "utf8"), readFileSync(join(SHARED, "rules-template.md"), "utf8"));
   writeFileSync(join(dir, "rules.md"), "edited\n");
   assert.deepEqual(initProfile(dir), { created: [], kept: ["config.json", "rules.md", "projects/"] });

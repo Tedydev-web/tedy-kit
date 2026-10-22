@@ -83,6 +83,8 @@ Known limitations, by design or left out by the threat model:
 - Value-taking flags are known for the shells, python and node only; another interpreter's flag that takes a separate value can hide a `-` after it.
 - `env -S` strings are not unwrapped.
 - Whether Claude Code's own `permissions.ask` matching sees a quoted subcommand was not tested; the gate asks when the raw text matches no rule.
+- With `gates.publishApproval: "answer"` and `bypassPermissions`, git-gate is the only layer before a publish. Its publish pattern is narrower than the `*script*verb*` ask rules the switch removes, so a publish the gate does not read as one (a renamed copy or a symlink of a kit script, a script file, an interpreter one-liner) runs with no approval and no prompt.
+- The answer check is only as good as the session transcript it reads. The deny rule the switch adds blocks Claude's file tools, the file commands Claude Code recognises in Bash and redirect targets; `cp`, `mv`, `sed -i`, a script file or any other subprocess can still rewrite the transcript.
 
 ## Approval prompts
 
@@ -100,6 +102,8 @@ node <plugin>/scripts/profile.mjs publish-approval
 ```
 
 The first removes exactly the 22 kit publish rules, adds `Edit(~/.claude/projects/**/*.jsonl)` to `permissions.deny` so an agent's file tools cannot rewrite the session transcripts the gate reads (the memory folder is not covered), and sets the key; the second restores the rules and takes the deny rule back out; the third prints the mode, how many rules are present and whether the deny rule is on. Each write first copies `settings.json` to `settings.json.tedy-backup-<time>` with the same file mode, and touches no other key; `Bash(gh pr merge*)` stays in both modes. A missing `config.json` is refused (run `profile.mjs init` first), and the profile guard asks before a session runs the switch. Running sessions pick up both files without a restart.
+
+Upgrading and rolling back: a plugin release from before `gates.publishApproval` rejects the key as unknown and so turns every personal gate on. Update the plugin in every running session (`/reload-plugins`) before running `publish-approval answer`. Before moving back to such a release, run `publish-approval ask` first: it restores the rules and removes the key from `config.json`, since `"ask"` is the default. `profile.mjs init` writes no `publishApproval` key for the same reason.
 
 ## Rescue
 

@@ -63,6 +63,7 @@ test("the toggle is idempotent and ask restores the same rules", () => {
   assert.equal(read(place.settings).permissions.ask.length, 24);
   assert.deepEqual(read(place.settings).permissions.deny, [SSH_DENY]);
   assert.equal(loadConfig(place.profile).gates.publishApproval, "ask");
+  assert.deepEqual(read(join(place.profile, "config.json")).gates, { noComments: true });
   assert.equal(statSync(place.settings).mode & 0o777, 0o600);
   assert.equal(backups(place).length, 2);
   toggle(place, "ask");

@@ -84,7 +84,9 @@ export function initProfile(dir = profileDir()) {
   const config = join(dir, "config.json");
   if (existsSync(config)) result.kept.push("config.json");
   else {
-    writeFileSync(config, `${JSON.stringify(DEFAULT_CONFIG, null, 2)}\n`);
+    const gates = { ...DEFAULT_CONFIG.gates };
+    delete gates.publishApproval;
+    writeFileSync(config, `${JSON.stringify({ ...DEFAULT_CONFIG, gates }, null, 2)}\n`);
     result.created.push("config.json");
   }
   const rules = join(dir, "rules.md");
@@ -212,7 +214,9 @@ function publishApproval(dir, mode, settingsFile = CLAUDE_SETTINGS) {
     const { backup, removed, added } = writePermissions(settingsFile, current, next);
     lines.push(`${settingsFile}: removed ${removed}, restored ${added} kit publish ask rules; transcript edit deny ${mode === "answer" ? "on" : "off"}; backup ${backup}`);
   }
-  if (raw.gates?.publishApproval !== mode) writeFileSync(file, `${JSON.stringify({ ...raw, gates: { ...raw.gates, publishApproval: mode } }, null, 2)}\n`);
+  const gates = { ...raw.gates, publishApproval: mode };
+  if (mode === "ask") delete gates.publishApproval;
+  if (JSON.stringify(gates) !== JSON.stringify(raw.gates ?? {})) writeFileSync(file, `${JSON.stringify({ ...raw, gates }, null, 2)}\n`);
   lines.push(`publish approval: ${mode}`);
   const leftover = mode === "answer" ? leftoverKitRules(next.ask) : [];
   if (leftover.length) lines.push(`still prompts, not a kit rule: ${leftover.join(", ")}`);
