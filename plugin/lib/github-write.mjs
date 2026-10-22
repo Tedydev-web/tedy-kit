@@ -7,6 +7,7 @@ import { lintComment, lintDraft, mapLanguage, parseDraft, readDiff, snapshotPath
 import { appendEditLog, labelText } from "./edit-log.mjs";
 import { fetchTab, indexTab, quoteInText, UC_ID } from "./prd-section.mjs";
 import { resolveMap } from "./project-map.mjs";
+import { consumeApproval } from "./publish-approval-ticket.mjs";
 
 const normalise = (text) => text.replace(/\s+/g, " ").trim();
 
@@ -156,6 +157,7 @@ async function post(file, flags) {
     console.log(JSON.stringify(payload, null, 2));
     return 0;
   }
+  consumeApproval(process.argv, payload.comments.map((comment) => comment.body));
   const review = JSON.parse(gh(["api", "-X", "POST", `repos/${repo}/pulls/${final.pr}/reviews`, "--input", "-"], JSON.stringify(payload)));
   const posted = JSON.parse(gh(["api", "--paginate", "--slurp", `repos/${repo}/pulls/${final.pr}/reviews/${review.id}/comments`])).flat();
   for (const comment of posted) console.log(`${comment.id} ${comment.path}:${comment.line ?? comment.original_line} ${comment.side ?? "RIGHT"} ${comment.commit_id.slice(0, 8)}`);
@@ -179,6 +181,7 @@ function edit(id, flags) {
   const repo = currentRepo(flags);
   const body = readBody(flags);
   console.log(`WRITE → ${repo} : edit review comment ${id}`);
+  consumeApproval(process.argv, [body]);
   const updated = JSON.parse(gh(["api", "-X", "PATCH", `repos/${repo}/pulls/comments/${id}`, "--input", "-"], JSON.stringify({ body })));
   logEdits([{ repo, key: String(id), label: "post-edit", draft: null, posted: body }]);
   if (normalise(updated.body) !== normalise(body)) throw new Error(`comment ${id} body differs after PATCH`);
@@ -188,6 +191,7 @@ function edit(id, flags) {
 
 function minimize(nodeId) {
   console.log(`WRITE → minimize ${nodeId} as OUTDATED`);
+  consumeApproval(process.argv, []);
   const query = "mutation($id: ID!) { minimizeComment(input: {subjectId: $id, classifier: OUTDATED}) { minimizedComment { isMinimized } } }";
   const result = JSON.parse(gh(["api", "graphql", "-f", `query=${query}`, "-f", `id=${nodeId}`]));
   if (result.data?.minimizeComment?.minimizedComment?.isMinimized !== true) throw new Error(`${nodeId} is not minimized: ${JSON.stringify(result.errors ?? result)}`);
@@ -202,6 +206,7 @@ export function threadMutation(resolved) {
 
 function setThreadsResolved(threadIds, resolved) {
   const { name, verb, query } = threadMutation(resolved);
+  consumeApproval(process.argv, []);
   for (const threadId of threadIds) {
     console.log(`WRITE → ${verb} review thread ${threadId}`);
     const result = JSON.parse(gh(["api", "graphql", "-f", `query=${query}`, "-f", `id=${threadId}`]));
@@ -220,6 +225,7 @@ function reply(pr, id, flags) {
     return 1;
   }
   console.log(`WRITE → ${repo}#${pr} : reply to ${id}`);
+  consumeApproval(process.argv, [body]);
   const created = JSON.parse(gh(["api", "-X", "POST", `repos/${repo}/pulls/${pr}/comments/${id}/replies`, "--input", "-"], JSON.stringify({ body })));
   logEdits([{ repo, pr: Number(pr), key: String(id), label: "reply", draft: null, posted: body }]);
   console.log(`replied ${created.id}: ${created.html_url}`);
@@ -250,6 +256,7 @@ function prBody(number, flags) {
   }
   console.log(`WRITE → ${repo}#${number} : PR body`);
   if (flags["dry-run"]) return 0;
+  consumeApproval(process.argv, [body]);
   gh(["api", "-X", "PATCH", `repos/${repo}/pulls/${number}`, "--input", "-"], JSON.stringify({ body }));
   const same = view().body.trim() === body;
   console.log(same ? `updated #${number} body` : `written, but the read-back differs; open #${number} and check`);

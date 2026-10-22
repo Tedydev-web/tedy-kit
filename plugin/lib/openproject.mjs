@@ -4,6 +4,7 @@ import { addSlugs, buildPayload, foreignActivity, forgetSlugs, loadConfig, loadR
 import { closedStatuses, closestWorkPackage, listWorkPackages } from "./openproject-dedup.mjs";
 import { deleteRelation, setRelation } from "./openproject-relation.mjs";
 import { resolveMap } from "./project-map.mjs";
+import { consumeApproval } from "./publish-approval-ticket.mjs";
 import { snapshotOnce, snapshotPath } from "./draft-lint.mjs";
 import { appendEditLog, frozenOriginal, labelText } from "./edit-log.mjs";
 import { chatLanguage } from "./labels.mjs";
@@ -92,6 +93,7 @@ async function apply(client, project, drafts, file) {
     for (const [slug] of moved) console.log(`refused: ${slug} changed in OpenProject since the preview; read its activity, then preview again`);
     return 1;
   }
+  consumeApproval(process.argv, drafts.flatMap((draft) => [draft.subject, draft.description].filter((text) => typeof text === "string")));
   const path = sidecarPath(client.host, project);
   const created = {};
   const expected = {};
@@ -169,6 +171,7 @@ async function quickSet(client, id, flags) {
     console.log(`refused: #${id} is at lock ${current.lockVersion}, not the previewed ${flags.lock}; read its activity, then preview again`);
     return 1;
   }
+  consumeApproval(process.argv, []);
   await client.request(`/api/v3/work_packages/${id}`, { method: "PATCH", body: payload });
   const read = await client.request(`/api/v3/work_packages/${id}`);
   console.log(`set ${describe(read)} assignee ${read._links.assignee?.title ?? "none"} priority ${read._links.priority?.title} estimate ${read.estimatedTime ?? "none"} dates ${read.startDate ?? "none"}..${read.dueDate ?? "none"}`);
@@ -195,6 +198,7 @@ async function comment(client, id, flags) {
     console.log(`WRITE → ${client.host} · #${id} : 1 comment; run again with --apply`);
     return 0;
   }
+  consumeApproval(process.argv, [body]);
   await client.request(`/api/v3/work_packages/${id}/activities`, { method: "POST", body: { comment: { raw: body } } });
   const read = sameComment((await client.request(`/api/v3/work_packages/${id}/activities`))._embedded.elements, body);
   console.log(read ? `commented #${id} activity ${read.id}` : `posted but not found on read-back; open #${id} and check`);
@@ -232,6 +236,7 @@ async function commentEdit(client, id, flags) {
     console.log(`WRITE → ${client.host} · #${current.id} : 1 comment edit; run again with --apply`);
     return 0;
   }
+  consumeApproval(process.argv, [body]);
   await client.request(`/api/v3/activities/${id}`, { method: "PATCH", body: { comment: { raw: body } } });
   const read = (await client.request(`/api/v3/activities/${id}`)).comment?.raw?.trim() === body;
   console.log(read ? `edited #${current.id} activity ${id}` : `sent but the read-back differs; open #${current.id} and check activity ${id}`);
@@ -290,6 +295,7 @@ async function rollback(client, project, flags) {
     console.log(`WRITE → ${client.host} · project ${project} : ${items.length} ${action}; run again with --apply${action === "delete" ? " --delete" : ""}`);
     return 0;
   }
+  consumeApproval(process.argv, []);
   const statuses = (await client.request("/api/v3/statuses"))._embedded.elements.filter((status) => status.isClosed);
   const closedStatus = statuses.find((status) => status.name.toLowerCase() === "closed") ?? statuses[0];
   if (action === "close" && !closedStatus) throw new Error("this instance has no closed status");

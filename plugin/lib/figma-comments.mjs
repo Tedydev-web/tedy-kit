@@ -6,6 +6,7 @@ import { requestJson } from "./api-request.mjs";
 import { lintChatComment, mapLanguage } from "./draft-lint.mjs";
 import { logPostedText } from "./edit-log.mjs";
 import { resolveMap } from "./project-map.mjs";
+import { consumeApproval } from "./publish-approval-ticket.mjs";
 import { notBefore, sinceTime } from "./since.mjs";
 
 const API = "https://api.figma.com/v1";
@@ -77,6 +78,7 @@ async function main([command, target, ...rest]) {
     const twin = duplicateOnNode((await figma.request(`/files/${figma.file}/comments`)).comments, node, body);
     if (twin) throw new Error(`comment ${twin.id} on node ${node} already says this; nothing posted`);
     console.log(`WRITE → Figma ${figma.file} node ${node} : 1 comment`);
+    consumeApproval(process.argv, [body]);
     const created = await figma.request(`/files/${figma.file}/comments`, { method: "POST", body: { message: body, client_meta: { node_id: node, node_offset: pinOffset(box) } } });
     await verify(figma, created.id, body);
     logPostedText("figma-comment", flags["body-file"], created.id, body);
@@ -89,6 +91,7 @@ async function main([command, target, ...rest]) {
     const twin = duplicateReply(comments, root.id, body);
     if (twin) throw new Error(`reply ${twin.id} in thread ${root.id} already says this; nothing posted`);
     console.log(`WRITE → Figma ${figma.file} thread ${root.id} : 1 reply`);
+    consumeApproval(process.argv, [body]);
     const created = await figma.request(`/files/${figma.file}/comments`, { method: "POST", body: { message: body, comment_id: root.id } });
     await verify(figma, created.id, body);
     logPostedText("figma-reply", flags["body-file"], created.id, body);
@@ -101,6 +104,7 @@ async function main([command, target, ...rest]) {
     if (!comment) throw new Error(`comment ${target} not found`);
     if (comment.user.handle !== me.handle) throw new Error(`comment ${target} belongs to ${comment.user.handle}; only your own comments are deleted`);
     console.log(`WRITE → Figma ${figma.file} : delete own comment ${target}`);
+    consumeApproval(process.argv, []);
     await figma.request(`/files/${figma.file}/comments/${target}`, { method: "DELETE" });
     console.log(`deleted ${target}`);
     return 0;
