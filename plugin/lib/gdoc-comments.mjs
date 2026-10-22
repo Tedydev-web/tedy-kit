@@ -112,11 +112,16 @@ export const stillThere = (comments, commentId, replyId) => {
   return Boolean(comment && (!replyId || comment.replies.some((reply) => reply.id === replyId && !reply.deleted)));
 };
 
+export const readDocument = (google) => google.request(`${DOCS}/documents/${google.doc}?includeTabsContent=true&suggestionsViewMode=SUGGESTIONS_INLINE`);
+
 export async function anchorComment(google, tab, quote, body, beforeWrite = () => {}) {
-  const document = await google.request(`${DOCS}/documents/${google.doc}?includeTabsContent=true&suggestionsViewMode=SUGGESTIONS_INLINE`);
-  const range = findQuoteRange(document, tab, quote);
-  console.log(`WRITE → Google Doc ${google.doc} tab ${tab} : 1 comment anchored at ${range.startIndex}–${range.endIndex}`);
+  const range = findQuoteRange(await readDocument(google), tab, quote);
   beforeWrite();
+  return insertAnchored(google, range, body);
+}
+
+export async function insertAnchored(google, range, body) {
+  console.log(`WRITE → Google Doc ${google.doc} tab ${range.tabId} : 1 comment anchored at ${range.startIndex}–${range.endIndex}`);
   await google.request(`${DOCS}/documents/${google.doc}:batchUpdate`, { method: "POST", body: { requests: [{ insertComment: { content: body, range } }] } });
   const posted = (await listComments(google)).filter((comment) => comment.author.me && !comment.resolved && comment.content.trim() === body).at(-1);
   if (!posted) throw new Error("the anchored comment could not be read back with the same text");

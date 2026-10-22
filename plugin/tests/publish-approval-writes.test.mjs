@@ -217,3 +217,14 @@ test("in answer mode a write whose target would come from the cwd or the map mus
   }
   assert.deepEqual(doc.writes(), []);
 });
+
+test("doc-comment-file finds every quote in the Doc before it spends the ticket", async () => {
+  const otherDocument = { tabs: [{ tabProperties: { tabId: "t.1" }, documentTab: { body: { content: [{ paragraph: { elements: [{ startIndex: 1, textRun: { content: "A different paragraph\n" } }] } }] } } }] };
+  const doc = world({ web: { tabs: { "t.1": TAB }, document: otherDocument }, map: { name: "p", repos: [{ path: ".", role: "FE" }], language: { pr_review: "en", doc_figma: "en" }, prd: { doc: "D", tabs: { "09": { tab: "t.1" } } } } });
+  doc.file("items.json", JSON.stringify({ title: "PRD", items: [ITEM] }));
+  const args = ["post", "items.json", "--html", "out.html", "--apply", "--doc", "D"];
+  doc.approve(`${renderDocComment(ITEM, "t.1")}\n${doc.line("doc-comment-file", args)}`);
+  assert.match((await doc.run("doc-comment-file", args)).out, /quote not found/);
+  assert.equal(doc.tickets(), 1);
+  assert.deepEqual(doc.writes(), []);
+});

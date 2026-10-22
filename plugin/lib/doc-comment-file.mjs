@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { lintChatComment } from "./draft-lint.mjs";
 import { logPostedText } from "./edit-log.mjs";
-import { anchorComment, session } from "./gdoc-comments.mjs";
+import { findQuoteRange, insertAnchored, readDocument, session } from "./gdoc-comments.mjs";
 import { chatLanguage, fill, labels } from "./labels.mjs";
 import { slugOf, stamp } from "./handoff.mjs";
 import { fetchTab, quoteCount } from "./prd-section.mjs";
@@ -99,6 +99,8 @@ async function post(itemsFile, flags) {
   if (!flags.apply) return 0;
   requireExplicitTarget("doc", flags.doc, { expected: map.prd.doc });
   const google = await session({ doc: map.prd.doc }, true);
+  const document = await readDocument(google);
+  const ranges = todo.map((item) => findQuoteRange(document, tabOf(item.epic), item.quote));
   consumeApproval(process.argv, todo.map((item) => renderDocComment(item, tabOf(item.epic))));
   const save = () => {
     writeFileSync(itemsFile, `${JSON.stringify(data, null, 2)}\n`);
@@ -106,9 +108,9 @@ async function post(itemsFile, flags) {
     const checkedAt = new Date().toLocaleString(labels(lang)["doc.locale"], { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
     writeFileSync(flags.html, renderFile({ title: data.title, doc: map.prd.doc, items: data.items, checkedAt, lang }));
   };
-  for (const item of todo) {
+  for (const [index, item] of todo.entries()) {
     const body = item.comment.trim();
-    const id = await anchorComment(google, tabOf(item.epic), item.quote, body);
+    const id = await insertAnchored(google, ranges[index], body);
     item.posted = { id, at: new Date().toISOString() };
     logPostedText("doc-comment", itemsFile, id, body);
     save();
