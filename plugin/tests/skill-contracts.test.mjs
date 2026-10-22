@@ -35,3 +35,24 @@ test("eval graders check facts only: no llm or baseline grader in any case", asy
   assert.ok(graders.length > 0);
   for (const path of graders) assert.doesNotMatch(readFileSync(new URL(path, evals), "utf8"), /^type:\s*(llm|baseline)\s*$/m, path);
 });
+
+test("every write command line in the skills names the target answer mode needs", async () => {
+  const { readdirSync } = await import("node:fs");
+  const skills = new URL("../skills/", import.meta.url);
+  const files = readdirSync(skills, { recursive: true }).filter((path) => path.endsWith(".md"));
+  const needs = [[/github-write\.mjs (?:post|edit|reply|pr-body)\b/, "--repo"], [/openproject\.mjs (?:apply\b|rollback\b(?=.*--apply))/, "--project"], [/figma-comments\.mjs (?:post|reply|delete)\b/, "--file"], [/gdoc-comments\.mjs (?:reply|anchor|edit|delete)\b/, "--doc"], [/doc-comment-file\.mjs post\b(?=.*--apply)/, "--doc"]];
+  let checked = 0;
+  for (const path of files) {
+    for (const line of readFileSync(new URL(path, skills), "utf8").split("\n")) {
+      for (const span of line.match(/(?:github-write|openproject|figma-comments|gdoc-comments|doc-comment-file)\.mjs [^`\n]*/g) ?? []) {
+        if (!span.includes("<")) continue;
+        for (const [pattern, flag] of needs) {
+          if (!pattern.test(span)) continue;
+          checked += 1;
+          assert.ok(span.includes(flag), `${path}: ${span}`);
+        }
+      }
+    }
+  }
+  assert.ok(checked >= 4, String(checked));
+});

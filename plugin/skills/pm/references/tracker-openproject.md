@@ -44,8 +44,8 @@ A JSON array, one object per work package:
 | `set <id> [--status] [--assignee] [--priority] [--estimate] [--start] [--due]` | no | One-line preview of a quick change to one work package: before → after for each named field, the `/form` result, and its lock |
 | `set <id> … --apply --lock <n>` | yes | Patches only the named fields; refuses when the work package moved past the previewed lock; reads it back |
 | `rollback` | no | Lists the work packages the last `apply` created, with status and last update |
-| `rollback --apply [--delete]` | yes | Closes them, or deletes them with `--delete`, children first; never touches anything that apply updated or merged; a deleted slug leaves the sidecar |
-| `apply <drafts.json>` | yes | Refuses unless preview is clean; creates, updates or merges, adds relations and status, adds new slugs to the sidecar, reads every work package back and prints `verified N/N` |
+| `rollback --project <id> --apply [--delete]` | yes | Closes them, or deletes them with `--delete`, children first; never touches anything that apply updated or merged; a deleted slug leaves the sidecar |
+| `apply <drafts.json> --project <id>` | yes | Refuses unless preview is clean; creates, updates or merges, adds relations and status, adds new slugs to the sidecar, reads every work package back and prints `verified N/N` |
 | `comment <id> --body-file <file>` | no | Preview of one comment on a work package; refuses a comment that is already there |
 | `comment <id> --body-file <file> --apply` | yes | Posts the comment and reads it back |
 | `comment-edit <activity-id> --body-file <file>` | no | Preview of rewriting a comment the token's user posted (activity id from `get <id> --activities`); refuses anyone else's |

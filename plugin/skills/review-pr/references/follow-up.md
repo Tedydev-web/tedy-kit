@@ -22,8 +22,8 @@ For every thread you opened:
 ## Writes (after the user picks them)
 
 ```bash
-node <plugin>/scripts/github-write.mjs reply <pr> <comment-databaseId> --body-file <file>
-node <plugin>/scripts/github-write.mjs edit <comment-databaseId> --body-file <file>
+node <plugin>/scripts/github-write.mjs reply <pr> <comment-databaseId> --body-file <file> --repo <owner/repo>
+node <plugin>/scripts/github-write.mjs edit <comment-databaseId> --body-file <file> --repo <owner/repo>
 node <plugin>/scripts/github-write.mjs minimize <comment-node-id>
 node <plugin>/scripts/github-write.mjs resolve <thread-node-id>...
 node <plugin>/scripts/github-write.mjs unresolve <thread-node-id>...
