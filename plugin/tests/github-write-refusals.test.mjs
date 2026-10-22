@@ -184,3 +184,15 @@ test("pr-body refuses a body with no OP link and writes nothing", () => {
   assert.match(result.out, /the body has no OP#<id>/);
   assert.equal(result.writes.length, 0);
 });
+
+test("--dry-run is refused on a verb that does not support it, and a valued --dry-run on any verb", () => {
+  const dir = tempDir("tedy-ghcwd-");
+  writeFileSync(join(dir, "b.md"), "ok a\n");
+  writeFileSync(join(dir, "d.md"), draft("body one"));
+  for (const args of [["reply", "1", "2", "--body-file", "b.md", "--dry-run"], ["edit", "5", "--body-file", "b.md", "--dry-run"], ["minimize", "IC_x", "--dry-run"], ["resolve", "PRRT_x", "--dry-run"], ["unresolve", "PRRT_x", "--dry-run"], ["reply", "1", "2", "--body-file", "b.md", "--dry-run=no"], ["post", "d.md", "--dry-run=no"], ["pr-body", "3", "--body-file", "b.md", "--dry-run=yes"]]) {
+    const result = run(args, { cwd: dir });
+    assert.equal(result.status, 2, args.join(" "));
+    assert.match(result.out, /--dry-run/, args.join(" "));
+    assert.equal(result.writes.length, 0, args.join(" "));
+  }
+});

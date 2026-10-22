@@ -147,6 +147,21 @@ test("gh pr merge still asks in answer mode, and a plain command gets no decisio
   assert.equal(runGate(`${POST} --dry-run`, ws), null);
 });
 
+test("--dry-run skips the approval only on post and pr-body, and only as a bare flag", () => {
+  const ws = workspace([prompt(NOW - 60_000)]);
+  writeFileSync(join(ws.dir, "b.md"), "ok a\n");
+  for (const command of [
+    "node /k/github-write.mjs reply 1 2 --body-file b.md --dry-run",
+    "node /k/github-write.mjs edit 5 --body-file b.md --dry-run",
+    "node /k/github-write.mjs resolve PRRT_x --dry-run",
+    "node /k/github-write.mjs unresolve PRRT_x --dry-run",
+    "node /k/github-write.mjs minimize IC_x --dry-run",
+    "node /k/github-write.mjs reply 1 2 --body-file b.md --dry-run=no",
+    "node /k/github-write.mjs post d.md --dry-run=no",
+  ]) assert.equal(runGate(command, ws)?.permissionDecision, "deny", command);
+  for (const command of ["node /k/github-write.mjs pr-body 3 --body-file b.md --dry-run", `${POST} --dry-run`]) assert.equal(runGate(command, ws), null, command);
+});
+
 test("the required texts are every body that goes out, else the command", () => {
   const dir = tempDir("tedy-needs-");
   const files = {

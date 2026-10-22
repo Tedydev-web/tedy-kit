@@ -1,6 +1,6 @@
 import { readFileSync, statSync } from "node:fs";
 import { basename, resolve } from "node:path";
-import { parseFlags } from "../lib/cli-flags.mjs";
+import { githubWriteDryRun, parseFlags } from "../lib/cli-flags.mjs";
 import { parseDraft } from "../lib/draft-lint.mjs";
 import { currentTurn, isUserPrompt } from "../lib/hook-io.mjs";
 import { chatLanguage, labels } from "../lib/labels.mjs";
@@ -23,7 +23,7 @@ export function needs(segment, dir, read) {
   const script = basename(tokens[at], ".mjs");
   const { positional, flags } = parseFlags(tokens.slice(at + 1));
   const [name, target] = positional;
-  if (script === "github-write" && flags["dry-run"]) return null;
+  if (script === "github-write" && githubWriteDryRun(name, flags)) return null;
   const files = [];
   const load = (path) => {
     const file = resolve(dir, path);

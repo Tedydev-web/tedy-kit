@@ -54,6 +54,8 @@ test("posting needs every comment body shown to the user after the draft's last 
   const asked = { type: "assistant", timestamp: at(2_000), message: { content: [{ type: "tool_use", name: "AskUserQuestion", input: { questions: [{ question: "Đăng?", options: [{ label: "Đăng", description: "c check lại chỗ này giúp e nha / đoạn này thiếu case rỗng" }] }] } }] } };
   assert.deepEqual(unshown(found, [asked], mtime), []);
   assert.equal(publishes(`node /k/github-write.mjs post ${file} --dry-run`, "/", read).length, 0);
+  for (const verb of ["reply 1 2", "edit 5"]) assert.equal(publishes(`node /k/github-write.mjs ${verb} --body-file b.md --dry-run`, "/w", () => "ok a").length, 1, verb);
+  assert.equal(publishes(`node /k/github-write.mjs post ${file} --dry-run=no`, "/", read).length, 1);
   const files = (command) => publishes(command, "/w", (path) => `body of ${path}`).map((item) => item.file);
   assert.deepEqual(files("node /k/github-write.mjs reply 1 2 --body-file a.md --body-file b.md"), ["/w/b.md"]);
   assert.deepEqual(files("node /k/github-write.mjs --repo o/r reply 1 2 --body-file b.md"), ["/w/b.md"]);

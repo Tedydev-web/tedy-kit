@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { parseFlags } from "./cli-flags.mjs";
+import { GITHUB_WRITE_DRY_RUN_VERBS, githubWriteDryRun, parseFlags } from "./cli-flags.mjs";
 import { lintComment, lintDraft, mapLanguage, parseDraft, readDiff, snapshotPath } from "./draft-lint.mjs";
 import { appendEditLog, labelText } from "./edit-log.mjs";
 import { fetchTab, indexTab, quoteInText, UC_ID } from "./prd-section.mjs";
@@ -267,6 +267,10 @@ const USAGE = `usage:
 
 async function main([command, ...args]) {
   const { positional, flags } = parseFlags(args);
+  if ("dry-run" in flags && !githubWriteDryRun(command, flags)) {
+    console.error(`github-write: --dry-run is a bare flag of ${GITHUB_WRITE_DRY_RUN_VERBS.join(" and ")} only; nothing written`);
+    return 2;
+  }
   if (command === "post" && positional[0]) return post(positional[0], flags);
   if (command === "edit" && positional[0]) return edit(positional[0], flags);
   if (command === "minimize" && positional[0]) return minimize(positional[0]);

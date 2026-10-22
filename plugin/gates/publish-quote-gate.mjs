@@ -1,6 +1,6 @@
 import { closeSync, fstatSync, openSync, readFileSync, statSync } from "node:fs";
 import { resolve } from "node:path";
-import { parseFlags } from "../lib/cli-flags.mjs";
+import { githubWriteDryRun, parseFlags } from "../lib/cli-flags.mjs";
 import { parseDraft } from "../lib/draft-lint.mjs";
 import { classify, splitSegments, tokenize } from "./git-gate.mjs";
 import { readTranscriptTail } from "../lib/hook-io.mjs";
@@ -37,7 +37,7 @@ export function publishes(command, cwd, read) {
     if (at === -1) continue;
     const { positional, flags } = parseFlags(tokens.slice(at + 1));
     const [name] = positional;
-    if (!PUBLISH_COMMANDS.has(name) || flags["dry-run"]) continue;
+    if (!PUBLISH_COMMANDS.has(name) || githubWriteDryRun(name, flags)) continue;
     if (name === "post") {
       const file = resolve(dir, positional[1]);
       found.push({ file, bodies: parseDraft(read(file)).comments.map((comment) => ({ label: `comment ${comment.index}`, text: comment.body })) });

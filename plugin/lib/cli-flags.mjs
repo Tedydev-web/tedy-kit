@@ -9,3 +9,7 @@ export function parseFlags(args) {
   }
   return { positional, flags };
 }
+
+export const GITHUB_WRITE_DRY_RUN_VERBS = Object.freeze(["post", "pr-body"]);
+
+export const githubWriteDryRun = (verb, flags) => GITHUB_WRITE_DRY_RUN_VERBS.includes(verb) && flags["dry-run"] === true;
