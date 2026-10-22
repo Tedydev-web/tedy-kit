@@ -2,6 +2,16 @@
 
 Every write below prints a `WRITE →` line, lints the body first, and reads the result back. In an interactive session it stops for the user's approval: with `gates.publishApproval: "ask"` a `permissions.ask` rule matches it, or git-gate asks when no rule does; with `"answer"` the script writes only with a ticket from an `approve.all` answer whose `preview` held the body on whole lines and the exact command line on a line of its own, one ticket per command, and refuses otherwise. In `"answer"` mode a write names its target on the command line, so the approval shows it: `--file <key>` for `figma-comments.mjs`, `--doc <id>` for `gdoc-comments.mjs` and for `doc-comment-file.mjs post … --apply` (the map's PRD doc). A headless `claude -p` run cannot be approved, so the write is refused. Bodies live in files so the draft the user approved is the text that is posted.
 
+## Pinned sources
+
+A clean `draft-lint.mjs figma-comment <file>` pins the map's Figma file at its current version; a clean `doc-comment <file>` pins the PRD Doc at its Docs API `revisionId` when rclone has an own OAuth client, else at its Drive file `version`. `doc-comment-file.mjs <items.json>` pins the Doc the same way when it writes the HTML file. Each prints a `pinned:` line; it goes into the approval `preview`. Every write below refuses a body with no pin or edited since its lint, and rechecks before writing:
+
+- Figma `post` and `reply`: an unchanged version posts. A changed version compares the commented node (the reply's root node) at the pinned and the latest version: same subtree, `notice: …` and it posts; changed, gone, or no node to compare, `refused: …`.
+- Doc `reply`, `anchor` and `edit`: any change of the pinned value refuses, because no anchor-level diff exists.
+- `doc-comment-file.mjs post --apply`: a changed Doc only prints a notice, because the same run re-finds every highlighted passage exactly once before anchoring.
+
+On `refused`: re-read the node or the Doc, fix the draft, lint, and ask again.
+
 ## Figma
 
 `node <plugin>/scripts/figma-comments.mjs` with the map's `figma.file`, passed as `--file <key>` on every write; token from `~/.config/figma/token`.

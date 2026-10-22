@@ -7,6 +7,7 @@ import { logPostedText } from "./edit-log.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { notBefore, sinceTime } from "./since.mjs";
+import { applyVerdict, requirePin, versionCheck } from "./source-pins.mjs";
 
 const DRIVE = "https://www.googleapis.com/drive/v3";
 const DOCS = "https://docs.googleapis.com/v1";
@@ -59,20 +60,35 @@ async function accessToken(remote, needOwnClient) {
     const body = new URLSearchParams({ client_id: token.clientId, client_secret: token.clientSecret, refresh_token: token.refresh, grant_type: "refresh_token" });
     const response = await fetch("https://oauth2.googleapis.com/token", { method: "POST", body });
     if (!response.ok) throw new Error(`token refresh returned HTTP ${response.status}; run rclone config reconnect ${remote}:`);
-    return (await response.json()).access_token;
+    return { bearer: (await response.json()).access_token, ownClient: true };
   }
   if (!(token.expiry > Date.now() + 60_000)) {
     execFileSync("rclone", ["lsjson", `${remote}:`, "--max-depth", "1", "--dirs-only"], { stdio: "ignore" });
     token = dump();
   }
-  return token.access;
+  return { bearer: token.access, ownClient: false };
 }
 
 export async function session(flags, needOwnClient = false) {
   const doc = flags.doc ?? resolveMap(process.cwd())?.map.prd?.doc;
   if (!doc) throw new Error("no --doc and no prd.doc in the project map");
-  const bearer = await accessToken(flags.remote ?? "gdrive", needOwnClient);
-  return { doc, bearer, request: (url, options = {}) => requestJson(url, { ...options, headers: { Authorization: `Bearer ${bearer}` } }) };
+  const { bearer, ownClient } = await accessToken(flags.remote ?? "gdrive", needOwnClient);
+  return { doc, bearer, ownClient, request: (url, options = {}) => requestJson(url, { ...options, headers: { Authorization: `Bearer ${bearer}` } }) };
+}
+
+const docField = async (google, field) =>
+  field === "revisionId" ? (await google.request(`${DOCS}/documents/${google.doc}?fields=revisionId`)).revisionId : String((await google.request(`${DRIVE}/files/${google.doc}?fields=version`)).version);
+
+export async function gdocPin(google) {
+  const field = google.ownClient ? "revisionId" : "version";
+  return { kind: "gdoc", doc: google.doc, field, value: await docField(google, field) };
+}
+
+export const recheckGdoc = async (google, pin, kept) => versionCheck(`Google Doc ${pin.doc} ${pin.field}`, pin.value, await docField(google, pin.field), kept ? { kept } : {});
+
+export async function recheckDocPin(google, file, relint, kept) {
+  const pin = requirePin(file, relint, (candidate) => candidate.kind === "gdoc" && candidate.doc === google.doc, `revision of Google Doc ${google.doc}`);
+  applyVerdict(await recheckGdoc(google, pin, kept));
 }
 
 const readBody = (flags) => {
@@ -158,6 +174,7 @@ async function main([command, target, ...rest]) {
     const body = readBody(flags);
     const google = await session(flags, command === "anchor");
     if (alreadyPosted(await listComments(google), command, target, body)) throw new Error(`the Doc already has this ${command === "reply" ? `reply in thread ${target}` : "comment"}; nothing posted`);
+    await recheckDocPin(google, flags["body-file"], `draft-lint.mjs doc-comment ${flags["body-file"]}`);
     const approve = () => consumeApproval(process.argv, [body]);
     let id;
     if (command === "reply") {
@@ -180,6 +197,7 @@ async function main([command, target, ...rest]) {
     const google = await session(flags);
     const item = editTarget(await listComments(google), target, flags.reply);
     if (squash(item.content) === squash(body)) throw new Error("the posted text already matches the body file; nothing edited");
+    await recheckDocPin(google, flags["body-file"], `draft-lint.mjs doc-comment ${flags["body-file"]}`);
     const path = `${DRIVE}/files/${google.doc}/comments/${target}${flags.reply ? `/replies/${flags.reply}` : ""}?fields=id,content`;
     console.log(`WRITE → Google Doc ${google.doc} thread ${target}${flags.reply ? ` reply ${flags.reply}` : ""} : edit 1 ${flags.reply ? "reply" : "comment"}`);
     consumeApproval(process.argv, [body]);

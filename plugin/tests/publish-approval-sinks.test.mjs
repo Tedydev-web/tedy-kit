@@ -49,7 +49,9 @@ function place(mode = "answer") {
   const approve = (preview, text = "Đăng?") => recordApprovals({ session_id: "s", tool_use_id: "t", tool_input: { questions: [{ question: text, header: "x", options: [{ label: VI["post.asIs"], description: "d", preview }, { label: VI["post.hold"], description: "n" }] }] }, tool_response: { answers: { [text]: VI["post.asIs"] }, annotations: { [text]: { preview } } } }, { dir: join(state, "approvals"), accepted: ACCEPTED });
   const shell = (command, args) => spawnSync(command, args, { cwd: dir, env, encoding: "utf8" });
   const run = (script, args) => shell("node", [script, ...args]);
-  return { dir, env, state, writes, approve, run, shell };
+  const lint = () => assert.equal(run(join(SCRIPTS, "draft-lint.mjs"), ["pr-reply", "b.md"]).status, 0);
+  lint();
+  return { dir, env, state, writes, approve, run, shell, lint };
 }
 
 const reply = ["reply", "1", "2", "--repo", "o/r", "--body-file", "b.md"];
@@ -75,10 +77,13 @@ test("answer mode: a ticket with the command line and the body allows one write,
 });
 
 test("answer mode: the body file edited after the approval no longer matches the ticket", () => {
-  const { run, writes, approve, dir } = place();
+  const { run, writes, approve, dir, lint } = place();
   approve(`${BODY}\n\n${REPLY_LINE}`);
   writeFileSync(join(dir, "b.md"), "Fixed it, and also the other one.\n");
-  assert.equal(run(GH, reply).status, 1);
+  lint();
+  const result = run(GH, reply);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /no unused approval/);
   assert.deepEqual(writes(), []);
 });
 

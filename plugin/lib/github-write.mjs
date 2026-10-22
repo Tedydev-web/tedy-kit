@@ -8,6 +8,7 @@ import { appendEditLog, labelText } from "./edit-log.mjs";
 import { fetchTab, indexTab, quoteInText, UC_ID } from "./prd-section.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
+import { mapRepos, pinnedSources, recheckRepos } from "./source-pins.mjs";
 
 const normalise = (text) => text.replace(/\s+/g, " ").trim();
 
@@ -120,6 +121,21 @@ async function loadPrd(comments) {
   return prd;
 }
 
+function sourcesRefused(file, lintMode) {
+  if (typeof file !== "string") {
+    console.log("refused: pass the body as --body-file <file> so draft-lint can pin its sources");
+    return true;
+  }
+  const { sources, refusal } = pinnedSources(file, `draft-lint.mjs ${lintMode} ${file}`);
+  if (refusal) {
+    console.log(refusal);
+    return true;
+  }
+  const { refusals, notices } = recheckRepos(sources, mapRepos(resolveMap(process.cwd())?.map));
+  for (const line of [...notices, ...refusals]) console.log(line);
+  return refusals.length > 0;
+}
+
 function logEdits(entries) {
   appendEditLog(entries.map((entry) => ({ channel: "pr-comment", ...entry })));
 }
@@ -152,6 +168,7 @@ async function post(file, flags) {
   const twins = alreadyOnPr(prComments(repo, final.pr), final.comments);
   for (const twin of twins) console.log(`refused ${twin.comment.index}. ${twin.comment.path}:${twin.comment.line}: already on the PR as comment ${twin.id}; drop it from the draft`);
   if (twins.length) return 1;
+  if (sourcesRefused(file, "pr-comment")) return 1;
   const payload = buildReviewPayload(final.comments, head);
   console.log(`WRITE → ${repo}#${final.pr} : 1 review · ${final.comments.length} comments`);
   if (flags["dry-run"]) {
@@ -181,6 +198,7 @@ function readBody(flags) {
 function edit(id, flags) {
   const repo = currentRepo(flags);
   const body = readBody(flags);
+  if (sourcesRefused(flags["body-file"], "pr-reply")) return 1;
   console.log(`WRITE → ${repo} : edit review comment ${id}`);
   consumeApproval(process.argv, [body]);
   const updated = JSON.parse(gh(["api", "-X", "PATCH", `repos/${repo}/pulls/comments/${id}`, "--input", "-"], JSON.stringify({ body })));
@@ -225,6 +243,7 @@ function reply(pr, id, flags) {
     console.log(`refused: reply ${twin} under ${id} already says this; nothing posted`);
     return 1;
   }
+  if (sourcesRefused(flags["body-file"], "pr-reply")) return 1;
   console.log(`WRITE → ${repo}#${pr} : reply to ${id}`);
   consumeApproval(process.argv, [body]);
   const created = JSON.parse(gh(["api", "-X", "POST", `repos/${repo}/pulls/${pr}/comments/${id}/replies`, "--input", "-"], JSON.stringify({ body })));

@@ -108,6 +108,10 @@ The first removes exactly the 22 kit publish rules, adds `Edit(//<state>/approva
 
 Upgrading and rolling back: a plugin release from before `gates.publishApproval` rejects the key as unknown and so turns every personal gate on. Update the plugin in every running session (`/reload-plugins`) before running `publish-approval answer`. Before moving back to such a release, run `publish-approval ask` first: it restores the rules and removes the key from `config.json`, since `"ask"` is the default. `profile.mjs init` writes no `publishApproval` key for the same reason.
 
+## Pinned sources
+
+A draft is only as current as the sources it was read from. A clean lint records them in the kit's state directory: `draft-lint.mjs pr-comment` and `pr-reply` pin each sibling repo a `path:line@branch` cite resolves to, as its local `origin/<branch>@<sha>` plus the cited paths; `figma-comment` pins the Figma file version, `doc-comment` and `doc-comment-file.mjs` the PRD Doc's `revisionId` (Drive `version` without an own OAuth client), and `openproject.mjs preview` every Figma file and Doc the drafts link. Each pin prints a `pinned:` line for the approval preview. At publish, `github-write.mjs post`, `reply` and `edit`, the Figma and Doc writers and `openproject.mjs apply` refuse a body that was never linted or changed since, then re-fetch every pin, the way an HTTP `If-Match` precondition refuses a stale write ([RFC 9110 §13.1.1](https://www.rfc-editor.org/rfc/rfc9110#section-13.1.1)): unchanged posts; a repo that moved without touching a cited path posts with a `notice:` line; a cited path touched, a Figma node changed, or any Doc change refuses with `refused:`, naming the commits and files, so the agent re-reads, fixes the draft, lints and asks again. `doc-comment-file.mjs post --apply` only notes a changed Doc, because it re-finds every highlighted passage before anchoring.
+
 ## Rescue
 
 - Roll the plugin back from a plain shell: `git -C ~/Documents/workspace/tedy-kit-release checkout --detach <previous tag>`, then `/reload-plugins` in each running session.

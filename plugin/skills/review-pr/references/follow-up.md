@@ -29,6 +29,7 @@ node <plugin>/scripts/github-write.mjs resolve <thread-node-id>...
 node <plugin>/scripts/github-write.mjs unresolve <thread-node-id>...
 ```
 
+- Before the batch question, lint each reply or edit body with `node <plugin>/scripts/draft-lint.mjs pr-reply <file> --findings <evidence.md>`, where the evidence file lists the `path:line@branch` cites the body rests on; put its `pinned:` lines in the `preview` with the body. `reply` and `edit` refuse a body that was not linted or changed since, and recheck the pins as `draft-format.md` (Pinned sources) describes.
 - `reply`: one sentence in the map's `language.pr_review`, same lint as a review comment; for "not fixed yet" or a rebuttal.
 - One reply per thread: if the user already replied on the thread, `edit` that reply into one sentence covering everything still open instead of adding another; if extra replies exist, merge them and `minimize` the rest (overlapping replies are hard for the author to follow).
 - `edit`: rewording a comment the user asked to change; the old text stays in the edit log.

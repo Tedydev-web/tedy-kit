@@ -1,6 +1,8 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { addSlugs, buildPayload, foreignActivity, forgetSlugs, loadConfig, loadRefs, mergePayload, planWrites, readSidecar, recordLastApply, setPayload, sidecarPath, workPackageFilters, workPackageLine, writeSidecar } from "./openproject-client.mjs";
+import { client as figmaClient, figmaPin, recheckFigma } from "./figma-comments.mjs";
+import { gdocPin, recheckGdoc, session } from "./gdoc-comments.mjs";
 import { closedStatuses, closestWorkPackage, listWorkPackages } from "./openproject-dedup.mjs";
 import { deleteRelation, setRelation } from "./openproject-relation.mjs";
 import { resolveMap } from "./project-map.mjs";
@@ -9,6 +11,7 @@ import { approvalLines, renderRollbackItem, renderWorkPackageDraft } from "./pub
 import { snapshotOnce, snapshotPath } from "./draft-lint.mjs";
 import { appendEditLog, frozenOriginal, labelText } from "./edit-log.mjs";
 import { chatLanguage } from "./labels.mjs";
+import { describePin, linkedDocs, pinnedSources, writeSources } from "./source-pins.mjs";
 import { countWords, lintDrafts, lintWorkPackage, readiness, readinessLine } from "./task-lint.mjs";
 
 function projectOf(flags) {
@@ -78,6 +81,32 @@ async function check(client, project, drafts) {
 
 const locksPath = (file) => `${snapshotPath(file)}.locks.json`;
 
+async function pinLinks(file) {
+  const { figma, docs } = linkedDocs(readFileSync(file, "utf8"));
+  const pins = [];
+  for (const { file: key, nodes } of figma) pins.push({ ...(await figmaPin(figmaClient({ file: key }))), nodes });
+  for (const doc of docs) pins.push(await gdocPin(await session({ doc })));
+  writeSources(file, pins);
+  for (const pin of pins) console.log(describePin(pin));
+}
+
+async function linksRefused(file) {
+  const { sources, refusal } = pinnedSources(file, `openproject.mjs preview ${file}`);
+  if (refusal) {
+    console.log(refusal);
+    return true;
+  }
+  for (const pin of sources) {
+    const verdict = pin.kind === "figma" ? await recheckFigma(figmaClient({ file: pin.file }), pin, pin.nodes ?? []) : await recheckGdoc(await session({ doc: pin.doc }), pin);
+    if (verdict.notice) console.log(verdict.notice);
+    if (verdict.refusal) {
+      console.log(verdict.refusal);
+      return true;
+    }
+  }
+  return false;
+}
+
 async function apply(client, project, drafts, file) {
   const { failed, plan, refs, mapping, locks } = await check(client, project, drafts);
   if (failed) {
@@ -94,6 +123,7 @@ async function apply(client, project, drafts, file) {
     for (const [slug] of moved) console.log(`refused: ${slug} changed in OpenProject since the preview; read its activity, then preview again`);
     return 1;
   }
+  if (await linksRefused(file)) return 1;
   consumeApproval(process.argv, drafts.map((draft, index) => renderWorkPackageDraft(draft, plan[index])));
   const path = sidecarPath(client.host, project);
   const created = {};
@@ -180,7 +210,6 @@ async function quickSet(client, id, flags) {
 }
 
 export const prBodyFrom = (wp) => [`OP#${wp.id}`, "", `Task read at ${wp.updatedAt}`, "", `## ${wp.subject}`, "", (wp.description?.raw ?? "").trim()].join("\n").trim() + "\n";
-
 export const sameComment = (activities, body) => activities.find((activity) => (activity.comment?.raw ?? "").trim() === body.trim()) ?? null;
 
 async function comment(client, id, flags) {
@@ -345,6 +374,7 @@ async function main([command, target, ...rest]) {
       const { failed, locks, plan } = await check(client, project, drafts);
       if (!failed && snapshotOnce(target, readFileSync(target, "utf8"))) console.log("original drafts frozen for the edit log");
       if (!failed) writeFileSync(locksPath(target), JSON.stringify(locks));
+      if (!failed) await pinLinks(target);
       if (!failed) console.log(approvalLines(drafts.map((draft, index) => renderWorkPackageDraft(draft, plan[index]))));
       return failed ? 1 : 0;
     }

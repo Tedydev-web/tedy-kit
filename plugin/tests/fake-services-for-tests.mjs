@@ -17,7 +17,7 @@ const args = process.argv.slice(2);
 const fx = JSON.parse(readFileSync(process.env.GH_FIXTURE, "utf8"));
 const out = (value) => process.stdout.write(typeof value === "string" ? value : JSON.stringify(value));
 const write = args.some((token) => /^-X/.test(token)) || (args.includes("graphql") && args.some((token) => /mutation/.test(token)));
-if (write) appendFileSync(process.env.WRITES, "gh " + args.join(" ") + "\\n");
+if (write) appendFileSync(process.env.WRITES, "gh " + args.join(" ") + (args.includes("--input") ? " " + JSON.stringify(readFileSync(0, "utf8")) : "") + "\\n");
 if (args.includes("graphql")) out(fx.graphql ?? {});
 else if (args[0] === "repo" && args[1] === "view") out(fx.repo ?? "o/r");
 else if (args[0] === "pr" && args[1] === "diff") out(fx.diff ?? "");
@@ -47,6 +47,7 @@ globalThis.fetch = async (input, options = {}) => {
   if (method !== "GET") appendFileSync(process.env.WRITES, \`\${url.host} \${method} \${url.pathname}\\n\`);
   if (url.host === "api.figma.com") {
     if (url.pathname === "/v1/me") return json({ handle: "me" });
+    if (/^\\/v1\\/files\\/[^/]+$/.test(url.pathname)) return json({ version: web.figmaVersion ?? "1" });
     if (url.pathname.endsWith("/nodes")) return json({ nodes: { [url.searchParams.get("ids")]: { document: { absoluteBoundingBox: { x: 0, y: 0, width: 100, height: 40 } } } } });
     const one = url.pathname.match(/\\/comments\\/([^/]+)$/);
     if (one && method === "DELETE") {
@@ -66,6 +67,7 @@ globalThis.fetch = async (input, options = {}) => {
       for (const request of body.requests) web.drive.push({ id: String(next++), content: request.insertComment.content, resolved: false, author: { me: true, displayName: "me" }, replies: [], createdTime: "2026-10-22T00:00:00Z" });
       return json({});
     }
+    if (url.searchParams.get("fields") === "revisionId") return json({ revisionId: web.revisionId ?? "r1" });
     return json(web.document);
   }
   if (url.host === "www.googleapis.com") {

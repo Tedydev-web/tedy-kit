@@ -38,7 +38,7 @@ git -C <repo> grep -n "<pattern>" origin/<branch> -- <path>
 
 - `<branch>` is the integration branch in the map (`dev` when unset). Read from the remote ref; never check out, edit or commit in a sibling or `readonly` repo.
 - Check the writer, not the schema: a field on a DTO or model is real only when code that saves it sets it. Name the writer `path:line@branch`.
-- Cite a backend fact as `path:line@branch`.
+- Cite a backend fact as `path:line@branch`. `draft-lint.mjs` pins each cited repo at its local `origin/<branch>`, so fetch before reading, never between the read and the lint; the publish step fetches again and refuses when a cited path changed.
 
 ## Blast radius
 

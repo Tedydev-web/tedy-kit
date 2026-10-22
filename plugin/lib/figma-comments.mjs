@@ -5,9 +5,11 @@ import { pathToFileURL } from "node:url";
 import { requestJson } from "./api-request.mjs";
 import { lintChatComment, mapLanguage } from "./draft-lint.mjs";
 import { logPostedText } from "./edit-log.mjs";
+import { subtreeHash } from "./figma-read.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { notBefore, sinceTime } from "./since.mjs";
+import { applyVerdict, requirePin, versionCheck } from "./source-pins.mjs";
 
 const API = "https://api.figma.com/v1";
 
@@ -39,6 +41,34 @@ export function client(flags) {
   const file = flags.file ?? resolveMap(process.cwd())?.map.figma?.file;
   if (!file) throw new Error("no --file and no figma.file in the project map");
   return { file, request: (path, options = {}) => requestJson(`${API}${path}`, { ...options, headers: { "X-Figma-Token": token } }) };
+}
+
+const fileVersion = async (figma) => (await figma.request(`/files/${figma.file}?depth=1`)).version;
+
+export const figmaPin = async (figma) => ({ kind: "figma", file: figma.file, version: await fileVersion(figma) });
+
+export async function recheckFigma(figma, pin, nodes) {
+  const now = await fileVersion(figma);
+  if (now === pin.version) return {};
+  const source = `Figma ${figma.file} version`;
+  if (!nodes.length) return versionCheck(source, pin.version, now, { changed: "the draft cites no node to compare" });
+  const hashAt = async (node, version) => {
+    const data = await figma.request(`/files/${figma.file}/nodes?ids=${encodeURIComponent(node)}${version ? `&version=${encodeURIComponent(version)}` : ""}`);
+    const document = data.nodes?.[node]?.document;
+    return document ? subtreeHash(document) : null;
+  };
+  const changed = [];
+  for (const node of nodes) {
+    const before = await hashAt(node, pin.version);
+    if (before === null || before !== (await hashAt(node, null))) changed.push(node);
+  }
+  return versionCheck(source, pin.version, now, changed.length ? { changed: `node ${changed.join(", ")} changed` } : { kept: `node ${nodes.join(", ")} is unchanged` });
+}
+
+async function recheckPinned(figma, flags, node) {
+  const file = flags["body-file"];
+  const pin = requirePin(file, `draft-lint.mjs figma-comment ${file}`, (candidate) => candidate.kind === "figma" && candidate.file === figma.file, `Figma version of ${figma.file}`);
+  applyVerdict(await recheckFigma(figma, pin, node ? [node] : []));
 }
 
 const readBody = (flags) => {
@@ -78,6 +108,7 @@ async function main([command, target, ...rest]) {
     if (!box) throw new Error(`node ${node} not found in ${figma.file}`);
     const twin = duplicateOnNode((await figma.request(`/files/${figma.file}/comments`)).comments, node, body);
     if (twin) throw new Error(`comment ${twin.id} on node ${node} already says this; nothing posted`);
+    await recheckPinned(figma, flags, node);
     console.log(`WRITE → Figma ${figma.file} node ${node} : 1 comment`);
     consumeApproval(process.argv, [body]);
     const created = await figma.request(`/files/${figma.file}/comments`, { method: "POST", body: { message: body, client_meta: { node_id: node, node_offset: pinOffset(box) } } });
@@ -91,6 +122,7 @@ async function main([command, target, ...rest]) {
     const root = rootOf(comments, target);
     const twin = duplicateReply(comments, root.id, body);
     if (twin) throw new Error(`reply ${twin.id} in thread ${root.id} already says this; nothing posted`);
+    await recheckPinned(figma, flags, root.client_meta?.node_id ?? null);
     console.log(`WRITE → Figma ${figma.file} thread ${root.id} : 1 reply`);
     consumeApproval(process.argv, [body]);
     const created = await figma.request(`/files/${figma.file}/comments`, { method: "POST", body: { message: body, comment_id: root.id } });

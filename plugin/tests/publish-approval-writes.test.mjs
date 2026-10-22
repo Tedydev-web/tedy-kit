@@ -14,6 +14,11 @@ const ITEM = { group: "A", epic: "09", where: "UC_SW_13 BR1", quote: "Crypto tak
 const TAB = "Crypto takes the price in USDT and the fee in GRAM from the payer\n";
 const DOCUMENT = { tabs: [{ tabProperties: { tabId: "t.1" }, documentTab: { body: { content: [{ paragraph: { elements: [{ startIndex: 1, textRun: { content: TAB } }] } }] } } }] };
 
+async function lint(w, script, args) {
+  const result = await w.run(script, args);
+  assert.equal(result.code, 0, result.out);
+}
+
 async function onceOnly(w, script, args, preview, count) {
   const refused = await w.run(script, args);
   assert.notEqual(refused.code, 0, refused.out);
@@ -30,9 +35,11 @@ async function onceOnly(w, script, args, preview, count) {
 test("github-write post, edit and minimize write only with a ticket, once", async () => {
   const post = world({ gh: { diff: DIFF, head: HEAD, reviewComments: [{ id: 1, path: "src/a.ts", line: 10, side: "RIGHT", commit_id: HEAD }] } });
   post.file("d.md", DRAFT);
+  await lint(post, "draft-lint", ["pr-comment", "d.md"]);
   await onceOnly(post, "github-write", ["post", "d.md", "--repo", "o/r"], (line) => `${DRAFT}\n${line}`, () => post.writes().length);
   const edit = world({ gh: { write: { id: 5, html_url: "u", body: "Fixed it." } } });
   edit.file("b.md", "Fixed it.\n");
+  await lint(edit, "draft-lint", ["pr-reply", "b.md"]);
   await onceOnly(edit, "github-write", ["edit", "5", "--body-file", "b.md", "--repo", "o/r"], (line) => `Fixed it.\n${line}`, () => edit.writes().length);
   const minimize = world({ gh: { graphql: { data: { minimizeComment: { minimizedComment: { isMinimized: true } } } } } });
   await onceOnly(minimize, "github-write", ["minimize", "IC_x"], (line) => line, () => minimize.writes().length);
@@ -84,9 +91,11 @@ test("openproject apply, set, relation, relation-delete, comment, comment-edit a
 test("figma post and reply write only with a ticket, once", async () => {
   const w = world({ web: { figma: [{ id: "100", message: "Root question", user: { handle: "lam" }, created_at: "2026-10-01T00:00:00Z", client_meta: { node_id: "1:2" } }] } });
   w.file("f.md", "@lam Màn này thiếu trạng thái rỗng.\n");
+  await lint(w, "draft-lint", ["figma-comment", "f.md", "--file", "F"]);
   await onceOnly(w, "figma-comments", ["post", "1:2", "--body-file", "f.md", "--file", "F"], (line) => `@lam Màn này thiếu trạng thái rỗng.\n${line}`, () => w.writes().length);
   const reply = world({ web: { figma: [{ id: "100", message: "Root question", user: { handle: "lam" }, created_at: "2026-10-01T00:00:00Z", client_meta: { node_id: "1:2" } }] } });
   reply.file("f.md", "@lam Đã thêm trạng thái rỗng.\n");
+  await lint(reply, "draft-lint", ["figma-comment", "f.md", "--file", "F"]);
   await onceOnly(reply, "figma-comments", ["reply", "100", "--body-file", "f.md", "--file", "F"], (line) => `@lam Đã thêm trạng thái rỗng.\n${line}`, () => reply.writes().length);
 });
 
@@ -102,6 +111,7 @@ test("gdoc reply, anchor, edit and delete write only with a ticket, once", async
   ]) {
     const w = world({ web: { drive: [thread, own], document: DOCUMENT } });
     w.file("g.md", `${body}\n`);
+    await lint(w, "draft-lint", ["doc-comment", "g.md", "--doc", "D"]);
     await onceOnly(w, "gdoc-comments", args, (line) => (command === "delete" ? line : `${body}\n${line}`), () => w.writes().length);
   }
 });
@@ -109,12 +119,14 @@ test("gdoc reply, anchor, edit and delete write only with a ticket, once", async
 test("doc-comment-file post --apply writes only with a ticket, once", async () => {
   const w = world({ web: { tabs: { "t.1": TAB }, document: DOCUMENT }, map: { name: "p", repos: [{ path: ".", role: "FE" }], language: { pr_review: "en", doc_figma: "en" }, prd: { doc: "D", tabs: { "09": { tab: "t.1" } } } } });
   w.file("items.json", JSON.stringify({ title: "PRD", items: [ITEM] }));
+  await lint(w, "doc-comment-file", ["items.json"]);
   await onceOnly(w, "doc-comment-file", ["post", "items.json", "--html", "out.html", "--apply", "--doc", "D"], (line) => `${renderDocComment(ITEM, "t.1")}\n${line}`, () => w.writes().length);
 });
 
 test("a post ticket binds the PR, head, path and line, not only the comment text", async () => {
   const w = world({ gh: { diff: DIFF, head: HEAD, reviewComments: [{ id: 1, path: "src/a.ts", line: 10, side: "RIGHT", commit_id: HEAD }] } });
   w.file("d.md", DRAFT);
+  await lint(w, "draft-lint", ["pr-comment", "d.md"]);
   const args = ["post", "d.md", "--repo", "o/r"];
   w.approve(`${DRAFT.replace("src/a.ts:10", "src/b.ts:4")}\n${w.line("github-write", args)}`);
   const moved = await w.run("github-write", args);
@@ -127,6 +139,8 @@ test("a post ticket binds the PR, head, path and line, not only the comment text
 test("a run refused before it writes leaves its ticket unused", async () => {
   const post = world({ gh: { diff: "diff --git a/other.ts b/other.ts\n--- a/other.ts\n+++ b/other.ts\n@@ -1,1 +1,1 @@\n+x\n", head: HEAD } });
   post.file("d.md", DRAFT);
+  post.file("pr.diff", DIFF);
+  await lint(post, "draft-lint", ["pr-comment", "d.md", "--diff", "pr.diff"]);
   const args = ["post", "d.md", "--repo", "o/r"];
   post.approve(`${DRAFT}\n${post.line("github-write", args)}`);
   assert.notEqual((await post.run("github-write", args)).code, 0);
@@ -138,6 +152,7 @@ test("a run refused before it writes leaves its ticket unused", async () => {
 
   const anchor = world({ web: { drive: [], document: DOCUMENT } });
   anchor.file("g.md", "Which wallet pays the fee?\n");
+  await lint(anchor, "draft-lint", ["doc-comment", "g.md", "--doc", "D"]);
   const anchorArgs = ["anchor", "--tab", "t.1", "--quote", "a passage not in the tab", "--body-file", "g.md", "--doc", "D"];
   anchor.approve(`Which wallet pays the fee?\n${anchor.line("gdoc-comments", anchorArgs)}`);
   assert.match((await anchor.run("gdoc-comments", anchorArgs)).out, /quote not found/);
@@ -192,6 +207,7 @@ test("apply, rollback and doc-comment-file tickets need the rendered lines, whic
   }
   const doc = world({ web: { tabs: { "t.1": TAB }, document: DOCUMENT }, map: { name: "p", repos: [{ path: ".", role: "FE" }], language: { pr_review: "en", doc_figma: "en" }, prd: { doc: "D", tabs: { "09": { tab: "t.1" } } } } });
   doc.file("items.json", JSON.stringify({ title: "PRD", items: [ITEM] }));
+  await lint(doc, "doc-comment-file", ["items.json"]);
   const args = ["post", "items.json", "--html", "out.html", "--apply", "--doc", "D"];
   assert.ok((await doc.run("doc-comment-file", ["post", "items.json", "--html", "out.html"])).out.includes(`approval lines:\n${renderDocComment(ITEM, "t.1")}`));
   doc.approve(`${ITEM.comment}\n${doc.line("doc-comment-file", args)}`);
@@ -239,6 +255,7 @@ test("doc-comment-file finds every quote in the Doc before it spends the ticket"
   const otherDocument = { tabs: [{ tabProperties: { tabId: "t.1" }, documentTab: { body: { content: [{ paragraph: { elements: [{ startIndex: 1, textRun: { content: "A different paragraph\n" } }] } }] } } }] };
   const doc = world({ web: { tabs: { "t.1": TAB }, document: otherDocument }, map: { name: "p", repos: [{ path: ".", role: "FE" }], language: { pr_review: "en", doc_figma: "en" }, prd: { doc: "D", tabs: { "09": { tab: "t.1" } } } } });
   doc.file("items.json", JSON.stringify({ title: "PRD", items: [ITEM] }));
+  await lint(doc, "doc-comment-file", ["items.json"]);
   const args = ["post", "items.json", "--html", "out.html", "--apply", "--doc", "D"];
   doc.approve(`${renderDocComment(ITEM, "t.1")}\n${doc.line("doc-comment-file", args)}`);
   assert.match((await doc.run("doc-comment-file", args)).out, /quote not found/);
@@ -258,6 +275,7 @@ test("a null field the payload still sends shows in the approval lines", async (
 test("in answer mode a real dry run of post or pr-body needs no --repo and spends nothing", async () => {
   const post = world({ gh: { diff: DIFF, head: HEAD } });
   post.file("d.md", DRAFT);
+  await lint(post, "draft-lint", ["pr-comment", "d.md"]);
   const dry = await post.run("github-write", ["post", "d.md", "--dry-run"]);
   assert.equal(dry.code, 0, dry.out);
   assert.match(dry.out, /WRITE → o\/r#701/);
