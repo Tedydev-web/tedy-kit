@@ -91,7 +91,7 @@ function gh(args, input) {
 }
 
 function currentRepo(flags) {
-  requireExplicitTarget("repo", flags.repo);
+  if (!flags["dry-run"]) requireExplicitTarget("repo", flags.repo);
   return flags.repo ?? gh(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]).trim();
 }
 

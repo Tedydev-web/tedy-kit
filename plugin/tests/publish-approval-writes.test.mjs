@@ -249,3 +249,17 @@ test("a null field the payload still sends shows in the approval lines", async (
   assert.ok(lines.includes("estimate: null"), lines.join("\n"));
   assert.ok(lines.includes("parent: null"), lines.join("\n"));
 });
+
+test("in answer mode a real dry run of post or pr-body needs no --repo and spends nothing", async () => {
+  const post = world({ gh: { diff: DIFF, head: HEAD } });
+  post.file("d.md", DRAFT);
+  const dry = await post.run("github-write", ["post", "d.md", "--dry-run"]);
+  assert.equal(dry.code, 0, dry.out);
+  assert.match(dry.out, /WRITE → o\/r#701/);
+  assert.match((await post.run("github-write", ["post", "d.md"])).out, /name the write target with --repo/);
+  const prBody = world({ gh: { prView: { number: 3, isDraft: true, author: { login: "me" }, body: "old" } } });
+  prBody.file("p.md", "OP#21298\n\nTask read now\n");
+  const dryBody = await prBody.run("github-write", ["pr-body", "3", "--body-file", "p.md", "--dry-run"]);
+  assert.equal(dryBody.code, 0, dryBody.out);
+  assert.deepEqual([...post.writes(), ...prBody.writes()], []);
+});
