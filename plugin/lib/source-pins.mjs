@@ -6,8 +6,8 @@ import { STATE_DIR } from "./hook-io.mjs";
 
 const CITE = /`([^`]+):\d+(?:-\d+)?@([^`\s]+)`/g;
 const RECHECK = "re-read the changed sources, fix the draft, lint it again and ask the user again";
-const FIGMA_LINK = /figma\.com\/(?:design|file)\/([A-Za-z0-9]+)([^\s)"'`]*)/g;
-const DOC_LINK = /docs\.google\.com\/document\/d\/([\w-]+)/g;
+const FIGMA_LINK = /figma\.com\/(?:design|file|proto|board)\/([A-Za-z0-9]+)([^\s)"'`]*)/g;
+const DOC_LINK = /docs\.google\.com\/document\/(?:u\/\d+\/)?d\/([\w-]+)/g;
 
 export function cites(text) {
   const found = new Map();

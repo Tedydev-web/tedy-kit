@@ -141,4 +141,6 @@ test("a sources record serves only the file it was written for, even when two pa
 test("linkedDocs finds the Figma files and Google Docs a tracker draft links", () => {
   const text = "See https://www.figma.com/design/AbC123/App?node-id=1-2&m=dev and https://www.figma.com/file/AbC123/x, (https://www.figma.com/design/Zz9/B?node-id=30-4) PRD https://docs.google.com/document/d/1x-Y_z/edit#heading";
   assert.deepEqual(linkedDocs(text), { figma: [{ file: "AbC123", nodes: ["1:2"] }, { file: "Zz9", nodes: ["30:4"] }], docs: ["1x-Y_z"] });
+  const more = "Flow https://figma.com/proto/Pp1/z?node-id=3-4, board https://www.figma.com/board/Bd2/y and PRD https://docs.google.com/document/u/0/d/D9-x/edit, https://docs.google.com/document/u/12/d/D10/view";
+  assert.deepEqual(linkedDocs(more), { figma: [{ file: "Pp1", nodes: ["3:4"] }, { file: "Bd2", nodes: [] }], docs: ["D9-x", "D10"] });
 });
