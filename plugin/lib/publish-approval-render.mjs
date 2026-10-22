@@ -23,7 +23,7 @@ const shown = (value) => {
   return value !== null && typeof value === "object" ? JSON.stringify(value) : String(value);
 };
 
-const present = (value) => value !== undefined && value !== null && !(Array.isArray(value) && !value.length);
+const present = (value) => value !== undefined && !(Array.isArray(value) && !value.length);
 
 export function renderWorkPackageDraft(draft) {
   const extra = Object.keys(draft).filter((key) => !KNOWN.has(key)).sort().map((key) => [key, key]);

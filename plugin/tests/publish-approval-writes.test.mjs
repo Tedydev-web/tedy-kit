@@ -240,3 +240,12 @@ test("doc-comment-file finds every quote in the Doc before it spends the ticket"
   assert.equal(doc.tickets(), 1);
   assert.deepEqual(doc.writes(), []);
 });
+
+test("a null field the payload still sends shows in the approval lines", async () => {
+  const { buildPayload } = await import("../lib/openproject-client.mjs");
+  const draft = { slug: "s", type: "Task", subject: "x", description: "d", estimate: null, parent: null };
+  assert.equal(buildPayload(draft, { types: { task: "/api/v3/types/1" }, assignees: [] }).estimatedTime, "PT0H");
+  const lines = renderWorkPackageDraft(draft, { action: "create" }).split("\n");
+  assert.ok(lines.includes("estimate: null"), lines.join("\n"));
+  assert.ok(lines.includes("parent: null"), lines.join("\n"));
+});
