@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { cites, linkedDocs, mapRepos, pinnedSources, pinRepos, recheckRepos, runGit, sourcesPath, versionCheck, writeSources } from "../lib/source-pins.mjs";
+import { bareCites, cites, linkedDocs, mapRepos, pinnedSources, pinRepos, recheckRepos, runGit, sourcesPath, versionCheck, writeSources } from "../lib/source-pins.mjs";
 import { git, siblingRepo } from "./git-sibling-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
@@ -23,6 +23,11 @@ test("cites reads every backticked path:line@branch whole, ranges included, and 
     { path: "src/@types/user.d.ts", branch: "dev" },
     { path: "internal/wallet service.go", branch: "dev" },
   ]);
+});
+
+test("bareCites finds path:line@branch tokens outside backticks only, without trailing punctuation", () => {
+  const text = "Bare src/a.ts:3@dev, range (lib/x.sol:5-9@feature/v2). Fine `src/b.ts:1@dev`, `path:line@branch`, me@example.com, https://h:8080/a@b, git@github.com:o/r.git";
+  assert.deepEqual(bareCites(text), ["src/a.ts:3@dev", "lib/x.sol:5-9@feature/v2"]);
 });
 
 test("a cite path is read literally, so brackets, parentheses, @ and spaces pin the file they name and nothing else", () => {

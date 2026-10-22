@@ -16,6 +16,8 @@ export function cites(text) {
   return [...found.values()];
 }
 
+export const bareCites = (text) => [...new Set(text.replace(/`[^`]*`/g, " ").match(/[^\s`([{'"][^\s`]*:\d+(?:-\d+)?@[^\s`]*[^\s`.,;:!?)\]}'"]/g) ?? [])];
+
 export function linkedDocs(text) {
   const figma = new Map();
   for (const [, file, rest] of text.matchAll(FIGMA_LINK)) {

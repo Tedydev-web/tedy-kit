@@ -53,6 +53,21 @@ test("draft-lint says when nothing is pinned, and fails on a cite no map repo ho
   assert.match(result.out, /^sources: `src\/zzz\.ts@dev` is cited, but no repo in the project map has src\/zzz\.ts at origin\/dev; fetch that repo or fix the cite$/m);
 });
 
+test("draft-lint fails on a path:line@branch cite outside backticks, in the draft or the findings, instead of skipping it", () => {
+  const findings = project({ findings: { "261022-1314": "Writer src/a.ts:1@dev, and `src/b.ts:1@dev`; see `path:line@branch` and mail me@example.com.\n" } });
+  const fromFindings = findings.lint("pr-comment", "d.md", "--diff", "pr.diff");
+  assert.equal(fromFindings.status, 1);
+  assert.match(fromFindings.out, /^sources: src\/a\.ts:1@dev is a path:line@branch cite outside backticks, so it would not be pinned; put it in backticks$/m);
+  assert.doesNotMatch(fromFindings.out, /^clean:/m);
+  const draft = project({ findings: {} });
+  writeFileSync(join(draft.fe, "d.md"), DRAFT.replace("The label is wrong.", "The label is wrong, the writer at src/a.ts:1-3@dev sets it."));
+  const fromDraft = draft.lint("pr-comment", "d.md", "--diff", "pr.diff");
+  assert.equal(fromDraft.status, 1);
+  assert.match(fromDraft.out, /^sources: src\/a\.ts:1-3@dev is a path:line@branch cite outside backticks/m);
+  writeFileSync(join(draft.fe, "r.txt"), "The label is still wrong, see src/a.ts:1@dev.\n");
+  assert.match(draft.lint("pr-reply", "r.txt").out, /^sources: src\/a\.ts:1@dev is a path:line@branch cite outside backticks/m);
+});
+
 test("post refuses a draft that was never linted, and one edited after its pins were taken", () => {
   const p = project();
   const unlinted = p.write(["post", "d.md", "--repo", "o/r"]);

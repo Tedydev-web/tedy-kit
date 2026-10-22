@@ -6,7 +6,7 @@ import { STATE_DIR } from "./hook-io.mjs";
 import { UC_ID } from "./prd-section.mjs";
 import { chatLanguage } from "./labels.mjs";
 import { resolveMap } from "./project-map.mjs";
-import { cites, describePin, mapRepos, pinRepos, takePin, writeSources } from "./source-pins.mjs";
+import { bareCites, cites, describePin, mapRepos, pinRepos, takePin, writeSources } from "./source-pins.mjs";
 
 export const MAX_BODY = 360;
 export const MAX_CHAT = 600;
@@ -172,9 +172,11 @@ export function newestFindings(pr, dir = join(process.cwd(), "plans", "reports")
 }
 
 function repoPins(text, evidence) {
-  const { pins, problems } = pinRepos(cites([text, evidence ? readFileSync(evidence, "utf8") : ""].join("\n")), mapRepos(resolveMap(process.cwd())?.map));
-  for (const problem of problems) console.log(`sources: ${problem}`);
-  return problems.length ? null : pins;
+  const all = [text, evidence ? readFileSync(evidence, "utf8") : ""].join("\n");
+  const bare = bareCites(all).map((cite) => `${cite} is a path:line@branch cite outside backticks, so it would not be pinned; put it in backticks`);
+  const { pins, problems } = pinRepos(cites(all), mapRepos(resolveMap(process.cwd())?.map));
+  for (const problem of [...bare, ...problems]) console.log(`sources: ${problem}`);
+  return bare.length || problems.length ? null : pins;
 }
 
 async function chatPins(kind, flag) {
