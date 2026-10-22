@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { cites, linkedDocs, mapRepos, pinnedSources, pinRepos, recheckRepos, sourcesPath, versionCheck, writeSources } from "../lib/source-pins.mjs";
+import { cites, linkedDocs, mapRepos, pinnedSources, pinRepos, recheckRepos, runGit, sourcesPath, versionCheck, writeSources } from "../lib/source-pins.mjs";
 import { git, siblingRepo } from "./git-sibling-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
@@ -149,6 +149,23 @@ test("the recheck compares with what the fetch returned, so a clone that keeps n
   assert.match(refusals[0], new RegExp(`moved from ${pins[0].sha.slice(0, 8)} to ${cited.slice(0, 8)} since the draft was linted and changed what the draft cites`));
   git(sibling.clone, "remote", "set-url", "origin", join(sibling.root, "gone.git"));
   assert.match(recheckRepos(pins, repos).refusals[0], /^refused: \.\.\/backend origin\/dev could not be fetched to recheck the pin \(.+\); fetch it, then publish again$/);
+});
+
+test("the recheck takes the branch tip from ls-remote, so another process rewriting FETCH_HEAD cannot hide a change", () => {
+  const sibling = siblingRepo();
+  const repos = repoOf(sibling.clone);
+  const { pins } = pinRepos([{ path: "src/a.ts", branch: "dev" }], repos);
+  const cited = sibling.push("src/a.ts", "a2\n", "fix: change the writer");
+  const racing = (dir, args) => {
+    const out = runGit(dir, args);
+    if (args[0] === "fetch") writeFileSync(join(dir, ".git", "FETCH_HEAD"), `${pins[0].sha}\t\tbranch 'dev' of elsewhere\n`);
+    return out;
+  };
+  const { refusals } = recheckRepos(pins, repos, racing);
+  assert.equal(refusals.length, 1);
+  assert.match(refusals[0], new RegExp(`moved from ${pins[0].sha.slice(0, 8)} to ${cited.slice(0, 8)}`));
+  git(sibling.root, "--git-dir", join(sibling.root, "origin.git"), "update-ref", "-d", "refs/heads/dev");
+  assert.match(recheckRepos(pins, repos).refusals[0], /^refused: \.\.\/backend origin\/dev no longer exists on origin; /);
 });
 
 test("linkedDocs finds the Figma files and Google Docs a tracker draft links", () => {

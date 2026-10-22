@@ -63,13 +63,19 @@ export function recheckRepos(pins, repos, git = runGit) {
       continue;
     }
     const branch = pin.ref.slice("origin/".length);
+    let now;
     try {
-      git(repo.dir, ["fetch", "-q", "origin", branch]);
+      now = git(repo.dir, ["ls-remote", "origin", `refs/heads/${branch}`]).split(/\s/)[0];
+      if (now && now !== pin.sha) git(repo.dir, ["fetch", "-q", "origin", branch]);
+      if (now) git(repo.dir, ["cat-file", "-e", `${now}^{commit}`]);
     } catch (error) {
       refusals.push(`refused: ${pin.repo} ${pin.ref} could not be fetched to recheck the pin (${error.code === "ETIMEDOUT" ? "timed out" : (error.stderr?.toString().trim() || error.message).split("\n")[0]}); fetch it, then publish again`);
       continue;
     }
-    const now = git(repo.dir, ["rev-parse", "FETCH_HEAD"]);
+    if (!now) {
+      refusals.push(`refused: ${pin.repo} ${pin.ref} no longer exists on origin; ${RECHECK}`);
+      continue;
+    }
     if (now === pin.sha) continue;
     const moved = `${pin.repo} ${pin.ref} moved from ${pin.sha.slice(0, 8)} to ${now.slice(0, 8)} since the draft was linted`;
     const touched = git(repo.dir, ["diff", "--name-only", pin.sha, now, "--", ...pin.paths]).split("\n").filter(Boolean);
