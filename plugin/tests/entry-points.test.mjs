@@ -10,7 +10,7 @@ const entries = ["../gates/", "../lib/"].flatMap((dir) => {
 });
 
 test("every module with an argv guard exports run and its guard only calls run", async () => {
-  assert.equal(entries.length, 27);
+  assert.equal(entries.length, 28);
   for (const file of entries) {
     assert.equal(typeof (await import(file)).run, "function", file.pathname);
     assert.match(readFileSync(file, "utf8"), new RegExp(`^${GUARD.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} run\\(\\);$`, "m"), file.pathname);

@@ -25,3 +25,11 @@ for (const [gate, tools] of [["git-gate", ["Bash"]], ["push-report", ["Bash"]], 
     }
   });
 }
+
+test("the publish-approval ticket hook runs after AskUserQuestion only", () => {
+  const { PostToolUse } = JSON.parse(readFileSync(new URL("../hooks/hooks.json", import.meta.url), "utf8")).hooks;
+  const entry = PostToolUse.find((item) => item.hooks.some((hook) => hook.command.includes("/publish-approval-ticket.mjs")));
+  const matcher = new RegExp(entry.matcher);
+  assert.ok(matcher.test("AskUserQuestion"));
+  for (const tool of ["Bash", "AskUserQuestionX", "mcp__x__AskUserQuestion"]) assert.ok(!matcher.test(tool), tool);
+});
