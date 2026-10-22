@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSyn
 import { homedir } from "node:os";
 import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { CLAUDE_SETTINGS, KIT_PUBLISH_ASK_RULES, leftoverKitRules, plannedAskRules, readSettings, writeAskRules } from "./publish-approval-settings.mjs";
+import { CLAUDE_SETTINGS, KIT_PUBLISH_ASK_RULES, TRANSCRIPT_EDIT_DENY, leftoverKitRules, plannedPermissions, readSettings, unchanged, writePermissions } from "./publish-approval-settings.mjs";
 
 const SHARED = fileURLToPath(new URL("../shared/", import.meta.url));
 const PERSONAL_GATES = ["noComments", "draftPrOnly", "roleGate", "ghWrites", "publishQuote"];
@@ -196,24 +196,25 @@ function publishApproval(dir, mode, settingsFile = CLAUDE_SETTINGS) {
   const file = join(dir, "config.json");
   const settings = () => readSettings(settingsFile);
   if (mode === undefined) {
-    const present = KIT_PUBLISH_ASK_RULES.filter((rule) => settings().ask.includes(rule)).length;
-    process.stdout.write(`publish approval: ${loadConfig(dir).gates.publishApproval}\nkit publish ask rules in ${settingsFile}: ${present}/${KIT_PUBLISH_ASK_RULES.length}\n`);
+    const { ask, deny } = settings();
+    const present = KIT_PUBLISH_ASK_RULES.filter((rule) => ask.includes(rule)).length;
+    process.stdout.write(`publish approval: ${loadConfig(dir).gates.publishApproval}\nkit publish ask rules in ${settingsFile}: ${present}/${KIT_PUBLISH_ASK_RULES.length}\ntranscript edit deny: ${deny.includes(TRANSCRIPT_EDIT_DENY) ? "on" : "off"}\n`);
     return 0;
   }
   if (!existsSync(file)) throw new Error(`${file} is missing; run profile.mjs init first, then switch the mode`);
   loadConfig(dir);
   const raw = JSON.parse(readFileSync(file, "utf8"));
   const current = settings();
-  const next = plannedAskRules(current.ask, mode);
+  const next = plannedPermissions(current, mode);
   const lines = [];
-  if (next.length === current.ask.length) lines.push(`${settingsFile}: kit publish ask rules already ${mode === "answer" ? "removed" : "present"}, not written`);
+  if (unchanged(current, next)) lines.push(`${settingsFile}: kit publish ask rules already ${mode === "answer" ? "removed" : "present"} and transcript edit deny already ${mode === "answer" ? "on" : "off"}, not written`);
   else {
-    const { backup, removed, added } = writeAskRules(settingsFile, current, next);
-    lines.push(`${settingsFile}: removed ${removed}, restored ${added} kit publish ask rules; backup ${backup}`);
+    const { backup, removed, added } = writePermissions(settingsFile, current, next);
+    lines.push(`${settingsFile}: removed ${removed}, restored ${added} kit publish ask rules; transcript edit deny ${mode === "answer" ? "on" : "off"}; backup ${backup}`);
   }
   if (raw.gates?.publishApproval !== mode) writeFileSync(file, `${JSON.stringify({ ...raw, gates: { ...raw.gates, publishApproval: mode } }, null, 2)}\n`);
   lines.push(`publish approval: ${mode}`);
-  const leftover = mode === "answer" ? leftoverKitRules(next) : [];
+  const leftover = mode === "answer" ? leftoverKitRules(next.ask) : [];
   if (leftover.length) lines.push(`still prompts, not a kit rule: ${leftover.join(", ")}`);
   process.stdout.write(`${lines.join("\n")}\n`);
   return 0;

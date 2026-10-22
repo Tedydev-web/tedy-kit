@@ -99,7 +99,7 @@ node <plugin>/scripts/profile.mjs publish-approval ask
 node <plugin>/scripts/profile.mjs publish-approval
 ```
 
-The first removes exactly the 22 kit publish rules and sets the key, the second restores them, the third prints the mode and how many rules are present. Each write first copies `settings.json` to `settings.json.tedy-backup-<time>` with the same file mode, and touches no other key; `Bash(gh pr merge*)` stays in both modes. A missing `config.json` is refused (run `profile.mjs init` first), and the profile guard asks before a session runs the switch. Running sessions pick up both files without a restart.
+The first removes exactly the 22 kit publish rules, adds `Edit(~/.claude/projects/**/*.jsonl)` to `permissions.deny` so an agent's file tools cannot rewrite the session transcripts the gate reads (the memory folder is not covered), and sets the key; the second restores the rules and takes the deny rule back out; the third prints the mode, how many rules are present and whether the deny rule is on. Each write first copies `settings.json` to `settings.json.tedy-backup-<time>` with the same file mode, and touches no other key; `Bash(gh pr merge*)` stays in both modes. A missing `config.json` is refused (run `profile.mjs init` first), and the profile guard asks before a session runs the switch. Running sessions pick up both files without a restart.
 
 ## Rescue
 

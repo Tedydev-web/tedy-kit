@@ -13,7 +13,9 @@ export const KIT_PUBLISH_ASK_RULES = Object.freeze([
   "Bash(*doc-comment-file.mjs*post*--apply*)",
 ]);
 
-const KIT_SCRIPT = /github-write\.mjs|openproject\.mjs|figma-comments\.mjs|gdoc-comments\.mjs|doc-comment-file\.mjs/;
+export const TRANSCRIPT_EDIT_DENY = "Edit(~/.claude/projects/**/*.jsonl)";
+
+const KIT_SCRIPT =/github-write\.mjs|openproject\.mjs|figma-comments\.mjs|gdoc-comments\.mjs|doc-comment-file\.mjs/;
 
 export function readSettings(file) {
   let data;
@@ -24,25 +26,34 @@ export function readSettings(file) {
   }
   if (data === null || typeof data !== "object" || Array.isArray(data)) throw new Error(`${file}: must be a JSON object`);
   const ask = data.permissions?.ask ?? [];
+  const deny = data.permissions?.deny ?? [];
   if (!Array.isArray(ask)) throw new Error(`${file}: permissions.ask must be an array`);
-  return { data, ask };
+  if (!Array.isArray(deny)) throw new Error(`${file}: permissions.deny must be an array`);
+  return { data, ask, deny };
 }
 
-export function plannedAskRules(ask, mode) {
-  return mode === "answer" ? ask.filter((rule) => !KIT_PUBLISH_ASK_RULES.includes(rule)) : [...ask, ...KIT_PUBLISH_ASK_RULES.filter((rule) => !ask.includes(rule))];
+export function plannedPermissions({ ask, deny }, mode) {
+  if (mode === "answer") return { ask: ask.filter((rule) => !KIT_PUBLISH_ASK_RULES.includes(rule)), deny: deny.includes(TRANSCRIPT_EDIT_DENY) ? deny : [...deny, TRANSCRIPT_EDIT_DENY] };
+  return { ask: [...ask, ...KIT_PUBLISH_ASK_RULES.filter((rule) => !ask.includes(rule))], deny: deny.filter((rule) => rule !== TRANSCRIPT_EDIT_DENY) };
 }
+
+export const unchanged = (current, next) => current.ask.length === next.ask.length && current.deny.length === next.deny.length;
 
 export const leftoverKitRules = (ask) => ask.filter((rule) => typeof rule === "string" && !KIT_PUBLISH_ASK_RULES.includes(rule) && KIT_SCRIPT.test(rule));
 
-export function writeAskRules(file, { data, ask }, next) {
+export function writePermissions(file, { data, ask, deny }, next) {
+  const had = data.permissions ?? {};
+  const permissions = { ...had, ask: next.ask, deny: next.deny };
+  if (!next.ask.length && !("ask" in had)) delete permissions.ask;
+  if (!next.deny.length && (deny.length || !("deny" in had))) delete permissions.deny;
   const target = realpathSync(file);
   const mode = statSync(target).mode & 0o777;
   const backup = `${target}.tedy-backup-${new Date().toISOString().replace(/[:.]/g, "-")}`;
   copyFileSync(target, backup);
   chmodSync(backup, mode);
   const temporary = `${target}.tedy-write-${process.pid}`;
-  writeFileSync(temporary, `${JSON.stringify({ ...data, permissions: { ...data.permissions, ask: next } }, null, 2)}\n`, { mode });
+  writeFileSync(temporary, `${JSON.stringify({ ...data, permissions }, null, 2)}\n`, { mode });
   chmodSync(temporary, mode);
   renameSync(temporary, target);
-  return { backup, removed: ask.filter((rule) => !next.includes(rule)).length, added: next.filter((rule) => !ask.includes(rule)).length };
+  return { backup, removed: ask.filter((rule) => !next.ask.includes(rule)).length, added: next.ask.filter((rule) => !ask.includes(rule)).length };
 }
