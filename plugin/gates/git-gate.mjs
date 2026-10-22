@@ -3,12 +3,11 @@ import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { ALL_GATES_ON, allow, ask, deny, gateSwitches, logGate, readHookInput } from "../lib/hook-io.mjs";
+import { ALL_GATES_ON, ask, deny, gateSwitches, logGate, readHookInput } from "../lib/hook-io.mjs";
 import { CLAUDE_SETTINGS } from "../lib/publish-approval-settings.mjs";
 import { resolveMap } from "../lib/project-map.mjs";
 import { shellWords, splitSegments, tokenize, walkCommands } from "../lib/shell-segments.mjs";
 import { INTERPRETER, SHELLS, readsUnreadableCode, variableScriptArguments } from "../lib/shell-program-arguments.mjs";
-import { check as checkAnswered } from "./publish-answer-gate.mjs";
 import { check as checkQuoted } from "./publish-quote-gate.mjs";
 import { evaluate as trackerToken, trackerHost } from "./tracker-token-gate.mjs";
 
@@ -357,10 +356,12 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
   const rewriteFor = (reason) => {
     rewrite ??= { allow: false, reason };
   };
-  const hidden = hiddenPublish(command);
-  if (hidden) askFor(`tedy gate: this publishes through a kit script in a form the permission rules do not match (\`${hidden.slice(0, 120)}\`). Allow it only if the user approved this exact publish; otherwise run it as a plain \`node <script> …\` command.`);
-  const uncovered = settingsFile ? uncoveredPublish(command, settingsFile) : null;
-  if (uncovered) askFor(uncovered);
+  if (gates.publishApproval !== "answer") {
+    const hidden = hiddenPublish(command);
+    if (hidden) askFor(`tedy gate: this publishes through a kit script in a form the permission rules do not match (\`${hidden.slice(0, 120)}\`). Allow it only if the user approved this exact publish; otherwise run it as a plain \`node <script> …\` command.`);
+    const uncovered = settingsFile ? uncoveredPublish(command, settingsFile) : null;
+    if (uncovered) askFor(uncovered);
+  }
   const { parts, tooDeep } = walkCommands(command, cwd);
   if (tooDeep) rewriteFor(`tedy gate: this command nests command substitutions too deeply to check. ${REWRITE}`);
   for (const { text: segment, piped, dir } of parts) {
@@ -448,7 +449,7 @@ function judge(input, tool) {
   const gates = gateSwitches();
   const answerMode = gates.publishApproval === "answer";
   try {
-    let result = CTX_TOOL.test(tool) && splitSegments(command, false).some(publishes) ? { allow: false, reason: CTX_PUBLISH_REASON } : evaluate(command, input.cwd ?? process.cwd(), { gates, settingsFile: answerMode ? null : CLAUDE_SETTINGS });
+    let result = CTX_TOOL.test(tool) && splitSegments(command, false).some(publishes) ? { allow: false, reason: CTX_PUBLISH_REASON } : evaluate(command, input.cwd ?? process.cwd(), { gates, settingsFile: CLAUDE_SETTINGS });
     if (result.allow || result.ask) {
       const token = trackerToken(input.tool_input, trackerHost(), { cwd: input.cwd ?? process.cwd() });
       if (token) result = { allow: false, reason: token };
@@ -462,19 +463,12 @@ function judge(input, tool) {
       }
       if (quoted && (!quoted.ask || result.allow)) result = { allow: false, ...quoted };
     }
-    if (answerMode && (result.allow || result.ask)) {
-      const answered = checkAnswered(input);
-      if (answered && !answered.allow) result = answered;
-      else if (answered && result.ask) result = { allow: false, reason: result.reason };
-      else if (answered) result = { allow: true, approved: true };
-    }
-    if (result.approved) logGate({ hook: "git-gate", decision: "allow-answered", tool, command: command.slice(0, 200), cwd: input.cwd });
     if (!result.allow) logGate({ hook: "git-gate", decision: result.ask ? "ask" : "deny", tool, command: command.slice(0, 200), cwd: input.cwd, reason: result.reason });
     return result;
   } catch (error) {
     const publish = splitSegments(String(command), false).some(publishes);
     logGate({ hook: "git-gate", decision: answerMode && publish ? "deny" : "ask", tool, command: String(command).slice(0, 200), error: error.message });
-    if (answerMode && publish) return { allow: false, reason: `tedy gate: could not check this publish command (${error.message}), so publish approval in answer mode refuses it. Fix what the error names, then ask for approval again.` };
+    if (answerMode && publish) return { allow: false, reason: `tedy gate: could not check this command (${error.message}). Publish approval is in answer mode, where a publish is never asked twice, so it is refused; run the publish as a plain command of its own.` };
     return { allow: false, ask: true, reason: publish ? `tedy gate: could not check this publish command (${error.message}). Approve only if you have seen the exact draft.` : `tedy gate: could not check this command (${error.message}). Allow it only if the user asked for it.` };
   }
 }
@@ -492,7 +486,6 @@ export function run() {
   const result = results.find((item) => !item.allow && !item.ask) ?? results.find((item) => item.ask);
   if (result?.ask) ask(result.reason);
   else if (result) deny(result.reason);
-  else if (results.length && results.every((item) => item.approved)) allow("tedy gate: the user approved this exact publish in an AskUserQuestion after its last change.");
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();

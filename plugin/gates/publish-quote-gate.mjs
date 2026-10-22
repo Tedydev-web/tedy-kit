@@ -8,7 +8,7 @@ import { readTranscriptTail } from "../lib/hook-io.mjs";
 const SCRIPT = /github-write\.mjs$/;
 const PUBLISH_COMMANDS = new Set(["post", "reply", "edit"]);
 
-export const normalise = (text) =>
+const normalise = (text) =>
   text
     .split("\n")
     .map((line) => line.replace(/^\s*>\s?/, ""))
@@ -75,9 +75,7 @@ export function unshown(found, entries, mtime) {
 export const reasonFor = (missing) =>
   `tedy gate: the user has not seen the exact text being published under their name since its last change (${missing.join(", ")}). Only two places count as shown: a text block in the reply, and an AskUserQuestion question or preview. Thinking does not count, and neither does Write or Bash input or any other tool's input. Put the whole body, verbatim, in the AskUserQuestion preview of the approval question, then post.`;
 
-const transcriptSince = (path, sinceMs) => transcriptUntil(path, (entries) => Date.parse(entries.find((entry) => entry.timestamp)?.timestamp ?? "") < sinceMs);
-
-export function transcriptUntil(path, enough) {
+function transcriptSince(path, sinceMs) {
   let size = 0;
   try {
     const descriptor = openSync(path, "r");
@@ -88,7 +86,8 @@ export function transcriptUntil(path, enough) {
   }
   for (let bytes = 2_000_000; ; bytes *= 4) {
     const entries = readTranscriptTail(path, bytes);
-    if (bytes >= size || bytes >= 256_000_000 || enough(entries)) return entries;
+    const oldest = Date.parse(entries.find((entry) => entry.timestamp)?.timestamp ?? "");
+    if (bytes >= size || bytes >= 256_000_000 || oldest < sinceMs) return entries;
   }
 }
 
