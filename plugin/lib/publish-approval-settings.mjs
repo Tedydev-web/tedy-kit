@@ -1,6 +1,7 @@
 import { chmodSync, copyFileSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
+import { STATE_DIR } from "./state-dir.mjs";
 
 export const CLAUDE_SETTINGS = process.env.TEDY_CLAUDE_SETTINGS ?? join(homedir(), ".claude", "settings.json");
 
@@ -13,7 +14,7 @@ export const KIT_PUBLISH_ASK_RULES = Object.freeze([
   "Bash(*doc-comment-file.mjs*post*--apply*)",
 ]);
 
-export const TRANSCRIPT_EDIT_DENY = "Edit(~/.claude/projects/**/*.jsonl)";
+export const approvalsDenyRule = (state = STATE_DIR) => `Edit(/${resolve(state, "approvals")}/**)`;
 
 const KIT_SCRIPT =/github-write\.mjs|openproject\.mjs|figma-comments\.mjs|gdoc-comments\.mjs|doc-comment-file\.mjs/;
 
@@ -33,8 +34,8 @@ export function readSettings(file) {
 }
 
 export function plannedPermissions({ ask, deny }, mode) {
-  if (mode === "answer") return { ask: ask.filter((rule) => !KIT_PUBLISH_ASK_RULES.includes(rule)), deny: deny.includes(TRANSCRIPT_EDIT_DENY) ? deny : [...deny, TRANSCRIPT_EDIT_DENY] };
-  return { ask: [...ask, ...KIT_PUBLISH_ASK_RULES.filter((rule) => !ask.includes(rule))], deny: deny.filter((rule) => rule !== TRANSCRIPT_EDIT_DENY) };
+  if (mode === "answer") return { ask: ask.filter((rule) => !KIT_PUBLISH_ASK_RULES.includes(rule)), deny: deny.includes(approvalsDenyRule()) ? deny : [...deny, approvalsDenyRule()] };
+  return { ask: [...ask, ...KIT_PUBLISH_ASK_RULES.filter((rule) => !ask.includes(rule))], deny: deny.filter((rule) => rule !== approvalsDenyRule()) };
 }
 
 export const unchanged = (current, next) => current.ask.length === next.ask.length && current.deny.length === next.deny.length;

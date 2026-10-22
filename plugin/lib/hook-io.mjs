@@ -1,10 +1,10 @@
 import { appendFileSync, closeSync, existsSync, fstatSync, mkdirSync, openSync, readFileSync, readSync } from "node:fs";
-import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { redact } from "./api-request.mjs";
 import { loadConfig, profileDir } from "./profile.mjs";
+import { STATE_DIR } from "./state-dir.mjs";
 
-export const STATE_DIR = process.env.TEDY_STATE_DIR ?? join(homedir(), ".local", "state", "tedy");
+export { STATE_DIR };
 
 export function readHookInput({ askOnFailure = false } = {}) {
   try {

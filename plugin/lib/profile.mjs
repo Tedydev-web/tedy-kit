@@ -3,7 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSyn
 import { homedir } from "node:os";
 import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { CLAUDE_SETTINGS, KIT_PUBLISH_ASK_RULES, TRANSCRIPT_EDIT_DENY, leftoverKitRules, plannedPermissions, readSettings, unchanged, writePermissions } from "./publish-approval-settings.mjs";
+import { CLAUDE_SETTINGS, KIT_PUBLISH_ASK_RULES, approvalsDenyRule, leftoverKitRules, plannedPermissions, readSettings, unchanged, writePermissions } from "./publish-approval-settings.mjs";
 
 const SHARED = fileURLToPath(new URL("../shared/", import.meta.url));
 const PERSONAL_GATES = ["noComments", "draftPrOnly", "roleGate", "ghWrites", "publishQuote"];
@@ -200,7 +200,7 @@ function publishApproval(dir, mode, settingsFile = CLAUDE_SETTINGS) {
   if (mode === undefined) {
     const { ask, deny } = settings();
     const present = KIT_PUBLISH_ASK_RULES.filter((rule) => ask.includes(rule)).length;
-    process.stdout.write(`publish approval: ${loadConfig(dir).gates.publishApproval}\nkit publish ask rules in ${settingsFile}: ${present}/${KIT_PUBLISH_ASK_RULES.length}\ntranscript edit deny: ${deny.includes(TRANSCRIPT_EDIT_DENY) ? "on" : "off"}\n`);
+    process.stdout.write(`publish approval: ${loadConfig(dir).gates.publishApproval}\nkit publish ask rules in ${settingsFile}: ${present}/${KIT_PUBLISH_ASK_RULES.length}\nticket edit deny: ${deny.includes(approvalsDenyRule()) ? "on" : "off"}\n`);
     return 0;
   }
   if (!existsSync(file)) throw new Error(`${file} is missing; run profile.mjs init first, then switch the mode`);
@@ -209,10 +209,10 @@ function publishApproval(dir, mode, settingsFile = CLAUDE_SETTINGS) {
   const current = settings();
   const next = plannedPermissions(current, mode);
   const lines = [];
-  if (unchanged(current, next)) lines.push(`${settingsFile}: kit publish ask rules already ${mode === "answer" ? "removed" : "present"} and transcript edit deny already ${mode === "answer" ? "on" : "off"}, not written`);
+  if (unchanged(current, next)) lines.push(`${settingsFile}: kit publish ask rules already ${mode === "answer" ? "removed" : "present"} and ticket edit deny already ${mode === "answer" ? "on" : "off"}, not written`);
   else {
     const { backup, removed, added } = writePermissions(settingsFile, current, next);
-    lines.push(`${settingsFile}: removed ${removed}, restored ${added} kit publish ask rules; transcript edit deny ${mode === "answer" ? "on" : "off"}; backup ${backup}`);
+    lines.push(`${settingsFile}: removed ${removed}, restored ${added} kit publish ask rules; ticket edit deny ${mode === "answer" ? "on" : "off"}; backup ${backup}`);
   }
   const gates = { ...raw.gates, publishApproval: mode };
   if (mode === "ask") delete gates.publishApproval;
