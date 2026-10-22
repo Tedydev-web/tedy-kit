@@ -37,6 +37,18 @@ test("github-write post, edit and minimize write only with a ticket, once", asyn
   await onceOnly(minimize, "github-write", ["minimize", "IC_x"], (line) => line, () => minimize.writes().length);
 });
 
+test("github-write pr-body, resolve and unresolve write only with a ticket, once", async () => {
+  const prBody = world({ gh: { write: { id: 5, html_url: "u", body: "Fixed it." }, prView: { number: 3, isDraft: true, author: { login: "me" }, body: "old" } } });
+  prBody.file("p.md", "OP#21298\n\nTask read now\n");
+  await onceOnly(prBody, "github-write", ["pr-body", "3", "--body-file", "p.md", "--repo", "X/Y"], (line) => `OP#21298\nTask read now\n${line}`, () => prBody.writes().length);
+  assert.ok(prBody.writes().every((line) => line.includes("repos/X/Y/pulls/3")), prBody.writes().join("\n"));
+  const threads = world({ gh: { graphql: { data: { resolveReviewThread: { thread: { isResolved: true } }, unresolveReviewThread: { thread: { isResolved: false } } } } } });
+  await onceOnly(threads, "github-write", ["resolve", "PRRT_a", "PRRT_b"], (line) => line, () => threads.writes().length);
+  assert.equal(threads.writes().length, 2);
+  const unresolve = world({ gh: { graphql: { data: { unresolveReviewThread: { thread: { isResolved: false } } } } } });
+  await onceOnly(unresolve, "github-write", ["unresolve", "PRRT_a"], (line) => line, () => unresolve.writes().length);
+});
+
 test("openproject apply, set, relation, relation-delete, comment, comment-edit and rollback write only with a ticket, once", async () => {
   const op = await fakeOpenProject();
   try {
