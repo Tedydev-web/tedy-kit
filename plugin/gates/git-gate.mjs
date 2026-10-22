@@ -6,8 +6,8 @@ import { pathToFileURL } from "node:url";
 import { ALL_GATES_ON, ask, deny, gateSwitches, logGate, readHookInput } from "../lib/hook-io.mjs";
 import { CLAUDE_SETTINGS } from "../lib/publish-approval-settings.mjs";
 import { resolveMap } from "../lib/project-map.mjs";
-import { shellWords, splitSegments, tokenize, walkCommands } from "../lib/shell-segments.mjs";
-import { INTERPRETER, SHELLS, readsUnreadableCode, variableScriptArguments } from "../lib/shell-program-arguments.mjs";
+import { shellWords, splitSegments, substitutions, tokenize, walkCommands } from "../lib/shell-segments.mjs";
+import { INTERPRETER, SHELLS, readsUnreadableCode, scriptOperand, variableScriptArguments } from "../lib/shell-program-arguments.mjs";
 import { check as checkQuoted } from "./publish-quote-gate.mjs";
 import { evaluate as trackerToken, trackerHost } from "./tracker-token-gate.mjs";
 
@@ -51,6 +51,7 @@ const LOCAL_RUNNERS = new Set(["find", "script", "busybox"]);
 const KIT_SCRIPTS = ["github-write.mjs", "openproject.mjs", "figma-comments.mjs", "gdoc-comments.mjs", "doc-comment-file.mjs"];
 const SEARCH_TOOLS = new Set(["rg", "grep", "egrep", "fgrep", "fd", "fdfind", "ag", "ack"]);
 const SEARCH_EXEC = /^(?:-x|-X|--exec|--exec-batch|--pre|--pre-glob)(?:=|$)/;
+export const DATA_PROGRAMS = new Set(["printf", "echo", "cat", "tee", "mkdir", "cp", "mv", "rm", "touch", "chmod", "cd", "true"]);
 const FIND_EXEC = /^-(?:exec|execdir|ok|okdir)$/;
 const SUDO_SHELL = /^(?:-[a-zA-Z]*[si]|--shell|--login)$/;
 const PR_CREATE_VALUE_FLAGS = new Set(["-t", "--title", "-b", "--body", "-F", "--body-file", "-B", "--base", "-H", "--head", "-a", "--assignee", "-l", "--label", "-m", "--milestone", "-p", "--project", "-r", "--reviewer", "-T", "--template"]);
@@ -200,12 +201,49 @@ function searchOnly(segment) {
   return SEARCH_TOOLS.has(program) && !args.some((arg) => SEARCH_EXEC.test(arg));
 }
 
-export const publishes = (segment) => PUBLISH.test(shellWords(segment)) && !searchOnly(segment);
+export function kitScriptCall(segment) {
+  const all = tokenize(segment);
+  const tokens = strippedTokens(segment);
+  const [word = "", ...args] = tokens;
+  const program = basename(word);
+  const viaXargs = all.slice(0, all.length - tokens.length).some((token) => basename(token) === "xargs");
+  if (KIT_SCRIPTS.includes(program)) return { words: [program, ...args], viaXargs };
+  if (!INTERPRETER.test(program)) return null;
+  const { script, index } = scriptOperand(program, args);
+  return script !== undefined && KIT_SCRIPTS.includes(basename(script)) ? { words: [basename(script), ...args.slice(index + 1)], viaXargs } : null;
+}
+
+function dataOnly(segment) {
+  if (substitutions(segment)?.length !== 0) return false;
+  const [word, ...args] = tokenize(segment);
+  if (word === "printf") return !args.some((arg) => arg.startsWith("-v"));
+  return DATA_PROGRAMS.has(word);
+}
+
+function xargsUnreadable(segment) {
+  const tokens = tokenize(segment);
+  const at = tokens.findIndex((token) => basename(token) === "xargs");
+  if (at === -1) return false;
+  const rest = tokens.slice(at + 1);
+  return rest.some((token) => /^--[^=]+$/.test(token)) && rest.some((token) => KIT_SCRIPTS.includes(basename(token)));
+}
+
+function runsPublish(segment) {
+  const call = kitScriptCall(segment);
+  return (call !== null && (call.viaXargs || PUBLISH.test(call.words.join(" ")))) || xargsUnreadable(segment);
+}
+
+export const dataOnlyCommand = (command) => splitSegments(command, false).every(dataOnly);
+
+export function publishingSegments(command) {
+  const segments = splitSegments(command, false);
+  const data = segments.every(dataOnly);
+  return segments.filter((segment) => runsPublish(segment) || (!data && PUBLISH.test(shellWords(segment)) && !searchOnly(segment)));
+}
 
 function uncoveredPublish(command, settingsFile) {
   let rules;
-  for (const segment of splitSegments(command, false)) {
-    if (!publishes(segment)) continue;
+  for (const segment of publishingSegments(command)) {
     rules ??= loadAskRules(settingsFile);
     if (rules === null) return "tedy gate: could not read the ask rules; approve only if you have seen the exact draft.";
     if (!rules.some((glob) => globMatches(glob, segment))) return `tedy gate: no permission rule covers this publish (\`${segment.slice(0, 120)}\`); approve only if you have seen the exact draft.`;
@@ -214,8 +252,7 @@ function uncoveredPublish(command, settingsFile) {
 }
 
 export function hiddenPublish(command) {
-  for (const segment of splitSegments(command, false)) {
-    if (!publishes(segment)) continue;
+  for (const segment of publishingSegments(command)) {
     const tokens = tokenize(segment);
     const first = tokens.find((token) => !ENV_ASSIGNMENT.test(token));
     if (first !== "node") return segment;
@@ -449,7 +486,7 @@ function judge(input, tool) {
   const gates = gateSwitches();
   const answerMode = gates.publishApproval === "answer";
   try {
-    let result = CTX_TOOL.test(tool) && splitSegments(command, false).some(publishes) ? { allow: false, reason: CTX_PUBLISH_REASON } : evaluate(command, input.cwd ?? process.cwd(), { gates, settingsFile: CLAUDE_SETTINGS });
+    let result = CTX_TOOL.test(tool) && publishingSegments(command).length ? { allow: false, reason: CTX_PUBLISH_REASON } : evaluate(command, input.cwd ?? process.cwd(), { gates, settingsFile: CLAUDE_SETTINGS });
     if (result.allow || result.ask) {
       const token = trackerToken(input.tool_input, trackerHost(), { cwd: input.cwd ?? process.cwd() });
       if (token) result = { allow: false, reason: token };
@@ -478,7 +515,7 @@ export function checkFailed(command, answerMode, tool, error) {
   let publish;
   try {
     text = String(command);
-    publish = splitSegments(text, false).some(publishes);
+    publish = publishingSegments(text).length > 0;
   } catch (unreadableError) {
     logGate({ hook: "git-gate", decision: "deny", tool, error: `${message}; ${errorText(unreadableError)}` });
     return { allow: false, reason: `tedy gate: could not read this command (${errorText(unreadableError)}), so it is refused unchecked. ${REWRITE}` };

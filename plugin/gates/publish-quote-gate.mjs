@@ -2,7 +2,7 @@ import { closeSync, fstatSync, openSync, readFileSync, statSync } from "node:fs"
 import { resolve } from "node:path";
 import { githubWriteDryRun, parseFlags } from "../lib/cli-flags.mjs";
 import { parseDraft } from "../lib/draft-lint.mjs";
-import { classify, splitSegments, tokenize } from "./git-gate.mjs";
+import { classify, dataOnlyCommand, kitScriptCall, splitSegments, tokenize } from "./git-gate.mjs";
 import { readTranscriptTail } from "../lib/hook-io.mjs";
 
 const SCRIPT = /github-write\.mjs$/;
@@ -26,6 +26,7 @@ function strings(value) {
 export function publishes(command, cwd, read) {
   const found = [];
   let dir = cwd;
+  const data = dataOnlyCommand(command);
   for (const segment of splitSegments(command)) {
     const action = classify(segment, dir);
     if (action.kind === "cd") {
@@ -34,8 +35,9 @@ export function publishes(command, cwd, read) {
     }
     const tokens = tokenize(segment);
     const at = tokens.findIndex((token) => SCRIPT.test(token));
-    if (at === -1) continue;
-    const { positional, flags } = parseFlags(tokens.slice(at + 1));
+    const words = kitScriptCall(segment)?.words ?? (!data && at !== -1 ? tokens.slice(at) : null);
+    if (!words || !SCRIPT.test(words[0])) continue;
+    const { positional, flags } = parseFlags(words.slice(1));
     const [name] = positional;
     if (!PUBLISH_COMMANDS.has(name) || githubWriteDryRun(name, flags)) continue;
     if (name === "post") {
