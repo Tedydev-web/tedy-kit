@@ -138,6 +138,19 @@ test("a sources record serves only the file it was written for, even when two pa
   assert.deepEqual(pinnedSources(first, "relint"), { sources: [{ kind: "figma", file: "F", version: "1" }] });
 });
 
+test("the recheck compares with what the fetch returned, so a clone that keeps no remote-tracking ref still refuses", () => {
+  const sibling = siblingRepo();
+  const repos = repoOf(sibling.clone);
+  const { pins } = pinRepos([{ path: "src/a.ts", branch: "dev" }], repos);
+  git(sibling.clone, "config", "--unset-all", "remote.origin.fetch");
+  const cited = sibling.push("src/a.ts", "a2\n", "fix: change the writer");
+  const { refusals } = recheckRepos(pins, repos);
+  assert.equal(refusals.length, 1);
+  assert.match(refusals[0], new RegExp(`moved from ${pins[0].sha.slice(0, 8)} to ${cited.slice(0, 8)} since the draft was linted and changed what the draft cites`));
+  git(sibling.clone, "remote", "set-url", "origin", join(sibling.root, "gone.git"));
+  assert.match(recheckRepos(pins, repos).refusals[0], /^refused: \.\.\/backend origin\/dev could not be fetched to recheck the pin \(.+\); fetch it, then publish again$/);
+});
+
 test("linkedDocs finds the Figma files and Google Docs a tracker draft links", () => {
   const text = "See https://www.figma.com/design/AbC123/App?node-id=1-2&m=dev and https://www.figma.com/file/AbC123/x, (https://www.figma.com/design/Zz9/B?node-id=30-4) PRD https://docs.google.com/document/d/1x-Y_z/edit#heading";
   assert.deepEqual(linkedDocs(text), { figma: [{ file: "AbC123", nodes: ["1:2"] }, { file: "Zz9", nodes: ["30:4"] }], docs: ["1x-Y_z"] });

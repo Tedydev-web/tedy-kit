@@ -5,7 +5,8 @@ import { dirname, isAbsolute, join, resolve } from "node:path";
 import { STATE_DIR } from "./hook-io.mjs";
 
 const CITE = /`([^`]+):\d+(?:-\d+)?@([^`\s]+)`/g;
-const RECHECK = "re-read the changed sources, fix the draft, lint it again and ask the user again";
+const GIT_TIMEOUT_MS = 60_000;
+const RECHECK ="re-read the changed sources, fix the draft, lint it again and ask the user again";
 const FIGMA_LINK = /figma\.com\/(?:design|file|proto|board)\/([A-Za-z0-9]+)([^\s)"'`]*)/g;
 const DOC_LINK = /docs\.google\.com\/document\/(?:u\/\d+\/)?d\/([\w-]+)/g;
 
@@ -31,7 +32,7 @@ export function linkedDocs(text) {
 export const mapRepos = (map) =>
   (map?.repos ?? []).map((repo) => ({ name: repo.path, dir: isAbsolute(repo.path) ? repo.path : resolve(map.paths?.[0] ?? process.cwd(), repo.path), branch: repo.branch ?? "dev" }));
 
-export const runGit = (dir, args) => execFileSync("git", ["--literal-pathspecs", "-C", dir, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+export const runGit = (dir, args) => execFileSync("git", ["--literal-pathspecs", "-C", dir, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: GIT_TIMEOUT_MS }).trim();
 
 export function pinRepos(list, repos, git = runGit) {
   const pins = new Map();
@@ -62,8 +63,13 @@ export function recheckRepos(pins, repos, git = runGit) {
       continue;
     }
     const branch = pin.ref.slice("origin/".length);
-    git(repo.dir, ["fetch", "-q", "origin", branch]);
-    const now = git(repo.dir, ["rev-parse", `refs/remotes/origin/${branch}`]);
+    try {
+      git(repo.dir, ["fetch", "-q", "origin", branch]);
+    } catch (error) {
+      refusals.push(`refused: ${pin.repo} ${pin.ref} could not be fetched to recheck the pin (${error.code === "ETIMEDOUT" ? "timed out" : (error.stderr?.toString().trim() || error.message).split("\n")[0]}); fetch it, then publish again`);
+      continue;
+    }
+    const now = git(repo.dir, ["rev-parse", "FETCH_HEAD"]);
     if (now === pin.sha) continue;
     const moved = `${pin.repo} ${pin.ref} moved from ${pin.sha.slice(0, 8)} to ${now.slice(0, 8)} since the draft was linted`;
     const touched = git(repo.dir, ["diff", "--name-only", pin.sha, now, "--", ...pin.paths]).split("\n").filter(Boolean);
