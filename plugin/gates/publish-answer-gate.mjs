@@ -15,15 +15,25 @@ const NO_TRANSCRIPT = "tedy gate: publish approval is in answer mode and this se
 
 export const approvalLabels = (lang = chatLanguage()) => APPROVAL_KEYS.map((key) => labels(lang)[key]);
 
-export function needs(segment, dir, read) {
+function scriptCall(segment) {
   const tokens = tokenize(segment);
   const at = tokens.findIndex((token) => SCRIPT.test(basename(token)));
-  const command = { files: [], texts: [{ label: `the command \`${segment}\``, text: segment }] };
-  if (at === -1) return command;
-  const script = basename(tokens[at], ".mjs");
+  if (at === -1) return null;
   const { positional, flags } = parseFlags(tokens.slice(at + 1));
-  const [name, target] = positional;
-  if (script === "github-write" && githubWriteDryRun(name, flags)) return null;
+  return { script: basename(tokens[at], ".mjs"), name: positional[0], target: positional[1], flags };
+}
+
+const dryRun = (segment) => {
+  const call = scriptCall(segment);
+  return call?.script === "github-write" && githubWriteDryRun(call.name, call.flags);
+};
+
+export function needs(segment, dir, read) {
+  const command = { files: [], texts: [{ label: `the command \`${segment}\``, text: segment }] };
+  if (dryRun(segment)) return null;
+  const call = scriptCall(segment);
+  if (!call) return command;
+  const { script, name, target, flags } = call;
   const files = [];
   const load = (path) => {
     const file = resolve(dir, path);
@@ -79,10 +89,11 @@ export function check(input, accepted = approvalLabels()) {
   const command = input.tool_input?.command ?? "";
   const parts = [...walkParts(command, input.cwd ?? process.cwd(), false)];
   const read = (file) => readFileSync(file, "utf8");
-  const wanted = parts.filter((part) => publishes(part.text)).map((part) => needs(part.text, part.dir, read)).filter(Boolean);
-  if (!wanted.length) return null;
+  const publishing = parts.filter((part) => publishes(part.text) && !dryRun(part.text));
+  if (!publishing.length) return null;
   if (parts.some((part) => !part.changesDir && !publishes(part.text))) return { allow: false, reason: ALONE };
   if (!input.transcript_path) return { allow: false, reason: NO_TRANSCRIPT };
+  const wanted = publishing.map((part) => needs(part.text, part.dir, read));
   const approved = approvals(currentTurn(transcriptUntil(input.transcript_path, (tail) => tail.some(isUserPrompt))), accepted);
   const missing = wanted.flatMap(({ files, texts }) => {
     const since = Math.max(0, ...files.map((file) => statSync(file).mtimeMs));

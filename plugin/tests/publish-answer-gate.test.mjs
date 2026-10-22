@@ -121,6 +121,14 @@ test("a publish that shares its command with anything but cd is denied in answer
     assert.equal(result?.permissionDecision, "deny", command);
   }
   assert.equal(runGate(`cd . && ${POST}`, workspace(approvedTurn()))?.permissionDecision, "allow");
+  for (const command of ["grep x y; node /k/github-write.mjs reply 1 2 --body-file missing.md", "echo x; node /k/github-write.mjs reply 1 2 --body-file missing.md"]) {
+    const result = runGate(command, workspace([prompt(NOW - 60_000)]));
+    assert.equal(result?.permissionDecision, "deny", command);
+    assert.match(result.permissionDecisionReason, /of its own/, command);
+  }
+  const missing = runGate("node /k/github-write.mjs reply 1 2 --body-file missing.md", workspace([prompt(NOW - 60_000)]));
+  assert.equal(missing?.permissionDecision, "deny");
+  assert.match(missing.permissionDecisionReason, /could not check this publish command.*ENOENT/);
 });
 
 test("ask mode is unchanged: a covered publish passes to the ask rule, an uncovered one asks", () => {

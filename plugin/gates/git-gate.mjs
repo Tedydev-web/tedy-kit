@@ -472,7 +472,7 @@ function judge(input, tool) {
     if (!result.allow) logGate({ hook: "git-gate", decision: result.ask ? "ask" : "deny", tool, command: command.slice(0, 200), cwd: input.cwd, reason: result.reason });
     return result;
   } catch (error) {
-    const publish = publishes(String(command));
+    const publish = splitSegments(String(command), false).some(publishes);
     logGate({ hook: "git-gate", decision: answerMode && publish ? "deny" : "ask", tool, command: String(command).slice(0, 200), error: error.message });
     if (answerMode && publish) return { allow: false, reason: `tedy gate: could not check this publish command (${error.message}), so publish approval in answer mode refuses it. Fix what the error names, then ask for approval again.` };
     return { allow: false, ask: true, reason: publish ? `tedy gate: could not check this publish command (${error.message}). Approve only if you have seen the exact draft.` : `tedy gate: could not check this command (${error.message}). Allow it only if the user asked for it.` };
