@@ -20,7 +20,7 @@ function apiMessage(data, text) {
   return data?.message ?? data?.error?.message ?? data?.err ?? data?._embedded?.errors?.map((error) => error.message).join("; ") ?? text.slice(0, 200);
 }
 
-export async function requestJson(url, { method = "GET", headers = {}, body, retries = 3, wait = (seconds) => new Promise((done) => setTimeout(done, seconds * 1000)) } = {}) {
+export async function requestJson(url, { method = "GET", headers = {}, body, as = "json", retries = 3, wait = (seconds) => new Promise((done) => setTimeout(done, seconds * 1000)) } = {}) {
   for (let attempt = 0; ; attempt += 1) {
     const response = await fetch(url, {
       method,
@@ -38,6 +38,6 @@ export async function requestJson(url, { method = "GET", headers = {}, body, ret
       const limit = response.headers.get("x-figma-rate-limit-type");
       throw new Error(`${method} ${new URL(url).pathname} returned HTTP ${response.status}: ${redact(apiMessage(data, text))}${limit ? ` (rate limit type ${limit})` : ""}`);
     }
-    return data;
+    return as === "text" ? text : data;
   }
 }

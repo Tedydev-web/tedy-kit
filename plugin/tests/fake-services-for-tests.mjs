@@ -70,6 +70,7 @@ globalThis.fetch = async (input, options = {}) => {
     return json(web.document);
   }
   if (url.host === "www.googleapis.com") {
+    if (url.pathname.endsWith("/export")) return new Response(web.exported ?? "", { status: 200 });
     const reply = url.pathname.match(/\\/comments\\/([^/]+)\\/replies(?:\\/([^/]+))?$/);
     const comment = url.pathname.match(/\\/comments\\/([^/]+)$/);
     const thread = (id) => web.drive.find((item) => item.id === id);

@@ -83,7 +83,7 @@ test("a stale-source refusal leaves the approval ticket unused, on every path th
     const applyArgs = ["apply", "drafts.json", "--project", "183"];
     const opPins = await lint(w, "openproject", ["preview", "drafts.json", "--project", "183"]);
     assert.equal(opPins.length, 1);
-    assert.match(opPins[0], /^pinned: Google Doc D2 text [0-9a-f]{12}$/);
+    assert.match(opPins[0], /^pinned: Google Doc D2 text [0-9a-f]{12} via docs-text$/);
     w.file("web.json", JSON.stringify({ ...WEB, document: textDoc("B\n") }));
     w.approve([renderWorkPackageDraft(task, { action: "create", id: null }), ...opPins, w.line("openproject", applyArgs)].join("\n"));
     op.calls.length = 0;
@@ -197,6 +197,26 @@ test("several Doc replies and anchors in one batch do not refuse each other, bec
     w.file("web.json", JSON.stringify({ ...WEB, drive: [thread], document: commented }));
   }
   assert.equal(w.writes().length, 3);
+});
+
+test("without an own OAuth client a Doc is pinned by its Drive text export: replies in a batch pass, a text change refuses", async () => {
+  const thread = { id: "c1", content: "Which wallet?", resolved: false, author: { me: false, displayName: "PM" }, replies: [], createdTime: "2026-10-01T00:00:00Z" };
+  const w = world({ mode: "ask", web: { drive: [thread], document: textDoc("A\n"), exported: "Crypto takes the price in USDT\n" } });
+  w.file("bin/rclone", "#!/usr/bin/env node\nif (process.argv[2] === \"config\") process.stdout.write(JSON.stringify({ gdrive: { token: JSON.stringify({ access_token: \"a\", refresh_token: \"r\", expiry: \"2999-01-01T00:00:00Z\" }) } }));\n");
+  const bodies = ["Which wallet pays the fee?", "Is the fee shown before paying?", "Does USDT cover the fee too?"];
+  for (const [index, body] of bodies.entries()) w.file(`g${index}.md`, `${body}\n`);
+  const pins = await lint(w, "draft-lint", ["doc-comment", "g0.md", "--doc", "D"]);
+  assert.match(pins[0], /^pinned: Google Doc D text [0-9a-f]{12} via drive-export$/);
+  for (const index of [1, 2]) await lint(w, "draft-lint", ["doc-comment", `g${index}.md`, "--doc", "D"]);
+  for (const index of [0, 1]) {
+    const result = await w.run("gdoc-comments", ["reply", "c1", "--body-file", `g${index}.md`, "--doc", "D"]);
+    assert.equal(result.code, 0, result.out);
+  }
+  w.file("web.json", JSON.stringify({ ...WEB, drive: [thread], document: textDoc("A\n"), exported: "Crypto takes the price in BTC\n" }));
+  const refused = await w.run("gdoc-comments", ["reply", "c1", "--body-file", "g2.md", "--doc", "D"]);
+  assert.notEqual(refused.code, 0);
+  assert.match(refused.out, /refused: Google Doc D text changed from [0-9a-f]{12} to [0-9a-f]{12}/);
+  assert.equal(w.writes().length, 2);
 });
 
 test("a ready PR body refresh needs --repo and a ticket in answer mode, and neither in ask mode", async () => {

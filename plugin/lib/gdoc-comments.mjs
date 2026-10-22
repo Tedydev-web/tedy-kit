@@ -81,22 +81,41 @@ const runsText = (node) => (Array.isArray(node) ? node.map(runsText).join("") : 
 
 const tabsText = (tabs) => tabs.map((tab) => `${tab.tabProperties?.tabId}\n${runsText(tab.documentTab?.body ?? {})}\n${tabsText(tab.childTabs ?? [])}`).join("\n");
 
-async function docText(google) {
-  let document;
-  try {
-    document = await google.request(`${DOCS}/documents/${google.doc}?includeTabsContent=true&suggestionsViewMode=PREVIEW_WITHOUT_SUGGESTIONS`);
-  } catch (error) {
-    throw new Error(`refused: the text of Google Doc ${google.doc} could not be read (${error.message}), so its pin cannot be taken or checked`);
+const sha256 = (text) => createHash("sha256").update(text).digest("hex");
+
+const TEXT_READERS = {
+  "docs-text": async (google) => {
+    const document = await google.request(`${DOCS}/documents/${google.doc}?includeTabsContent=true&suggestionsViewMode=PREVIEW_WITHOUT_SUGGESTIONS`);
+    if (!Array.isArray(document?.tabs)) throw new Error("the Docs API returned no tabs");
+    return sha256(tabsText(document.tabs));
+  },
+  "drive-export": async (google) => {
+    const text = await google.request(`${DRIVE}/files/${google.doc}/export?mimeType=text/plain`, { as: "text" });
+    if (typeof text !== "string") throw new Error("the Drive export returned no text");
+    return sha256(text);
+  },
+};
+
+export async function gdocPin(google) {
+  const failures = [];
+  for (const method of google.ownClient ? ["docs-text", "drive-export"] : ["drive-export"]) {
+    try {
+      return { kind: "gdoc", doc: google.doc, method, text: await TEXT_READERS[method](google) };
+    } catch (error) {
+      failures.push(`${method}: ${error.message}`);
+    }
   }
-  if (!Array.isArray(document?.tabs)) throw new Error(`refused: Google Doc ${google.doc} returned no tabs, so its pin cannot be taken or checked`);
-  return createHash("sha256").update(tabsText(document.tabs)).digest("hex");
+  throw new Error(`refused: the text of Google Doc ${google.doc} could not be read (${failures.join("; ")}), so its pin cannot be taken`);
 }
 
-export const gdocPin = async (google) => ({ kind: "gdoc", doc: google.doc, text: await docText(google) });
-
 export async function recheckGdoc(google, pin, kept) {
-  if (typeof pin.text !== "string") return { refusal: `refused: the pin of Google Doc ${pin.doc} predates text pins; lint the draft again and ask the user again` };
-  const now = await docText(google);
+  if (typeof pin.text !== "string" || !Object.hasOwn(TEXT_READERS, pin.method ?? "")) return { refusal: `refused: the pin of Google Doc ${pin.doc} predates text pins; lint the draft again and ask the user again` };
+  let now;
+  try {
+    now = await TEXT_READERS[pin.method](google);
+  } catch (error) {
+    throw new Error(`refused: the text of Google Doc ${pin.doc} could not be read through ${pin.method} (${error.message}), so its pin cannot be checked`);
+  }
   if (now === pin.text) return {};
   return versionCheck(`Google Doc ${pin.doc} text`, pin.text.slice(0, 12), now.startsWith(pin.text.slice(0, 12)) ? now : now.slice(0, 12), kept ? { kept } : {});
 }

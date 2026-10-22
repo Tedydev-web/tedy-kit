@@ -43,22 +43,40 @@ test("the Figma recheck compares the cited node at the pinned and the latest ver
 const paragraph = (text, extra = {}) => ({ paragraph: { elements: [{ startIndex: 1, textRun: { content: text, ...extra } }] } });
 const docBody = (texts, extra = {}) => ({ documentId: "D1", ...extra, tabs: texts.map((text, index) => ({ tabProperties: { tabId: `t.${index}` }, documentTab: { body: { content: [paragraph(text)] } }, childTabs: [] })) });
 
-function googleStub(document) {
+function googleStub(document, { ownClient = true, exported = new Error("HTTP 404") } = {}) {
   const calls = [];
-  const request = async (url) => {
+  const request = async (url, options = {}) => {
     calls.push(url);
     if (url === "https://docs.googleapis.com/v1/documents/D1?includeTabsContent=true&suggestionsViewMode=PREVIEW_WITHOUT_SUGGESTIONS") {
       if (document instanceof Error) throw document;
       return document;
     }
+    if (url === "https://www.googleapis.com/drive/v3/files/D1/export?mimeType=text/plain" && options.as === "text") {
+      if (exported instanceof Error) throw exported;
+      return exported;
+    }
     throw new Error(`unexpected ${url}`);
   };
-  return { google: { doc: "D1", request }, calls };
+  return { google: { doc: "D1", ownClient, request }, calls };
 }
+
+test("without an own OAuth client, or when the Docs API refuses, the pin is the SHA-256 of the Drive text/plain export", async () => {
+  const viewer = await gdocPin(googleStub(new Error("HTTP 403"), { ownClient: false, exported: "Crypto takes the price in USDT\n" }).google);
+  assert.deepEqual(Object.keys(viewer), ["kind", "doc", "method", "text"]);
+  assert.equal(viewer.method, "drive-export");
+  const denied = googleStub(new Error("GET /v1/documents/D1 returned HTTP 403: The caller does not have permission"), { exported: "Crypto takes the price in USDT\n" });
+  assert.deepEqual(await gdocPin(denied.google), viewer);
+  assert.equal((await gdocPin(googleStub(docBody(["A\n"]), { exported: "Crypto takes the price in USDT\n" }).google)).method, "docs-text");
+  assert.deepEqual(await recheckGdoc(googleStub(docBody(["changed\n"]), { exported: "Crypto takes the price in USDT\n" }).google, viewer), {});
+  assert.match((await recheckGdoc(googleStub(new Error("x"), { ownClient: false, exported: "Crypto takes the price in BTC\n" }).google, viewer)).refusal, /^refused: Google Doc D1 text changed from [0-9a-f]{12} to [0-9a-f]{12} since the draft was linted/);
+  await assert.rejects(gdocPin(googleStub(new Error("HTTP 403"), { exported: new Error("HTTP 403") }).google), /^Error: refused: the text of Google Doc D1 could not be read \(docs-text: .*; drive-export: .*\)/);
+  await assert.rejects(recheckGdoc(googleStub(docBody(["A\n"]), { exported: new Error("HTTP 500") }).google, viewer), /^Error: refused: the text of Google Doc D1 could not be read through drive-export/);
+});
 
 test("a Google Doc pin is the SHA-256 of the text of every tab, read without suggestions, never a revision field", async () => {
   const pin = await gdocPin(googleStub(docBody(["Crypto takes the price in USDT\n", "Fees\n"])).google);
-  assert.deepEqual(Object.keys(pin), ["kind", "doc", "text"]);
+  assert.deepEqual(Object.keys(pin), ["kind", "doc", "method", "text"]);
+  assert.equal(pin.method, "docs-text");
   assert.match(pin.text, /^[0-9a-f]{64}$/);
   const same = { ...docBody(["Crypto takes the price in USDT\n", "Fees\n"], { revisionId: "r9", namedRanges: { kix: { name: "kix" } }, suggestedDocumentStyleChanges: { s1: {} } }) };
   same.tabs[0].documentTab.body.content[0].paragraph.elements[0].textRun.suggestedInsertionIds = ["s1"];
@@ -75,6 +93,7 @@ test("the Google Doc recheck refuses a text change for an account that gets no r
   assert.match(changed.refusal, new RegExp(`^refused: Google Doc D1 text changed from ${short} to [0-9a-f]{12} since the draft was linted; ${RECHECK}$`));
   assert.match((await recheckGdoc(googleStub(docBody(["B\n"])).google, pin, "every highlighted passage still appears exactly once")).notice, /^notice: Google Doc D1 text changed from .* every highlighted passage still appears exactly once, so it posts as drafted$/);
   assert.match((await recheckGdoc(googleStub(docBody(["A\n"])).google, { kind: "gdoc", doc: "D1", field: "revisionId" }, "kept")).refusal, /predates text pins/);
+  assert.match((await recheckGdoc(googleStub(docBody(["A\n"])).google, { kind: "gdoc", doc: "D1", text: pin.text }, "kept")).refusal, /predates text pins/);
 });
 
 test("a Google Doc whose text cannot be read gives no pin and no pass", async () => {
