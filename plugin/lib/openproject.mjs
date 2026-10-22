@@ -94,7 +94,7 @@ async function apply(client, project, drafts, file) {
     for (const [slug] of moved) console.log(`refused: ${slug} changed in OpenProject since the preview; read its activity, then preview again`);
     return 1;
   }
-  consumeApproval(process.argv, drafts.map(renderWorkPackageDraft));
+  consumeApproval(process.argv, drafts.map((draft, index) => renderWorkPackageDraft(draft, plan[index])));
   const path = sidecarPath(client.host, project);
   const created = {};
   const expected = {};
@@ -342,10 +342,10 @@ async function main([command, target, ...rest]) {
     const drafts = JSON.parse(readFileSync(target, "utf8"));
     const project = projectOf(flags);
     if (command === "preview") {
-      const { failed, locks } = await check(client, project, drafts);
+      const { failed, locks, plan } = await check(client, project, drafts);
       if (!failed && snapshotOnce(target, readFileSync(target, "utf8"))) console.log("original drafts frozen for the edit log");
       if (!failed) writeFileSync(locksPath(target), JSON.stringify(locks));
-      if (!failed) console.log(approvalLines(drafts.map(renderWorkPackageDraft)));
+      if (!failed) console.log(approvalLines(drafts.map((draft, index) => renderWorkPackageDraft(draft, plan[index]))));
       return failed ? 1 : 0;
     }
     const original = frozenOriginal(target);

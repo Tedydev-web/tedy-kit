@@ -9,6 +9,7 @@ const DIFF = "diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n
 const DRAFT = "# PR #701: comment line by line (head abc1234)\n\n## 1. `src/a.ts:10`\nThe label is wrong.\n";
 const DESCRIPTION = "## Goal\nShow the pop-up when a 4th vault is started on Pro.\n\n## Checklist\n- [ ] Show the pop-up.\n\n## AC\n- [ ] On Pro, a 4th vault cannot be started.";
 const TASK = { slug: "task-fe-a", type: "Task", subject: "[FE] Vault limit pop-up on Pro", description: DESCRIPTION, estimate: 1 };
+const CREATE = { action: "create", id: null };
 const ITEM = { group: "A", epic: "09", where: "UC_SW_13 BR1", quote: "Crypto takes the price in USDT", comment: "Which wallet pays the fee?" };
 const TAB = "Crypto takes the price in USDT and the fee in GRAM from the payer\n";
 const DOCUMENT = { tabs: [{ tabProperties: { tabId: "t.1" }, documentTab: { body: { content: [{ paragraph: { elements: [{ startIndex: 1, textRun: { content: TAB } }] } }] } } }] };
@@ -58,7 +59,7 @@ test("openproject apply, set, relation, relation-delete, comment, comment-edit a
     w.file("drafts.json", JSON.stringify([TASK]));
     await w.run("openproject", ["preview", "drafts.json", "--project", "183"]);
     reset();
-    await onceOnly(w, "openproject", ["apply", "drafts.json", "--project", "183"], (line) => `${renderWorkPackageDraft(TASK)}\n${line}`, count);
+    await onceOnly(w, "openproject", ["apply", "drafts.json", "--project", "183"], (line) => `${renderWorkPackageDraft(TASK, CREATE)}\n${line}`, count);
     reset();
     await onceOnly(w, "openproject", ["rollback", "--project", "183", "--apply"], (line) => `${renderRollbackItem({ id: 30000, subject: TASK.subject })}\n${line}`, count);
     reset();
@@ -147,7 +148,7 @@ test("a run refused before it writes leaves its ticket unused", async () => {
     const w = world({ opUrl: op.url });
     w.file("drafts.json", JSON.stringify([TASK]));
     await w.run("openproject", ["preview", "drafts.json", "--project", "183"]);
-    w.approve(`${renderWorkPackageDraft(TASK)}\n${w.line("openproject", ["apply", "drafts.json", "--project", "183"])}`);
+    w.approve(`${renderWorkPackageDraft(TASK, CREATE)}\n${w.line("openproject", ["apply", "drafts.json", "--project", "183"])}`);
     await w.run("openproject", ["apply", "drafts.json", "--project", "183"]);
     const rollback = ["rollback", "--project", "183", "--apply"];
     w.approve(`${renderRollbackItem({ id: 30000, subject: TASK.subject })}\n${w.line("openproject", rollback)}`);
@@ -160,7 +161,9 @@ test("a run refused before it writes leaves its ticket unused", async () => {
 
 test("the rendered approval lines name every field a write sends", () => {
   const full = { slug: "task-fe-b", id: 21298, type: "Task", subject: "[FE] Màn rỗng", status: "In progress", priority: "High", assignee: "Hoàng Lâm", startDate: "2026-10-23", dueDate: "2026-10-24", estimate: 1.5, parent: 21270, relates: [21294, 21295], blocks: [], fields: { Environment: "Dev" }, description: "## Goal\nShow it." };
-  assert.equal(renderWorkPackageDraft(full), ["task task-fe-b", "id: 21298", "type: Task", "subject: [FE] Màn rỗng", "status: In progress", "priority: High", "assignee: Hoàng Lâm", "start: 2026-10-23", "due: 2026-10-24", "estimate: 1.5", "parent: 21270", "relates: 21294, 21295", "fields: {\"Environment\":\"Dev\"}", "description:", "## Goal", "Show it."].join("\n"));
+  assert.equal(renderWorkPackageDraft(full, { action: "update", id: 21298 }), ["task task-fe-b", "action update #21298", "id: 21298", "type: Task", "subject: [FE] Màn rỗng", "status: In progress", "priority: High", "assignee: Hoàng Lâm", "start: 2026-10-23", "due: 2026-10-24", "estimate: 1.5", "parent: 21270", "relates: 21294, 21295", "fields: {\"Environment\":\"Dev\"}", "description:", "## Goal", "Show it."].join("\n"));
+  assert.match(renderWorkPackageDraft(TASK, CREATE), /^task task-fe-a\naction create\n/);
+  assert.match(renderWorkPackageDraft({ ...TASK, merge: 21000 }, { action: "merge", id: 21000 }), /^task task-fe-a\naction merge #21000\n/);
   assert.equal(renderRollbackItem({ id: 30000, subject: "[FE] x" }), "#30000 [FE] x");
   assert.equal(renderDocComment(ITEM, "t.1"), "EPIC 09 · tab t.1 · UC_SW_13 BR1\nquote: Crypto takes the price in USDT\nWhich wallet pays the fee?");
 });
@@ -171,12 +174,14 @@ test("apply, rollback and doc-comment-file tickets need the rendered lines, whic
     const w = world({ opUrl: op.url });
     w.file("drafts.json", JSON.stringify([{ ...TASK, assignee: "Hoàng Lâm" }]));
     const preview = await w.run("openproject", ["preview", "drafts.json", "--project", "183"]);
-    assert.ok(preview.out.includes(`approval lines:\n${renderWorkPackageDraft({ ...TASK, assignee: "Hoàng Lâm" })}`), preview.out);
+    assert.ok(preview.out.includes(`approval lines:\n${renderWorkPackageDraft({ ...TASK, assignee: "Hoàng Lâm" }, CREATE)}`), preview.out);
+    assert.match(preview.out, /approval lines:\ntask task-fe-a\naction create\n/);
+    w.approve(`${renderWorkPackageDraft({ ...TASK, assignee: "Hoàng Lâm" }, CREATE).replace("action create\n", "")}\n${w.line("openproject", ["apply", "drafts.json", "--project", "183"])}`, "Q0?");
     const apply = ["apply", "drafts.json", "--project", "183"];
     w.approve(`${TASK.subject}\n${DESCRIPTION}\n${w.line("openproject", apply)}`);
-    w.approve(`${renderWorkPackageDraft(TASK)}\n${w.line("openproject", apply)}`, "Q2?");
+    w.approve(`${renderWorkPackageDraft(TASK, CREATE)}\n${w.line("openproject", apply)}`, "Q2?");
     assert.match((await w.run("openproject", apply)).out, /no unused approval/);
-    w.approve(`${renderWorkPackageDraft({ ...TASK, assignee: "Hoàng Lâm" })}\n${w.line("openproject", apply)}`, "Q3?");
+    w.approve(`${renderWorkPackageDraft({ ...TASK, assignee: "Hoàng Lâm" }, CREATE)}\n${w.line("openproject", apply)}`, "Q3?");
     assert.match((await w.run("openproject", apply)).out, /verified 1\/1/);
     const rollback = ["rollback", "--project", "183", "--apply"];
     assert.ok((await w.run("openproject", ["rollback", "--project", "183"])).out.includes(`approval lines:\n${renderRollbackItem({ id: 30000, subject: TASK.subject })}`));
@@ -214,7 +219,7 @@ test("in answer mode a write whose target would come from the cwd or the map mus
     const w = world({ opUrl: op.url, map: { name: "p", repos: [{ path: ".", role: "FE" }], language: { pr_review: "en", doc_figma: "en" }, tracker: { type: "openproject", project: "183" } } });
     w.file("drafts.json", JSON.stringify([TASK]));
     await w.run("openproject", ["preview", "drafts.json"]);
-    w.approve(`${renderWorkPackageDraft(TASK)}\n${w.line("openproject", ["apply", "drafts.json"])}`);
+    w.approve(`${renderWorkPackageDraft(TASK, CREATE)}\n${w.line("openproject", ["apply", "drafts.json"])}`);
     assert.match((await w.run("openproject", ["apply", "drafts.json"])).out, /name the write target with --project/);
     assert.match((await w.run("openproject", ["rollback", "--apply"])).out, /name the write target with --project/);
     assert.deepEqual(op.calls, []);

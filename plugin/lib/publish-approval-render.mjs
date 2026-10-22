@@ -25,9 +25,10 @@ const shown = (value) => {
 
 const present = (value) => value !== undefined && !(Array.isArray(value) && !value.length);
 
-export function renderWorkPackageDraft(draft) {
+export function renderWorkPackageDraft(draft, step) {
   const extra = Object.keys(draft).filter((key) => !KNOWN.has(key)).sort().map((key) => [key, key]);
-  const lines = [`task ${draft.slug}`, ...[...FIELDS, ...extra].filter(([key]) => present(draft[key])).map(([key, label]) => `${label}: ${shown(draft[key])}`)];
+  const action = step.action === "create" ? "action create" : `action ${step.action} #${step.id}`;
+  const lines = [`task ${draft.slug}`, action, ...[...FIELDS, ...extra].filter(([key]) => present(draft[key])).map(([key, label]) => `${label}: ${shown(draft[key])}`)];
   if (typeof draft.description === "string") lines.push("description:", ...draft.description.split("\n"));
   return lines.join("\n");
 }
