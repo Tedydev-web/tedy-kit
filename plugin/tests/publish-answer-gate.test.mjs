@@ -147,6 +147,23 @@ test("gh pr merge still asks in answer mode, and a plain command gets no decisio
   assert.equal(runGate(`${POST} --dry-run`, ws), null);
 });
 
+test("openproject apply needs every draft's subject and description, not just the command", () => {
+  const command = "node /k/openproject.mjs apply drafts.json";
+  const question = "Tạo 1 task?";
+  const ws = workspace([]);
+  writeFileSync(join(ws.dir, "drafts.json"), JSON.stringify([{ slug: "a", subject: "[FE] Pop-up giới hạn", description: "## Goal\nhiện pop-up khi hết lượt" }]));
+  utimesSync(join(ws.dir, "drafts.json"), new Date(NOW - 30_000), new Date(NOW - 30_000));
+  const turn = (preview) => [prompt(NOW - 60_000), asked(NOW - 20_000, [{ label: VI["approve.all"], description: "Tạo", preview }, { label: VI["approve.hold"], description: "Chưa" }], "toolu_4", question), answered(NOW - 19_000, { [question]: VI["approve.all"] }, { id: "toolu_4" })];
+  const gate = (preview) => {
+    writeFileSync(ws.transcript, turn(preview).map((entry) => JSON.stringify(entry)).join("\n") + "\n");
+    return runGate(command, ws);
+  };
+  const denied = gate(`Tạo 1 task\n\n${command}`);
+  assert.equal(denied?.permissionDecision, "deny");
+  assert.match(denied.permissionDecisionReason, /subject of draft 1 of .*drafts\.json/);
+  assert.equal(gate(`1. [FE] Pop-up giới hạn\n\n## Goal\nhiện pop-up khi hết lượt\n\n${command}`)?.permissionDecision, "allow");
+});
+
 test("--dry-run skips the approval only on post and pr-body, and only as a bare flag", () => {
   const ws = workspace([prompt(NOW - 60_000)]);
   writeFileSync(join(ws.dir, "b.md"), "ok a\n");
@@ -168,6 +185,7 @@ test("the required texts are every body that goes out, else the command", () => 
     [join(dir, "d.md")]: DRAFT,
     [join(dir, "items.json")]: JSON.stringify({ items: [{ comment: " đã đăng ", posted: { id: "x" } }, { comment: "  Câu này hỏi lại PM ạ  " }] }),
     [join(dir, "b.md")]: "trả lời\n",
+    [join(dir, "drafts.json")]: JSON.stringify([{ slug: "a", subject: "[FE] Pop-up giới hạn", description: "## Goal\nhiện pop-up" }, { slug: "b", id: 21298, subject: "[FE] Màn rỗng" }]),
   };
   const read = (file) => files[file];
   const texts = (command) => needs(command, dir, read)?.texts.map((item) => item.text);
@@ -175,7 +193,7 @@ test("the required texts are every body that goes out, else the command", () => 
   assert.deepEqual(texts("node /k/doc-comment-file.mjs post items.json --html x.html --apply"), ["Câu này hỏi lại PM ạ"]);
   assert.deepEqual(texts("node /k/gdoc-comments.mjs anchor --tab t.1 --quote 'x y' --body-file b.md"), ["trả lời\n"]);
   assert.deepEqual(texts("node /k/github-write.mjs reply 1 2 --body 'ok a'"), ["ok a"]);
-  assert.deepEqual(texts("node /k/openproject.mjs apply drafts.json"), ["node /k/openproject.mjs apply drafts.json"]);
+  assert.deepEqual(texts("node /k/openproject.mjs apply drafts.json"), ["[FE] Pop-up giới hạn", "## Goal\nhiện pop-up", "[FE] Màn rỗng"]);
   assert.deepEqual(needs("node /k/openproject.mjs apply drafts.json", dir, read).files, [join(dir, "drafts.json")]);
   assert.equal(needs("node /k/github-write.mjs post d.md --dry-run", dir, read), null);
 });

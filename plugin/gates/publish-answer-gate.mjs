@@ -38,7 +38,8 @@ export function needs(segment, dir, read) {
     const { file, text } = load(target);
     texts.push(...JSON.parse(text).items.filter((item) => !item.posted).map((item, index) => ({ label: `comment ${index + 1} of ${file}`, text: item.comment.trim() })));
   } else if (script === "openproject" && name === "apply") {
-    files.push(resolve(dir, target));
+    const { file, text } = load(target);
+    texts.push(...JSON.parse(text).flatMap((draft, index) => ["subject", "description"].filter((key) => typeof draft[key] === "string").map((key) => ({ label: `the ${key} of draft ${index + 1} of ${file}`, text: draft[key] }))));
   }
   if (flags["body-file"] !== undefined) {
     const { file, text } = load(flags["body-file"]);
