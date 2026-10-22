@@ -5,6 +5,7 @@ import { closedStatuses, closestWorkPackage, listWorkPackages } from "./openproj
 import { deleteRelation, setRelation } from "./openproject-relation.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval } from "./publish-approval-ticket.mjs";
+import { approvalLines, renderRollbackItem, renderWorkPackageDraft } from "./publish-approval-render.mjs";
 import { snapshotOnce, snapshotPath } from "./draft-lint.mjs";
 import { appendEditLog, frozenOriginal, labelText } from "./edit-log.mjs";
 import { chatLanguage } from "./labels.mjs";
@@ -93,7 +94,7 @@ async function apply(client, project, drafts, file) {
     for (const [slug] of moved) console.log(`refused: ${slug} changed in OpenProject since the preview; read its activity, then preview again`);
     return 1;
   }
-  consumeApproval(process.argv, drafts.flatMap((draft) => [draft.subject, draft.description].filter((text) => typeof text === "string")));
+  consumeApproval(process.argv, drafts.map(renderWorkPackageDraft));
   const path = sidecarPath(client.host, project);
   const created = {};
   const expected = {};
@@ -292,13 +293,14 @@ async function rollback(client, project, flags) {
     return 1;
   }
   if (flags.apply === undefined) {
+    console.log(approvalLines(items.map(renderRollbackItem)));
     console.log(`WRITE → ${client.host} · project ${project} : ${items.length} ${action}; run again with --apply${action === "delete" ? " --delete" : ""}`);
     return 0;
   }
   const statuses = (await client.request("/api/v3/statuses"))._embedded.elements.filter((status) => status.isClosed);
   const closedStatus = statuses.find((status) => status.name.toLowerCase() === "closed") ?? statuses[0];
   if (action === "close" && !closedStatus) throw new Error("this instance has no closed status");
-  consumeApproval(process.argv, []);
+  consumeApproval(process.argv, items.map(renderRollbackItem));
   const done = [];
   const failed = [];
   for (const item of items.toReversed()) {
@@ -342,6 +344,7 @@ async function main([command, target, ...rest]) {
       const { failed, locks } = await check(client, project, drafts);
       if (!failed && snapshotOnce(target, readFileSync(target, "utf8"))) console.log("original drafts frozen for the edit log");
       if (!failed) writeFileSync(locksPath(target), JSON.stringify(locks));
+      if (!failed) console.log(approvalLines(drafts.map(renderWorkPackageDraft)));
       return failed ? 1 : 0;
     }
     const original = frozenOriginal(target);

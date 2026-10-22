@@ -9,6 +9,7 @@ import { slugOf, stamp } from "./handoff.mjs";
 import { fetchTab, quoteCount } from "./prd-section.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval } from "./publish-approval-ticket.mjs";
+import { approvalLines, renderDocComment } from "./publish-approval-render.mjs";
 
 const GROUPS = ["A", "B"];
 
@@ -93,11 +94,11 @@ async function post(itemsFile, flags) {
     console.error(`doc-comment-file: nothing posted; fix these first:\n${problems.map((problem) => `- ${problem}`).join("\n")}`);
     return 1;
   }
-  for (const item of todo) console.log(`- EPIC ${item.epic} · ${item.where} · tab ${tabOf(item.epic)}\n  [${item.quote.slice(0, 80)}]\n  ${item.comment.trim().replace(/\s+/g, " ")}`);
+  console.log(approvalLines(todo.map((item) => renderDocComment(item, tabOf(item.epic)))));
   console.log(`WRITE → Google Doc ${map.prd.doc} : ${todo.length} anchored comments (${data.items.length - todo.length} already posted)`);
   if (!flags.apply) return 0;
   const google = await session({ doc: map.prd.doc }, true);
-  consumeApproval(process.argv, todo.map((item) => item.comment.trim()));
+  consumeApproval(process.argv, todo.map((item) => renderDocComment(item, tabOf(item.epic))));
   const save = () => {
     writeFileSync(itemsFile, `${JSON.stringify(data, null, 2)}\n`);
     const lang = chatLanguage();
