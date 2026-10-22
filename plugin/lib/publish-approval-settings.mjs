@@ -14,7 +14,9 @@ export const KIT_PUBLISH_ASK_RULES = Object.freeze([
   "Bash(*doc-comment-file.mjs*post*--apply*)",
 ]);
 
-export const stateDenyRules = (state = STATE_DIR) => [`Edit(/${resolve(state, "approvals")}/**)`, `Edit(/${resolve(state, "pr-bodies")}/**)`, `Edit(/${resolve(state, "drafts")}/*.sources.json)`];
+export const stateDenyRules = (state = STATE_DIR) => [`Edit(/${resolve(state, "approvals")}/**)`, `Edit(/${resolve(state, "pr-bodies")}/**)`, `Edit(/${resolve(state, "drafts")}/**)`];
+
+const retiredDenyRules = (state = STATE_DIR) => [`Edit(/${resolve(state, "drafts")}/*.sources.json)`];
 
 export const stateDenyOn = (deny) => stateDenyRules().every((rule) => deny.includes(rule));
 
@@ -37,11 +39,14 @@ export function readSettings(file) {
 
 export function plannedPermissions({ ask, deny }, mode) {
   const rules = stateDenyRules();
-  if (mode === "answer") return { ask: ask.filter((rule) => !KIT_PUBLISH_ASK_RULES.includes(rule)), deny: [...deny, ...rules.filter((rule) => !deny.includes(rule))] };
-  return { ask: [...ask, ...KIT_PUBLISH_ASK_RULES.filter((rule) => !ask.includes(rule))], deny: deny.filter((rule) => !rules.includes(rule)) };
+  const kept = deny.filter((rule) => !retiredDenyRules().includes(rule));
+  if (mode === "answer") return { ask: ask.filter((rule) => !KIT_PUBLISH_ASK_RULES.includes(rule)), deny: [...kept, ...rules.filter((rule) => !kept.includes(rule))] };
+  return { ask: [...ask, ...KIT_PUBLISH_ASK_RULES.filter((rule) => !ask.includes(rule))], deny: kept.filter((rule) => !rules.includes(rule)) };
 }
 
-export const unchanged = (current, next) => current.ask.length === next.ask.length && current.deny.length === next.deny.length;
+const sameRules = (a, b) => a.length === b.length && a.every((rule, index) => rule === b[index]);
+
+export const unchanged = (current, next) => sameRules(current.ask, next.ask) && sameRules(current.deny, next.deny);
 
 export const leftoverKitRules = (ask) => ask.filter((rule) => typeof rule === "string" && !KIT_PUBLISH_ASK_RULES.includes(rule) && KIT_SCRIPT.test(rule));
 
