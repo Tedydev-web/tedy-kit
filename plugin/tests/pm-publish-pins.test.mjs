@@ -83,15 +83,15 @@ test("a Google Doc reply refuses when the Doc changed after the lint pinned it",
   const { work, run } = setup();
   writeFileSync(join(work, "r.txt"), "Mình chốt theo Figma nha\n");
   const doc = (version) => [
-    ["GET", "/drive/v3/files/D1?fields=version", { version: String(version) }],
+    ["GET", "/v1/documents/D1?includeTabsContent=true", { tabs: [{ tabProperties: { tabId: "t.0" }, documentTab: { body: { content: [{ paragraph: { elements: [{ textRun: { content: `Crypto ${version}\n` } }] } }] } } }] }],
     ["GET", "/drive/v3/files/D1/comments", { comments: [{ id: "t1", content: "q", resolved: false, author: { displayName: "PM", me: false }, replies: [{ id: "x", content: "Mình chốt theo Figma nha", author: { displayName: "me", me: true } }] }] }],
     ["POST", "/drive/v3/files/D1/comments/t1/replies", { id: "x" }],
   ];
   const lint = run("draft-lint", ["doc-comment", "r.txt"], doc(7));
   assert.equal(lint.status, 0, lint.out);
-  assert.match(lint.out, /^pinned: Google Doc D1 version 7$/m);
+  assert.match(lint.out, /^pinned: Google Doc D1 text [0-9a-f]{12}$/m);
   const changed = run("gdoc-comments", ["reply", "t1", "--body-file", "r.txt"], doc(8).map((route, index) => (index === 1 ? [route[0], route[1], { comments: [] }] : route)));
   assert.equal(changed.status, 1);
-  assert.match(changed.out, /^gdoc-comments: refused: Google Doc D1 version changed from 7 to 8 since the draft was linted; re-read the changed sources, fix the draft, lint it again and ask the user again$/m);
+  assert.match(changed.out, /^gdoc-comments: refused: Google Doc D1 text changed from [0-9a-f]{12} to [0-9a-f]{12} since the draft was linted; re-read the changed sources, fix the draft, lint it again and ask the user again$/m);
   assert.equal(changed.posts.length, 0);
 });

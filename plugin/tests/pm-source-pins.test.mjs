@@ -40,32 +40,49 @@ test("the Figma recheck compares the cited node at the pinned and the latest ver
   assert.deepEqual(await recheckFigma(figmaStub({ version: "v2" }).figma, pin, []), { refusal: `refused: Figma F1 version changed from v1 to v2 since the draft was linted and the draft cites no node to compare; ${RECHECK}` });
 });
 
-function googleStub({ ownClient, revisionId = "r1", version = 7 }) {
+const paragraph = (text, extra = {}) => ({ paragraph: { elements: [{ startIndex: 1, textRun: { content: text, ...extra } }] } });
+const docBody = (texts, extra = {}) => ({ documentId: "D1", ...extra, tabs: texts.map((text, index) => ({ tabProperties: { tabId: `t.${index}` }, documentTab: { body: { content: [paragraph(text)] } }, childTabs: [] })) });
+
+function googleStub(document) {
   const calls = [];
   const request = async (url) => {
     calls.push(url);
-    if (url.startsWith("https://docs.googleapis.com/v1/documents/D1?fields=revisionId")) return { revisionId };
-    if (url.startsWith("https://www.googleapis.com/drive/v3/files/D1?fields=version")) return { version: String(version) };
+    if (url === "https://docs.googleapis.com/v1/documents/D1?includeTabsContent=true&suggestionsViewMode=PREVIEW_WITHOUT_SUGGESTIONS") {
+      if (document instanceof Error) throw document;
+      return document;
+    }
     throw new Error(`unexpected ${url}`);
   };
-  return { google: { doc: "D1", ownClient, request }, calls };
+  return { google: { doc: "D1", request }, calls };
 }
 
-test("a Google Doc pin is the Docs revisionId with an own OAuth client, else the Drive file version", async () => {
-  assert.deepEqual(await gdocPin(googleStub({ ownClient: true }).google), { kind: "gdoc", doc: "D1", field: "revisionId", value: "r1" });
-  assert.deepEqual(await gdocPin(googleStub({ ownClient: false }).google), { kind: "gdoc", doc: "D1", field: "version", value: "7" });
+test("a Google Doc pin is the SHA-256 of the text of every tab, read without suggestions, never a revision field", async () => {
+  const pin = await gdocPin(googleStub(docBody(["Crypto takes the price in USDT\n", "Fees\n"])).google);
+  assert.deepEqual(Object.keys(pin), ["kind", "doc", "text"]);
+  assert.match(pin.text, /^[0-9a-f]{64}$/);
+  const same = { ...docBody(["Crypto takes the price in USDT\n", "Fees\n"], { revisionId: "r9", namedRanges: { kix: { name: "kix" } }, suggestedDocumentStyleChanges: { s1: {} } }) };
+  same.tabs[0].documentTab.body.content[0].paragraph.elements[0].textRun.suggestedInsertionIds = ["s1"];
+  assert.equal((await gdocPin(googleStub(same).google)).text, pin.text);
+  assert.notEqual((await gdocPin(googleStub(docBody(["Crypto takes the price in USDT\n", "Fees!\n"])).google)).text, pin.text);
+  assert.notEqual((await gdocPin(googleStub(docBody(["Fees\n", "Crypto takes the price in USDT\n"])).google)).text, pin.text);
 });
 
-test("the Google Doc recheck refuses any change, unless the caller proved every anchor intact", async () => {
-  const pin = { kind: "gdoc", doc: "D1", field: "revisionId", value: "r1" };
-  assert.deepEqual(await recheckGdoc(googleStub({ ownClient: true }).google, pin), {});
-  assert.deepEqual(await recheckGdoc(googleStub({ ownClient: true, revisionId: "r2" }).google, pin), { refusal: `refused: Google Doc D1 revisionId changed from r1 to r2 since the draft was linted; ${RECHECK}` });
-  assert.deepEqual(await recheckGdoc(googleStub({ ownClient: true, revisionId: "r2" }).google, pin, "every highlighted passage still appears exactly once"), {
-    notice: "notice: Google Doc D1 revisionId changed from r1 to r2 since the draft was linted; every highlighted passage still appears exactly once, so it posts as drafted",
-  });
-  const byVersion = googleStub({ ownClient: true, version: 8 });
-  assert.match((await recheckGdoc(byVersion.google, { ...pin, field: "version", value: "7" })).refusal, /version changed from 7 to 8/);
-  assert.ok(byVersion.calls.every((url) => url.includes("/drive/v3/")));
+test("the Google Doc recheck refuses a text change for an account that gets no revisionId, unless the caller proved every anchor intact", async () => {
+  const pin = await gdocPin(googleStub(docBody(["A\n"])).google);
+  const short = pin.text.slice(0, 12);
+  assert.deepEqual(await recheckGdoc(googleStub(docBody(["A\n"])).google, pin), {});
+  const changed = await recheckGdoc(googleStub(docBody(["B\n"])).google, pin);
+  assert.match(changed.refusal, new RegExp(`^refused: Google Doc D1 text changed from ${short} to [0-9a-f]{12} since the draft was linted; ${RECHECK}$`));
+  assert.match((await recheckGdoc(googleStub(docBody(["B\n"])).google, pin, "every highlighted passage still appears exactly once")).notice, /^notice: Google Doc D1 text changed from .* every highlighted passage still appears exactly once, so it posts as drafted$/);
+  assert.match((await recheckGdoc(googleStub(docBody(["A\n"])).google, { kind: "gdoc", doc: "D1", field: "revisionId" }, "kept")).refusal, /predates text pins/);
+});
+
+test("a Google Doc whose text cannot be read gives no pin and no pass", async () => {
+  const pin = await gdocPin(googleStub(docBody(["A\n"])).google);
+  for (const document of [new Error("HTTP 403"), {}, { revisionId: "r1" }]) {
+    await assert.rejects(gdocPin(googleStub(document).google), /^Error: refused: .*Google Doc D1/);
+    await assert.rejects(recheckGdoc(googleStub(document).google, pin, "kept"), /^Error: refused: .*Google Doc D1/);
+  }
 });
 
 test("a publish without a pin for its target refuses and names the lint to run", () => {

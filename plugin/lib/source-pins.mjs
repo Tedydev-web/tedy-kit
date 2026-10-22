@@ -89,7 +89,7 @@ export const describePin = (pin) =>
     ? `pinned: ${pin.repo} ${pin.ref}@${pin.sha.slice(0, 8)} · ${pin.paths.join(", ")}`
     : pin.kind === "figma"
       ? `pinned: Figma ${pin.file} version ${pin.version}${pin.nodes?.length ? ` · node ${pin.nodes.join(", ")}` : ""}`
-      : `pinned: Google Doc ${pin.doc} ${pin.field} ${pin.value}`;
+      : `pinned: Google Doc ${pin.doc} text ${pin.text.slice(0, 12)}`;
 
 const digest = (text) => createHash("sha256").update(text).digest("hex");
 

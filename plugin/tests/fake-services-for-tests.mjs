@@ -67,7 +67,6 @@ globalThis.fetch = async (input, options = {}) => {
       for (const request of body.requests) web.drive.push({ id: String(next++), content: request.insertComment.content, resolved: false, author: { me: true, displayName: "me" }, replies: [], createdTime: "2026-10-22T00:00:00Z" });
       return json({});
     }
-    if (url.searchParams.get("fields") === "revisionId") return json({ revisionId: web.revisionId ?? "r1" });
     return json(web.document);
   }
   if (url.host === "www.googleapis.com") {

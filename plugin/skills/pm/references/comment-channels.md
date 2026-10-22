@@ -4,11 +4,11 @@ Every write below prints a `WRITE →` line, lints the body first, and reads the
 
 ## Pinned sources
 
-A clean `draft-lint.mjs figma-comment <file>` pins the map's Figma file at its current version; a clean `doc-comment <file>` pins the PRD Doc at its Docs API `revisionId` when rclone has an own OAuth client, else at its Drive file `version`. `doc-comment-file.mjs <items.json>` pins the Doc the same way when it writes the HTML file. Each prints a `pinned:` line; it goes into the approval `preview`. Every write below refuses a body with no pin or edited since its lint, and rechecks before writing:
+A clean `draft-lint.mjs figma-comment <file>` pins the map's Figma file at its current version; a clean `doc-comment <file>` pins the SHA-256 of the PRD Doc's text across all tabs, read through the Docs API without suggestions; comments and other metadata do not move it. A Doc the Docs API cannot read (no own OAuth client, or no access) gives no pin, so the lint fails and the write refuses. `doc-comment-file.mjs <items.json>` pins the Doc the same way when it writes the HTML file. Each prints a `pinned:` line; it goes into the approval `preview`. Every write below refuses a body with no pin or edited since its lint, and rechecks before writing:
 
 - Figma `post` and `reply`: an unchanged version posts. A changed version compares the commented node (the reply's root node) at the pinned and the latest version: same subtree, `notice: …` and it posts; changed, gone, or no node to compare, `refused: …`.
-- Doc `reply`, `anchor` and `edit`: any change of the pinned value refuses, because no anchor-level diff exists.
-- `doc-comment-file.mjs post --apply`: a changed Doc only prints a notice, because the same run re-finds every highlighted passage exactly once before anchoring.
+- Doc `reply`, `anchor` and `edit`: any change to the Doc's text refuses, because no anchor-level diff exists.
+- `doc-comment-file.mjs post --apply`: changed Doc text only prints a notice, because the same run re-finds every highlighted passage exactly once before anchoring.
 
 On `refused`: re-read the node or the Doc, fix the draft, lint, and ask again.
 

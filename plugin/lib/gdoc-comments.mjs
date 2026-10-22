@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { redact, requestJson } from "./api-request.mjs";
@@ -76,19 +77,33 @@ export async function session(flags, needOwnClient = false) {
   return { doc, bearer, ownClient, request: (url, options = {}) => requestJson(url, { ...options, headers: { Authorization: `Bearer ${bearer}` } }) };
 }
 
-const docField = async (google, field) =>
-  field === "revisionId" ? (await google.request(`${DOCS}/documents/${google.doc}?fields=revisionId`)).revisionId : String((await google.request(`${DRIVE}/files/${google.doc}?fields=version`)).version);
+const runsText = (node) => (Array.isArray(node) ? node.map(runsText).join("") : node && typeof node === "object" ? (typeof node.textRun?.content === "string" ? node.textRun.content : Object.values(node).map(runsText).join("")) : "");
 
-export async function gdocPin(google) {
-  const field = google.ownClient ? "revisionId" : "version";
-  return { kind: "gdoc", doc: google.doc, field, value: await docField(google, field) };
+const tabsText = (tabs) => tabs.map((tab) => `${tab.tabProperties?.tabId}\n${runsText(tab.documentTab?.body ?? {})}\n${tabsText(tab.childTabs ?? [])}`).join("\n");
+
+async function docText(google) {
+  let document;
+  try {
+    document = await google.request(`${DOCS}/documents/${google.doc}?includeTabsContent=true&suggestionsViewMode=PREVIEW_WITHOUT_SUGGESTIONS`);
+  } catch (error) {
+    throw new Error(`refused: the text of Google Doc ${google.doc} could not be read (${error.message}), so its pin cannot be taken or checked`);
+  }
+  if (!Array.isArray(document?.tabs)) throw new Error(`refused: Google Doc ${google.doc} returned no tabs, so its pin cannot be taken or checked`);
+  return createHash("sha256").update(tabsText(document.tabs)).digest("hex");
 }
 
-export const recheckGdoc = async (google, pin, kept) => versionCheck(`Google Doc ${pin.doc} ${pin.field}`, pin.value, await docField(google, pin.field), kept ? { kept } : {});
+export const gdocPin = async (google) => ({ kind: "gdoc", doc: google.doc, text: await docText(google) });
+
+export async function recheckGdoc(google, pin, kept) {
+  if (typeof pin.text !== "string") return { refusal: `refused: the pin of Google Doc ${pin.doc} predates text pins; lint the draft again and ask the user again` };
+  const now = await docText(google);
+  if (now === pin.text) return {};
+  return versionCheck(`Google Doc ${pin.doc} text`, pin.text.slice(0, 12), now.startsWith(pin.text.slice(0, 12)) ? now : now.slice(0, 12), kept ? { kept } : {});
+}
 
 export async function recheckDocPin(google, file, relint, kept) {
-  const pin = requirePin(file, relint, (candidate) => candidate.kind === "gdoc" && candidate.doc === google.doc, `revision of Google Doc ${google.doc}`);
-  applyVerdict(await recheckGdoc(google, pin, kept));
+  const pin = requirePin(file, relint, (candidate) => candidate.kind === "gdoc" && candidate.doc === google.doc, `text of Google Doc ${google.doc}`);
+  return applyVerdict(await recheckGdoc(google, pin, kept));
 }
 
 const readBody = (flags) => {
