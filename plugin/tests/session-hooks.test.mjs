@@ -37,6 +37,13 @@ test("does not nudge when the turn already asked through AskUserQuestion, includ
   assert.equal(decideNudge(entries, false).nudge, false);
 });
 
+test("a prompt carrying an image opens a new turn, so an earlier AskUserQuestion does not count", () => {
+  const image = { type: "image", source: { type: "base64", media_type: "image/png", data: "AA==" } };
+  const withImage = { type: "user", entrypoint: "cli", message: { content: [{ type: "text", text: "màn này sao?" }, image] } };
+  const entries = [prompt("x"), use("AskUserQuestion", { questions: [] }), result("ok"), withImage, say("Anh muốn em sửa màn này không?")];
+  assert.equal(decideNudge(entries, false).nudge, true);
+});
+
 test("ignores question marks inside code fences and quoted drafts", () => {
   const entries = [prompt("x"), say("Bản nháp:\n> Nút đang là \"Ask the family\" ạ?\n```ts\nconst ok = a ? b : c;\n```\nĐã lưu file nháp.")];
   assert.equal(decideNudge(entries, false).nudge, false);

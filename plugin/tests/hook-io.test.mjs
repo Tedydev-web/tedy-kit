@@ -64,3 +64,17 @@ test("unreadable hook input is logged and the gate asks", () => {
   assert.equal(JSON.parse(run.stdout).hookSpecificOutput.permissionDecision, "ask");
   assert.match(readFileSync(join(state, "gate-log.jsonl"), "utf8"), /"decision":"hook-input-unreadable"/);
 });
+
+test("a user prompt is a non-meta user entry with a text block and no tool result", async () => {
+  const { isUserPrompt } = await import("../lib/hook-io.mjs");
+  const image = { type: "image", source: { type: "base64", media_type: "image/png", data: "AA==" } };
+  const user = (content, extra = {}) => ({ type: "user", message: { content }, ...extra });
+  assert.equal(isUserPrompt(user("hi")), true);
+  assert.equal(isUserPrompt(user([{ type: "text", text: "hi" }])), true);
+  assert.equal(isUserPrompt(user([{ type: "text", text: "màn này" }, image])), true);
+  assert.equal(isUserPrompt(user([image])), false);
+  assert.equal(isUserPrompt(user([{ type: "tool_result", tool_use_id: "x", content: "ok" }, { type: "text", text: "note" }])), false);
+  assert.equal(isUserPrompt(user("hi", { isMeta: true })), false);
+  assert.equal(isUserPrompt({ type: "assistant", message: { content: "hi" } }), false);
+  assert.equal(isUserPrompt(user([])), false);
+});

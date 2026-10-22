@@ -83,7 +83,7 @@ export function isUserPrompt(entry) {
   if (entry?.type !== "user" || entry.isMeta) return false;
   const content = entry.message?.content;
   if (typeof content === "string") return true;
-  return Array.isArray(content) && content.length > 0 && content.every((block) => block.type === "text");
+  return Array.isArray(content) && content.some((block) => block?.type === "text") && !content.some((block) => block?.type === "tool_result");
 }
 
 export function currentTurn(entries) {

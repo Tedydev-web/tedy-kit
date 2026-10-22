@@ -68,6 +68,7 @@ test("answer mode denies, never asks, when the approval is missing, refused, sta
     ["note on the approval", approvedTurn(postOptions(), { [QUESTION]: VI["post.asIs"] }, { [QUESTION]: { notes: "bỏ câu 2" } })],
     ["timeout", [prompt(NOW - 60_000), asked(NOW - 20_000, postOptions()), answered(NOW - 19_000, {}, { content: "No response after 600s — the user may be away from keyboard.", extra: { afkTimeoutMs: 600_000 } })]],
     ["approval in an earlier turn", [...approvedTurn(), prompt(NOW - 10_000)]],
+    ["approval before a prompt with an image", [...approvedTurn(), { type: "user", timestamp: at(NOW - 10_000), message: { content: [{ type: "text", text: "khoan, đừng đăng" }, { type: "image", source: { type: "base64", media_type: "image/png", data: "AA==" } }] } }]],
     ["approval only in a request blob", [prompt(NOW - 60_000), asked(NOW - 20_000, postOptions()), { ...answered(NOW - 19_000, { [QUESTION]: VI["post.asIs"] }), type: "api-request-blob" }]],
   ];
   for (const [name, entries] of cases) {
