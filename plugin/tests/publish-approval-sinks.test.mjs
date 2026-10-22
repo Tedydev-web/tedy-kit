@@ -46,7 +46,7 @@ function place(mode = "answer") {
   writeFileSync(log, "");
   const env = { ...process.env, PATH: `${BIN}:${process.env.PATH}`, GH_FIXTURE: fixture, GH_LOG: log, HOME: dir, TEDY_STATE_DIR: state, TEDY_PROFILE_DIR: profileWith({ gates: mode ? { publishApproval: mode } : {}, language: { chat: "en" } }) };
   const writes = () => readFileSync(log, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)).filter((args) => args.some((token) => /^-X/.test(token)) || (args.includes("graphql") && args.some((token) => /mutation/.test(token))));
-  const approve = (preview, text = "Đăng?") => recordApprovals({ session_id: "s", tool_use_id: "t", tool_input: { questions: [{ question: text, header: "x", options: [{ label: VI["post.asIs"], description: "d", preview }, { label: VI["post.hold"], description: "n" }] }] }, tool_response: { answers: { [text]: VI["post.asIs"] }, annotations: {} } }, { dir: join(state, "approvals"), accepted: ACCEPTED });
+  const approve = (preview, text = "Đăng?") => recordApprovals({ session_id: "s", tool_use_id: "t", tool_input: { questions: [{ question: text, header: "x", options: [{ label: VI["post.asIs"], description: "d", preview }, { label: VI["post.hold"], description: "n" }] }] }, tool_response: { answers: { [text]: VI["post.asIs"] }, annotations: { [text]: { preview } } } }, { dir: join(state, "approvals"), accepted: ACCEPTED });
   const shell = (command, args) => spawnSync(command, args, { cwd: dir, env, encoding: "utf8" });
   const run = (script, args) => shell("node", [script, ...args]);
   return { dir, env, state, writes, approve, run, shell };

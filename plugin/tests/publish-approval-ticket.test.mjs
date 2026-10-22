@@ -16,7 +16,8 @@ const argv = (...args) => ["/usr/bin/node", "/k/plugin/scripts/github-write.mjs"
 const REPLY = "node /k/plugin/scripts/github-write.mjs reply 1 2 --body-file b.md";
 
 const question = (preview, text = "Đăng?", extra = {}) => ({ question: text, header: "Đăng", multiSelect: false, options: [{ label: VI["post.asIs"], description: "d", preview }, { label: VI["post.hold"], description: "n", preview: "khác" }], ...extra });
-const hookInput = (questions, answers, annotations = {}) => ({ session_id: "s1", tool_use_id: "toolu_1", hook_event_name: "PostToolUse", tool_name: "AskUserQuestion", tool_input: { questions }, tool_response: { questions, answers, annotations } });
+const shown = (questions, answers) => Object.fromEntries(questions.flatMap((item) => { const chosen = item.options.find((option) => option.label === answers[item.question]); return chosen?.preview ? [[item.question, { preview: chosen.preview }]] : []; }));
+const hookInput = (questions, answers, annotations = shown(questions, answers), extra = {}) => ({ session_id: "s1", tool_use_id: "toolu_1", hook_event_name: "PostToolUse", tool_name: "AskUserQuestion", tool_input: { questions }, tool_response: { questions, answers, annotations, ...extra } });
 
 function ticketWith(preview, { created = Date.now() } = {}) {
   const dir = tempDir("tedy-tickets-");
@@ -43,7 +44,13 @@ test("the hook writes no ticket for a refusal, a typed answer, a note, a timeout
     ["hold", hookInput([question("A")], { "Đăng?": VI["post.hold"] })],
     ["typed", hookInput([question("A")], { "Đăng?": "ok đăng đi" })],
     ["English label", hookInput([question("A")], { "Đăng?": LABELS.en["post.asIs"] })],
-    ["note", hookInput([question("A")], { "Đăng?": VI["post.asIs"] }, { "Đăng?": { notes: "bỏ câu 2" } })],
+    ["note", hookInput([question("A")], { "Đăng?": VI["post.asIs"] }, { "Đăng?": { preview: "A", notes: "bỏ câu 2" } })],
+    ["AFK auto-resolve with the approval already picked", hookInput([question("A")], { "Đăng?": VI["post.asIs"] }, undefined, { afkTimeoutMs: 600000 })],
+    ["followUp", hookInput([question("A")], { "Đăng?": VI["post.asIs"] }, undefined, { followUp: true })],
+    ["freeform response", hookInput([question("A")], { "Đăng?": VI["post.asIs"] }, undefined, { response: "khoan, sửa câu 2" })],
+    ["multiSelect with only the approval picked", hookInput([question("A", "Đăng?", { multiSelect: true })], { "Đăng?": VI["post.asIs"] })],
+    ["annotation preview differs from the option", hookInput([question("A")], { "Đăng?": VI["post.asIs"] }, { "Đăng?": { preview: "B" } })],
+    ["no annotation preview", hookInput([question("A")], { "Đăng?": VI["post.asIs"] }, {})],
     ["timeout", hookInput([question("A")], {})],
     ["duplicate question text", hookInput([question("node x.mjs reply 1 2 --body A"), question("node x.mjs reply 1 3 --body B")], { "Đăng?": VI["post.asIs"] })],
     ["no preview on the chosen option", hookInput([{ ...question("A"), options: [{ label: VI["post.asIs"], description: "d" }, { label: VI["post.hold"], description: "n", preview: "A" }] }], { "Đăng?": VI["post.asIs"] })],

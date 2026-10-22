@@ -15,16 +15,19 @@ export const approvalLabels = (lang = chatLanguage()) => APPROVAL_KEYS.map((key)
 
 function approvedPreviews(input, accepted) {
   const questions = Array.isArray(input?.tool_input?.questions) ? input.tool_input.questions : [];
-  const answers = input?.tool_response?.answers;
-  const annotations = input?.tool_response?.annotations ?? {};
+  const response = input?.tool_response;
+  if (!response || typeof response !== "object" || response.afkTimeoutMs !== undefined || response.followUp || response.response !== undefined) return [];
+  const answers = response.answers;
+  const annotations = response.annotations ?? {};
   if (!answers || typeof answers !== "object") return [];
   return questions.flatMap((question) => {
     const text = question?.question;
-    if (typeof text !== "string" || questions.filter((other) => other?.question === text).length !== 1) return [];
+    if (typeof text !== "string" || question.multiSelect || questions.filter((other) => other?.question === text).length !== 1) return [];
     const answer = answers[text];
     if (!accepted.includes(answer) || annotations[text]?.notes) return [];
     const chosen = (Array.isArray(question.options) ? question.options : []).filter((option) => option?.label === answer);
-    return chosen.length === 1 && typeof chosen[0].preview === "string" && chosen[0].preview.trim() ? [chosen[0].preview] : [];
+    if (chosen.length !== 1 || typeof chosen[0].preview !== "string" || !chosen[0].preview.trim()) return [];
+    return annotations[text]?.preview === chosen[0].preview ? [chosen[0].preview] : [];
   });
 }
 
