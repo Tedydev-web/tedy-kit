@@ -4,7 +4,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { STATE_DIR } from "./hook-io.mjs";
 
-const CITE = /(?<![\w./-])([\w.-][\w./-]*):\d+(?:-\d+)?@(\w(?:[\w./-]*\w)?)/g;
+const CITE = /`([^`]+):\d+(?:-\d+)?@([^`\s]+)`/g;
 const RECHECK = "re-read the changed sources, fix the draft, lint it again and ask the user again";
 const FIGMA_LINK = /figma\.com\/(?:design|file)\/([A-Za-z0-9]+)([^\s)"'`]*)/g;
 const DOC_LINK = /docs\.google\.com\/document\/d\/([\w-]+)/g;
@@ -31,7 +31,7 @@ export function linkedDocs(text) {
 export const mapRepos = (map) =>
   (map?.repos ?? []).map((repo) => ({ name: repo.path, dir: isAbsolute(repo.path) ? repo.path : resolve(map.paths?.[0] ?? process.cwd(), repo.path), branch: repo.branch ?? "dev" }));
 
-export const runGit = (dir, args) => execFileSync("git", ["-C", dir, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+export const runGit = (dir, args) => execFileSync("git", ["--literal-pathspecs", "-C", dir, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
 
 export function pinRepos(list, repos, git = runGit) {
   const pins = new Map();

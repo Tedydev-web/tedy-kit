@@ -4,18 +4,45 @@ import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { cites, linkedDocs, mapRepos, pinnedSources, pinRepos, recheckRepos, versionCheck, writeSources } from "../lib/source-pins.mjs";
-import { siblingRepo } from "./git-sibling-for-tests.mjs";
+import { git, siblingRepo } from "./git-sibling-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const repoOf = (clone) => [{ name: "../backend", dir: clone, branch: "dev" }];
 
-test("cites reads path:line@branch from findings, ranges and trailing punctuation included, and skips the placeholder", () => {
-  const text = "Writer `src/a.ts:12@dev`, guard src/b.ts:3-9@dev. Again src/a.ts:40@dev; contract lib/x.sol:5@feature/v2) and `path:line@branch`.";
+test("cites reads every backticked path:line@branch whole, ranges included, and skips the placeholder", () => {
+  const text = "Writer `src/a.ts:12@dev`, guard `src/b.ts:3-9@dev`. Again `src/a.ts:40@dev`; contract (`lib/x.sol:5@feature/v2`) and `path:line@branch`.";
   assert.deepEqual(cites(text), [
     { path: "src/a.ts", branch: "dev" },
     { path: "src/b.ts", branch: "dev" },
     { path: "lib/x.sol", branch: "feature/v2" },
   ]);
+  const odd = "`app/(auth)/login/page.tsx:12@dev`, `pages/users/[id].tsx:5@dev`, `src/@types/user.d.ts:3@dev` and `internal/wallet service.go:3-4@dev`";
+  assert.deepEqual(cites(odd), [
+    { path: "app/(auth)/login/page.tsx", branch: "dev" },
+    { path: "pages/users/[id].tsx", branch: "dev" },
+    { path: "src/@types/user.d.ts", branch: "dev" },
+    { path: "internal/wallet service.go", branch: "dev" },
+  ]);
+});
+
+test("a cite path is read literally, so brackets, parentheses, @ and spaces pin the file they name and nothing else", () => {
+  const sibling = siblingRepo();
+  const paths = ["app/(auth)/login/page.tsx", "pages/users/[id].tsx", "src/@types/user.d.ts", "internal/wallet service.go"];
+  for (const path of paths) sibling.push(path, "x\n", `add ${path}`);
+  sibling.push("pages/users/i.tsx", "decoy\n", "add a file the bracket glob would match");
+  git(sibling.clone, "fetch", "-q", "origin");
+  const { pins, problems } = pinRepos(paths.map((path) => ({ path, branch: "dev" })), repoOf(sibling.clone));
+  assert.deepEqual(problems, []);
+  assert.deepEqual(pins[0].paths, paths);
+  const glob = pinRepos([{ path: "pages/users/[a-z].tsx", branch: "dev" }, { path: "src/*.ts", branch: "dev" }], repoOf(sibling.clone));
+  assert.deepEqual(glob.pins, []);
+  assert.equal(glob.problems.length, 2);
+  sibling.push("pages/users/i.tsx", "decoy 2\n", "chore: change the decoy only");
+  const decoy = recheckRepos(pins, repoOf(sibling.clone));
+  assert.deepEqual(decoy.refusals, []);
+  assert.equal(decoy.notices.length, 1);
+  const cited = sibling.push("pages/users/[id].tsx", "y\n", "fix: change the bracket page");
+  assert.match(recheckRepos(pins, repoOf(sibling.clone)).refusals[0], new RegExp(`files: pages/users/\\[id\\]\\.tsx\\n  commit ${cited.slice(0, 7)} fix: change the bracket page`));
 });
 
 test("mapRepos resolves map repos against the first path and defaults the branch to dev", () => {
