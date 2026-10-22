@@ -1,6 +1,6 @@
 # Follow-up on a posted review
 
-Use when the user asks to check replies, when a teammate says a thread is fixed, or when the next-step menu picks `replies.header`. Writes still go through `github-write.mjs` after the user approves, one `AskUserQuestion` per batch. Quote each reply or edit body verbatim before the batch question, and put every body and the exact command line that posts it verbatim in the `preview` of the option that posts them, then run the batch as one command joined by `&&` (one approval covers one publish command), because a tool call is always recorded while reply prose can land in thinking.
+Use when the user asks to check replies, when a teammate says a thread is fixed, or when the next-step menu picks `replies.header`. Writes still go through `github-write.mjs` after the user approves, one `AskUserQuestion` per batch with one question per write command (up to four). Quote each reply or edit body verbatim before the batch question, and put that body and, on a line of its own, the exact command line that posts it verbatim in the `preview` of the approving option of its question, because a tool call is always recorded while reply prose can land in thinking, and in `publishApproval: answer` each approval is a one-use ticket for that one command.
 
 Start with the status-after-merge sweep of step 1a in the skill; a merged PR of the user's own work package is handed to the PM session there.
 

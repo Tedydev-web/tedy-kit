@@ -65,7 +65,7 @@ The gates keep an honest but careless agent from publishing, merging, rewriting 
 | `gates.ghWrites` | off | Refuses direct `gh` writes so that everything posted to GitHub goes through `github-write.mjs` after an approved draft |
 | `gates.roleGate` | off | Asks before a session writes for another role listed in the project map's `sessions` |
 | `gates.publishQuote` | off | Refuses a `github-write.mjs` post, reply or edit until the exact body was quoted to the user after its last change |
-| `gates.publishApproval` | `"ask"` | `"answer"` allows a kit-script publish only after an approving AskUserQuestion answer and refuses it otherwise, so Claude Code shows no second prompt; see [Approval prompts](#approval-prompts) |
+| `gates.publishApproval` | `"ask"` | `"answer"` lets each kit script write only with a one-use ticket from an approving AskUserQuestion answer, so Claude Code shows no second prompt; see [Approval prompts](#approval-prompts) |
 
 A broken `config.json`, or a profile with `rules.md` and no `config.json`, turns every personal gate on and is reported at session start until `profile.mjs doctor` reports it ok. The five PreToolUse gates run with `onFailure: "block"`: a gate that cannot start, crashes or times out stops the tool call. A gate that catches its own error allows, except git-gate on a publish command and the profile guard, which ask; in `gates.publishApproval: "answer"` git-gate refuses such a publish instead.
 
@@ -83,15 +83,17 @@ Known limitations, by design or left out by the threat model:
 - Value-taking flags are known for the shells, python and node only; another interpreter's flag that takes a separate value can hide a `-` after it.
 - `env -S` strings are not unwrapped.
 - Whether Claude Code's own `permissions.ask` matching sees a quoted subcommand was not tested; the gate asks when the raw text matches no rule.
-- With `gates.publishApproval: "answer"` and `bypassPermissions`, git-gate is the only layer before a publish. Its publish pattern is narrower than the `*script*verb*` ask rules the switch removes, so a publish the gate does not read as one (a renamed copy or a symlink of a kit script, a script file, an interpreter one-liner) runs with no approval and no prompt.
-- The answer check is only as good as the session transcript it reads. The deny rule the switch adds blocks Claude's file tools, the file commands Claude Code recognises in Bash and redirect targets; `cp`, `mv`, `sed -i`, a script file or any other subprocess can still rewrite the transcript.
+- With `gates.publishApproval: "answer"` the ticket check lives in the kit scripts. A write that does not go through them (`gh` directly with `gates.ghWrites` off, `curl` to a tracker or design API, a copied script with the check removed) meets no ticket check and, under `bypassPermissions`, no prompt either.
+- A ticket made by hand, with `cp`, `mv`, a script file or any other subprocess writing into the approvals folder, is out of the threat model: the deny rule the switch adds blocks only Claude's file tools, the file commands Claude Code recognises in Bash and redirect targets.
+- Tickets are not tied to a session: an approval in one session can be used by an identical command in another within its 30 minutes.
+- The ticket hook reads the answers from the `tool_response` Claude Code passes to PostToolUse, documented as the tool's own output and recorded in transcripts as `{questions, answers, annotations}`; a headless run has no AskUserQuestion, so this was not checked live.
 
 ## Approval prompts
 
 Every publish starts with the skill's AskUserQuestion menu (`post.asIs` or `approve.all`). What happens after the user picks it depends on `gates.publishApproval`:
 
 - `"ask"` (default): `permissions.ask` rules in `~/.claude/settings.json` that match the kit's publish scripts (`github-write.mjs`, `openproject.mjs … --apply`, `figma-comments.mjs`, `gdoc-comments.mjs`, `doc-comment-file.mjs post … --apply`) prompt a second time before each write, and git-gate asks when no such rule matches the command. Both prompts appear in an interactive session, including `bypassPermissions` mode and subagents. In a headless `claude -p` run nobody can answer, so the ask becomes a refusal.
-- `"answer"`: git-gate allows the publish only when, in the current turn and after the last change to every file the command reads, the user picked `post.asIs` or `approve.all` (labels in the chat language, with no note) on an option whose `preview` holds, verbatim and together, the exact command line and every body the command publishes (for `openproject.mjs apply`, the subject and description of every draft in the file). One approval covers one publish command: it must come after the previous publish command that ran, so a batch the user approved at once runs as one command joined by `&&`. Anything else is refused, never asked: another answer, a timeout, a changed draft, a reused approval, no transcript, a subagent with no menu, or a publish sharing its command with anything but a `cd` or another publish.
+- `"answer"`: no second prompt. When the user picks `post.asIs` or `approve.all` (labels in the chat language, with no note, on a question whose text is unique), a PostToolUse hook on AskUserQuestion writes a ticket holding the chosen option's `preview` to `<state>/approvals/`. Each kit script, right before it writes, builds its command line from its own arguments (`github-write.mjs reply 1 2 --body-file b.md`) and uses the oldest unused ticket, at most 30 minutes old, whose preview has that command line on a line of its own (it may start with `node` and the script's full path) and holds every text the script is about to send on whole lines: each comment of a review draft, a body file, each draft's subject and description for `openproject.mjs apply`, each pending comment for `doc-comment-file.mjs post`. Using a ticket renames it, so one ticket covers one command, once, even when two run at the same time. With no matching ticket the script writes nothing and says to ask again. A real `--dry-run` of `post` or `pr-body` needs no ticket. git-gate leaves these commands to the scripts: it neither allows nor asks.
 
 Claude Code still prompts on a matching `permissions.ask` rule when a hook returns `allow` ([permissions: precedence among rules, hooks, and mods](https://code.claude.com/docs/en/permissions#precedence-among-rules-hooks-and-mods)), so `"answer"` also needs the kit's rules out of `settings.json`. One command switches both and is safe to repeat:
 
@@ -101,7 +103,7 @@ node <plugin>/scripts/profile.mjs publish-approval ask
 node <plugin>/scripts/profile.mjs publish-approval
 ```
 
-The first removes exactly the 22 kit publish rules, adds `Edit(~/.claude/projects/**/*.jsonl)` to `permissions.deny` so an agent's file tools cannot rewrite the session transcripts the gate reads (the memory folder is not covered), and sets the key; the second restores the rules and takes the deny rule back out; the third prints the mode, how many rules are present and whether the deny rule is on. Each write first copies `settings.json` to `settings.json.tedy-backup-<time>` with the same file mode, and touches no other key; `Bash(gh pr merge*)` stays in both modes. A missing `config.json` is refused (run `profile.mjs init` first), and the profile guard asks before a session runs the switch. Running sessions pick up both files without a restart.
+The first removes exactly the 22 kit publish rules, adds `Edit(//<state>/approvals/**)` (the real absolute path) to `permissions.deny` so an agent's file tools cannot write a ticket, and sets the key; the second restores the rules and takes the deny rule back out; the third prints the mode, how many rules are present and whether the deny rule is on. Each write first copies `settings.json` to `settings.json.tedy-backup-<time>` with the same file mode, and touches no other key; `Bash(gh pr merge*)` stays in both modes. A missing `config.json` is refused (run `profile.mjs init` first), and the profile guard asks before a session runs the switch. Running sessions pick up both files without a restart.
 
 Upgrading and rolling back: a plugin release from before `gates.publishApproval` rejects the key as unknown and so turns every personal gate on. Update the plugin in every running session (`/reload-plugins`) before running `publish-approval answer`. Before moving back to such a release, run `publish-approval ask` first: it restores the rules and removes the key from `config.json`, since `"ask"` is the default. `profile.mjs init` writes no `publishApproval` key for the same reason.
 
@@ -134,7 +136,7 @@ Menus and table words come in the profile's chat language (`language.chat`, Engl
 | What | Where |
 |---|---|
 | Rules, style samples, project maps, gate switches | Your profile: `TEDY_PROFILE_DIR` or `~/.config/tedy` |
-| Gate log, edit log, draft snapshots, last reply check | `TEDY_STATE_DIR` or `~/.local/state/tedy` |
+| Gate log, edit log, draft snapshots, last reply check, approval tickets (`approvals/`) | `TEDY_STATE_DIR` or `~/.local/state/tedy` |
 | Release worktree the profile guard watches | `TEDY_RELEASE_DIR` or `~/Documents/workspace/tedy-kit-release` |
 | `permissions.ask` rules git-gate checks a publish against | `TEDY_CLAUDE_SETTINGS` or `~/.claude/settings.json` |
 | Tracker slug map | `~/.config/op/sync/` |
