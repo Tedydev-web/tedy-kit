@@ -50,6 +50,7 @@ export function evaluate(input, { profile = profileDir(), release = releaseDir()
     if (item.tool_name !== "Bash" || typeof item.tool_input?.command !== "string") continue;
     for (const { dir, tokens } of walkSegments(item.tool_input.command, item.cwd ?? cwd)) {
       if (movesRelease(dir, tokens, releaseRoot)) return REASON;
+      if (tokens.some((token, at) => /(?:^|\/)profile\.mjs$/.test(token) && tokens[at + 1] === "publish-approval" && tokens[at + 2] !== undefined)) return REASON;
       if (tokens.some((token) => guarded.has(real(resolve(dir, expandHome(token)))))) return REASON;
     }
   }

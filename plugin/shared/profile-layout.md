@@ -28,13 +28,14 @@ Runtime state (gate log, edit log, draft snapshots, last check times) lives in `
 | `gates.roleGate` | boolean | `false` | Ask before a session writes for another role in the project map's `sessions` |
 | `gates.publishQuote` | boolean | `false` | Refuse a `github-write.mjs` post, reply or edit until the exact body was quoted to the user after its last change |
 | `gates.ghWrites` | boolean | `false` | Block direct `gh` writes (close, edit, comment, API POST) so everything published to GitHub goes through `github-write.mjs` after the user approves the draft |
+| `gates.publishApproval` | `"ask"` or `"answer"` | `"ask"` | How a kit-script publish is approved after the skill's menu: `"ask"` keeps the `permissions.ask` prompt; `"answer"` lets git-gate allow it only after an approving AskUserQuestion answer whose preview holds the exact body or command. Switch with `profile.mjs publish-approval answer\|ask`, which also removes or restores the kit's ask rules in `~/.claude/settings.json` |
 | `gates.pushExempt` | string[] | `[]` | Repositories whose pushes to an integration branch need no prompt; `~/` expands to the home directory |
 | `language.chat` | string | `"en"` | Language of replies and question labels, and of the comment rules in a directory no project map covers |
 
 Gates that protect every user stay on regardless of the config:
 - a prompt before a push to an integration branch, before a push that rewrites history, and before `gh pr merge`, `gh pr ready` or the equivalent `gh api` calls;
 - in a project whose map has a `tracker`, a refusal of `gh pr create` without `OP#<id>` in the body;
-- a prompt before a `node <script>` publish that no `permissions.ask` rule covers;
+- a prompt before a `node <script>` publish that no `permissions.ask` rule covers, or in `"answer"` mode a refusal of one with no approving answer;
 - the tracker token gate and the profile guard.
 
 A profile directory that has `rules.md` but no `config.json` turns every personal gate on.

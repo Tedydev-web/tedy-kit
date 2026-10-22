@@ -55,7 +55,7 @@ The gates keep an honest but careless agent from publishing, merging, rewriting 
 | History rewrite | always on | Asks before a force push, a deleting refspec or `--mirror` |
 | PR merge and ready | always on | Asks before `gh pr merge`, `gh pr ready` and the equivalent `gh api` calls, in any form the gate can read |
 | Work package in the PR body | always on in a project whose map has a `tracker` | Refuses `gh pr create` whose body does not carry `OP#<id>` |
-| Unchecked publish | always on | Asks before a `node <script>` publish that no `permissions.ask` rule covers, or whose draft the gate could not read |
+| Unchecked publish | always on in `gates.publishApproval: "ask"` | Asks before a `node <script>` publish that no `permissions.ask` rule covers, or whose draft the gate could not read |
 | Unreadable command | always on | Refuses, without asking the user, a command the gate cannot read (a command word built at run time or holding glob characters, `eval`, a shell or interpreter reading code from stdin, a heredoc, a pipe, `-`, `/dev/stdin` or a process substitution, a shell given `-c`, a globbed script path, an interpreter script path held in a variable whose arguments carry a kit publish verb, `find -exec`, `script`, `busybox` or `flock -c` carrying git, gh, a shell or an interpreter, over 10,000 characters, or nested too deep), and tells the agent to rewrite it as plain commands or a script file in the system temp directory run with `python3` or `node`, keeping every push, merge and GitHub write a plain command of its own. The gate reads quoted and escaped words the way the shell does, looks through wrappers such as `env`, `sudo`, `setsid`, `flock`, `timeout`, `nohup`, `xargs` and `npx` and through absolute paths such as `/usr/bin/git`, checks each command after a `;`, `&&`, `||`, `|` or `&` and inside a `( … )` subshell, and judges it in the directory that `cd`, `pushd` and `popd` leave it in. It does not read script files, so a push or merge placed inside one is not checked |
 | Context-mode shell | always on | Checks shell code sent through any MCP server's `ctx_execute`, `ctx_execute_file` or `ctx_batch_execute` exactly like a Bash command, so every row above, the profile guard, `gates.roleGate` and the post-push report apply: `code` with `language: "shell"`, and every command in a batch. Each command is judged where context-mode runs it: in an absolute `cwd` (which `ctx_execute_file` ignores, as context-mode does), otherwise in `CLAUDE_PROJECT_DIR`; a relative `cwd` is refused, because context-mode resolves it against its own install directory. Code in another language there is not read, like a `python3 <file>` script. A kit-script publish sent this way is refused and the agent told to run it as a plain Bash command, because the `permissions.ask` rules ask only on Bash. A call whose fields the gate cannot read is refused |
 | Tracker token | always on | Refuses any tool call that reads the tracker token file or writes to the tracker host around `openproject.mjs` |
@@ -65,8 +65,9 @@ The gates keep an honest but careless agent from publishing, merging, rewriting 
 | `gates.ghWrites` | off | Refuses direct `gh` writes so that everything posted to GitHub goes through `github-write.mjs` after an approved draft |
 | `gates.roleGate` | off | Asks before a session writes for another role listed in the project map's `sessions` |
 | `gates.publishQuote` | off | Refuses a `github-write.mjs` post, reply or edit until the exact body was quoted to the user after its last change |
+| `gates.publishApproval` | `"ask"` | `"answer"` allows a kit-script publish only after an approving AskUserQuestion answer and refuses it otherwise, so Claude Code shows no second prompt; see [Approval prompts](#approval-prompts) |
 
-A broken `config.json`, or a profile with `rules.md` and no `config.json`, turns every personal gate on and is reported at session start until `profile.mjs doctor` reports it ok. The five PreToolUse gates run with `onFailure: "block"`: a gate that cannot start, crashes or times out stops the tool call. A gate that catches its own error allows, except git-gate on a publish command and the profile guard, which ask.
+A broken `config.json`, or a profile with `rules.md` and no `config.json`, turns every personal gate on and is reported at session start until `profile.mjs doctor` reports it ok. The five PreToolUse gates run with `onFailure: "block"`: a gate that cannot start, crashes or times out stops the tool call. A gate that catches its own error allows, except git-gate on a publish command and the profile guard, which ask; in `gates.publishApproval: "answer"` git-gate refuses such a publish instead.
 
 Known limitations, by design or left out by the threat model:
 
@@ -85,7 +86,20 @@ Known limitations, by design or left out by the threat model:
 
 ## Approval prompts
 
-Publishing is approved in two layers. `permissions.ask` rules in `~/.claude/settings.json` that match the kit's publish scripts (`github-write.mjs`, `openproject.mjs … --apply`, `figma-comments.mjs`, `gdoc-comments.mjs`, `doc-comment-file.mjs post … --apply`) prompt before each write. git-gate asks too when no such rule matches the command. Both prompts appear in an interactive session, including `bypassPermissions` mode and subagents. In a headless `claude -p` run nobody can answer, so the ask becomes a refusal.
+Every publish starts with the skill's AskUserQuestion menu (`post.asIs` or `approve.all`). What happens after the user picks it depends on `gates.publishApproval`:
+
+- `"ask"` (default): `permissions.ask` rules in `~/.claude/settings.json` that match the kit's publish scripts (`github-write.mjs`, `openproject.mjs … --apply`, `figma-comments.mjs`, `gdoc-comments.mjs`, `doc-comment-file.mjs post … --apply`) prompt a second time before each write, and git-gate asks when no such rule matches the command. Both prompts appear in an interactive session, including `bypassPermissions` mode and subagents. In a headless `claude -p` run nobody can answer, so the ask becomes a refusal.
+- `"answer"`: git-gate allows the publish only when, in the current turn and after the last change to every file the command reads, the user picked `post.asIs` or `approve.all` (labels in the chat language, with no note) on an option whose `preview` holds, verbatim, every body the command publishes; a command that publishes no body (`openproject.mjs set`, `relation`, `apply`, `rollback`, `github-write.mjs resolve`, `figma-comments.mjs delete` and the like) needs the exact command in that preview. Anything else is refused, never asked: another answer, a timeout, a changed draft, no transcript, a subagent with no menu, or a publish sharing its command with anything but a `cd`.
+
+Claude Code still prompts on a matching `permissions.ask` rule when a hook returns `allow` ([permissions: precedence among rules, hooks, and mods](https://code.claude.com/docs/en/permissions#precedence-among-rules-hooks-and-mods)), so `"answer"` also needs the kit's rules out of `settings.json`. One command switches both and is safe to repeat:
+
+```bash
+node <plugin>/scripts/profile.mjs publish-approval answer
+node <plugin>/scripts/profile.mjs publish-approval ask
+node <plugin>/scripts/profile.mjs publish-approval
+```
+
+The first removes exactly the 22 kit publish rules and sets the key, the second restores them, the third prints the mode and how many rules are present. Each write first copies `settings.json` to `settings.json.tedy-backup-<time>` with the same file mode, and touches no other key; `Bash(gh pr merge*)` stays in both modes. A missing `config.json` is refused (run `profile.mjs init` first), and the profile guard asks before a session runs the switch. Running sessions pick up both files without a restart.
 
 ## Rescue
 

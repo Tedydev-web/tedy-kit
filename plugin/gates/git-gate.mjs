@@ -1,12 +1,14 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { basename, isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { ALL_GATES_ON, ask, deny, gateSwitches, logGate, readHookInput } from "../lib/hook-io.mjs";
+import { ALL_GATES_ON, allow, ask, deny, gateSwitches, logGate, readHookInput } from "../lib/hook-io.mjs";
+import { CLAUDE_SETTINGS } from "../lib/publish-approval-settings.mjs";
 import { resolveMap } from "../lib/project-map.mjs";
 import { shellWords, splitSegments, tokenize, walkCommands } from "../lib/shell-segments.mjs";
 import { INTERPRETER, SHELLS, readsUnreadableCode, variableScriptArguments } from "../lib/shell-program-arguments.mjs";
+import { check as checkAnswered } from "./publish-answer-gate.mjs";
 import { check as checkQuoted } from "./publish-quote-gate.mjs";
 import { evaluate as trackerToken, trackerHost } from "./tracker-token-gate.mjs";
 
@@ -62,7 +64,7 @@ const REWRITE = "Rewrite it so every command word is literal: split it into plai
 const UNREADABLE_REASON = `tedy gate: this command runs code the gate cannot read (a command word built at run time, eval, a shell or interpreter reading code from stdin, a heredoc, a pipe or a process substitution, a shell given -c, an interpreter one-liner that mentions gh, or git -c alias/core). ${REWRITE}`;
 const MERGE_REASON = "tedy gate: merging or marking a PR ready belongs to the user. Allow it only if the user asked for this exact PR in this turn.";
 const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve|unresolve|pr-body)|openproject\.mjs["']?\s+apply|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor|edit|delete))\b|^(?=[\s\S]*--apply\b)[\s\S]*?(?:openproject\.mjs["']?\s+(?:set|comment|comment-edit|relation|relation-delete|rollback)|doc-comment-file\.mjs["']?\s+post)\b/;
-export const CLAUDE_SETTINGS = process.env.TEDY_CLAUDE_SETTINGS ?? join(homedir(), ".claude", "settings.json");
+export { CLAUDE_SETTINGS };
 const REWRITING_PUSH = /^(-f|--force|--force-with-lease(=.*)?|--force-if-includes|--mirror|--all|--prune|-d|--delete)$/;
 export const CTX_TOOL = /__ctx_(execute|execute_file|batch_execute)$/;
 const CTX_PUBLISH_REASON = "tedy gate: this publishes through a kit script from a context-mode tool, where the user's permission rules never ask. Run the publish as a plain Bash command of its own, so the permission rule asks the user before it goes out.";
@@ -443,9 +445,10 @@ export function bashInputs(input) {
 
 function judge(input, tool) {
   const command = input.tool_input?.command ?? "";
+  const gates = gateSwitches();
+  const answerMode = gates.publishApproval === "answer";
   try {
-    const gates = gateSwitches();
-    let result = CTX_TOOL.test(tool) && splitSegments(command, false).some(publishes) ? { allow: false, reason: CTX_PUBLISH_REASON } : evaluate(command, input.cwd ?? process.cwd(), { gates, settingsFile: CLAUDE_SETTINGS });
+    let result = CTX_TOOL.test(tool) && splitSegments(command, false).some(publishes) ? { allow: false, reason: CTX_PUBLISH_REASON } : evaluate(command, input.cwd ?? process.cwd(), { gates, settingsFile: answerMode ? null : CLAUDE_SETTINGS });
     if (result.allow || result.ask) {
       const token = trackerToken(input.tool_input, trackerHost(), { cwd: input.cwd ?? process.cwd() });
       if (token) result = { allow: false, reason: token };
@@ -459,11 +462,20 @@ function judge(input, tool) {
       }
       if (quoted && (!quoted.ask || result.allow)) result = { allow: false, ...quoted };
     }
+    if (answerMode && (result.allow || result.ask)) {
+      const answered = checkAnswered(input);
+      if (answered && !answered.allow) result = answered;
+      else if (answered && result.ask) result = { allow: false, reason: result.reason };
+      else if (answered) result = { allow: true, approved: true };
+    }
+    if (result.approved) logGate({ hook: "git-gate", decision: "allow-answered", tool, command: command.slice(0, 200), cwd: input.cwd });
     if (!result.allow) logGate({ hook: "git-gate", decision: result.ask ? "ask" : "deny", tool, command: command.slice(0, 200), cwd: input.cwd, reason: result.reason });
     return result;
   } catch (error) {
-    logGate({ hook: "git-gate", decision: "ask", tool, command: String(command).slice(0, 200), error: error.message });
-    return { allow: false, ask: true, reason: publishes(String(command)) ? `tedy gate: could not check this publish command (${error.message}). Approve only if you have seen the exact draft.` : `tedy gate: could not check this command (${error.message}). Allow it only if the user asked for it.` };
+    const publish = publishes(String(command));
+    logGate({ hook: "git-gate", decision: answerMode && publish ? "deny" : "ask", tool, command: String(command).slice(0, 200), error: error.message });
+    if (answerMode && publish) return { allow: false, reason: `tedy gate: could not check this publish command (${error.message}), so publish approval in answer mode refuses it. Fix what the error names, then ask for approval again.` };
+    return { allow: false, ask: true, reason: publish ? `tedy gate: could not check this publish command (${error.message}). Approve only if you have seen the exact draft.` : `tedy gate: could not check this command (${error.message}). Allow it only if the user asked for it.` };
   }
 }
 
@@ -480,6 +492,7 @@ export function run() {
   const result = results.find((item) => !item.allow && !item.ask) ?? results.find((item) => item.ask);
   if (result?.ask) ask(result.reason);
   else if (result) deny(result.reason);
+  else if (results.length && results.every((item) => item.approved)) allow("tedy gate: the user approved this exact publish in an AskUserQuestion after its last change.");
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();

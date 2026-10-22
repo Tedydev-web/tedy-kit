@@ -3,12 +3,14 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSyn
 import { homedir } from "node:os";
 import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { CLAUDE_SETTINGS, KIT_PUBLISH_ASK_RULES, leftoverKitRules, plannedAskRules, readSettings, writeAskRules } from "./publish-approval-settings.mjs";
 
 const SHARED = fileURLToPath(new URL("../shared/", import.meta.url));
 const PERSONAL_GATES = ["noComments", "draftPrOnly", "roleGate", "ghWrites", "publishQuote"];
+export const PUBLISH_APPROVAL_MODES = Object.freeze(["ask", "answer"]);
 
 export const DEFAULT_CONFIG = Object.freeze({
-  gates: Object.freeze({ noComments: false, draftPrOnly: false, roleGate: false, ghWrites: false, publishQuote: false, pushExempt: Object.freeze([]) }),
+  gates: Object.freeze({ noComments: false, draftPrOnly: false, roleGate: false, ghWrites: false, publishQuote: false, publishApproval: "ask", pushExempt: Object.freeze([]) }),
   language: Object.freeze({ chat: "en" }),
 });
 
@@ -39,14 +41,16 @@ export function loadConfig(dir = profileDir()) {
   const language = raw.language ?? {};
   if (!isObject(gates)) throw new Error(`${file}: gates must be an object`);
   if (!isObject(language)) throw new Error(`${file}: language must be an object`);
-  checkKeys(file, gates, [...PERSONAL_GATES, "pushExempt"], "gates.");
+  checkKeys(file, gates, [...PERSONAL_GATES, "publishApproval", "pushExempt"], "gates.");
   checkKeys(file, language, ["chat"], "language.");
   for (const key of PERSONAL_GATES) if (key in gates && typeof gates[key] !== "boolean") throw new Error(`${file}: gates.${key} must be a boolean`);
+  if ("publishApproval" in gates && !PUBLISH_APPROVAL_MODES.includes(gates.publishApproval)) throw new Error(`${file}: gates.publishApproval must be "ask" or "answer"`);
   if ("pushExempt" in gates && !(Array.isArray(gates.pushExempt) && gates.pushExempt.every((path) => typeof path === "string" && path))) throw new Error(`${file}: gates.pushExempt must be an array of strings`);
   if ("chat" in language && !(typeof language.chat === "string" && language.chat.trim())) throw new Error(`${file}: language.chat must be a non-empty string`);
   return {
     gates: {
       ...Object.fromEntries(PERSONAL_GATES.map((key) => [key, gates[key] ?? DEFAULT_CONFIG.gates[key]])),
+      publishApproval: gates.publishApproval ?? DEFAULT_CONFIG.gates.publishApproval,
       pushExempt: (gates.pushExempt ?? []).map(expandHome),
     },
     language: { chat: language.chat ?? DEFAULT_CONFIG.language.chat },
@@ -188,11 +192,46 @@ function doctor(dir, env = process.env) {
   return status;
 }
 
-const USAGE = "usage: profile.mjs <path <relative-path>|doctor|init>";
+function publishApproval(dir, mode, settingsFile = CLAUDE_SETTINGS) {
+  const file = join(dir, "config.json");
+  const settings = () => readSettings(settingsFile);
+  if (mode === undefined) {
+    const present = KIT_PUBLISH_ASK_RULES.filter((rule) => settings().ask.includes(rule)).length;
+    process.stdout.write(`publish approval: ${loadConfig(dir).gates.publishApproval}\nkit publish ask rules in ${settingsFile}: ${present}/${KIT_PUBLISH_ASK_RULES.length}\n`);
+    return 0;
+  }
+  if (!existsSync(file)) throw new Error(`${file} is missing; run profile.mjs init first, then switch the mode`);
+  loadConfig(dir);
+  const raw = JSON.parse(readFileSync(file, "utf8"));
+  const current = settings();
+  const next = plannedAskRules(current.ask, mode);
+  const lines = [];
+  if (next.length === current.ask.length) lines.push(`${settingsFile}: kit publish ask rules already ${mode === "answer" ? "removed" : "present"}, not written`);
+  else {
+    const { backup, removed, added } = writeAskRules(settingsFile, current, next);
+    lines.push(`${settingsFile}: removed ${removed}, restored ${added} kit publish ask rules; backup ${backup}`);
+  }
+  if (raw.gates?.publishApproval !== mode) writeFileSync(file, `${JSON.stringify({ ...raw, gates: { ...raw.gates, publishApproval: mode } }, null, 2)}\n`);
+  lines.push(`publish approval: ${mode}`);
+  const leftover = mode === "answer" ? leftoverKitRules(next) : [];
+  if (leftover.length) lines.push(`still prompts, not a kit rule: ${leftover.join(", ")}`);
+  process.stdout.write(`${lines.join("\n")}\n`);
+  return 0;
+}
 
-function main([command, arg]) {
+const USAGE = "usage: profile.mjs <path <relative-path>|doctor|init|publish-approval [ask|answer]>";
+
+function main([command, arg, ...rest]) {
   const dir = profileDir();
   if (command === "doctor") return doctor(dir);
+  if (command === "publish-approval" && !rest.length && (arg === undefined || PUBLISH_APPROVAL_MODES.includes(arg))) {
+    try {
+      return publishApproval(dir, arg);
+    } catch (error) {
+      process.stderr.write(`${error.message}\n`);
+      return 1;
+    }
+  }
   if (command === "init") {
     const { created, kept } = initProfile(dir);
     process.stdout.write(`profile: ${dir}\ncreated: ${created.join(", ") || "nothing"}\nkept: ${kept.join(", ") || "nothing"}\n`);

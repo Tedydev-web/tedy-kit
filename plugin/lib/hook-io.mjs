@@ -29,7 +29,7 @@ export function logGate(entry) {
   }
 }
 
-export const ALL_GATES_ON = Object.freeze({ noComments: true, draftPrOnly: true, roleGate: true, ghWrites: true, publishQuote: true, pushExempt: Object.freeze([]) });
+export const ALL_GATES_ON = Object.freeze({ noComments: true, draftPrOnly: true, roleGate: true, ghWrites: true, publishQuote: true, publishApproval: "ask", pushExempt: Object.freeze([]) });
 
 export function gateSwitches() {
   try {
@@ -44,6 +44,10 @@ export function gateSwitches() {
 
 export function deny(reason) {
   process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: reason } }));
+}
+
+export function allow(reason) {
+  process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "allow", permissionDecisionReason: reason } }));
 }
 
 export function ask(reason) {

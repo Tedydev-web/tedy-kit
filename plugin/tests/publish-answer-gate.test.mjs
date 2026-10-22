@@ -1,0 +1,166 @@
+import "./test-isolation.mjs";
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { utimesSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { needs } from "../gates/publish-answer-gate.mjs";
+import { KIT_PUBLISH_ASK_RULES } from "../lib/publish-approval-settings.mjs";
+import { LABELS } from "../lib/labels.mjs";
+import { profileWith, tempDir } from "./temp-dir-for-tests.mjs";
+
+const GATE_ENTRY = join(dirname(fileURLToPath(import.meta.url)), "../gates/git-gate.mjs");
+const VI = LABELS.vi;
+const QUESTION = "Đăng review PR #735 (2 comment)?";
+const DRAFT = "# PR #735: comment line by line (head abc1234)\n\n## 1. `src/a.ts:10`\nc check lại chỗ này giúp e nha\n\n---\n\n## 2. `src/b.ts:4`\nđoạn này thiếu case rỗng\n";
+const NOW = Date.now();
+const at = (ms) => new Date(ms).toISOString();
+
+function settingsWith(rules) {
+  const file = join(tempDir("tedy-settings-"), "settings.json");
+  writeFileSync(file, JSON.stringify({ permissions: { ask: rules } }));
+  return file;
+}
+
+const prompt = (ms) => ({ type: "user", timestamp: at(ms), message: { content: "đăng review đi e" } });
+const asked = (ms, options, id = "toolu_1", question = QUESTION) => ({ type: "assistant", timestamp: at(ms), message: { content: [{ type: "tool_use", id, name: "AskUserQuestion", input: { questions: [{ question, header: VI["post.header"], options, multiSelect: false }] } }] } });
+const answered = (ms, answers, { id = "toolu_1", annotations = {}, content = "Your questions have been answered.", extra = {} } = {}) => ({ type: "user", timestamp: at(ms), message: { content: [{ type: "tool_result", tool_use_id: id, content }] }, toolUseResult: { questions: [], answers, annotations, ...extra } });
+const postOptions = (preview = DRAFT, hold = undefined) => [
+  { label: VI["post.asIs"], description: "Đăng 2 comment", ...(preview === null ? {} : { preview }) },
+  { label: VI["post.hold"], description: "Chưa đăng", ...(hold === undefined ? {} : { preview: hold }) },
+];
+
+function workspace(entries, { draftAt = NOW - 30_000 } = {}) {
+  const dir = tempDir("tedy-answer-");
+  const draft = join(dir, "d.md");
+  writeFileSync(draft, DRAFT);
+  utimesSync(draft, new Date(draftAt), new Date(draftAt));
+  const transcript = join(dir, "t.jsonl");
+  writeFileSync(transcript, entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n");
+  return { dir, transcript };
+}
+
+function runGate(command, { dir, transcript }, { mode = "answer", rules = [], extraEnv = {} } = {}) {
+  const gates = mode ? { publishApproval: mode } : {};
+  const input = JSON.stringify({ tool_name: "Bash", tool_input: { command }, cwd: dir, ...(transcript ? { transcript_path: transcript } : {}) });
+  const env = { ...process.env, TEDY_STATE_DIR: tempDir("tedy-state-"), TEDY_CLAUDE_SETTINGS: settingsWith(rules), TEDY_PROFILE_DIR: profileWith({ gates, language: { chat: "vi" } }), ...extraEnv };
+  const out = execFileSync("node", [GATE_ENTRY], { input, encoding: "utf8", env });
+  return out ? JSON.parse(out).hookSpecificOutput : null;
+}
+
+const POST = "node /k/github-write.mjs post d.md";
+const approvedTurn = (options = postOptions(), answers = { [QUESTION]: VI["post.asIs"] }, annotations = {}) => [prompt(NOW - 60_000), asked(NOW - 20_000, options), answered(NOW - 19_000, answers, { annotations })];
+
+test("answer mode allows a publish after an approved AskUserQuestion whose chosen preview holds the draft verbatim", () => {
+  const result = runGate(POST, workspace(approvedTurn()));
+  assert.equal(result?.permissionDecision, "allow");
+});
+
+test("answer mode denies, never asks, when the approval is missing, refused, stale, noted, timed out or not verbatim", () => {
+  const cases = [
+    ["no answer", [prompt(NOW - 60_000), asked(NOW - 20_000, postOptions())]],
+    ["not an approval label", approvedTurn(postOptions(), { [QUESTION]: VI["post.hold"] })],
+    ["free text", approvedTurn(postOptions(), { [QUESTION]: "ok đăng đi" })],
+    ["English label in a Vietnamese chat", approvedTurn(postOptions(), { [QUESTION]: LABELS.en["post.asIs"] })],
+    ["preview not verbatim", approvedTurn(postOptions(DRAFT.replace("rỗng", "null")))],
+    ["preview only on the option not chosen", approvedTurn(postOptions(null, DRAFT))],
+    ["note on the approval", approvedTurn(postOptions(), { [QUESTION]: VI["post.asIs"] }, { [QUESTION]: { notes: "bỏ câu 2" } })],
+    ["timeout", [prompt(NOW - 60_000), asked(NOW - 20_000, postOptions()), answered(NOW - 19_000, {}, { content: "No response after 600s — the user may be away from keyboard.", extra: { afkTimeoutMs: 600_000 } })]],
+    ["approval in an earlier turn", [...approvedTurn(), prompt(NOW - 10_000)]],
+    ["approval only in a request blob", [prompt(NOW - 60_000), asked(NOW - 20_000, postOptions()), { ...answered(NOW - 19_000, { [QUESTION]: VI["post.asIs"] }), type: "api-request-blob" }]],
+  ];
+  for (const [name, entries] of cases) {
+    const result = runGate(POST, workspace(entries));
+    assert.equal(result?.permissionDecision, "deny", name);
+    assert.match(result.permissionDecisionReason, /AskUserQuestion/, name);
+    assert.match(result.permissionDecisionReason, /comment [12] of .*d\.md/, name);
+  }
+});
+
+test("a draft changed after the approval is denied", () => {
+  const result = runGate(POST, workspace(approvedTurn(), { draftAt: NOW - 5_000 }));
+  assert.equal(result?.permissionDecision, "deny");
+});
+
+test("without a transcript answer mode denies a publish", () => {
+  const { dir } = workspace(approvedTurn());
+  const result = runGate(POST, { dir });
+  assert.equal(result?.permissionDecision, "deny");
+  assert.match(result.permissionDecisionReason, /transcript/);
+});
+
+test("a draftless publish needs the verbatim command in the approving preview", () => {
+  const command = "node /k/openproject.mjs set 21298 --status Closed --apply --lock 7";
+  const question = "Đóng #21298?";
+  const turn = (preview) => [prompt(NOW - 60_000), asked(NOW - 20_000, [{ label: VI["approve.all"], description: "Đóng", preview }, { label: VI["approve.hold"], description: "Chưa" }], "toolu_2", question), answered(NOW - 19_000, { [question]: VI["approve.all"] }, { id: "toolu_2" })];
+  assert.equal(runGate(command, workspace(turn(`#21298 New → Closed\n\n${command}`)))?.permissionDecision, "allow");
+  const denied = runGate(command, workspace(turn("#21298 New → Closed")));
+  assert.equal(denied?.permissionDecision, "deny");
+  assert.ok(denied.permissionDecisionReason.includes(command), denied.permissionDecisionReason);
+  for (const draftless of ["node /k/openproject.mjs relation 1 2 --type blocks --apply", "node /k/figma-comments.mjs delete 99", "node /k/github-write.mjs resolve PRRT_x"]) {
+    assert.equal(runGate(draftless, workspace(turn(`#21298 New → Closed\n\n${command}`)))?.permissionDecision, "deny", draftless);
+  }
+});
+
+test("a body-file publish needs the body verbatim, and approve.all counts as an approval", () => {
+  const ws = workspace([]);
+  writeFileSync(join(ws.dir, "b.md"), "Màn này thiếu trạng thái rỗng ạ?\n");
+  utimesSync(join(ws.dir, "b.md"), new Date(NOW - 30_000), new Date(NOW - 30_000));
+  const question = "Đăng 1 comment Figma?";
+  const entries = [prompt(NOW - 60_000), asked(NOW - 20_000, [{ label: VI["approve.all"], description: "Đăng", preview: "1. Màn này thiếu trạng thái rỗng ạ?" }, { label: VI["approve.hold"], description: "Chưa" }], "toolu_3", question), answered(NOW - 19_000, { [question]: VI["approve.all"] }, { id: "toolu_3" })];
+  writeFileSync(ws.transcript, entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n");
+  assert.equal(runGate("node /k/figma-comments.mjs post 1:2 --body-file b.md", ws)?.permissionDecision, "allow");
+  assert.equal(runGate("cd / && node /k/figma-comments.mjs post 1:2 --body-file b.md", ws)?.permissionDecision, "deny");
+});
+
+test("a publish that shares its command with anything but cd is denied in answer mode", () => {
+  for (const command of [`${POST} && echo ok`, `${POST}; git push origin main`, `timeout 60 ${POST}`]) {
+    const result = runGate(command, workspace(approvedTurn()));
+    assert.equal(result?.permissionDecision, "deny", command);
+  }
+  assert.equal(runGate(`cd . && ${POST}`, workspace(approvedTurn()))?.permissionDecision, "allow");
+});
+
+test("ask mode is unchanged: a covered publish passes to the ask rule, an uncovered one asks", () => {
+  const ws = workspace(approvedTurn());
+  for (const mode of ["ask", null]) {
+    assert.equal(runGate(POST, ws, { mode, rules: KIT_PUBLISH_ASK_RULES }), null, String(mode));
+    const uncovered = runGate(POST, ws, { mode });
+    assert.equal(uncovered?.permissionDecision, "ask", String(mode));
+    assert.match(uncovered.permissionDecisionReason, /no permission rule covers/);
+  }
+});
+
+test("answer mode skips the uncovered-publish ask and denies an unapproved publish instead", () => {
+  const result = runGate(POST, workspace([prompt(NOW - 60_000)]));
+  assert.equal(result?.permissionDecision, "deny");
+  assert.doesNotMatch(result.permissionDecisionReason, /no permission rule covers/);
+});
+
+test("gh pr merge still asks in answer mode, and a plain command gets no decision", () => {
+  const ws = workspace(approvedTurn());
+  const merge = runGate("gh pr merge 12", ws);
+  assert.equal(merge?.permissionDecision, "ask");
+  assert.match(merge.permissionDecisionReason, /belongs to the user/);
+  assert.equal(runGate("git status", ws), null);
+  assert.equal(runGate(`${POST} --dry-run`, ws), null);
+});
+
+test("the required texts are every body that goes out, else the command", () => {
+  const dir = tempDir("tedy-needs-");
+  const files = {
+    [join(dir, "d.md")]: DRAFT,
+    [join(dir, "items.json")]: JSON.stringify({ items: [{ comment: " đã đăng ", posted: { id: "x" } }, { comment: "  Câu này hỏi lại PM ạ  " }] }),
+    [join(dir, "b.md")]: "trả lời\n",
+  };
+  const read = (file) => files[file];
+  const texts = (command) => needs(command, dir, read)?.texts.map((item) => item.text);
+  assert.deepEqual(texts("node /k/github-write.mjs post d.md"), ["c check lại chỗ này giúp e nha", "đoạn này thiếu case rỗng"]);
+  assert.deepEqual(texts("node /k/doc-comment-file.mjs post items.json --html x.html --apply"), ["Câu này hỏi lại PM ạ"]);
+  assert.deepEqual(texts("node /k/gdoc-comments.mjs anchor --tab t.1 --quote 'x y' --body-file b.md"), ["trả lời\n"]);
+  assert.deepEqual(texts("node /k/github-write.mjs reply 1 2 --body 'ok a'"), ["ok a"]);
+  assert.deepEqual(texts("node /k/openproject.mjs apply drafts.json"), ["node /k/openproject.mjs apply drafts.json"]);
+  assert.deepEqual(needs("node /k/openproject.mjs apply drafts.json", dir, read).files, [join(dir, "drafts.json")]);
+  assert.equal(needs("node /k/github-write.mjs post d.md --dry-run", dir, read), null);
+});

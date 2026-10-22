@@ -30,13 +30,13 @@ test("the profile directory comes from TEDY_PROFILE_DIR, else ~/.config/tedy", (
 test("a missing config gives the defaults, with every personal gate off", () => {
   const config = loadConfig(profileWith({}));
   assert.deepEqual(config, DEFAULT_CONFIG);
-  assert.deepEqual(config.gates, { noComments: false, draftPrOnly: false, roleGate: false, ghWrites: false, publishQuote: false, pushExempt: [] });
+  assert.deepEqual(config.gates, { noComments: false, draftPrOnly: false, roleGate: false, ghWrites: false, publishQuote: false, publishApproval: "ask", pushExempt: [] });
   assert.equal(config.language.chat, "en");
 });
 
 test("a partial config keeps the defaults it does not set and expands ~ in pushExempt", () => {
   const dir = profileWith({ "config.json": JSON.stringify({ gates: { noComments: true, pushExempt: ["~/work/kit", "/abs/profile"] }, language: { chat: "vi" } }) });
-  assert.deepEqual(loadConfig(dir), { gates: { noComments: true, draftPrOnly: false, roleGate: false, ghWrites: false, publishQuote: false, pushExempt: [join(homedir(), "work/kit"), "/abs/profile"] }, language: { chat: "vi" } });
+  assert.deepEqual(loadConfig(dir), { gates: { noComments: true, draftPrOnly: false, roleGate: false, ghWrites: false, publishQuote: false, publishApproval: "ask", pushExempt: [join(homedir(), "work/kit"), "/abs/profile"] }, language: { chat: "vi" } });
 });
 
 test("an invalid config fails loudly, naming the file and the field", () => {
@@ -44,6 +44,8 @@ test("an invalid config fails loudly, naming the file and the field", () => {
     [{ gates: { noComments: "yes" } }, /gates\.noComments must be a boolean/],
     [{ gates: { ghWrites: 1 } }, /gates\.ghWrites must be a boolean/],
     [{ gates: { publishQuote: "yes" } }, /gates\.publishQuote must be a boolean/],
+    [{ gates: { publishApproval: "maybe" } }, /gates\.publishApproval must be "ask" or "answer"/],
+    [{ gates: { publishApproval: true } }, /gates\.publishApproval must be "ask" or "answer"/],
     [{ gates: { pushExempt: "/one" } }, /gates\.pushExempt must be an array of strings/],
     [{ gate: {} }, /unknown key "gate"/],
     [{ gates: { noComment: true } }, /unknown key "gates\.noComment"/],
