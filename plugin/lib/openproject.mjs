@@ -85,11 +85,12 @@ async function check(client, project, drafts) {
 const locksPath = (file) => `${snapshotPath(file)}.locks.json`;
 
 async function pinLinks(file) {
-  const { figma, docs } = linkedDocs(readFileSync(file, "utf8"));
+  const text = readFileSync(file, "utf8");
+  const { figma, docs } = linkedDocs(text);
   const pins = [];
   for (const { file: key, nodes } of figma) pins.push({ ...(await figmaPin(figmaClient({ file: key }))), nodes });
   for (const doc of docs) pins.push(await gdocPin(await session({ doc })));
-  writeSources(file, pins);
+  writeSources(file, pins, text);
   for (const pin of pins) console.log(describePin(pin));
 }
 

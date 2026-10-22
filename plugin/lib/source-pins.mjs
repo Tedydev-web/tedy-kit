@@ -107,7 +107,9 @@ export function pinnedSources(file, relint) {
   const again = `run ${relint}, then ask the user again`;
   if (!existsSync(path)) return { refusal: `refused: ${file} has no pinned sources; ${again}` };
   const record = JSON.parse(readFileSync(path, "utf8"));
-  if (record.sha256 && record.sha256 !== digest(readFileSync(file, "utf8"))) return { refusal: `refused: ${file} changed after its sources were pinned; ${again}` };
+  if (record.file !== resolve(file)) return { refusal: `refused: the sources record for ${file} was written for ${record.file}; ${again}` };
+  if (typeof record.sha256 !== "string") return { refusal: `refused: ${file} has a sources record with no digest of its text; ${again}` };
+  if (record.sha256 !== digest(readFileSync(file, "utf8"))) return { refusal: `refused: ${file} changed after its sources were pinned; ${again}` };
   return { sources: record.sources };
 }
 

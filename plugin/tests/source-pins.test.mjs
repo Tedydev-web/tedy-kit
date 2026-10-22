@@ -1,9 +1,9 @@
 import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { cites, linkedDocs, mapRepos, pinnedSources, pinRepos, recheckRepos, versionCheck, writeSources } from "../lib/source-pins.mjs";
+import { cites, linkedDocs, mapRepos, pinnedSources, pinRepos, recheckRepos, sourcesPath, versionCheck, writeSources } from "../lib/source-pins.mjs";
 import { git, siblingRepo } from "./git-sibling-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
@@ -119,7 +119,23 @@ test("the sources record is required at publish and goes stale when the linted f
   writeFileSync(file, "draft two\n");
   assert.deepEqual(pinnedSources(file, relint), { refusal: `refused: ${file} changed after its sources were pinned; run ${relint}, then ask the user again` });
   writeSources(file, []);
+  assert.deepEqual(pinnedSources(file, relint), { refusal: `refused: ${file} has a sources record with no digest of its text; run ${relint}, then ask the user again` });
+  writeSources(file, [], "draft two\n");
   assert.deepEqual(pinnedSources(file, relint), { sources: [] });
+});
+
+test("a sources record serves only the file it was written for, even when two paths share its name", () => {
+  const dir = tempDir("tedy-pins-");
+  const first = join(dir, "a_b", "c");
+  const second = join(dir, "a", "b_c");
+  mkdirSync(join(dir, "a_b"));
+  mkdirSync(join(dir, "a"));
+  writeFileSync(first, "same text\n");
+  writeFileSync(second, "same text\n");
+  assert.equal(sourcesPath(first), sourcesPath(second));
+  writeSources(first, [{ kind: "figma", file: "F", version: "1" }], "same text\n");
+  assert.deepEqual(pinnedSources(second, "relint"), { refusal: `refused: the sources record for ${second} was written for ${first}; run relint, then ask the user again` });
+  assert.deepEqual(pinnedSources(first, "relint"), { sources: [{ kind: "figma", file: "F", version: "1" }] });
 });
 
 test("linkedDocs finds the Figma files and Google Docs a tracker draft links", () => {

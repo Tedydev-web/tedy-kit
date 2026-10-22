@@ -9,7 +9,7 @@ import { fetchTab, indexTab, quoteInText, UC_ID } from "./prd-section.mjs";
 import { generatedPrBodyOp } from "./openproject.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
-import { mapRepos, pinnedSources, recheckRepos } from "./source-pins.mjs";
+import { cites, mapRepos, pinnedSources, recheckRepos } from "./source-pins.mjs";
 
 const normalise = (text) => text.replace(/\s+/g, " ").trim();
 
@@ -127,9 +127,15 @@ function sourcesRefused(file, lintMode) {
     console.log("refused: pass the body as --body-file <file> so draft-lint can pin its sources");
     return true;
   }
-  const { sources, refusal } = pinnedSources(file, `draft-lint.mjs ${lintMode} ${file}`);
+  const relint = `draft-lint.mjs ${lintMode} ${file}`;
+  const { sources, refusal } = pinnedSources(file, relint);
   if (refusal) {
     console.log(refusal);
+    return true;
+  }
+  const unpinned = cites(readFileSync(file, "utf8")).filter(({ path, branch }) => !sources.some((pin) => pin.kind === "git" && pin.ref === `origin/${branch}` && pin.paths.includes(path)));
+  if (unpinned.length) {
+    console.log(`refused: ${file} cites ${unpinned.map(({ path, branch }) => `${path}@${branch}`).join(", ")} with no pin in its sources record; run ${relint}, then ask the user again`);
     return true;
   }
   const { refusals, notices } = recheckRepos(sources, mapRepos(resolveMap(process.cwd())?.map));

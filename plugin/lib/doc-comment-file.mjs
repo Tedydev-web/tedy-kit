@@ -135,7 +135,8 @@ async function main([itemsFile, ...rest]) {
   const resolved = resolveMap(process.cwd());
   if (!resolved) throw new Error(`no project map covers ${process.cwd()}; run /tedy:setup`);
   const { map } = resolved;
-  const { title, items } = JSON.parse(readFileSync(itemsFile, "utf8"));
+  const text = readFileSync(itemsFile, "utf8");
+  const { title, items } = JSON.parse(text);
   const tabOf = (epic) => map.prd?.tabs?.[epic]?.tab;
   const tabsText = {};
   for (const tab of new Set(items.map((item) => tabOf(item.epic)).filter(Boolean))) tabsText[tab] = await fetchTab(map.prd.doc, tab);
@@ -147,7 +148,7 @@ async function main([itemsFile, ...rest]) {
     return 1;
   }
   const pin = await gdocPin(await session({ doc: map.prd.doc }));
-  writeSources(itemsFile, [pin]);
+  writeSources(itemsFile, [pin], text);
   console.log(describePin(pin));
   const dir = join(map.paths[0], "plans", "drafts");
   mkdirSync(dir, { recursive: true });
