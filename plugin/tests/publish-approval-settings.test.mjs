@@ -80,6 +80,7 @@ test("answer denies file-tool edits to the approval tickets, and ask takes that 
   assert.deepEqual(read(place.settings).permissions.deny, [TICKET_DENY]);
   assert.deepEqual(read(place.settings).permissions.ask, []);
   assert.match(toggle(place).stdout, /ticket edit deny: on/);
+  assert.ok(toggle(place).stdout.includes(TICKET_DENY));
   const ruleOnly = places({ rules: [], deny: [] });
   assert.equal(toggle(ruleOnly, "answer").status, 0);
   assert.deepEqual(read(ruleOnly.settings).permissions.deny, [TICKET_DENY]);

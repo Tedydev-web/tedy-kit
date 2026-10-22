@@ -72,6 +72,16 @@ test("the hook entry writes tickets only in answer mode", () => {
   }
 });
 
+test("in answer mode the hook logs an AskUserQuestion that gave no ticket, with the response keys it saw", () => {
+  const state = tempDir("tedy-ticket-state-");
+  const profile = profileWith({ gates: { publishApproval: "answer" }, language: { chat: "vi" } });
+  const run = spawnSync("node", [HOOK], { input: JSON.stringify(hookInput([question("A")], {})), encoding: "utf8", env: { ...process.env, TEDY_STATE_DIR: state, TEDY_PROFILE_DIR: profile } });
+  assert.equal(run.status, 0, run.stderr);
+  const entry = readFileSync(join(state, "gate-log.jsonl"), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)).find((item) => item.hook === "publish-approval-ticket");
+  assert.equal(entry.decision, "no-ticket");
+  assert.deepEqual(entry.response_keys, ["questions", "answers", "annotations"]);
+});
+
 test("a ticket is used once, for the command line on a line of its own and every text on whole lines", () => {
   const { dir } = ticketWith(`Trả lời thread 2:\n\nok a\nthêm dòng 2\n\n${REPLY}`);
   assert.throws(() => consume(dir, ["reply", "1", "3", "--body-file", "b.md"], ["ok a"]), /no unused approval/);

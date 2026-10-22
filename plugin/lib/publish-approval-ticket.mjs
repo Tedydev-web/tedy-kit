@@ -130,6 +130,7 @@ export function run() {
     if (gateSwitches().publishApproval !== "answer") return;
     const ids = recordApprovals(input);
     if (ids.length) logGate({ hook: "publish-approval-ticket", decision: "ticket", tickets: ids.length, tool_use_id: input.tool_use_id });
+    else logGate({ hook: "publish-approval-ticket", decision: "no-ticket", tool_use_id: input.tool_use_id, response_keys: Object.keys(input.tool_response ?? {}) });
   } catch (error) {
     logGate({ hook: "publish-approval-ticket", decision: "ticket-failed", error: error.message });
   }

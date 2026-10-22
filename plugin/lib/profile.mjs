@@ -200,7 +200,7 @@ function publishApproval(dir, mode, settingsFile = CLAUDE_SETTINGS) {
   if (mode === undefined) {
     const { ask, deny } = settings();
     const present = KIT_PUBLISH_ASK_RULES.filter((rule) => ask.includes(rule)).length;
-    process.stdout.write(`publish approval: ${loadConfig(dir).gates.publishApproval}\nkit publish ask rules in ${settingsFile}: ${present}/${KIT_PUBLISH_ASK_RULES.length}\nticket edit deny: ${deny.includes(approvalsDenyRule()) ? "on" : "off"}\n`);
+    process.stdout.write(`publish approval: ${loadConfig(dir).gates.publishApproval}\nkit publish ask rules in ${settingsFile}: ${present}/${KIT_PUBLISH_ASK_RULES.length}\nticket edit deny: ${deny.includes(approvalsDenyRule()) ? "on" : "off"} (${approvalsDenyRule()})\n`);
     return 0;
   }
   if (!existsSync(file)) throw new Error(`${file} is missing; run profile.mjs init first, then switch the mode`);
@@ -212,7 +212,7 @@ function publishApproval(dir, mode, settingsFile = CLAUDE_SETTINGS) {
   if (unchanged(current, next)) lines.push(`${settingsFile}: kit publish ask rules already ${mode === "answer" ? "removed" : "present"} and ticket edit deny already ${mode === "answer" ? "on" : "off"}, not written`);
   else {
     const { backup, removed, added } = writePermissions(settingsFile, current, next);
-    lines.push(`${settingsFile}: removed ${removed}, restored ${added} kit publish ask rules; ticket edit deny ${mode === "answer" ? "on" : "off"}; backup ${backup}`);
+    lines.push(`${settingsFile}: removed ${removed}, restored ${added} kit publish ask rules; ticket edit deny ${mode === "answer" ? "on" : "off"} (${approvalsDenyRule()}); backup ${backup}`);
   }
   const gates = { ...raw.gates, publishApproval: mode };
   if (mode === "ask") delete gates.publishApproval;
