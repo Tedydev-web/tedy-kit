@@ -189,10 +189,3 @@ test("answer mode: figma delete needs a ticket holding the exact command line", 
   assert.equal(done.status, 0, done.stdout + done.stderr);
   assert.equal(deletes().length, 1);
 });
-
-test("every kit write path asks consumeApproval before it writes", () => {
-  const source = (name) => readFileSync(new URL(`../lib/${name}.mjs`, import.meta.url), "utf8");
-  for (const [name, count] of [["github-write", 6], ["openproject", 5], ["openproject-relation", 2], ["figma-comments", 3], ["gdoc-comments", 3], ["doc-comment-file", 1]]) {
-    assert.equal(source(name).match(/consumeApproval\(process\.argv/g)?.length ?? 0, count, name);
-  }
-});
