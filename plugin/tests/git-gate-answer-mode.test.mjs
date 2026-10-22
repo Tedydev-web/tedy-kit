@@ -63,3 +63,10 @@ test("a failed check never crashes the gate: a command it cannot even read is re
   assert.equal(checkFailed("git status", false, "Bash", new Error("first")).ask, true);
   assert.equal(checkFailed("node /k/github-write.mjs reply 1 2 --body x", true, "Bash", new Error("first")).ask, undefined);
 });
+
+test("a failed check names a non-Error throw by its own text", async () => {
+  const { checkFailed } = await import("../gates/git-gate.mjs");
+  assert.match(checkFailed("git status", false, "Bash", "plain text failure").reason, /plain text failure/);
+  assert.match(checkFailed({ toString() { throw new Error("boom"); } }, false, "Bash", 42).reason, /could not read this command \(boom\)/);
+  assert.match(checkFailed("node /k/github-write.mjs reply 1 2 --body x", true, "Bash", "odd").reason, /\(odd\)/);
+});
