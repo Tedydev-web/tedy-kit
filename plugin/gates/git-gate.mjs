@@ -466,11 +466,23 @@ function judge(input, tool) {
     if (!result.allow) logGate({ hook: "git-gate", decision: result.ask ? "ask" : "deny", tool, command: command.slice(0, 200), cwd: input.cwd, reason: result.reason });
     return result;
   } catch (error) {
-    const publish = splitSegments(String(command), false).some(publishes);
-    logGate({ hook: "git-gate", decision: answerMode && publish ? "deny" : "ask", tool, command: String(command).slice(0, 200), error: error.message });
-    if (answerMode && publish) return { allow: false, reason: `tedy gate: could not check this command (${error.message}). Publish approval is in answer mode, where a publish is never asked twice, so it is refused; run the publish as a plain command of its own.` };
-    return { allow: false, ask: true, reason: publish ? `tedy gate: could not check this publish command (${error.message}). Approve only if you have seen the exact draft.` : `tedy gate: could not check this command (${error.message}). Allow it only if the user asked for it.` };
+    return checkFailed(command, answerMode, tool, error);
   }
+}
+
+export function checkFailed(command, answerMode, tool, error) {
+  let text;
+  let publish;
+  try {
+    text = String(command);
+    publish = splitSegments(text, false).some(publishes);
+  } catch (unreadableError) {
+    logGate({ hook: "git-gate", decision: "deny", tool, error: `${error.message}; ${unreadableError.message}` });
+    return { allow: false, reason: `tedy gate: could not read this command (${unreadableError.message}), so it is refused unchecked. ${REWRITE}` };
+  }
+  logGate({ hook: "git-gate", decision: answerMode && publish ? "deny" : "ask", tool, command: text.slice(0, 200), error: error.message });
+  if (answerMode && publish) return { allow: false, reason: `tedy gate: could not check this command (${error.message}). Publish approval is in answer mode, where a publish is never asked twice, so it is refused; run the publish as a plain command of its own.` };
+  return { allow: false, ask: true, reason: publish ? `tedy gate: could not check this publish command (${error.message}). Approve only if you have seen the exact draft.` : `tedy gate: could not check this command (${error.message}). Allow it only if the user asked for it.` };
 }
 
 export function run() {

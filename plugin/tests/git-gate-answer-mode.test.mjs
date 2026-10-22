@@ -50,3 +50,16 @@ test("ask mode is unchanged: an uncovered publish asks, a covered one passes to 
     assert.equal(gate("timeout 60 node /k/github-write.mjs post d.md", { mode, rules: KIT_PUBLISH_ASK_RULES })?.permissionDecision, "ask", String(mode));
   }
 });
+
+test("a failed check never crashes the gate: a command it cannot even read is refused", async () => {
+  const { checkFailed } = await import("../gates/git-gate.mjs");
+  const unreadable = { toString() { throw new Error("boom"); } };
+  for (const answerMode of [false, true]) {
+    const result = checkFailed(unreadable, answerMode, "Bash", new Error("first"));
+    assert.equal(result.allow, false);
+    assert.notEqual(result.ask, true);
+    assert.match(result.reason, /could not read this command/);
+  }
+  assert.equal(checkFailed("git status", false, "Bash", new Error("first")).ask, true);
+  assert.equal(checkFailed("node /k/github-write.mjs reply 1 2 --body x", true, "Bash", new Error("first")).ask, undefined);
+});
