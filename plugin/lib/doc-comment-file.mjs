@@ -96,8 +96,8 @@ async function post(itemsFile, flags) {
   for (const item of todo) console.log(`- EPIC ${item.epic} · ${item.where} · tab ${tabOf(item.epic)}\n  [${item.quote.slice(0, 80)}]\n  ${item.comment.trim().replace(/\s+/g, " ")}`);
   console.log(`WRITE → Google Doc ${map.prd.doc} : ${todo.length} anchored comments (${data.items.length - todo.length} already posted)`);
   if (!flags.apply) return 0;
-  consumeApproval(process.argv, todo.map((item) => item.comment.trim()));
   const google = await session({ doc: map.prd.doc }, true);
+  consumeApproval(process.argv, todo.map((item) => item.comment.trim()));
   const save = () => {
     writeFileSync(itemsFile, `${JSON.stringify(data, null, 2)}\n`);
     const lang = chatLanguage();

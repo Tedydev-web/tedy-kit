@@ -112,10 +112,11 @@ export const stillThere = (comments, commentId, replyId) => {
   return Boolean(comment && (!replyId || comment.replies.some((reply) => reply.id === replyId && !reply.deleted)));
 };
 
-export async function anchorComment(google, tab, quote, body) {
+export async function anchorComment(google, tab, quote, body, beforeWrite = () => {}) {
   const document = await google.request(`${DOCS}/documents/${google.doc}?includeTabsContent=true&suggestionsViewMode=SUGGESTIONS_INLINE`);
   const range = findQuoteRange(document, tab, quote);
   console.log(`WRITE → Google Doc ${google.doc} tab ${tab} : 1 comment anchored at ${range.startIndex}–${range.endIndex}`);
+  beforeWrite();
   await google.request(`${DOCS}/documents/${google.doc}:batchUpdate`, { method: "POST", body: { requests: [{ insertComment: { content: body, range } }] } });
   const posted = (await listComments(google)).filter((comment) => comment.author.me && !comment.resolved && comment.content.trim() === body).at(-1);
   if (!posted) throw new Error("the anchored comment could not be read back with the same text");
@@ -151,14 +152,15 @@ async function main([command, target, ...rest]) {
     const body = readBody(flags);
     const google = await session(flags, command === "anchor");
     if (alreadyPosted(await listComments(google), command, target, body)) throw new Error(`the Doc already has this ${command === "reply" ? `reply in thread ${target}` : "comment"}; nothing posted`);
-    consumeApproval(process.argv, [body]);
+    const approve = () => consumeApproval(process.argv, [body]);
     let id;
     if (command === "reply") {
       console.log(`WRITE → Google Doc ${google.doc} thread ${target} : 1 reply`);
+      approve();
       await google.request(`${DRIVE}/files/${google.doc}/comments/${target}/replies?fields=id`, { method: "POST", body: { content: body } });
       id = target;
     } else {
-      id = await anchorComment(google, flags.tab, flags.quote, body);
+      id = await anchorComment(google, flags.tab, flags.quote, body, approve);
     }
     const comments = await listComments(google);
     const found = comments.some((comment) => (command === "reply" ? comment.id === id && comment.replies.some((reply) => reply.content.trim() === body) : comment.content.trim() === body));

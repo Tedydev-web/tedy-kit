@@ -295,10 +295,10 @@ async function rollback(client, project, flags) {
     console.log(`WRITE → ${client.host} · project ${project} : ${items.length} ${action}; run again with --apply${action === "delete" ? " --delete" : ""}`);
     return 0;
   }
-  consumeApproval(process.argv, []);
   const statuses = (await client.request("/api/v3/statuses"))._embedded.elements.filter((status) => status.isClosed);
   const closedStatus = statuses.find((status) => status.name.toLowerCase() === "closed") ?? statuses[0];
   if (action === "close" && !closedStatus) throw new Error("this instance has no closed status");
+  consumeApproval(process.argv, []);
   const done = [];
   const failed = [];
   for (const item of items.toReversed()) {

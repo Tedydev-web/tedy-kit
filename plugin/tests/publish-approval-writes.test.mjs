@@ -95,3 +95,50 @@ test("doc-comment-file post --apply writes only with a ticket, once", async () =
   w.file("items.json", JSON.stringify({ title: "PRD", items: [{ group: "A", epic: "09", where: "UC_SW_13 BR1", quote: "Crypto takes the price in USDT", comment: "Which wallet pays the fee?" }] }));
   await onceOnly(w, "doc-comment-file", ["post", "items.json", "--html", "out.html", "--apply"], (line) => `Which wallet pays the fee?\n${line}`, () => w.writes().length);
 });
+
+test("a post ticket binds the PR, head, path and line, not only the comment text", async () => {
+  const w = world({ gh: { diff: DIFF, head: HEAD, reviewComments: [{ id: 1, path: "src/a.ts", line: 10, side: "RIGHT", commit_id: HEAD }] } });
+  w.file("d.md", DRAFT);
+  const args = ["post", "d.md", "--repo", "o/r"];
+  w.approve(`${DRAFT.replace("src/a.ts:10", "src/b.ts:4")}\n${w.line("github-write", args)}`);
+  const moved = await w.run("github-write", args);
+  assert.match(moved.out, /no unused approval/);
+  w.approve(`The label is wrong.\n${w.line("github-write", args)}`);
+  assert.match((await w.run("github-write", args)).out, /no unused approval/);
+  assert.deepEqual(w.writes(), []);
+});
+
+test("a run refused before it writes leaves its ticket unused", async () => {
+  const post = world({ gh: { diff: "diff --git a/other.ts b/other.ts\n--- a/other.ts\n+++ b/other.ts\n@@ -1,1 +1,1 @@\n+x\n", head: HEAD } });
+  post.file("d.md", DRAFT);
+  const args = ["post", "d.md", "--repo", "o/r"];
+  post.approve(`${DRAFT}\n${post.line("github-write", args)}`);
+  assert.notEqual((await post.run("github-write", args)).code, 0);
+  assert.equal(post.tickets(), 1);
+  post.file("gh.json", JSON.stringify({ diff: DIFF, head: HEAD, reviewComments: [{ id: 1, path: "src/a.ts", line: 10, side: "RIGHT", commit_id: HEAD }] }));
+  await post.run("github-write", args);
+  assert.equal(post.writes().length, 1);
+  assert.equal(post.tickets(), 0);
+
+  const anchor = world({ web: { drive: [], document: DOCUMENT } });
+  anchor.file("g.md", "Which wallet pays the fee?\n");
+  const anchorArgs = ["anchor", "--tab", "t.1", "--quote", "a passage not in the tab", "--body-file", "g.md", "--doc", "D"];
+  anchor.approve(`Which wallet pays the fee?\n${anchor.line("gdoc-comments", anchorArgs)}`);
+  assert.match((await anchor.run("gdoc-comments", anchorArgs)).out, /quote not found/);
+  assert.equal(anchor.tickets(), 1);
+
+  const op = await fakeOpenProject({ closedStatus: false });
+  try {
+    const w = world({ opUrl: op.url });
+    w.file("drafts.json", JSON.stringify([{ slug: "task-fe-a", type: "Task", subject: "[FE] Vault limit pop-up on Pro", description: DESCRIPTION, estimate: 1 }]));
+    await w.run("openproject", ["preview", "drafts.json", "--project", "183"]);
+    w.approve(`[FE] Vault limit pop-up on Pro\n${DESCRIPTION}\n${w.line("openproject", ["apply", "drafts.json", "--project", "183"])}`);
+    await w.run("openproject", ["apply", "drafts.json", "--project", "183"]);
+    const rollback = ["rollback", "--project", "183", "--apply"];
+    w.approve(w.line("openproject", rollback));
+    assert.match((await w.run("openproject", rollback)).out, /no closed status/);
+    assert.equal(w.tickets(), 1);
+  } finally {
+    op.server.close();
+  }
+});

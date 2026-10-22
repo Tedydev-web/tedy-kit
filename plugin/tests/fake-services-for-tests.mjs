@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -103,7 +103,7 @@ const STATUSES = [
 ];
 const DESCRIPTION = "## Goal\nShow the pop-up when a 4th vault is started on Free.\n\n## Checklist\n- [ ] Show the pop-up.\n\n## AC\n- [ ] On Free, a 4th vault cannot be started.";
 
-export function fakeOpenProject() {
+export function fakeOpenProject({ closedStatus = true } = {}) {
   const workPackages = {};
   const relations = [];
   const activities = [];
@@ -122,7 +122,7 @@ export function fakeOpenProject() {
       const path = url.pathname;
       const send = (data, status = 200) => response.writeHead(status).end(JSON.stringify(data));
       if (request.method !== "GET" && !path.endsWith("/form")) calls.push(`${request.method} ${path}`);
-      if (path === "/api/v3/statuses") return send({ _embedded: { elements: STATUSES } });
+      if (path === "/api/v3/statuses") return send({ _embedded: { elements: closedStatus ? STATUSES : STATUSES.filter((status) => !status.isClosed) } });
       if (path === "/api/v3/priorities") return send({ _embedded: { elements: [{ name: "High", _links: { self: { href: "/api/v3/priorities/9" } } }] } });
       if (path === "/api/v3/users/me") return send({ name: "me", _links: { self: { href: "/api/v3/users/1" } } });
       if (path.endsWith("/types")) return send({ _embedded: { elements: [{ name: "Task", _links: { self: { href: "/api/v3/types/1" } } }] } });
@@ -220,5 +220,12 @@ export function world({ mode = "answer", gh = {}, web = {}, map = null, opUrl = 
     return join(dir, name);
   };
   const quote = (arg) => (/^[\w./:@=-]+$/.test(arg) ? arg : `'${arg}'`);
-  return { dir, env, approve, run, writes, file, line: (script, args) => `node ${join(SCRIPTS, `${script}.mjs`)} ${args.map(quote).join(" ")}` };
+  const tickets = () => {
+    try {
+      return readdirSync(join(state, "approvals")).filter((name) => name.endsWith(".json")).length;
+    } catch {
+      return 0;
+    }
+  };
+  return { dir, env, approve, run, writes, file, tickets, line: (script, args) => `node ${join(SCRIPTS, `${script}.mjs`)} ${args.map(quote).join(" ")}` };
 }

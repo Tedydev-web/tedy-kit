@@ -157,7 +157,7 @@ async function post(file, flags) {
     console.log(JSON.stringify(payload, null, 2));
     return 0;
   }
-  consumeApproval(process.argv, payload.comments.map((comment) => comment.body));
+  consumeApproval(process.argv, [finalText]);
   const review = JSON.parse(gh(["api", "-X", "POST", `repos/${repo}/pulls/${final.pr}/reviews`, "--input", "-"], JSON.stringify(payload)));
   const posted = JSON.parse(gh(["api", "--paginate", "--slurp", `repos/${repo}/pulls/${final.pr}/reviews/${review.id}/comments`])).flat();
   for (const comment of posted) console.log(`${comment.id} ${comment.path}:${comment.line ?? comment.original_line} ${comment.side ?? "RIGHT"} ${comment.commit_id.slice(0, 8)}`);
