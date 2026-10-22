@@ -4,8 +4,8 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { chmodSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { KIT_PUBLISH_ASK_RULES, approvalsDenyRule } from "../lib/publish-approval-settings.mjs";
-const TICKET_DENY = approvalsDenyRule();
+import { KIT_PUBLISH_ASK_RULES, stateDenyRules } from "../lib/publish-approval-settings.mjs";
+const STATE_DENY = stateDenyRules();
 import { loadConfig } from "../lib/profile.mjs";
 import { evaluate as guard } from "../gates/profile-guard-gate.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
@@ -37,7 +37,7 @@ test("answer removes exactly the kit's publish ask rules, after a 600 backup, an
   assert.equal(run.status, 0, run.stderr);
   const after = read(place.settings);
   assert.deepEqual(after.permissions.ask, OTHER);
-  assert.deepEqual(after.permissions.deny, [SSH_DENY, TICKET_DENY]);
+  assert.deepEqual(after.permissions.deny, [SSH_DENY, ...STATE_DENY]);
   assert.deepEqual({ ...after, permissions: { ...after.permissions, ask: null, deny: null } }, { ...place.data, permissions: { ...place.data.permissions, ask: null, deny: null } });
   assert.equal(statSync(place.settings).mode & 0o777, 0o600);
   const [backup] = backups(place);
@@ -72,18 +72,23 @@ test("the toggle is idempotent and ask restores the same rules", () => {
   assert.match(toggle(place).stdout, /publish approval: ask/);
 });
 
-test("answer denies file-tool edits to the approval tickets, and ask takes that back, writing only on a change", () => {
-  assert.equal(TICKET_DENY, `Edit(/${join(process.env.TEDY_STATE_DIR, "approvals")}/**)`);
-  assert.match(TICKET_DENY, /^Edit\(\/\/[^~]/);
+test("answer denies file-tool edits to the approval tickets, the PR body records and the sources records, and ask takes that back, writing only on a change", () => {
+  const state = process.env.TEDY_STATE_DIR;
+  assert.deepEqual(STATE_DENY, [`Edit(/${join(state, "approvals")}/**)`, `Edit(/${join(state, "pr-bodies")}/**)`, `Edit(/${join(state, "drafts")}/*.sources.json)`]);
+  for (const rule of STATE_DENY) assert.match(rule, /^Edit\(\/\/[^~]/);
   const place = places({ rules: [...KIT_PUBLISH_ASK_RULES], deny: null });
   toggle(place, "answer");
-  assert.deepEqual(read(place.settings).permissions.deny, [TICKET_DENY]);
+  assert.deepEqual(read(place.settings).permissions.deny, STATE_DENY);
   assert.deepEqual(read(place.settings).permissions.ask, []);
-  assert.match(toggle(place).stdout, /ticket edit deny: on/);
-  assert.ok(toggle(place).stdout.includes(TICKET_DENY));
+  assert.match(toggle(place).stdout, /record edit deny: on/);
+  for (const rule of STATE_DENY) assert.ok(toggle(place).stdout.includes(rule), rule);
+  const older = places({ rules: [], deny: [SSH_DENY, STATE_DENY[0]] });
+  assert.match(toggle(older).stdout, /record edit deny: off/);
+  toggle(older, "answer");
+  assert.deepEqual(read(older.settings).permissions.deny, [SSH_DENY, ...STATE_DENY]);
   const ruleOnly = places({ rules: [], deny: [] });
   assert.equal(toggle(ruleOnly, "answer").status, 0);
-  assert.deepEqual(read(ruleOnly.settings).permissions.deny, [TICKET_DENY]);
+  assert.deepEqual(read(ruleOnly.settings).permissions.deny, STATE_DENY);
   assert.equal(backups(ruleOnly).length, 1);
   assert.equal(statSync(ruleOnly.settings).mode & 0o777, 0o600);
   toggle(ruleOnly, "answer");
@@ -91,7 +96,7 @@ test("answer denies file-tool edits to the approval tickets, and ask takes that 
   toggle(ruleOnly, "ask");
   assert.equal("deny" in read(ruleOnly.settings).permissions, false);
   assert.deepEqual(read(ruleOnly.settings).permissions.ask, KIT_PUBLISH_ASK_RULES);
-  assert.match(toggle(ruleOnly).stdout, /ticket edit deny: off/);
+  assert.match(toggle(ruleOnly).stdout, /record edit deny: off/);
   toggle(place, "ask");
   assert.equal("deny" in read(place.settings).permissions, false);
 });

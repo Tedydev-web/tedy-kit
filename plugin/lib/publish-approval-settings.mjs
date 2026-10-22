@@ -14,7 +14,9 @@ export const KIT_PUBLISH_ASK_RULES = Object.freeze([
   "Bash(*doc-comment-file.mjs*post*--apply*)",
 ]);
 
-export const approvalsDenyRule = (state = STATE_DIR) => `Edit(/${resolve(state, "approvals")}/**)`;
+export const stateDenyRules = (state = STATE_DIR) => [`Edit(/${resolve(state, "approvals")}/**)`, `Edit(/${resolve(state, "pr-bodies")}/**)`, `Edit(/${resolve(state, "drafts")}/*.sources.json)`];
+
+export const stateDenyOn = (deny) => stateDenyRules().every((rule) => deny.includes(rule));
 
 const KIT_SCRIPT =/github-write\.mjs|openproject\.mjs|figma-comments\.mjs|gdoc-comments\.mjs|doc-comment-file\.mjs/;
 
@@ -34,8 +36,9 @@ export function readSettings(file) {
 }
 
 export function plannedPermissions({ ask, deny }, mode) {
-  if (mode === "answer") return { ask: ask.filter((rule) => !KIT_PUBLISH_ASK_RULES.includes(rule)), deny: deny.includes(approvalsDenyRule()) ? deny : [...deny, approvalsDenyRule()] };
-  return { ask: [...ask, ...KIT_PUBLISH_ASK_RULES.filter((rule) => !ask.includes(rule))], deny: deny.filter((rule) => rule !== approvalsDenyRule()) };
+  const rules = stateDenyRules();
+  if (mode === "answer") return { ask: ask.filter((rule) => !KIT_PUBLISH_ASK_RULES.includes(rule)), deny: [...deny, ...rules.filter((rule) => !deny.includes(rule))] };
+  return { ask: [...ask, ...KIT_PUBLISH_ASK_RULES.filter((rule) => !ask.includes(rule))], deny: deny.filter((rule) => !rules.includes(rule)) };
 }
 
 export const unchanged = (current, next) => current.ask.length === next.ask.length && current.deny.length === next.deny.length;
