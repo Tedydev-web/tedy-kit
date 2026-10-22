@@ -6,7 +6,7 @@ import { requestJson } from "./api-request.mjs";
 import { lintChatComment, mapLanguage } from "./draft-lint.mjs";
 import { logPostedText } from "./edit-log.mjs";
 import { resolveMap } from "./project-map.mjs";
-import { consumeApproval } from "./publish-approval-ticket.mjs";
+import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { notBefore, sinceTime } from "./since.mjs";
 
 const API = "https://api.figma.com/v1";
@@ -59,6 +59,7 @@ async function main([command, target, ...rest]) {
   const args = target?.startsWith("--") ? [target, ...rest] : rest;
   const flags = Object.fromEntries(args.flatMap((arg, index) => (arg.startsWith("--") ? [[arg.slice(2), args[index + 1]]] : [])));
   if (flags.since !== undefined) sinceTime(flags.since);
+  if (["post", "reply", "delete"].includes(command)) requireExplicitTarget("file", flags.file);
   const figma = client(flags);
   if (command === "list") {
     const { comments } = await figma.request(`/files/${figma.file}/comments`);

@@ -96,7 +96,7 @@ test("gdoc reply, anchor, edit and delete write only with a ticket, once", async
 test("doc-comment-file post --apply writes only with a ticket, once", async () => {
   const w = world({ web: { tabs: { "t.1": TAB }, document: DOCUMENT }, map: { name: "p", repos: [{ path: ".", role: "FE" }], language: { pr_review: "en", doc_figma: "en" }, prd: { doc: "D", tabs: { "09": { tab: "t.1" } } } } });
   w.file("items.json", JSON.stringify({ title: "PRD", items: [ITEM] }));
-  await onceOnly(w, "doc-comment-file", ["post", "items.json", "--html", "out.html", "--apply"], (line) => `${renderDocComment(ITEM, "t.1")}\n${line}`, () => w.writes().length);
+  await onceOnly(w, "doc-comment-file", ["post", "items.json", "--html", "out.html", "--apply", "--doc", "D"], (line) => `${renderDocComment(ITEM, "t.1")}\n${line}`, () => w.writes().length);
 });
 
 test("a post ticket binds the PR, head, path and line, not only the comment text", async () => {
@@ -175,10 +175,45 @@ test("apply, rollback and doc-comment-file tickets need the rendered lines, whic
   }
   const doc = world({ web: { tabs: { "t.1": TAB }, document: DOCUMENT }, map: { name: "p", repos: [{ path: ".", role: "FE" }], language: { pr_review: "en", doc_figma: "en" }, prd: { doc: "D", tabs: { "09": { tab: "t.1" } } } } });
   doc.file("items.json", JSON.stringify({ title: "PRD", items: [ITEM] }));
-  const args = ["post", "items.json", "--html", "out.html", "--apply"];
+  const args = ["post", "items.json", "--html", "out.html", "--apply", "--doc", "D"];
   assert.ok((await doc.run("doc-comment-file", ["post", "items.json", "--html", "out.html"])).out.includes(`approval lines:\n${renderDocComment(ITEM, "t.1")}`));
   doc.approve(`${ITEM.comment}\n${doc.line("doc-comment-file", args)}`);
   doc.approve(`${renderDocComment({ ...ITEM, quote: "Crypto takes the price" }, "t.1")}\n${doc.line("doc-comment-file", args)}`, "Q2?");
   assert.match((await doc.run("doc-comment-file", args)).out, /no unused approval/);
+  assert.deepEqual(doc.writes(), []);
+});
+
+test("in answer mode a write whose target would come from the cwd or the map must name it on the command line", async () => {
+  const gh = world({ gh: { write: { id: 5, html_url: "u", body: "Fixed it." } } });
+  gh.file("b.md", "Fixed it.\n");
+  for (const args of [["edit", "5", "--body-file", "b.md"], ["reply", "1", "2", "--body-file", "b.md"], ["pr-body", "3", "--body-file", "b.md"]]) {
+    gh.approve(`Fixed it.\n${gh.line("github-write", args)}`);
+    assert.match((await gh.run("github-write", args)).out, /name the write target with --repo/, args.join(" "));
+  }
+  assert.deepEqual(gh.writes(), []);
+  const figma = world({ web: { figma: [{ id: "100", message: "Root", user: { handle: "me" }, created_at: "2026-10-01T00:00:00Z" }] }, map: { name: "p", repos: [{ path: ".", role: "FE" }], language: { pr_review: "en", doc_figma: "en" }, figma: { file: "F" }, prd: { doc: "D", tabs: { "09": { tab: "t.1" } } } } });
+  figma.file("f.md", "@lam Màn này thiếu trạng thái rỗng.\n");
+  for (const args of [["post", "1:2", "--body-file", "f.md"], ["delete", "100"]]) assert.match((await figma.run("figma-comments", args)).out, /name the write target with --file/, args.join(" "));
+  figma.file("g.md", "Which wallet pays the fee?\n");
+  for (const args of [["reply", "c1", "--body-file", "g.md"], ["delete", "c2"]]) assert.match((await figma.run("gdoc-comments", args)).out, /name the write target with --doc/, args.join(" "));
+  assert.deepEqual(figma.writes(), []);
+  const op = await fakeOpenProject();
+  try {
+    const w = world({ opUrl: op.url, map: { name: "p", repos: [{ path: ".", role: "FE" }], language: { pr_review: "en", doc_figma: "en" }, tracker: { type: "openproject", project: "183" } } });
+    w.file("drafts.json", JSON.stringify([TASK]));
+    await w.run("openproject", ["preview", "drafts.json"]);
+    w.approve(`${renderWorkPackageDraft(TASK)}\n${w.line("openproject", ["apply", "drafts.json"])}`);
+    assert.match((await w.run("openproject", ["apply", "drafts.json"])).out, /name the write target with --project/);
+    assert.match((await w.run("openproject", ["rollback", "--apply"])).out, /name the write target with --project/);
+    assert.deepEqual(op.calls, []);
+  } finally {
+    op.server.close();
+  }
+  const doc = world({ web: { tabs: { "t.1": TAB }, document: DOCUMENT }, map: { name: "p", repos: [{ path: ".", role: "FE" }], language: { pr_review: "en", doc_figma: "en" }, prd: { doc: "D", tabs: { "09": { tab: "t.1" } } } } });
+  doc.file("items.json", JSON.stringify({ title: "PRD", items: [ITEM] }));
+  for (const args of [["post", "items.json", "--html", "out.html", "--apply"], ["post", "items.json", "--html", "out.html", "--apply", "--doc", "OTHER"]]) {
+    doc.approve(`${renderDocComment(ITEM, "t.1")}\n${doc.line("doc-comment-file", args)}`);
+    assert.match((await doc.run("doc-comment-file", args)).out, /name the write target with --doc/, args.join(" "));
+  }
   assert.deepEqual(doc.writes(), []);
 });

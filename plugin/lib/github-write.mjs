@@ -7,7 +7,7 @@ import { lintComment, lintDraft, mapLanguage, parseDraft, readDiff, snapshotPath
 import { appendEditLog, labelText } from "./edit-log.mjs";
 import { fetchTab, indexTab, quoteInText, UC_ID } from "./prd-section.mjs";
 import { resolveMap } from "./project-map.mjs";
-import { consumeApproval } from "./publish-approval-ticket.mjs";
+import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 
 const normalise = (text) => text.replace(/\s+/g, " ").trim();
 
@@ -91,6 +91,7 @@ function gh(args, input) {
 }
 
 function currentRepo(flags) {
+  requireExplicitTarget("repo", flags.repo);
   return flags.repo ?? gh(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]).trim();
 }
 

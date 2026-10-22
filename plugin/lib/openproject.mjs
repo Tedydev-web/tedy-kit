@@ -4,7 +4,7 @@ import { addSlugs, buildPayload, foreignActivity, forgetSlugs, loadConfig, loadR
 import { closedStatuses, closestWorkPackage, listWorkPackages } from "./openproject-dedup.mjs";
 import { deleteRelation, setRelation } from "./openproject-relation.mjs";
 import { resolveMap } from "./project-map.mjs";
-import { consumeApproval } from "./publish-approval-ticket.mjs";
+import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { approvalLines, renderRollbackItem, renderWorkPackageDraft } from "./publish-approval-render.mjs";
 import { snapshotOnce, snapshotPath } from "./draft-lint.mjs";
 import { appendEditLog, frozenOriginal, labelText } from "./edit-log.mjs";
@@ -321,6 +321,7 @@ async function rollback(client, project, flags) {
 async function main([command, target, ...rest]) {
   const args = command === "rollback" || command === "list" ? [target, ...rest].filter((arg) => arg !== undefined) : rest;
   const flags = Object.fromEntries(args.flatMap((arg, index) => (arg.startsWith("--") ? [[arg.slice(2), args[index + 1] === undefined || args[index + 1].startsWith("--") ? true : args[index + 1]]] : [])));
+  if (command === "apply" || (command === "rollback" && flags.apply !== undefined)) requireExplicitTarget("project", flags.project);
   const client = loadConfig();
   if (command === "get" && target) {
     for (const path of getPaths(target, flags)) console.log(JSON.stringify(await client.request(path), null, 1));

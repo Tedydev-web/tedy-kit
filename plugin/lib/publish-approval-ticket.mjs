@@ -87,6 +87,13 @@ function sweep(dir, now) {
 export const refusal = (command) =>
   `publish approval is in answer mode and no unused approval matches this write. Nothing was written. Ask the user again with one AskUserQuestion whose approving option's preview holds the command line \`${command.join(" ")}\` (optionally after \`node\` and with the script's full path) on a line of its own, and every text it writes, verbatim, on whole lines. One approval covers one command, for ${APPROVAL_TTL_MS / 60_000} minutes.`;
 
+export function requireExplicitTarget(flag, given, { expected, mode = gateSwitches().publishApproval } = {}) {
+  if (mode !== "answer") return;
+  if (typeof given !== "string" || !given || (expected !== undefined && given !== expected)) {
+    throw new Error(`publish approval is in answer mode, so name the write target with --${flag} <${flag}>${expected === undefined ? "" : ` (here --${flag} ${expected})`} on the command line, which the approval then shows. Nothing was written.`);
+  }
+}
+
 export function consumeApproval(argv, texts = [], { dir = approvalsDir(), now = Date.now(), mode = gateSwitches().publishApproval } = {}) {
   if (mode !== "answer") return null;
   const command = [basename(argv[1] ?? ""), ...argv.slice(2)];

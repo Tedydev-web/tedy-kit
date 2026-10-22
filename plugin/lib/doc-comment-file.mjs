@@ -8,7 +8,7 @@ import { chatLanguage, fill, labels } from "./labels.mjs";
 import { slugOf, stamp } from "./handoff.mjs";
 import { fetchTab, quoteCount } from "./prd-section.mjs";
 import { resolveMap } from "./project-map.mjs";
-import { consumeApproval } from "./publish-approval-ticket.mjs";
+import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { approvalLines, renderDocComment } from "./publish-approval-render.mjs";
 
 const GROUPS = ["A", "B"];
@@ -78,7 +78,7 @@ export const pendingItems = (items) => items.filter((item) => !item.posted);
 
 async function post(itemsFile, flags) {
   if (!itemsFile || !flags.html) {
-    console.error("usage: doc-comment-file.mjs post <items.json> --html <pm-comments-….html> [--apply]");
+    console.error("usage: doc-comment-file.mjs post <items.json> --html <pm-comments-….html> [--apply [--doc <prd doc id>]]");
     return 2;
   }
   const resolved = resolveMap(process.cwd());
@@ -97,6 +97,7 @@ async function post(itemsFile, flags) {
   console.log(approvalLines(todo.map((item) => renderDocComment(item, tabOf(item.epic)))));
   console.log(`WRITE → Google Doc ${map.prd.doc} : ${todo.length} anchored comments (${data.items.length - todo.length} already posted)`);
   if (!flags.apply) return 0;
+  requireExplicitTarget("doc", flags.doc, { expected: map.prd.doc });
   const google = await session({ doc: map.prd.doc }, true);
   consumeApproval(process.argv, todo.map((item) => renderDocComment(item, tabOf(item.epic))));
   const save = () => {
@@ -120,7 +121,8 @@ async function post(itemsFile, flags) {
 async function main([itemsFile, ...rest]) {
   if (itemsFile === "post") {
     const html = rest.includes("--html") ? rest[rest.indexOf("--html") + 1] : undefined;
-    return post(rest[0]?.startsWith("--") ? undefined : rest[0], { html, apply: rest.includes("--apply") });
+    const doc = rest.includes("--doc") ? rest[rest.indexOf("--doc") + 1] : undefined;
+    return post(rest[0]?.startsWith("--") ? undefined : rest[0], { html, doc, apply: rest.includes("--apply") });
   }
   if (!itemsFile) {
     console.error('usage: doc-comment-file.mjs <items.json>   items.json = { "title": "...", "items": [{ "group": "A|B", "epic": "09", "where": "UC_SW_13 BR1", "quote": "...", "comment": "...", "note": "..." }] }');
