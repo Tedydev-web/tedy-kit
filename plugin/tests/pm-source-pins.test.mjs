@@ -182,7 +182,8 @@ test("a Google Doc pin is the SHA-256 of the content of every tab, read without 
 });
 
 test("a Google Doc pin moves on a changed chip, rich link, footnote, header, footer, image or format, not only on text", async () => {
-  const doc = (element, tab = {}) => ({ tabs: [{ tabProperties: { tabId: "t.0" }, documentTab: { body: { content: [{ paragraph: { elements: [{ startIndex: 1, textRun: { content: "Deadline: " } }, element, { textRun: { content: "\n" } }] } }] }, footnotes: { f1: { content: [paragraph("Fee 1%\n")] } }, headers: { h1: { content: [paragraph("Draft v1\n")] } }, footers: { r1: { content: [paragraph("Page\n")] } }, inlineObjects: { i1: { inlineObjectProperties: { embeddedObject: { imageProperties: { contentUri: "https://x/1.png" } } } } }, ...tab } }] });
+  const doc = (element, tab = {}) => ({ tabs: [{ tabProperties: { tabId: "t.0" }, documentTab: { body: { content: [{ paragraph: { elements: [{ startIndex: 1, textRun: { content: "Deadline: " } }, element, { textRun: { content: "\n" } }] } }] }, footnotes: { f1: { content: [paragraph("Fee 1%\n")] } }, headers: { h1: { content: [paragraph("Draft v1\n")] } }, footers: { r1: { content: [paragraph("Page\n")] } }, inlineObjects: { i1: { objectId: "i1", inlineObjectProperties: { embeddedObject: { imageProperties: { contentUri: "https://x/1.png?expires=1", sourceUri: "https://x/source-1.png" }, size: { width: { magnitude: 10 } } } } } }, ...tab } }] });
+  const image = (change) => ({ inlineObjects: { i1: { objectId: "i1", inlineObjectProperties: { embeddedObject: { imageProperties: { contentUri: "https://x/1.png?expires=1", sourceUri: "https://x/source-1.png", ...change.image }, size: { width: { magnitude: 10 } }, ...change.object } } }, ...change.root } });
   const pin = async (document) => (await gdocPin(googleStub(document).google)).text;
   const date = (text) => ({ dateElement: { dateElementProperties: { timestamp: text, displayText: text } } });
   const person = (email) => ({ person: { personProperties: { email, name: email } } });
@@ -195,7 +196,12 @@ test("a Google Doc pin moves on a changed chip, rich link, footnote, header, foo
   assert.notEqual(await pin(doc(date("Oct 30, 2026"), { footnotes: { f1: { content: [paragraph("Fee 2%\n")] } } })), base);
   assert.notEqual(await pin(doc(date("Oct 30, 2026"), { headers: { h1: { content: [paragraph("Draft v2\n")] } } })), base);
   assert.notEqual(await pin(doc(date("Oct 30, 2026"), { footers: { r1: { content: [paragraph("Page 2\n")] } } })), base);
-  assert.notEqual(await pin(doc(date("Oct 30, 2026"), { inlineObjects: { i1: { inlineObjectProperties: { embeddedObject: { imageProperties: { contentUri: "https://x/2.png" } } } } } })), base);
+  assert.equal(await pin(doc(date("Oct 30, 2026"), image({ image: { contentUri: "https://x/1.png?expires=2" } }))), base);
+  assert.notEqual(await pin(doc(date("Oct 30, 2026"), image({ image: { sourceUri: "https://x/source-2.png" } }))), base);
+  assert.notEqual(await pin(doc(date("Oct 30, 2026"), image({ object: { size: { width: { magnitude: 20 } } } }))), base);
+  const moved = doc(date("Oct 30, 2026"), image({}));
+  moved.tabs[0].documentTab.inlineObjects.i1.objectId = "i2";
+  assert.notEqual(await pin(moved), base);
   const bold = doc(date("Oct 30, 2026"));
   bold.tabs[0].documentTab.body.content[0].paragraph.elements[0].textRun.textStyle = { strikethrough: true };
   assert.notEqual(await pin(bold), base);

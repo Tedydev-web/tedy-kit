@@ -87,9 +87,9 @@ export async function session(flags, needOwnClient = false) {
   return { doc, bearer, ownClient, request: (url, options = {}) => requestJson(url, { ...options, headers: { Authorization: `Bearer ${bearer}` } }) };
 }
 
-const NOT_CONTENT = (key) => ["revisionId", "namedRanges", "commentAnchors"].includes(key) || /^suggest(?:ed|ion)/.test(key);
+const NOT_CONTENT = (key, parent) => ["revisionId", "namedRanges", "commentAnchors"].includes(key) || /^suggest(?:ed|ion)/.test(key) || (parent === "imageProperties" && key === "contentUri");
 
-const contentOf = (node) => (Array.isArray(node) ? node.map(contentOf) : node && typeof node === "object" ? Object.fromEntries(Object.entries(node).flatMap(([key, value]) => (NOT_CONTENT(key) ? [] : [[key, contentOf(value)]]))) : node);
+const contentOf = (node, parent) => (Array.isArray(node) ? node.map((item) => contentOf(item, parent)) : node && typeof node === "object" ? Object.fromEntries(Object.entries(node).flatMap(([key, value]) => (NOT_CONTENT(key, parent) ? [] : [[key, contentOf(value, key)]]))) : node);
 
 const tabsContent = (tabs) => tabs.map((tab) => ({ tabId: tab.tabProperties?.tabId, content: contentOf(tab.documentTab ?? {}), childTabs: tabsContent(tab.childTabs ?? []) }));
 
