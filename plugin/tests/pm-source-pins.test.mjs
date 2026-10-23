@@ -115,6 +115,23 @@ test("a Drive export pin drops only the comment entries the Drive comments API l
   assert.notEqual((await viewer(exportOf("Crypto takes the price in USDT[a]\r\nThe fee is in GRAM[b]", ["Which wallet?", "Not a comment the API lists"]), [thread("Which wallet?")])).text, bare.text);
 });
 
+test("a Drive export entry the comments API shows differently keeps a label that does not move, so three replies in a row each pass", async () => {
+  const thread = (content, replies = []) => ({ id: content, content, resolved: false, author: { me: false, displayName: "PM" }, replies: replies.map((reply) => ({ id: reply, content: reply, author: { me: true, displayName: "me" } })) });
+  const viewer = (text, comments) => gdocPin(googleStub(status(403), { ownClient: false, exported: text, comments }).google);
+  const odd = "Text the API shows differently";
+  const replies = ["The payer.", "In GRAM.", "Before paying."];
+  const pins = [];
+  for (let count = 0; count <= replies.length; count += 1) {
+    const labels = Array.from({ length: count + 2 }, (_, index) => String.fromCharCode(97 + index));
+    const markers = labels.slice(0, count + 1).map((label) => `[${label}]`).join("");
+    const entries = ["Which wallet?", ...replies.slice(0, count), odd].map((text, index) => `[${labels[index]}]${text}`);
+    pins.push((await viewer(`Fee rule${markers}\r\nRefund rule[${labels.at(-1)}]\r\n\r\n${entries.join("\r\n")}\r\n`, [thread("Which wallet?", replies.slice(0, count))])).text);
+  }
+  assert.equal(new Set(pins).size, 1);
+  assert.equal(exportWithoutComments(`Fee rule[a]\r\nRefund rule[b]\r\n\r\n[a]Which wallet?\r\n[b]${odd}\r\n`, [thread("Which wallet?")]), `Fee rule\nRefund rule[?]\n\n[?]${odd}`);
+  assert.notEqual((await viewer(`Fee rule[a]\r\nRefund rule changed[b]\r\n\r\n[a]Which wallet?\r\n[b]${odd}\r\n`, [thread("Which wallet?")])).text, pins[0]);
+});
+
 test("a body line that starts with [a] never hides the text after it from a Drive export pin", async () => {
   const viewer = (text, comments = []) => gdocPin(googleStub(status(403), { ownClient: false, exported: text, comments }).google);
   const body = (tail) => `Options, see [a] and [b] below:\r\n[a] pay in USDT\r\n[b] pay in GRAM\r\n${tail}\r\n`;

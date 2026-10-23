@@ -109,11 +109,14 @@ export function exportWithoutComments(text, comments) {
   }
   const body = lines.slice(0, start);
   const marked = body.join("\n");
-  const dropped = entries.filter((entry) => marked.includes(entry[0].match(LABEL)[0]) && listed.has(squash(entry.join("\n").replace(LABEL, ""))));
-  const labels = new Set(dropped.map((entry) => entry[0].match(LABEL)[1]));
+  const commented = entries.filter((entry) => marked.includes(entry[0].match(LABEL)[0]));
+  const dropped = commented.filter((entry) => listed.has(squash(entry.join("\n").replace(LABEL, ""))));
+  const labelOf = (entry) => entry[0].match(LABEL)[1];
+  const gone = new Set(dropped.map(labelOf));
+  const unmatched = new Set(commented.filter((entry) => !dropped.includes(entry)).map(labelOf));
   return [...body, ...entries.filter((entry) => !dropped.includes(entry)).flat()]
     .join("\n")
-    .replace(/\[([a-z]{1,3})\]/g, (marker, label) => (labels.has(label) ? "" : marker))
+    .replace(/\[([a-z]{1,3})\]/g, (marker, label) => (gone.has(label) ? "" : unmatched.has(label) ? "[?]" : marker))
     .trimEnd();
 }
 
