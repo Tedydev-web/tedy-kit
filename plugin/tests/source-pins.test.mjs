@@ -49,6 +49,17 @@ test("namedIn matches a capitalised file with no extension by its name, a basena
   assert.equal(namedIn(["The `src/auth/` module trusts the header."], "src/authz/guard.ts"), false);
   assert.equal(namedIn(["The core changed."], "libs/core"), false);
   assert.equal(namedIn(["See `foo.tsx:3`."], "src/foo.ts"), false);
+  assert.equal(namedIn(["The backup `guard.ts.bak` is stale."], "src/auth/guard.ts"), false);
+  assert.equal(namedIn(["See `./src/auth/` for the guard."], "src/auth/guard.ts"), true);
+});
+
+test("namedIn reads a cited folder through a sibling path, the repo's name, its clone path and a GitHub tree link", async () => {
+  const roots = ["../backend", "backend", "/work/backend"];
+  for (const text of ["check `../backend/src/auth/` again", "check `../../x/backend/src/auth/` again", "see backend/src/auth/ for the guard", "see /work/backend/src/auth/ there", "https://github.com/o/be/tree/dev/src/auth", "https://github.com/o/be/tree/dev/src/auth/"]) {
+    assert.equal(namedIn([text], "src/auth/guard.ts", roots), true, text);
+    assert.equal(namedIn([text], "src/authz/guard.ts", roots), false, text);
+  }
+  assert.equal(namedIn(["see /elsewhere/backend2/src/auth/ there"], "src/auth/guard.ts", roots), false);
 });
 
 test("branchTokens reads only the branch of a path:line@branch cite, so mentions, mail and decorators are not branches", async () => {
@@ -187,6 +198,20 @@ test("a rename lists both names, so text naming either the old or the new one re
   git(sibling.upstream, "push", "-q", "origin", "dev");
   assert.match(recheckRepos(pins, repos, ["see a.ts"]).refusals[0], /files: src\/a\.ts\n/);
   assert.match(recheckRepos(pins, repos, ["see src/fee.ts"]).refusals[0], /files: src\/fee\.ts\n/);
+});
+
+test("a cited folder refuses a change under it however the text spells the folder, and a status letter is never read as a path", async () => {
+  const sibling = siblingRepo();
+  const repos = repoOf(sibling.clone);
+  const { pins } = await pinRepos(repos, "");
+  sibling.push("src/auth/guard.ts", "g2\n", "fix: the guard trusts the header");
+  for (const text of ["Check `../backend/src/auth/` again.", "See backend/src/auth/ for the guard.", `See ${sibling.clone}/src/auth/ there.`, "See https://github.com/o/be/tree/dev/src/auth for it.", "See `./src/auth/` for it."]) {
+    const { refusals } = await recheckRepos(pins, repos, [text]);
+    assert.match(refusals[0] ?? "", /files: src\/auth\/guard\.ts\n/, text);
+  }
+  const { refusals, notices } = await recheckRepos(pins, repos, ["A label is wrong, M and D say so, see a ticket."]);
+  assert.deepEqual(refusals, []);
+  assert.equal(notices.length, 1);
 });
 
 test("a cite path is matched literally, so brackets, parentheses, @ and spaces name the file they spell and nothing else", async () => {

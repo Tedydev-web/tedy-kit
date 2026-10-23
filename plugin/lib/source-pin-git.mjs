@@ -1,6 +1,6 @@
 import { execFile, execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
-import { isAbsolute, resolve } from "node:path";
+import { basename, isAbsolute, resolve } from "node:path";
 import { promisify } from "node:util";
 
 const GIT_TIMEOUT_MS = 60_000;
@@ -8,7 +8,8 @@ const GIT_BUFFER = 64 * 1024 * 1024;
 export const RECHECK = "re-read the changed sources, fix the draft, lint it again and ask the user again";
 const NAME_BEFORE = "(?<![\\p{L}\\p{N}\\p{M}_.-])";
 const NAME_AFTER = "(?![\\p{L}\\p{N}\\p{M}_-]|\\.[\\p{L}\\p{N}])";
-const FOLDER = /(?<![\p{L}\p{N}\p{M}_.\/-])((?:[\p{L}\p{N}\p{M}_.-]+\/)+)(?=$|[\s`'"()<>,;:!?*_]|\.(?![\p{L}\p{N}]))/gu;
+const FOLDER = /(?<![\p{L}\p{N}\p{M}_.\/-])(\/?(?:[\p{L}\p{N}\p{M}_.-]+\/)+)(?=$|[\s`'"()<>,;:!?*_]|\.(?![\p{L}\p{N}]))/gu;
+const TREE_LINK = /\/tree\/[^/\s?#]+\/([^\s?#)"'`<>]+)/g;
 const execFileAsync = promisify(execFile);
 
 const unique = (list) => [...new Set(list)];
@@ -28,19 +29,28 @@ const readings = (text) => {
   return unique([text, unescaped, plain].flatMap((candidate) => [candidate, decodeRuns(candidate)])).map((candidate) => candidate.normalize("NFC"));
 };
 
-const underFolder = (candidate, path) =>
-  [...candidate.matchAll(FOLDER)].some(([folder]) => {
-    const prefix = folder.replace(/^(?:\.\/)+/, "").toLowerCase();
-    return prefix.length > 0 && (path.startsWith(prefix) || path.includes(`/${prefix}`));
-  });
+const folderPrefixes = (folder, roots) => {
+  const plain = folder.replace(/^(?:\.\/)+/, "").toLowerCase();
+  const sibling = plain.replace(/^(?:\.\.\/)+[^/]+\//, "");
+  const rooted = [plain, sibling].flatMap((form) => roots.filter((root) => form.startsWith(root)).map((root) => form.slice(root.length)));
+  return unique([plain, sibling, ...rooted]).filter(Boolean);
+};
 
-export function namedIn(texts, path) {
+const underFolder = (candidate, path, roots) =>
+  [...[...candidate.matchAll(FOLDER)].map((match) => match[1]), ...[...candidate.matchAll(TREE_LINK)].map((match) => match[1].replace(/\/?$/, "/"))].some((folder) =>
+    folderPrefixes(folder, roots).some((prefix) => path.startsWith(prefix) || path.includes(`/${prefix}`)),
+  );
+
+export function namedIn(texts, path, roots = []) {
   const base = path.split("/").pop();
   const name = (base.includes(".") || /\p{Lu}/u.test(base) ? base : path).normalize("NFC");
   const pattern = new RegExp(`${NAME_BEFORE}${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}${NAME_AFTER}`, "iu");
   const lower = path.normalize("NFC").toLowerCase();
-  return texts.some((text) => readings(text).some((candidate) => pattern.test(candidate) || underFolder(candidate, lower)));
+  const prefixes = unique(roots.map((root) => `${root.replace(/\/+$/, "")}/`.toLowerCase()));
+  return texts.some((text) => readings(text).some((candidate) => pattern.test(candidate) || underFolder(candidate, lower, prefixes)));
 }
+
+const rootsOf = (pin, dir) => [...(pin.repo === "." ? [] : [pin.repo]), basename(dir), dir, realPath(dir)];
 
 export const branchTokens = (text) => unique([...text.matchAll(/:\d+(?:[-,]\d+)*@(\w[\w./-]*)/g)].map((match) => match[1].replace(/[./-]+$/, "")));
 
@@ -211,7 +221,7 @@ function recheckRepo(pin, dir, texts, git) {
   if (!hasCommit(git, dir, pin.sha)) return { refusal: `refused: ${pin.repo} ${pin.ref}: the pinned commit ${pin.sha.slice(0, 8)} is not in the clone, so what changed cannot be listed; fetch it or lint again, then ask the user again` };
   const moved = `${pin.repo} ${pin.ref} moved from ${pin.sha.slice(0, 8)} to ${now.slice(0, 8)} since it was pinned`;
   if (pin.pr) return { refusal: [`refused: ${moved}, so the PR under review changed`, ...commitLines(git, dir, pin.sha, now, []), `  ${RECHECK}`].join("\n") };
-  const named = changedPaths(git, dir, pin.sha, now).filter((path) => namedIn(texts, path));
+  const named = changedPaths(git, dir, pin.sha, now).filter((path) => namedIn(texts, path, rootsOf(pin, dir)));
   if (!named.length) return { notice: `notice: ${moved}; no changed file is named in the text being posted, so it posts as drafted` };
   return { refusal: [`refused: ${moved} and changed a file the text being posted names`, `  files: ${named.join(", ")}`, ...commitLines(git, dir, pin.sha, now, named), `  ${RECHECK}`].join("\n") };
 }
