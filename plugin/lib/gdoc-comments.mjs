@@ -86,15 +86,25 @@ const tabsContent = (tabs) => tabs.map((tab) => ({ tabId: tab.tabProperties?.tab
 
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
 
-const MARKER = /\[[a-z]{1,3}\]/g;
+const LABEL = /^\[([a-z]{1,3})\]/;
 
 export function exportWithoutComments(text, comments) {
   const listed = new Set(comments.flatMap((comment) => [comment, ...(comment.replies ?? [])]).map((item) => squash(item.content ?? "")).filter(Boolean));
-  return text
-    .split(/\r?\n(?=\[[a-z]{1,3}\])/)
-    .filter((chunk, index) => index === 0 || !listed.has(squash(chunk.replace(/^\[[a-z]{1,3}\]/, ""))))
-    .map((chunk) => chunk.replace(MARKER, "").trimEnd())
+  const lines = text.trimEnd().split(/\r?\n/);
+  const start = lines.findLastIndex((line, index) => index > 0 && !lines[index - 1].trim() && LABEL.test(line));
+  if (start < 0) return lines.join("\n");
+  const entries = [];
+  for (const line of lines.slice(start)) {
+    if (LABEL.test(line)) entries.push([line]);
+    else entries.at(-1).push(line);
+  }
+  const body = lines.slice(0, start);
+  const marked = body.join("\n");
+  const dropped = entries.filter((entry) => marked.includes(entry[0].match(LABEL)[0]) && listed.has(squash(entry.join("\n").replace(LABEL, ""))));
+  const labels = new Set(dropped.map((entry) => entry[0].match(LABEL)[1]));
+  return [...body, ...entries.filter((entry) => !dropped.includes(entry)).flat()]
     .join("\n")
+    .replace(/\[([a-z]{1,3})\]/g, (marker, label) => (labels.has(label) ? "" : marker))
     .trimEnd();
 }
 

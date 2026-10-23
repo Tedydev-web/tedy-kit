@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { canonicalJson, figmaPin, recheckFigma } from "../lib/figma-comments.mjs";
-import { gdocPin, recheckGdoc } from "../lib/gdoc-comments.mjs";
+import { exportWithoutComments, gdocPin, recheckGdoc } from "../lib/gdoc-comments.mjs";
 import { recheckPinned, writeSources } from "../lib/source-pins.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
@@ -123,6 +123,27 @@ test("a body line that starts with [a] never hides the text after it from a Driv
   assert.notEqual((await viewer(body("The fee is 1%.").replace("pay in GRAM", "pay in BTC"))).text, before.text);
   const comment = [{ id: "c1", content: "pay in USDT", resolved: false, author: { me: false, displayName: "PM" }, replies: [] }];
   assert.notEqual((await viewer(body("The fee is 2%."), comment)).text, (await viewer(body("The fee is 1%."), comment)).text);
+});
+
+test("a Drive export drops only listed entries of the trailing comment section, and only the markers of their labels", () => {
+  const comments = [{ content: "Ok", replies: [{ content: "Không" }] }, { content: "Which wallet?", replies: [] }];
+  const tail = "\r\n\r\n[a]Which wallet?\r\n";
+  const before = `Answer options:\r\n[a] Ok\r\n[b] Không\r\n[c] Later\r\nFee 1%[a]${tail}`;
+  const base = exportWithoutComments(before, comments);
+  assert.equal(base, "Answer options:\n Ok\n[b] Không\n[c] Later\nFee 1%");
+  for (const changed of [
+    `Answer options:\r\n[b] Không\r\n[c] Later\r\nFee 1%[a]${tail}`,
+    `Answer options:\r\n[a] Ok\r\n[a] Ok\r\n[b] Không\r\n[c] Later\r\nFee 1%[a]${tail}`,
+    `Answer options:\r\n[a] Không\r\n[b] Không\r\n[c] Later\r\nFee 1%[a]${tail}`,
+  ]) assert.notEqual(exportWithoutComments(changed, comments), base, changed);
+  const other = [{ content: "Ok", replies: [{ content: "Có" }] }, { content: "Which wallet?", replies: [] }];
+  const options = "Answer options:\r\n[a] Ok\r\nFee 1%[b]\r\n\r\n[b]Which wallet?\r\n";
+  assert.notEqual(exportWithoutComments("Answer options:\r\nFee 1%[b]\r\n\r\n[b]Which wallet?\r\n", other), exportWithoutComments(options, other));
+  assert.notEqual(exportWithoutComments("Answer options:\r\n[a] Có\r\nFee 1%[b]\r\n\r\n[b]Which wallet?\r\n", other), exportWithoutComments(options, other));
+  assert.notEqual(exportWithoutComments("Lang [en] only\r\n", []), exportWithoutComments("Lang [vi] only\r\n", []));
+  assert.notEqual(exportWithoutComments("Intro\r\n\r\nLang [en] only[a]\r\n\r\n[a]Which wallet?\r\n", comments), exportWithoutComments("Intro\r\n\r\nLang [vi] only[a]\r\n\r\n[a]Which wallet?\r\n", comments));
+  assert.equal(exportWithoutComments("Intro\r\n\r\n[a] Ok\r\n[b] Không\r\n", comments), "Intro\n\n[a] Ok\n[b] Không");
+  assert.equal(exportWithoutComments("Fee[a]\r\n\r\n[a]Which wallet?\r\nThe second paragraph of it.\r\n", [{ content: "Which wallet?\n\nThe second paragraph of it.", replies: [] }]), "Fee");
 });
 
 test("a Google Doc pin is the SHA-256 of the content of every tab, read without suggestions, never a revision, suggestion or named range", async () => {
