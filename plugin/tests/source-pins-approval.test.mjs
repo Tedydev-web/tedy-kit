@@ -506,6 +506,9 @@ test("a branch cite that no repo pins warns at the lint, and the post needs that
   const posted = await w.run("github-write", args);
   assert.equal(posted.code, 0, posted.out);
   assert.equal(sent(w).length, 1);
+  w.file("r.md", "Still wrong: `src/a.ts:1@release/9` sets it.\n");
+  assert.ok((await lint(w, "draft-lint", ["pr-reply", "r.md", "--pr", "701", "--repo", "o/r"])).includes(warning));
+  assert.ok(JSON.parse(readFileSync(join(w.dir, "state", "drafts", `${join(w.dir, "r.md").replace(/\//g, "_")}.sources.json`), "utf8")).warnings.includes(warning));
 });
 
 test("a cite of the reviewed repo's own branch warns that it pins nothing, unless a pin-sources --branch read pin holds it", async () => {
