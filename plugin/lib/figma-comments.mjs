@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -5,11 +6,10 @@ import { pathToFileURL } from "node:url";
 import { requestJson } from "./api-request.mjs";
 import { lintChatComment, mapLanguage } from "./draft-lint.mjs";
 import { logPostedText } from "./edit-log.mjs";
-import { subtreeHash } from "./figma-read.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { notBefore, sinceTime } from "./since.mjs";
-import { applyVerdict, requirePin, sayNotice, versionCheck } from "./source-pins.mjs";
+import { nodeId, RECHECK, requireFresh, sayNotices, versionCheck } from "./source-pins.mjs";
 
 const API = "https://api.figma.com/v1";
 
@@ -43,32 +43,49 @@ export function client(flags) {
   return { file, request: (path, options = {}) => requestJson(`${API}${path}`, { ...options, headers: { "X-Figma-Token": token } }) };
 }
 
-const fileVersion = async (figma) => (await figma.request(`/files/${figma.file}?depth=1`)).version;
+export const canonicalJson = (value) =>
+  Array.isArray(value)
+    ? `[${value.map(canonicalJson).join(",")}]`
+    : value && typeof value === "object"
+      ? `{${Object.keys(value)
+          .sort()
+          .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`)
+          .join(",")}}`
+      : JSON.stringify(value);
 
-export const figmaPin = async (figma) => ({ kind: "figma", file: figma.file, version: await fileVersion(figma) });
-
-export async function recheckFigma(figma, pin, nodes) {
-  const now = await fileVersion(figma);
-  if (now === pin.version) return {};
-  const source = `Figma ${figma.file} version`;
-  if (!nodes.length) return versionCheck(source, pin.version, now, { changed: "the draft cites no node to compare" });
-  const hashAt = async (node, version) => {
-    const data = await figma.request(`/files/${figma.file}/nodes?ids=${encodeURIComponent(node)}${version ? `&version=${encodeURIComponent(version)}` : ""}`);
-    const document = data.nodes?.[node]?.document;
-    return document ? subtreeHash(document) : null;
-  };
-  const changed = [];
-  for (const node of nodes) {
-    const before = await hashAt(node, pin.version);
-    if (before === null || before !== (await hashAt(node, null))) changed.push(node);
-  }
-  return versionCheck(source, pin.version, now, changed.length ? { changed: `node ${changed.join(", ")} changed` } : { kept: `node ${nodes.join(", ")} is unchanged` });
+async function lastModified(figma) {
+  const modified = (await figma.request(`/files/${figma.file}?depth=1`))?.lastModified;
+  if (typeof modified !== "string") throw new Error(`Figma ${figma.file} returned no lastModified`);
+  return modified;
 }
 
-async function recheckPinned(figma, flags, node) {
+async function nodeHashes(figma, ids) {
+  if (!ids.length) return {};
+  const data = await figma.request(`/files/${figma.file}/nodes?ids=${encodeURIComponent(ids.join(","))}`);
+  return Object.fromEntries(ids.map((id) => [id, data?.nodes?.[id] ? createHash("sha256").update(canonicalJson(data.nodes[id])).digest("hex") : null]));
+}
+
+export async function figmaPin(figma, nodes = [], whole = !nodes.length) {
+  const hashes = await nodeHashes(figma, nodes);
+  const missing = nodes.filter((id) => hashes[id] === null);
+  if (missing.length) throw new Error(`node ${missing.join(", ")} not found in Figma ${figma.file}`);
+  return { kind: "figma", file: figma.file, lastModified: await lastModified(figma), whole, nodes: hashes };
+}
+
+export async function recheckFigma(figma, pin) {
+  if (typeof pin.lastModified !== "string" || !pin.nodes || typeof pin.nodes !== "object") return { refusal: `refused: the pin of Figma ${pin.file} predates node pins; lint the draft again and ask the user again` };
+  const ids = Object.keys(pin.nodes);
+  const now = await nodeHashes(figma, ids);
+  const changed = ids.filter((id) => now[id] !== pin.nodes[id]);
+  if (changed.length) return { refusal: `refused: Figma ${pin.file} node ${changed.join(", ")} changed since the draft was linted; ${RECHECK}` };
+  return versionCheck(`Figma ${pin.file} lastModified`, pin.lastModified, await lastModified(figma), pin.whole || !ids.length ? { changed: "the draft links the whole file, not a node" } : { kept: `node ${ids.join(", ")} is unchanged` });
+}
+
+const covering = (file, node) => (pin) => pin.kind === "figma" && pin.file === file && (pin.whole || (node !== null && Object.hasOwn(pin.nodes ?? {}, node)));
+
+function recheckTarget(figma, flags, node) {
   const file = flags["body-file"];
-  const pin = requirePin(file, `draft-lint.mjs figma-comment ${file}`, (candidate) => candidate.kind === "figma" && candidate.file === figma.file, `Figma version of ${figma.file}`);
-  return applyVerdict(await recheckFigma(figma, pin, node ? [node] : []));
+  return requireFresh(file, `draft-lint.mjs figma-comment ${file} --file ${figma.file}${node ? ` --node ${node}` : ""}`, { covers: covering(figma.file, node), what: node ? `Figma ${figma.file} node ${node}` : `Figma ${figma.file} file` });
 }
 
 const readBody = (flags) => {
@@ -102,16 +119,17 @@ async function main([command, target, ...rest]) {
   }
   if (command === "post" && target) {
     const body = readBody(flags);
-    const node = target.replace("-", ":");
+    const node = nodeId(target);
+    if (!node) throw new Error(`${target} is not a Figma node id such as 12-34 or 12:34`);
     const nodes = await figma.request(`/files/${figma.file}/nodes?ids=${encodeURIComponent(node)}`);
     const box = nodes.nodes?.[node]?.document?.absoluteBoundingBox;
     if (!box) throw new Error(`node ${node} not found in ${figma.file}`);
     const twin = duplicateOnNode((await figma.request(`/files/${figma.file}/comments`)).comments, node, body);
     if (twin) throw new Error(`comment ${twin.id} on node ${node} already says this; nothing posted`);
-    const notice = await recheckPinned(figma, flags, node);
+    const notices = await recheckTarget(figma, flags, node);
     console.log(`WRITE → Figma ${figma.file} node ${node} : 1 comment`);
     consumeApproval(process.argv, [body]);
-    sayNotice(notice);
+    sayNotices(notices);
     const created = await figma.request(`/files/${figma.file}/comments`, { method: "POST", body: { message: body, client_meta: { node_id: node, node_offset: pinOffset(box) } } });
     await verify(figma, created.id, body);
     logPostedText("figma-comment", flags["body-file"], created.id, body);
@@ -123,10 +141,10 @@ async function main([command, target, ...rest]) {
     const root = rootOf(comments, target);
     const twin = duplicateReply(comments, root.id, body);
     if (twin) throw new Error(`reply ${twin.id} in thread ${root.id} already says this; nothing posted`);
-    const notice = await recheckPinned(figma, flags, root.client_meta?.node_id ?? null);
+    const notices = await recheckTarget(figma, flags, root.client_meta?.node_id ?? null);
     console.log(`WRITE → Figma ${figma.file} thread ${root.id} : 1 reply`);
     consumeApproval(process.argv, [body]);
-    sayNotice(notice);
+    sayNotices(notices);
     const created = await figma.request(`/files/${figma.file}/comments`, { method: "POST", body: { message: body, comment_id: root.id } });
     await verify(figma, created.id, body);
     logPostedText("figma-reply", flags["body-file"], created.id, body);
@@ -144,7 +162,7 @@ async function main([command, target, ...rest]) {
     console.log(`deleted ${target}`);
     return 0;
   }
-  console.error("usage: figma-comments.mjs list [--since <ISO>] [--file <key>] | post <node-id> --body-file <f> | reply <comment-id> --body-file <f> | delete <comment-id>");
+  console.error("usage: figma-comments.mjs list [--since <ISO>] [--file <key>] | post <node-id> --body-file <f> --file <key> | reply <comment-id> --body-file <f> --file <key> | delete <comment-id> --file <key>");
   return 2;
 }
 

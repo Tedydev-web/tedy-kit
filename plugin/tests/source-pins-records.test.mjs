@@ -27,7 +27,7 @@ test("openproject apply refuses drafts edited after the preview pinned them", as
     op.calls.length = 0;
     const apply = await w.run("openproject", ["apply", "drafts.json", "--project", "183"]);
     assert.notEqual(apply.code, 0);
-    assert.match(apply.out, /refused: drafts\.json changed after its sources were pinned; run openproject\.mjs preview drafts\.json, then ask the user again/);
+    assert.match(apply.out, /refused: drafts\.json changed after its sources were pinned; run openproject\.mjs preview drafts\.json --project 183, then ask the user again/);
     assert.deepEqual(op.calls, []);
   } finally {
     op.server.close();
@@ -47,14 +47,18 @@ test("doc-comment-file post refuses an items file edited after it was pinned", a
   assert.deepEqual(w.writes(), []);
 });
 
-test("github-write refuses a draft whose cites have no pin, even with a matching sources record", async () => {
-  const w = world({ mode: "ask", gh: { diff: DIFF, head: HEAD } });
+test("github-write reads no cites out of the draft: a matching record without pins posts, one for another text refuses", async () => {
+  const w = world({ mode: "ask", gh: { diff: DIFF, head: HEAD, reviewComments: [{ id: 1, path: "src/a.ts", line: 10, side: "RIGHT", commit_id: HEAD }] } });
   const draft = "# PR #701: comment line by line (head abc1234)\n\n## 1. `src/a.ts:10`\nThe label is wrong, the writer `src/a.ts:1@dev` sets it.\n";
   w.file("d.md", draft);
   mkdirSync(join(w.dir, "state", "drafts"), { recursive: true });
+  writeFileSync(recordPath(w, "d.md"), JSON.stringify({ file: join(w.dir, "d.md"), sha256: createHash("sha256").update(`${draft}x`).digest("hex"), sources: [] }));
+  const stale = await w.run("github-write", ["post", "d.md", "--repo", "o/r"]);
+  assert.notEqual(stale.code, 0);
+  assert.match(stale.out, /^refused: d\.md changed after its sources were pinned; run draft-lint\.mjs pr-comment d\.md, then ask the user again$/m);
+  assert.deepEqual(w.writes(), []);
   writeFileSync(recordPath(w, "d.md"), JSON.stringify({ file: join(w.dir, "d.md"), sha256: createHash("sha256").update(draft).digest("hex"), sources: [] }));
   const post = await w.run("github-write", ["post", "d.md", "--repo", "o/r"]);
-  assert.notEqual(post.code, 0);
-  assert.match(post.out, /^refused: d\.md cites src\/a\.ts@dev with no pin in its sources record; run draft-lint\.mjs pr-comment d\.md, then ask the user again$/m);
-  assert.deepEqual(w.writes(), []);
+  assert.equal(post.code, 0, post.out);
+  assert.equal(w.writes().length, 1);
 });

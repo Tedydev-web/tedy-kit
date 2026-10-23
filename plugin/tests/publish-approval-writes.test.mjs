@@ -73,9 +73,13 @@ test("openproject apply, set, relation, relation-delete, comment, comment-edit a
     await onceOnly(w, "openproject", ["set", "21298", "--status", "In progress", "--apply", "--lock", "0"], (line) => line, count);
     reset();
     w.file("c.md", "The pop-up needs the Pro price.\n");
+    await lint(w, "openproject", ["comment", "21298", "--body-file", "c.md"]);
+    reset();
     await onceOnly(w, "openproject", ["comment", "21298", "--apply", "--body-file", "c.md"], (line) => `The pop-up needs the Pro price.\n${line}`, count);
     reset();
     w.file("e.md", "The pop-up needs the Pro price, monthly.\n");
+    await lint(w, "openproject", ["comment-edit", "9", "--body-file", "e.md"]);
+    reset();
     await onceOnly(w, "openproject", ["comment-edit", "9", "--apply", "--body-file", "e.md"], (line) => `The pop-up needs the Pro price, monthly.\n${line}`, count);
     reset();
     await onceOnly(w, "openproject", ["relation", "21298", "21300", "--type", "blocks", "--apply"], (line) => line, count);

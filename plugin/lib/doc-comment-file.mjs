@@ -3,14 +3,14 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { lintChatComment } from "./draft-lint.mjs";
 import { logPostedText } from "./edit-log.mjs";
-import { findQuoteRange, gdocPin, insertAnchored, readDocument, recheckDocPin, session } from "./gdoc-comments.mjs";
+import { findQuoteRange, gdocPin, insertAnchored, readDocument, recheckDocTarget, session } from "./gdoc-comments.mjs";
 import { chatLanguage, fill, labels } from "./labels.mjs";
 import { slugOf, stamp } from "./handoff.mjs";
 import { fetchTab, quoteCount } from "./prd-section.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { approvalLines, renderDocComment } from "./publish-approval-render.mjs";
-import { describePin, sayNotice, takePin, writeSources } from "./source-pins.mjs";
+import { describePin, sayNotices, takePin, writeSources } from "./source-pins.mjs";
 
 const GROUPS = ["A", "B"];
 
@@ -100,11 +100,11 @@ async function post(itemsFile, flags) {
   if (!flags.apply) return 0;
   requireExplicitTarget("doc", flags.doc, { expected: map.prd.doc });
   const google = await session({ doc: map.prd.doc }, true);
-  const notice = await recheckDocPin(google, itemsFile, `doc-comment-file.mjs ${itemsFile}`, "every highlighted passage still appears exactly once");
+  const notices = await recheckDocTarget(map.prd.doc, itemsFile, `doc-comment-file.mjs ${itemsFile}`, "every highlighted passage still appears exactly once");
   const document = await readDocument(google);
   const ranges = todo.map((item) => findQuoteRange(document, tabOf(item.epic), item.quote));
   consumeApproval(process.argv, todo.map((item) => renderDocComment(item, tabOf(item.epic))));
-  sayNotice(notice);
+  sayNotices(notices);
   const save = () => {
     writeFileSync(itemsFile, `${JSON.stringify(data, null, 2)}\n`);
     const lang = chatLanguage();

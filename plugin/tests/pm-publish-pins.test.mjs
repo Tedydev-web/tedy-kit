@@ -52,30 +52,29 @@ function setup() {
 const frame = (text) => ({ id: "1:2", type: "FRAME", name: "Card", absoluteBoundingBox: { x: 0, y: 0, width: 100, height: 40 }, children: [{ id: "1:3", type: "TEXT", characters: text }] });
 const BODY = "@an frame Card thiếu trạng thái lỗi nha\n";
 
-test("a Figma post needs the lint's pin and refuses when the commented node changed after it", () => {
+test("a Figma post needs the lint's pin of the node and refuses when that node changed after it", () => {
   const { work, run } = setup();
   writeFileSync(join(work, "c.txt"), BODY);
-  const figma = (version, latest) => [
-    ["GET", "/files/F1?depth=1", { version }],
-    ["GET", "/files/F1/nodes?ids=1%3A2&version=v1", { nodes: { "1:2": { document: frame("Pay") } } }],
-    ["GET", "/files/F1/nodes?ids=1%3A2", { nodes: { "1:2": { document: latest } } }],
+  const figma = (lastModified, latest) => [
+    ["GET", "/files/F1?depth=1", { lastModified }],
+    ["GET", "/files/F1/nodes?ids=1%3A2", { lastModified, nodes: { "1:2": { document: latest } } }],
     ["GET", "/files/F1/comments", { comments: [{ id: "c9", message: BODY.trim() }] }],
     ["POST", "/files/F1/comments", { id: "c9" }],
   ];
-  const unlinted = run("figma-comments", ["post", "1-2", "--body-file", "c.txt"], figma("v1", frame("Pay")));
+  const unlinted = run("figma-comments", ["post", "1-2", "--body-file", "c.txt"], figma("t1", frame("Pay")));
   assert.equal(unlinted.status, 1);
-  assert.match(unlinted.out, /^figma-comments: refused: c\.txt has no pinned sources; run draft-lint\.mjs figma-comment c\.txt, then ask the user again$/m);
+  assert.match(unlinted.out, /^figma-comments: refused: c\.txt has no pinned sources; run draft-lint\.mjs figma-comment c\.txt --file F1 --node 1:2, then ask the user again$/m);
   assert.equal(unlinted.posts.length, 0);
-  const lint = run("draft-lint", ["figma-comment", "c.txt"], figma("v1", frame("Pay")));
+  const lint = run("draft-lint", ["figma-comment", "c.txt", "--node", "1-2"], figma("t1", frame("Pay")));
   assert.equal(lint.status, 0, lint.out);
-  assert.match(lint.out, /^pinned: Figma F1 version v1$/m);
-  const changed = run("figma-comments", ["post", "1-2", "--body-file", "c.txt"], figma("v2", frame("Pay now")));
+  assert.match(lint.out, /^pinned: Figma F1 lastModified t1 · node 1:2 [0-9a-f]{12}$/m);
+  const changed = run("figma-comments", ["post", "1-2", "--body-file", "c.txt"], figma("t2", frame("Pay now")));
   assert.equal(changed.status, 1);
-  assert.match(changed.out, /^figma-comments: refused: Figma F1 version changed from v1 to v2 since the draft was linted and node 1:2 changed; re-read the changed sources, fix the draft, lint it again and ask the user again$/m);
+  assert.match(changed.out, /^figma-comments: refused: Figma F1 node 1:2 changed since the draft was linted; re-read the changed sources, fix the draft, lint it again and ask the user again$/m);
   assert.equal(changed.posts.length, 0);
-  const kept = run("figma-comments", ["post", "1-2", "--body-file", "c.txt"], figma("v2", frame("Pay")));
+  const kept = run("figma-comments", ["post", "1-2", "--body-file", "c.txt"], figma("t2", frame("Pay")));
   assert.equal(kept.status, 0, kept.out);
-  assert.match(kept.out, /^notice: Figma F1 version changed from v1 to v2 since the draft was linted; node 1:2 is unchanged, so it posts as drafted$/m);
+  assert.match(kept.out, /^notice: Figma F1 lastModified changed from t1 to t2 since the draft was linted; node 1:2 is unchanged, so it posts as drafted$/m);
   assert.equal(kept.posts.length, 1);
 });
 

@@ -31,5 +31,5 @@ export function siblingRepo() {
     git(upstream, "push", "-q", "origin", "dev");
     return sha;
   };
-  return { root, clone, push };
+  return { root, upstream, clone, push };
 }

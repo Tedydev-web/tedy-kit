@@ -36,7 +36,7 @@ export async function requestJson(url, { method = "GET", headers = {}, body, as 
     }
     if (!response.ok) {
       const limit = response.headers.get("x-figma-rate-limit-type");
-      throw new Error(`${method} ${new URL(url).pathname} returned HTTP ${response.status}: ${redact(apiMessage(data, text))}${limit ? ` (rate limit type ${limit})` : ""}`);
+      throw Object.assign(new Error(`${method} ${new URL(url).pathname} returned HTTP ${response.status}: ${redact(apiMessage(data, text))}${limit ? ` (rate limit type ${limit})` : ""}`), { status: response.status });
     }
     return as === "text" ? text : data;
   }

@@ -9,7 +9,7 @@ import { fetchTab, indexTab, quoteInText, UC_ID } from "./prd-section.mjs";
 import { generatedPrBodyOp } from "./openproject.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
-import { cites, mapRepos, pinnedSources, recheckRepos } from "./source-pins.mjs";
+import { recheckPinned } from "./source-pins.mjs";
 
 const normalise = (text) => text.replace(/\s+/g, " ").trim();
 
@@ -122,23 +122,12 @@ async function loadPrd(comments) {
   return prd;
 }
 
-function recheckSources(file, lintMode) {
+async function recheckSources(file, lintMode, texts) {
   if (typeof file !== "string") {
     console.log("refused: pass the body as --body-file <file> so draft-lint can pin its sources");
     return null;
   }
-  const relint = `draft-lint.mjs ${lintMode} ${file}`;
-  const { sources, refusal } = pinnedSources(file, relint);
-  if (refusal) {
-    console.log(refusal);
-    return null;
-  }
-  const unpinned = cites(readFileSync(file, "utf8")).filter(({ path, branch }) => !sources.some((pin) => pin.kind === "git" && pin.ref === `origin/${branch}` && pin.paths.includes(path)));
-  if (unpinned.length) {
-    console.log(`refused: ${file} cites ${unpinned.map(({ path, branch }) => `${path}@${branch}`).join(", ")} with no pin in its sources record; run ${relint}, then ask the user again`);
-    return null;
-  }
-  const { refusals, notices } = recheckRepos(sources, mapRepos(resolveMap(process.cwd())?.map));
+  const { refusals, notices } = await recheckPinned(file, `draft-lint.mjs ${lintMode} ${file}`, { texts });
   for (const line of refusals) console.log(line);
   return refusals.length ? null : notices;
 }
@@ -179,7 +168,7 @@ async function post(file, flags) {
   const twins = alreadyOnPr(prComments(repo, final.pr), final.comments);
   for (const twin of twins) console.log(`refused ${twin.comment.index}. ${twin.comment.path}:${twin.comment.line}: already on the PR as comment ${twin.id}; drop it from the draft`);
   if (twins.length) return 1;
-  const notices = recheckSources(file, "pr-comment");
+  const notices = await recheckSources(file, "pr-comment", final.comments.map((comment) => comment.body));
   if (!notices) return 1;
   const payload = buildReviewPayload(final.comments, head);
   console.log(`WRITE → ${repo}#${final.pr} : 1 review · ${final.comments.length} comments`);
@@ -209,10 +198,10 @@ function readBody(flags) {
   return body;
 }
 
-function edit(id, flags) {
+async function edit(id, flags) {
   const repo = currentRepo(flags);
   const body = readBody(flags);
-  const notices = recheckSources(flags["body-file"], "pr-reply");
+  const notices = await recheckSources(flags["body-file"], "pr-reply", [body]);
   if (!notices) return 1;
   console.log(`WRITE → ${repo} : edit review comment ${id}`);
   consumeApproval(process.argv, [body]);
@@ -251,7 +240,7 @@ function setThreadsResolved(threadIds, resolved) {
   return 0;
 }
 
-function reply(pr, id, flags) {
+async function reply(pr, id, flags) {
   const repo = currentRepo(flags);
   const body = readBody(flags);
   const twin = replyExists(prComments(repo, pr), id, body);
@@ -259,7 +248,7 @@ function reply(pr, id, flags) {
     console.log(`refused: reply ${twin} under ${id} already says this; nothing posted`);
     return 1;
   }
-  const notices = recheckSources(flags["body-file"], "pr-reply");
+  const notices = await recheckSources(flags["body-file"], "pr-reply", [body]);
   if (!notices) return 1;
   console.log(`WRITE → ${repo}#${pr} : reply to ${id}`);
   consumeApproval(process.argv, [body]);

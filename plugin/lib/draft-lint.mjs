@@ -1,12 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { STATE_DIR } from "./hook-io.mjs";
 import { UC_ID } from "./prd-section.mjs";
 import { chatLanguage } from "./labels.mjs";
 import { resolveMap } from "./project-map.mjs";
-import { bareCites, cites, describePin, mapRepos, pinRepos, takePin, writeSources } from "./source-pins.mjs";
+import { describePin, linkPins, mapRepos, nodeId, pinRepos, writeSources } from "./source-pins.mjs";
 
 export const MAX_BODY = 360;
 export const MAX_CHAT = 600;
@@ -165,32 +165,22 @@ export function readDiff(pr, repo, run = (args) => execFileSync("gh", args, { en
 
 export const mapLanguage = (field) => resolveMap(process.cwd())?.map.language?.[field] ?? chatLanguage();
 
-export function newestFindings(pr, dir = join(process.cwd(), "plans", "reports")) {
-  const name = new RegExp(`^review-\\d{6}-\\d{4}-pr${pr}-findings\\.md$`);
-  const found = existsSync(dir) ? readdirSync(dir).filter((entry) => name.test(entry)).sort().at(-1) : undefined;
-  return found && join(dir, found);
+function repoPins(text) {
+  const { pins, problems } = pinRepos(mapRepos(resolveMap(process.cwd())?.map), text);
+  for (const problem of problems) console.log(`sources: ${problem}`);
+  return problems.length ? null : pins;
 }
 
-function repoPins(text, evidence) {
-  const all = [text, evidence ? readFileSync(evidence, "utf8") : ""].join("\n");
-  const bare = bareCites(all).map((cite) => `${cite} is a path:line@branch cite outside backticks, so it would not be pinned; put it in backticks`);
-  const { pins, problems } = pinRepos(cites(all), mapRepos(resolveMap(process.cwd())?.map));
-  for (const problem of [...bare, ...problems]) console.log(`sources: ${problem}`);
-  return bare.length || problems.length ? null : pins;
-}
-
-async function chatPins(kind, flag) {
+async function chatPins(kind, text, flag) {
   const map = resolveMap(process.cwd())?.map;
   if (kind === "figma-comment") {
     const file = flag("--file") ?? map?.figma?.file;
-    if (!file) return [];
-    const { client, figmaPin } = await import("./figma-comments.mjs");
-    return [await takePin(`Figma file ${file}`, async () => figmaPin(client({ file })))];
+    const node = flag("--node");
+    if (node !== undefined && !nodeId(node)) throw new Error(`--node ${node} is not a Figma node id such as 12-34 or 12:34`);
+    return linkPins(text, file ? { figma: [{ file, nodes: node ? [nodeId(node)] : [], whole: !node }] } : {});
   }
   const doc = flag("--doc") ?? map?.prd?.doc;
-  if (!doc) return [];
-  const { gdocPin, session } = await import("./gdoc-comments.mjs");
-  return [await takePin(`Google Doc ${doc}`, async () => gdocPin(await session({ doc })))];
+  return linkPins(text, doc ? { docs: [doc] } : {});
 }
 
 function record(file, text, pins, none, freeze = true) {
@@ -207,9 +197,9 @@ async function main([kind, file, ...flags]) {
     const problems = lintChatComment(text, kind.replace("-comment", ""), mapLanguage("doc_figma"));
     for (const problem of problems) console.log(problem);
     if (problems.length) return 1;
-    const pins = await chatPins(kind, flag);
+    const pins = await chatPins(kind, text, flag);
     console.log(`clean: ${kind}`);
-    record(file, text, pins, kind === "figma-comment" ? "no Figma file in the project map" : "no PRD doc in the project map");
+    record(file, text, pins, kind === "figma-comment" ? "no Figma file in the project map and no link in the comment" : "no PRD doc in the project map and no link in the comment");
     return 0;
   }
   if (kind === "pr-reply" && file) {
@@ -217,14 +207,14 @@ async function main([kind, file, ...flags]) {
     const problems = lintComment(text.trim(), mapLanguage("pr_review"));
     for (const problem of problems) console.log(problem);
     if (problems.length) return 1;
-    const pins = repoPins(text, flag("--findings"));
+    const pins = repoPins(text);
     if (!pins) return 1;
     console.log("clean: pr-reply");
-    record(file, text, pins, "no path:line@branch cite in the body or the --findings file", false);
+    record(file, text, pins, "no repo in the project map", false);
     return 0;
   }
   if (kind !== "pr-comment" || !file) {
-    console.error("usage: draft-lint.mjs pr-comment <draft.md> [--diff <file>] [--repo <owner/repo>] [--findings <file>] | pr-reply <body.txt> [--findings <file>] | doc-comment <body.txt> [--doc <id>] | figma-comment <body.txt> [--file <key>]");
+    console.error("usage: draft-lint.mjs pr-comment <draft.md> [--diff <file>] [--repo <owner/repo>] | pr-reply <body.txt> | doc-comment <body.txt> [--doc <id>] | figma-comment <body.txt> [--file <key>] [--node <node-id>]");
     return 2;
   }
   const text = readFileSync(file, "utf8");
@@ -235,10 +225,10 @@ async function main([kind, file, ...flags]) {
     for (const item of result.problems) console.log(`${item.index}. ${item.location}: ${item.problem}`);
     return 1;
   }
-  const pins = repoPins(text, flag("--findings") ?? newestFindings(pr));
+  const pins = repoPins(text);
   if (!pins) return 1;
   console.log(`clean: ${result.comments.length} comments, PR #${result.pr}, head ${result.sha}`);
-  record(file, text, pins, `no path:line@branch cite in the draft or a findings file for PR #${pr}`);
+  record(file, text, pins, "no repo in the project map");
   return 0;
 }
 

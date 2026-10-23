@@ -8,7 +8,7 @@ import { logPostedText } from "./edit-log.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { notBefore, sinceTime } from "./since.mjs";
-import { applyVerdict, requirePin, sayNotice, versionCheck } from "./source-pins.mjs";
+import { requireFresh, sayNotices, versionCheck } from "./source-pins.mjs";
 
 const DRIVE = "https://www.googleapis.com/drive/v3";
 const DOCS = "https://docs.googleapis.com/v1";
@@ -83,6 +83,18 @@ const tabsText = (tabs) => tabs.map((tab) => `${tab.tabProperties?.tabId}\n${run
 
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
 
+const markerLabel = (index) => (index < 26 ? String.fromCharCode(97 + index) : markerLabel(Math.floor(index / 26) - 1) + String.fromCharCode(97 + (index % 26)));
+
+export function exportWithoutComments(text) {
+  const start = text.lastIndexOf("\n[a]");
+  if (start < 0) return text.trimEnd();
+  const body = text.slice(0, start);
+  const labels = [...text.slice(start).matchAll(/\n\[([a-z]{1,3})\]/g)].map((match) => match[1]);
+  if (!labels.every((label, index) => label === markerLabel(index) && body.includes(`[${label}]`))) return text.trimEnd();
+  const known = new Set(labels);
+  return body.replace(/\[([a-z]{1,3})\]/g, (marker, label) => (known.has(label) ? "" : marker)).trimEnd();
+}
+
 const TEXT_READERS = {
   "docs-text": async (google) => {
     const document = await google.request(`${DOCS}/documents/${google.doc}?includeTabsContent=true&suggestionsViewMode=PREVIEW_WITHOUT_SUGGESTIONS`);
@@ -92,18 +104,24 @@ const TEXT_READERS = {
   "drive-export": async (google) => {
     const text = await google.request(`${DRIVE}/files/${google.doc}/export?mimeType=text/plain`, { as: "text" });
     if (typeof text !== "string") throw new Error("the Drive export returned no text");
-    return sha256(text);
+    return sha256(exportWithoutComments(text));
   },
 };
 
 export async function gdocPin(google) {
   const failures = [];
-  for (const method of google.ownClient ? ["docs-text", "drive-export"] : ["drive-export"]) {
+  if (google.ownClient) {
     try {
-      return { kind: "gdoc", doc: google.doc, method, text: await TEXT_READERS[method](google) };
+      return { kind: "gdoc", doc: google.doc, method: "docs-text", text: await TEXT_READERS["docs-text"](google) };
     } catch (error) {
-      failures.push(`${method}: ${error.message}`);
+      if (error.status !== 403) throw new Error(`refused: the text of Google Doc ${google.doc} could not be read through docs-text (${error.message}), so its pin cannot be taken`);
+      failures.push(`docs-text: ${error.message}`);
     }
+  }
+  try {
+    return { kind: "gdoc", doc: google.doc, method: "drive-export", text: await TEXT_READERS["drive-export"](google) };
+  } catch (error) {
+    failures.push(`drive-export: ${error.message}`);
   }
   throw new Error(`refused: the text of Google Doc ${google.doc} could not be read (${failures.join("; ")}), so its pin cannot be taken`);
 }
@@ -120,10 +138,9 @@ export async function recheckGdoc(google, pin, kept) {
   return versionCheck(`Google Doc ${pin.doc} text`, pin.text.slice(0, 12), now.startsWith(pin.text.slice(0, 12)) ? now : now.slice(0, 12), kept ? { kept } : {});
 }
 
-export async function recheckDocPin(google, file, relint, kept) {
-  const pin = requirePin(file, relint, (candidate) => candidate.kind === "gdoc" && candidate.doc === google.doc, `text of Google Doc ${google.doc}`);
-  return applyVerdict(await recheckGdoc(google, pin, kept));
-}
+export const recheckDocTarget = (doc, file, relint, kept) => requireFresh(file, relint, { kept, covers: (pin) => pin.kind === "gdoc" && pin.doc === doc, what: `text of Google Doc ${doc}` });
+
+const relintDoc = (file, doc) => `draft-lint.mjs doc-comment ${file} --doc ${doc}`;
 
 const readBody = (flags) => {
   const body = readFileSync(flags["body-file"], "utf8").trim();
@@ -208,10 +225,10 @@ async function main([command, target, ...rest]) {
     const body = readBody(flags);
     const google = await session(flags, command === "anchor");
     if (alreadyPosted(await listComments(google), command, target, body)) throw new Error(`the Doc already has this ${command === "reply" ? `reply in thread ${target}` : "comment"}; nothing posted`);
-    const notice = await recheckDocPin(google, flags["body-file"], `draft-lint.mjs doc-comment ${flags["body-file"]}`);
+    const notices = await recheckDocTarget(google.doc, flags["body-file"], relintDoc(flags["body-file"], google.doc));
     const approve = () => {
       consumeApproval(process.argv, [body]);
-      sayNotice(notice);
+      sayNotices(notices);
     };
     let id;
     if (command === "reply") {
@@ -234,11 +251,11 @@ async function main([command, target, ...rest]) {
     const google = await session(flags);
     const item = editTarget(await listComments(google), target, flags.reply);
     if (squash(item.content) === squash(body)) throw new Error("the posted text already matches the body file; nothing edited");
-    const notice = await recheckDocPin(google, flags["body-file"], `draft-lint.mjs doc-comment ${flags["body-file"]}`);
+    const notices = await recheckDocTarget(google.doc, flags["body-file"], relintDoc(flags["body-file"], google.doc));
     const path = `${DRIVE}/files/${google.doc}/comments/${target}${flags.reply ? `/replies/${flags.reply}` : ""}?fields=id,content`;
     console.log(`WRITE → Google Doc ${google.doc} thread ${target}${flags.reply ? ` reply ${flags.reply}` : ""} : edit 1 ${flags.reply ? "reply" : "comment"}`);
     consumeApproval(process.argv, [body]);
-    sayNotice(notice);
+    sayNotices(notices);
     await google.request(path, { method: "PATCH", body: { content: body } });
     const after = editTarget(await listComments(google), target, flags.reply);
     if (after.content.trim() !== body) throw new Error("the edited text could not be read back unchanged");
@@ -289,7 +306,7 @@ async function main([command, target, ...rest]) {
     console.log("deleted and confirmed gone");
     return 0;
   }
-  console.error("usage: gdoc-comments.mjs list [--since <ISO>] [--doc <id>] | reply <comment-id> --body-file <f> | anchor --tab <t.id> --quote <exact text> --body-file <f> | edit <comment-id> [--reply <reply-id>] --body-file <f> | delete <comment-id> [--reply <reply-id>] | changed [--since <ISO>] | export [--out <f>]");
+  console.error("usage: gdoc-comments.mjs list [--since <ISO>] [--doc <id>] | reply <comment-id> --body-file <f> --doc <id> | anchor --tab <t.id> --quote <exact text> --body-file <f> --doc <id> | edit <comment-id> [--reply <reply-id>] --body-file <f> --doc <id> | delete <comment-id> [--reply <reply-id>] --doc <id> | changed [--since <ISO>] | export [--out <f>]");
   return 2;
 }
 

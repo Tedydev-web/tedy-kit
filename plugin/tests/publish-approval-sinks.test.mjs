@@ -156,6 +156,7 @@ test("answer mode: openproject comment with --apply before --body-file needs the
     const exec = promisify(execFile);
     const op = (...args) => exec("node", [OP, ...args], { cwd: dir, env: { ...env, OP_SYNC_DIR: join(dir, ".config", "op", "sync") } }).then((result) => ({ code: 0, out: result.stdout }), (error) => ({ code: error.code, out: `${error.stdout}${error.stderr}` }));
     const args = ["comment", "5", "--apply", "--body-file", "c.md"];
+    assert.equal((await op("comment", "5", "--body-file", "c.md")).code, 0);
     approve(`node ${OP} ${args.join(" ")}`);
     const commandOnly = await op(...args);
     assert.equal(commandOnly.code, 1, commandOnly.out);

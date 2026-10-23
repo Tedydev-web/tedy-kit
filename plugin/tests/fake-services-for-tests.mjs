@@ -47,8 +47,8 @@ globalThis.fetch = async (input, options = {}) => {
   if (method !== "GET") appendFileSync(process.env.WRITES, \`\${url.host} \${method} \${url.pathname}\\n\`);
   if (url.host === "api.figma.com") {
     if (url.pathname === "/v1/me") return json({ handle: "me" });
-    if (/^\\/v1\\/files\\/[^/]+$/.test(url.pathname)) return json({ version: web.figmaVersion ?? "1" });
-    if (url.pathname.endsWith("/nodes")) return json({ nodes: { [url.searchParams.get("ids")]: { document: { absoluteBoundingBox: { x: 0, y: 0, width: 100, height: 40 } } } } });
+    if (/^\\/v1\\/files\\/[^/]+$/.test(url.pathname)) return json({ version: "1", lastModified: web.figmaModified ?? "2026-10-01T00:00:00Z" });
+    if (url.pathname.endsWith("/nodes")) return json({ nodes: Object.fromEntries(url.searchParams.get("ids").split(",").map((id) => [id, web.figmaNodes?.[id] === undefined ? { document: { id, absoluteBoundingBox: { x: 0, y: 0, width: 100, height: 40 } } } : web.figmaNodes[id]])) });
     const one = url.pathname.match(/\\/comments\\/([^/]+)$/);
     if (one && method === "DELETE") {
       web.figma = web.figma.filter((comment) => comment.id !== one[1]);

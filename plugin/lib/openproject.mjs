@@ -4,8 +4,6 @@ import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { STATE_DIR } from "./hook-io.mjs";
 import { addSlugs, buildPayload, foreignActivity, forgetSlugs, loadConfig, loadRefs, mergePayload, planWrites, readSidecar, recordLastApply, setPayload, sidecarPath, workPackageFilters, workPackageLine, writeSidecar } from "./openproject-client.mjs";
-import { client as figmaClient, figmaPin, recheckFigma } from "./figma-comments.mjs";
-import { gdocPin, recheckGdoc, session } from "./gdoc-comments.mjs";
 import { closedStatuses, closestWorkPackage, listWorkPackages } from "./openproject-dedup.mjs";
 import { deleteRelation, setRelation } from "./openproject-relation.mjs";
 import { resolveMap } from "./project-map.mjs";
@@ -14,7 +12,7 @@ import { approvalLines, renderRollbackItem, renderWorkPackageDraft } from "./pub
 import { snapshotOnce, snapshotPath } from "./draft-lint.mjs";
 import { appendEditLog, frozenOriginal, labelText } from "./edit-log.mjs";
 import { chatLanguage } from "./labels.mjs";
-import { describePin, linkedDocs, pinnedSources, takePin, writeSources } from "./source-pins.mjs";
+import { describePin, linkPins, recheckPinned, sayNotices, writeSources } from "./source-pins.mjs";
 import { countWords, lintDrafts, lintWorkPackage, readiness, readinessLine } from "./task-lint.mjs";
 
 function projectOf(flags) {
@@ -84,30 +82,15 @@ async function check(client, project, drafts) {
 
 const locksPath = (file) => `${snapshotPath(file)}.locks.json`;
 
-async function linkPins(text) {
-  const { figma, docs } = linkedDocs(text);
-  const pins = [];
-  for (const { file: key, nodes } of figma) pins.push({ ...(await takePin(`Figma file ${key}`, async () => figmaPin(figmaClient({ file: key })))), nodes });
-  for (const doc of docs) pins.push(await takePin(`Google Doc ${doc}`, async () => gdocPin(await session({ doc }))));
-  return pins;
+async function recheckLinks(file, relint) {
+  const { refusals, notices } = await recheckPinned(file, relint);
+  for (const line of refusals) console.log(line);
+  return refusals.length ? null : notices;
 }
 
-async function recheckLinks(file) {
-  const { sources, refusal } = pinnedSources(file, `openproject.mjs preview ${file}`);
-  if (refusal) {
-    console.log(refusal);
-    return null;
-  }
-  const notices = [];
-  for (const pin of sources) {
-    const verdict = pin.kind === "figma" ? await recheckFigma(figmaClient({ file: pin.file }), pin, pin.nodes ?? []) : await recheckGdoc(await session({ doc: pin.doc }), pin);
-    if (verdict.refusal) {
-      console.log(verdict.refusal);
-      return null;
-    }
-    if (verdict.notice) notices.push(verdict.notice);
-  }
-  return notices;
+function pinBody(file, text, pins) {
+  writeSources(file, pins, text);
+  console.log(pins.length ? pins.map(describePin).join("\n") : "pinned: no Figma or Google Doc link in the comment");
 }
 
 async function apply(client, project, drafts, file) {
@@ -126,10 +109,10 @@ async function apply(client, project, drafts, file) {
     for (const [slug] of moved) console.log(`refused: ${slug} changed in OpenProject since the preview; read its activity, then preview again`);
     return 1;
   }
-  const notices = await recheckLinks(file);
+  const notices = await recheckLinks(file, `openproject.mjs preview ${file} --project ${project}`);
   if (!notices) return 1;
   consumeApproval(process.argv, drafts.map((draft, index) => renderWorkPackageDraft(draft, plan[index])));
-  for (const notice of notices) console.log(notice);
+  sayNotices(notices);
   const path = sidecarPath(client.host, project);
   const created = {};
   const expected = {};
@@ -232,8 +215,10 @@ export const generatedPrBodyOp = (body) => {
 export const sameComment = (activities, body) => activities.find((activity) => (activity.comment?.raw ?? "").trim() === body.trim()) ?? null;
 
 async function comment(client, id, flags) {
-  if (typeof flags["body-file"] !== "string") throw new Error("comment needs --body-file <file>");
-  const body = readFileSync(flags["body-file"], "utf8").trim();
+  const file = flags["body-file"];
+  if (typeof file !== "string") throw new Error("comment needs --body-file <file>");
+  const text = readFileSync(file, "utf8");
+  const body = text.trim();
   if (!body) throw new Error("comment body is empty");
   const current = await client.request(`/api/v3/work_packages/${id}`);
   const activities = (await client.request(`/api/v3/work_packages/${id}/activities`))._embedded.elements;
@@ -244,10 +229,14 @@ async function comment(client, id, flags) {
   }
   console.log(`${describe(current)} | comment of ${body.length} characters`);
   if (flags.apply === undefined) {
+    pinBody(file, text, await linkPins(body));
     console.log(`WRITE → ${client.host} · #${id} : 1 comment; run again with --apply`);
     return 0;
   }
+  const notices = await recheckLinks(file, `openproject.mjs comment ${id} --body-file ${file}`);
+  if (!notices) return 1;
   consumeApproval(process.argv, [body]);
+  sayNotices(notices);
   await client.request(`/api/v3/work_packages/${id}/activities`, { method: "POST", body: { comment: { raw: body } } });
   const read = sameComment((await client.request(`/api/v3/work_packages/${id}/activities`))._embedded.elements, body);
   console.log(read ? `commented #${id} activity ${read.id}` : `posted but not found on read-back; open #${id} and check`);
@@ -255,8 +244,10 @@ async function comment(client, id, flags) {
 }
 
 async function commentEdit(client, id, flags) {
-  if (typeof flags["body-file"] !== "string") throw new Error("comment-edit needs --body-file <file>");
-  const body = readFileSync(flags["body-file"], "utf8").trim();
+  const file = flags["body-file"];
+  if (typeof file !== "string") throw new Error("comment-edit needs --body-file <file>");
+  const text = readFileSync(file, "utf8");
+  const body = text.trim();
   if (!body) throw new Error("comment body is empty");
   const activity = await client.request(`/api/v3/activities/${id}`);
   const refusal = foreignActivity(activity, await client.request("/api/v3/users/me"));
@@ -282,10 +273,14 @@ async function commentEdit(client, id, flags) {
   }
   console.log(`${describe(current)} | activity ${id} | comment of ${old.length} → ${body.length} characters`);
   if (flags.apply === undefined) {
+    pinBody(file, text, await linkPins(body));
     console.log(`WRITE → ${client.host} · #${current.id} : 1 comment edit; run again with --apply`);
     return 0;
   }
+  const notices = await recheckLinks(file, `openproject.mjs comment-edit ${id} --body-file ${file}`);
+  if (!notices) return 1;
   consumeApproval(process.argv, [body]);
+  sayNotices(notices);
   await client.request(`/api/v3/activities/${id}`, { method: "PATCH", body: { comment: { raw: body } } });
   const read = (await client.request(`/api/v3/activities/${id}`)).comment?.raw?.trim() === body;
   console.log(read ? `edited #${current.id} activity ${id}` : `sent but the read-back differs; open #${current.id} and check activity ${id}`);
