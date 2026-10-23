@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import { redact, requestJson } from "./api-request.mjs";
 import { lintChatComment, mapLanguage } from "./draft-lint.mjs";
 import { logPostedText } from "./edit-log.mjs";
+import { canonicalJson } from "./figma-comments.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { notBefore, sinceTime } from "./since.mjs";
@@ -77,9 +78,11 @@ export async function session(flags, needOwnClient = false) {
   return { doc, bearer, ownClient, request: (url, options = {}) => requestJson(url, { ...options, headers: { Authorization: `Bearer ${bearer}` } }) };
 }
 
-const runsText = (node) => (Array.isArray(node) ? node.map(runsText).join("") : node && typeof node === "object" ? (typeof node.textRun?.content === "string" ? node.textRun.content : Object.values(node).map(runsText).join("")) : "");
+const NOT_CONTENT = (key) => ["revisionId", "namedRanges", "commentAnchors"].includes(key) || /^suggest(?:ed|ion)/.test(key);
 
-const tabsText = (tabs) => tabs.map((tab) => `${tab.tabProperties?.tabId}\n${runsText(tab.documentTab?.body ?? {})}\n${tabsText(tab.childTabs ?? [])}`).join("\n");
+const contentOf = (node) => (Array.isArray(node) ? node.map(contentOf) : node && typeof node === "object" ? Object.fromEntries(Object.entries(node).flatMap(([key, value]) => (NOT_CONTENT(key) ? [] : [[key, contentOf(value)]]))) : node);
+
+const tabsContent = (tabs) => tabs.map((tab) => ({ tabId: tab.tabProperties?.tabId, content: contentOf(tab.documentTab ?? {}), childTabs: tabsContent(tab.childTabs ?? []) }));
 
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
 
@@ -99,7 +102,7 @@ const TEXT_READERS = {
   "docs-text": async (google) => {
     const document = await google.request(`${DOCS}/documents/${google.doc}?includeTabsContent=true&suggestionsViewMode=PREVIEW_WITHOUT_SUGGESTIONS`);
     if (!Array.isArray(document?.tabs)) throw new Error("the Docs API returned no tabs");
-    return sha256(tabsText(document.tabs));
+    return sha256(canonicalJson(tabsContent(document.tabs)));
   },
   "drive-export": async (google) => {
     const text = await google.request(`${DRIVE}/files/${google.doc}/export?mimeType=text/plain`, { as: "text" });

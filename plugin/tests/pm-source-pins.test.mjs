@@ -125,16 +125,41 @@ test("a body line that starts with [a] never hides the text after it from a Driv
   assert.notEqual((await viewer(body("The fee is 2%."), comment)).text, (await viewer(body("The fee is 1%."), comment)).text);
 });
 
-test("a Google Doc pin is the SHA-256 of the text of every tab, read without suggestions, never a revision field", async () => {
+test("a Google Doc pin is the SHA-256 of the content of every tab, read without suggestions, never a revision, suggestion or named range", async () => {
   const pin = await gdocPin(googleStub(docBody(["Crypto takes the price in USDT\n", "Fees\n"])).google);
   assert.deepEqual(Object.keys(pin), ["kind", "doc", "method", "text"]);
   assert.equal(pin.method, "docs-text");
   assert.match(pin.text, /^[0-9a-f]{64}$/);
   const same = { ...docBody(["Crypto takes the price in USDT\n", "Fees\n"], { revisionId: "r9", namedRanges: { kix: { name: "kix" } }, suggestedDocumentStyleChanges: { s1: {} } }) };
   same.tabs[0].documentTab.body.content[0].paragraph.elements[0].textRun.suggestedInsertionIds = ["s1"];
+  same.tabs[0].documentTab.body.content[0].paragraph.suggestedParagraphStyleChanges = { s1: {} };
+  same.tabs[0].documentTab.namedRanges = { kix: { name: "kix", namedRanges: [{ namedRangeId: "kix.1" }] } };
+  same.tabs[0].documentTab.revisionId = "r9";
+  same.tabs[0].documentTab.commentAnchors = { a1: { anchorId: "a1", ranges: [{ startIndex: 1, endIndex: 5 }] } };
+  same.tabs[0].tabProperties.title = "Renamed";
   assert.equal((await gdocPin(googleStub(same).google)).text, pin.text);
   assert.notEqual((await gdocPin(googleStub(docBody(["Crypto takes the price in USDT\n", "Fees!\n"])).google)).text, pin.text);
   assert.notEqual((await gdocPin(googleStub(docBody(["Fees\n", "Crypto takes the price in USDT\n"])).google)).text, pin.text);
+});
+
+test("a Google Doc pin moves on a changed chip, rich link, footnote, header, footer, image or format, not only on text", async () => {
+  const doc = (element, tab = {}) => ({ tabs: [{ tabProperties: { tabId: "t.0" }, documentTab: { body: { content: [{ paragraph: { elements: [{ startIndex: 1, textRun: { content: "Deadline: " } }, element, { textRun: { content: "\n" } }] } }] }, footnotes: { f1: { content: [paragraph("Fee 1%\n")] } }, headers: { h1: { content: [paragraph("Draft v1\n")] } }, footers: { r1: { content: [paragraph("Page\n")] } }, inlineObjects: { i1: { inlineObjectProperties: { embeddedObject: { imageProperties: { contentUri: "https://x/1.png" } } } } }, ...tab } }] });
+  const pin = async (document) => (await gdocPin(googleStub(document).google)).text;
+  const date = (text) => ({ dateElement: { dateElementProperties: { timestamp: text, displayText: text } } });
+  const person = (email) => ({ person: { personProperties: { email, name: email } } });
+  const link = (uri) => ({ richLink: { richLinkProperties: { title: uri, uri } } });
+  assert.notEqual(await pin(doc(date("Oct 30, 2026"))), await pin(doc(date("Nov 5, 2026"))));
+  assert.notEqual(await pin(doc(person("a@example.com"))), await pin(doc(person("b@example.com"))));
+  assert.notEqual(await pin(doc(link("https://www.figma.com/design/A"))), await pin(doc(link("https://www.figma.com/design/B"))));
+  const base = await pin(doc(date("Oct 30, 2026")));
+  assert.equal(await pin(doc(date("Oct 30, 2026"))), base);
+  assert.notEqual(await pin(doc(date("Oct 30, 2026"), { footnotes: { f1: { content: [paragraph("Fee 2%\n")] } } })), base);
+  assert.notEqual(await pin(doc(date("Oct 30, 2026"), { headers: { h1: { content: [paragraph("Draft v2\n")] } } })), base);
+  assert.notEqual(await pin(doc(date("Oct 30, 2026"), { footers: { r1: { content: [paragraph("Page 2\n")] } } })), base);
+  assert.notEqual(await pin(doc(date("Oct 30, 2026"), { inlineObjects: { i1: { inlineObjectProperties: { embeddedObject: { imageProperties: { contentUri: "https://x/2.png" } } } } } })), base);
+  const bold = doc(date("Oct 30, 2026"));
+  bold.tabs[0].documentTab.body.content[0].paragraph.elements[0].textRun.textStyle = { strikethrough: true };
+  assert.notEqual(await pin(bold), base);
 });
 
 test("the Google Doc recheck refuses any text change, with no way for a caller to wave it through", async () => {
