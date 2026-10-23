@@ -358,7 +358,7 @@ test("a ready PR body refresh needs --repo and a ticket in answer mode, and neit
   }
 });
 
-test("read pins of the Doc and of Figma nodes taken before the read hold at the lint", async () => {
+test("read pins of the Doc hold at the lint, and read pins of Figma nodes hold until the post", async () => {
   const sibling = siblingRepo();
   const w = world({ mode: "ask", web: { drive: [thread], document: textDoc(TAB), tabs: { "t.1": TAB } }, map: { ...PRD_MAP, repos: [{ path: sibling.clone, role: "BE", branch: "dev" }] } });
   w.file("ledger.md", "# ledger\n");
@@ -374,7 +374,7 @@ test("read pins of the Doc and of Figma nodes taken before the read hold at the 
   const doc = await w.run("draft-lint", ["doc-comment", "g.md", "--doc", "D", "--pinned-at", "ledger.md"]);
   assert.equal(doc.code, 0, doc.out);
   assert.doesNotMatch(doc.out, /warning:|notice:/);
-  changeWeb(w, { document: textDoc(`${TAB}A new paragraph\n`), figmaNodes: { "3:4": { document: { id: "3:4", name: "changed" } } } });
+  changeWeb(w, { document: textDoc(`${TAB}A new paragraph\n`), figmaNodes: { "3:4": { document: { id: "3:4", name: "changed", absoluteBoundingBox: { x: 0, y: 0, width: 100, height: 40 } } } } });
   const docLint = await w.run("draft-lint", ["doc-comment", "g.md", "--doc", "D", "--pinned-at", "ledger.md"]);
   assert.notEqual(docLint.code, 0);
   assert.match(docLint.out, /^sources: refused: Google Doc D text changed from [0-9a-f]{12} to [0-9a-f]{12} since it was pinned/m);
@@ -383,8 +383,11 @@ test("read pins of the Doc and of Figma nodes taken before the read hold at the 
   assert.match(figmaLint.out, /^pinned: Figma F1 lastModified \S+ · node 1:2 [0-9a-f]{12} \(read \S+\)$/m);
   assert.doesNotMatch(figmaLint.out, /\b3:4 [0-9a-f]{12}|Google Doc D/);
   const nodeB = await w.run("draft-lint", ["figma-comment", "f2.md", "--file", "F1", "--node", "3-4", "--pinned-at", "ledger.md"]);
-  assert.notEqual(nodeB.code, 0);
-  assert.match(nodeB.out, /^sources: refused: Figma F1 node 3:4 changed since it was pinned/m);
+  assert.equal(nodeB.code, 0, nodeB.out);
+  assert.match(nodeB.out, /^pinned: Figma F1 lastModified \S+ · node 3:4 [0-9a-f]{12} \(read \S+\)$/m);
+  const postB = await w.run("figma-comments", ["post", "3-4", "--body-file", "f2.md", "--file", "F1"]);
+  assert.notEqual(postB.code, 0);
+  assert.match(postB.out, /refused: Figma F1 node 3:4 changed since it was pinned/);
   const items = await w.run("doc-comment-file", ["items.json", "--pinned-at", "ledger.md"]);
   assert.notEqual(items.code, 0);
   assert.match(items.out, /refused: Google Doc D text changed/);
@@ -468,17 +471,18 @@ test("openproject preview, comment and comment-edit keep the read pins of --pinn
       assert.doesNotMatch(kept.out, /warning:|notice:/, name);
       for (const line of readLines) assert.ok(kept.out.includes(`${line}\n`), `${name}: ${line}\n${kept.out}`);
     }
-    moveFigma(w);
-    const noted = await w.run("openproject", ["comment", "21298", "--body-file", "c.md", "--pinned-at", "ledger.md"]);
-    assert.equal(noted.code, 0, noted.out);
-    assert.match(noted.out, /^notice: Figma F1 lastModified changed .* since it was pinned; node 1:2 is unchanged/m);
     changeWeb(w, { figmaNodes: { "1:2": { document: { id: "1:2", name: "changed" } } } });
+    const reads = w.reads().length;
+    const unasked = await w.run("openproject", ["comment", "21298", "--body-file", "c.md", "--pinned-at", "ledger.md"]);
+    assert.equal(unasked.code, 0, unasked.out);
+    assert.deepEqual(w.reads().slice(reads), []);
+    sibling.push("docs/Pro", "x\n", "docs: change the Pro plan");
     for (const [name, args, file] of runs) {
       const stateFile = join(w.dir, "state", "drafts", `${join(w.dir, file).replace(/\//g, "_")}.sources.json`);
       const before = readFileSync(stateFile, "utf8");
       const failed = await w.run("openproject", [...args, "--pinned-at", "ledger.md"]);
       assert.notEqual(failed.code, 0, name);
-      assert.match(failed.out, /^sources: refused: Figma F1 node 1:2 changed since it was pinned/m, `${name}: ${failed.out}`);
+      assert.match(failed.out, /^sources: refused: .* changed a file the text being posted names$/m, `${name}: ${failed.out}`);
       assert.match(failed.out, /^sources: a source changed while it was being read; run draft-lint\.mjs pin-sources ledger\.md again/m, name);
       assert.doesNotMatch(failed.out, /^WRITE →.*run again with --apply|approval lines:/m, name);
       assert.equal(readFileSync(stateFile, "utf8"), before, name);
@@ -542,6 +546,38 @@ test("every lint pins the links in its text and the map repos, and figma-comment
   const reviewPins = await lint(review, "draft-lint", ["pr-comment", "d.md"]);
   assert.ok(reviewPins.some((line) => line.startsWith("pinned: Figma F1 ")), reviewPins.join("\n"));
   assert.ok(reviewPins.some((line) => line.startsWith("pinned: . pull/701/head@")), reviewPins.join("\n"));
+});
+
+const tierOne = (w, from = 0) => w.reads().slice(from).filter((line) => /^\/v1\/files\/[^/?]+(?:\/nodes)?\?/.test(line));
+
+test("a Figma comment costs at most one Tier 1 call: the lint reuses read pins that cover its nodes, and the post rechecks from the call that finds the node", async () => {
+  const w = world({ mode: "ask", web: { figma: [] } });
+  w.file("ledger.md", "# ledger\n");
+  assert.equal((await w.run("draft-lint", ["pin-sources", "ledger.md", "--file", "F1", "--node", "1-2,3-4"])).code, 0);
+  assert.equal(tierOne(w).length, 1, w.reads().join("\n"));
+  w.file("f.md", "@lam Màn này thiếu trạng thái rỗng.\n");
+  let from = w.reads().length;
+  const pinned = await lint(w, "draft-lint", ["figma-comment", "f.md", "--file", "F1", "--node", "1-2", "--pinned-at", "ledger.md"]);
+  assert.deepEqual(tierOne(w, from), []);
+  assert.ok(pinned.some((line) => /^pinned: Figma F1 lastModified \S+ · node 1:2 [0-9a-f]{12} \(read \S+\)$/.test(line)), pinned.join("\n"));
+  from = w.reads().length;
+  const posted = await w.run("figma-comments", ["post", "1-2", "--body-file", "f.md", "--file", "F1"]);
+  assert.equal(posted.code, 0, posted.out);
+  assert.equal(tierOne(w, from).length, 1, w.reads().slice(from).join("\n"));
+  changeWeb(w, { figmaNodes: { "1:2": { document: { id: "1:2", name: "changed", absoluteBoundingBox: { x: 0, y: 0, width: 100, height: 40 } } } } });
+  w.file("f2.md", "@lam Nút này thiếu trạng thái tắt.\n");
+  await lint(w, "draft-lint", ["figma-comment", "f2.md", "--file", "F1", "--node", "1-2", "--pinned-at", "ledger.md"]);
+  const refused = await w.run("figma-comments", ["post", "1-2", "--body-file", "f2.md", "--file", "F1"]);
+  assert.notEqual(refused.code, 0);
+  assert.match(refused.out, /refused: Figma F1 node 1:2 changed since it was pinned/);
+});
+
+test("a draft that links several nodes of one Figma file pins them with one call", async () => {
+  const w = world({ mode: "ask", web: { figma: [] } });
+  w.file("f.md", "@lam Hai màn https://www.figma.com/design/F1/App?node-id=1-2 và https://www.figma.com/design/F1/App?node-id=3-4 lệch nhau.\n");
+  const pinned = await lint(w, "draft-lint", ["figma-comment", "f.md", "--file", "F1", "--node", "5-6"]);
+  assert.ok(pinned.some((line) => /node 5:6 [0-9a-f]{12}, 1:2 [0-9a-f]{12}, 3:4 [0-9a-f]{12}/.test(line)), pinned.join("\n"));
+  assert.equal(tierOne(w).length, 1, w.reads().join("\n"));
 });
 
 test("a Figma 429 refuses after one call, without retrying", async () => {

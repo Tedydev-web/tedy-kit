@@ -4,7 +4,7 @@ Every write below prints a `WRITE →` line, lints the body first, and reads the
 
 ## Pinned sources
 
-Before reading the PRD, Figma or code for a scope, `draft-lint.mjs pin-sources <ledger> --doc <id> --file <key> --node <node-id>,…` records the tip of every map repo, the Doc's text and each named frame's hash as they are at the start of the read (`--file` needs `--node`). Write each draft after that read: a read pin newer than the draft refuses its lint. Every lint below then takes `--pinned-at <ledger>`: it keeps the read pins of what it pins itself (every repo, plus the Doc and frames it targets or links), so a frame or Doc it cites that changed during the read fails the lint (`run draft-lint.mjs pin-sources <ledger> again, re-read what changed, …`), while a change to a frame or Doc it does not cite does not; a frame or Doc the read pins lack is pinned at lint with a `warning:`, and so is everything when there are no read pins.
+Before reading the PRD, Figma or code for a scope, `draft-lint.mjs pin-sources <ledger> --doc <id> --file <key> --node <node-id>,…` records the tip of every map repo, the Doc's text and each named frame's hash as they are at the start of the read (`--file` needs `--node`). Write each draft after that read: a read pin newer than the draft refuses its lint. Every lint below then takes `--pinned-at <ledger>`: it keeps the read pins of what it pins itself (every repo, plus the Doc and frames it targets or links), so a repo change it names or a Doc it cites that changed during the read fails the lint (`run draft-lint.mjs pin-sources <ledger> again, re-read what changed, …`), while a change to a frame or Doc it does not cite does not. Frames the read pins already cover are not asked again at the lint, because every Figma read is a Tier 1 call; the post rechecks them with the one call it makes. A frame or Doc the read pins lack is pinned at lint with a `warning:`, and so is everything when there are no read pins.
 
 Lint every body before its approval, naming the target as the write will:
 
@@ -29,7 +29,7 @@ On `refused`: re-read the node or the Doc, fix the draft, lint, and ask again.
 - `reply <comment-id> --body-file <f> --file <key>`: only on a root comment; the API rejects replies to replies.
 - `delete <comment-id> --file <key>`: only comments made by the token's own account, for reposting after a restyle. Answered threads are never reposted.
 - There is no edit and no resolve endpoint; resolving stays with the user.
-- HTTP 429 carries `Retry-After`; the client does not wait: the command refuses with that wait and nothing more is sent, so run it again later. A run reads `/nodes` once per file. Comments sit in rate-limit tier 2: 5 per minute on View or Collab seats, 25 to 100 per minute on Dev or Full seats.
+- HTTP 429 carries `Retry-After`; the client does not wait: the command refuses with that wait and nothing more is sent, so run it again later. A run reads `/nodes` once per file. `/nodes` and the file read are Tier 1: 20 a month on View or Collab seats, 10 to 20 a minute on Dev or Full seats, counted per token owner; so `pin-sources` reads each file once, a lint whose frames the read pins cover reads nothing, and a post or reply reads once. Comments sit in rate-limit tier 2: 5 per minute on View or Collab seats, 25 to 100 per minute on Dev or Full seats.
 
 ## Google Doc (PRD)
 

@@ -238,7 +238,7 @@ async function main([kind, file, ...flags]) {
     for (const problem of problems) console.log(problem);
     if (problems.length) return 1;
     const { extra, warnings } = chatTargets(kind, flag);
-    const pins = await sourcePins(text, extra);
+    const pins = await sourcePins(text, extra, { readKey: pinnedAt ?? file });
     if (!pins) return 1;
     const none = kind === "figma-comment" ? "no Figma file in the project map and no link in the comment" : "no PRD doc in the project map and no link in the comment";
     return record(file, text, pins, { clean: `clean: ${kind}`, none, texts: [text], pinnedAt, warnings });
@@ -249,7 +249,7 @@ async function main([kind, file, ...flags]) {
     const problems = lintComment(text.trim(), mapLanguage("pr_review"));
     for (const problem of problems) console.log(problem);
     if (problems.length) return 1;
-    const pins = await sourcePins(text, {}, { pr, repo: repoOf(flag) });
+    const pins = await sourcePins(text, {}, { pr, repo: repoOf(flag), readKey: pinnedAt ?? file });
     if (!pins) return 1;
     return record(file, text, pins, { clean: "clean: pr-reply", none: "no repo in the project map", texts: [text], pinnedAt, freeze: false });
   }
@@ -267,7 +267,7 @@ async function main([kind, file, ...flags]) {
     return 1;
   }
   const bodies = result.comments.map((comment) => comment.body);
-  const pins = await sourcePins(bodies.join("\n"), {}, { pr, repo });
+  const pins = await sourcePins(bodies.join("\n"), {}, { pr, repo, readKey: pinnedAt ?? file });
   if (!pins) return 1;
   return record(file, text, pins, { clean: `clean: ${result.comments.length} comments, PR #${result.pr}, head ${result.sha}`, none: "no repo in the project map", texts: bodies, pinnedAt });
 }

@@ -89,7 +89,7 @@ async function recheckLinks(file, relint, texts) {
 }
 
 async function pinText(file, text, posted, pinnedAt) {
-  const taken = await pinSourcesOf(posted);
+  const taken = await pinSourcesOf(posted, {}, { readKey: pinnedAt ?? file });
   for (const problem of taken.problems) console.log(`sources: ${problem}`);
   if (taken.problems.length) return null;
   return recordPins(file, text, taken.pins, { pinnedAt, texts: [posted] });

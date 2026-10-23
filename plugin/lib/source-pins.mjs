@@ -23,7 +23,9 @@ export async function takePin(what, take) {
   }
 }
 
-export async function linkPins(text, extra = {}) {
+const coveredBy = (read, file, nodes, whole) => read.some((pin) => pin.kind === "figma" && pin.file === file && typeof pin.lastModified === "string" && nodes.every((id) => Object.hasOwn(pin.nodes ?? {}, id)) && (!whole || pin.whole));
+
+export async function linkPins(text, extra = {}, read = []) {
   const links = linkedDocs(text);
   if (links.problems.length) throw new Error(`cannot pin ${links.problems.join("; ")}. Nothing was written.`);
   const figma = new Map();
@@ -34,13 +36,15 @@ export async function linkPins(text, extra = {}) {
     figma.set(file, entry);
   }
   const pins = [];
-  if (figma.size) {
+  const fetched = [...figma].filter(([file, { nodes, whole }]) => !coveredBy(read, file, nodes, whole));
+  for (const [file, { nodes, whole }] of figma) if (!fetched.some(([other]) => other === file)) pins.push({ kind: "figma", file, nodes: Object.fromEntries(nodes.map((id) => [id, null])), whole, held: true });
+  if (fetched.length) {
     const { client, figmaPin } = await import("./figma-comments.mjs");
-    for (const [file, { nodes, whole }] of figma) pins.push(await takePin(`Figma file ${file}`, async () => figmaPin(client({ file }), nodes, whole)));
+    for (const [file, { nodes, whole }] of fetched) pins.push(await takePin(`Figma file ${file}`, async () => figmaPin(client({ file }), nodes, whole)));
   }
   const docs = unique([...(extra.docs ?? []), ...links.docs]);
-  const held = docs.filter((doc) => extra.held?.includes(doc));
-  pins.push(...held.map((doc) => ({ kind: "gdoc", doc })));
+  const held = docs.filter((doc) => read.some((pin) => pin.kind === "gdoc" && pin.doc === doc && typeof pin.text === "string"));
+  pins.push(...held.map((doc) => ({ kind: "gdoc", doc, held: true })));
   const fresh = docs.filter((doc) => !held.includes(doc));
   if (fresh.length) {
     const { gdocPin, session } = await import("./gdoc-comments.mjs");
@@ -49,7 +53,7 @@ export async function linkPins(text, extra = {}) {
   return pins;
 }
 
-export async function pinSourcesOf(text, extra = {}, { pr, repo, branches = [] } = {}) {
+export async function pinSourcesOf(text, extra = {}, { pr, repo, branches = [], readKey } = {}) {
   const resolved = resolveMap(process.cwd());
   if (!resolved) return { pins: [], problems: [`no project map covers ${process.cwd()}, so its repos cannot be pinned; run this from a folder of a mapped project, or map it with /tedy:setup`] };
   const repos = mapRepos(resolved.map);
@@ -57,7 +61,7 @@ export async function pinSourcesOf(text, extra = {}, { pr, repo, branches = [] }
   const git = await pinRepos(repos, text, { extra: branches, reviewed: head.pins[0]?.repo });
   const problems = [...git.problems, ...head.problems];
   if (problems.length) return { pins: [], problems };
-  return { pins: [...git.pins, ...head.pins, ...(await linkPins(text, extra))], problems: [] };
+  return { pins: [...git.pins, ...head.pins, ...(await linkPins(text, extra, readKey === undefined ? [] : (loadReadPins(readKey)?.sources ?? [])))], problems: [] };
 }
 
 async function recheckLinked(pin) {
@@ -160,13 +164,12 @@ function loadReadPins(key) {
   }
 }
 
-export const readPinnedDocs = (key) => (loadReadPins(key)?.sources ?? []).flatMap((pin) => (pin.kind === "gdoc" && typeof pin.text === "string" ? [pin.doc] : []));
-
 const pinLabel = (pin, nodes = Object.keys(pin.nodes ?? {})) => (pin.kind === "git" ? `${pin.repo} ${pin.ref}` : pin.kind === "gdoc" ? `Google Doc ${pin.doc}` : nodes.length ? `Figma ${pin.file} node ${nodes.join(", ")}` : `Figma ${pin.file} file`);
 
 function matchReadPins(read, pins) {
   const kept = read.filter((pin) => pin.kind === "git");
   const extra = [];
+  const unchecked = [];
   for (const pin of pins) {
     if (pin.kind === "git") {
       if (!kept.some((candidate) => candidate.repo === pin.repo && candidate.ref === pin.ref)) extra.push({ pin, label: pinLabel(pin) });
@@ -184,11 +187,15 @@ function matchReadPins(read, pins) {
     const ids = Object.keys(pin.nodes ?? {});
     const shared = ids.filter((id) => Object.hasOwn(match.nodes ?? {}, id));
     const whole = Boolean(pin.whole && match.whole);
-    if (shared.length || whole) kept.push({ ...match, whole, nodes: Object.fromEntries(shared.map((id) => [id, match.nodes[id]])) });
+    if (shared.length || whole) {
+      const narrowed = { ...match, whole, nodes: Object.fromEntries(shared.map((id) => [id, match.nodes[id]])) };
+      kept.push(narrowed);
+      if (pin.held) unchecked.push(narrowed);
+    }
     const missing = ids.filter((id) => !shared.includes(id));
     if (missing.length || (pin.whole && !match.whole)) extra.push({ pin, label: pinLabel(pin, missing) });
   }
-  return { kept, extra };
+  return { kept, extra, unchecked };
 }
 
 export async function settleReadPins(key, pins, { texts, file } = {}) {
@@ -196,9 +203,9 @@ export async function settleReadPins(key, pins, { texts, file } = {}) {
   if (read === null) return { pins, problems: [], read: false, lines: pins.length ? [`warning: no read pins for ${key}, so these were pinned now, at lint, and a change made while you read them is not seen: ${pins.map((pin) => pinLabel(pin)).join("; ")}; next time run draft-lint.mjs pin-sources ${key} before reading`] : [] };
   if (read.problem) return { pins: [], problems: [read.problem], lines: [] };
   if (file && existsSync(file) && Date.parse(read.at) > statSync(file).mtimeMs) return { pins: [], problems: [`the read pins for ${key} were taken at ${read.at}, after ${file} was last written: pin-sources ran again but the draft was not re-read and rewritten; re-read the sources, update ${file}, then lint it again`], lines: [] };
-  const { kept, extra } = matchReadPins(read.sources, pins);
+  const { kept, extra, unchecked } = matchReadPins(read.sources, pins);
   const tips = new Map(pins.filter((pin) => pin.kind === "git").map((pin) => [tipKey(pin), pin.sha]));
-  const { refusals, notices } = await recheckPins(kept, { texts, tips });
+  const { refusals, notices } = await recheckPins(kept.filter((pin) => !unchecked.includes(pin)), { texts, tips });
   return {
     pins: [...kept, ...extra.map(({ pin }) => pin)],
     problems: refusals.length ? [...refusals, `a source changed while it was being read; run draft-lint.mjs pin-sources ${key} again, re-read what changed, fix the draft and lint it again`] : [],

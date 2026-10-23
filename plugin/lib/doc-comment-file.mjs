@@ -10,7 +10,7 @@ import { fetchTab, quoteCount } from "./prd-section.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { approvalLines, renderDocComment } from "./publish-approval-render.mjs";
-import { describePin, pinnedSources, pinSourcesOf, readPinnedDocs, recordPins, sayNotices } from "./source-pins.mjs";
+import { describePin, pinnedSources, pinSourcesOf, recordPins, sayNotices } from "./source-pins.mjs";
 
 const GROUPS = ["A", "B"];
 
@@ -141,7 +141,7 @@ async function main([itemsFile, ...rest]) {
   const { title, items } = JSON.parse(text);
   const pinnedAt = flagValue(rest, "--pinned-at");
   const comments = items.map((item) => item.comment ?? "");
-  const taken = await pinSourcesOf(comments.join("\n"), { docs: [map.prd.doc], held: readPinnedDocs(pinnedAt ?? itemsFile) });
+  const taken = await pinSourcesOf(comments.join("\n"), { docs: [map.prd.doc] }, { readKey: pinnedAt ?? itemsFile });
   for (const problem of taken.problems) console.log(`sources: ${problem}`);
   if (taken.problems.length) return 1;
   const tabOf = (epic) => map.prd?.tabs?.[epic]?.tab;
