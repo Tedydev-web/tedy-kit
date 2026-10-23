@@ -47,7 +47,7 @@ test("doc-comment-file post refuses an items file edited after it was pinned", a
   assert.deepEqual(w.writes(), []);
 });
 
-test("github-write reads no cites out of the draft: a matching record without pins posts, one for another text refuses", async () => {
+test("github-write reads no cites out of the draft: a record for another text refuses, and a matching one without the PR head pin refuses too", async () => {
   const w = world({ mode: "ask", gh: { diff: DIFF, head: HEAD, reviewComments: [{ id: 1, path: "src/a.ts", line: 10, side: "RIGHT", commit_id: HEAD }] } });
   const draft = "# PR #701: comment line by line (head abc1234)\n\n## 1. `src/a.ts:10`\nThe label is wrong, the writer `src/a.ts:1@dev` sets it.\n";
   w.file("d.md", draft);
@@ -55,10 +55,11 @@ test("github-write reads no cites out of the draft: a matching record without pi
   writeFileSync(recordPath(w, "d.md"), JSON.stringify({ file: join(w.dir, "d.md"), sha256: createHash("sha256").update(`${draft}x`).digest("hex"), sources: [] }));
   const stale = await w.run("github-write", ["post", "d.md", "--repo", "o/r"]);
   assert.notEqual(stale.code, 0);
-  assert.match(stale.out, /^refused: d\.md changed after its sources were pinned; run draft-lint\.mjs pr-comment d\.md \[--pinned-at <file pin-sources ran for>\], then ask the user again$/m);
+  assert.match(stale.out, /^refused: d\.md changed after its sources were pinned; run draft-lint\.mjs pr-comment d\.md --repo o\/r \[--pinned-at <file pin-sources ran for>\], then ask the user again$/m);
   assert.deepEqual(w.writes(), []);
   writeFileSync(recordPath(w, "d.md"), JSON.stringify({ file: join(w.dir, "d.md"), sha256: createHash("sha256").update(draft).digest("hex"), warnings: [], sources: [] }));
   const post = await w.run("github-write", ["post", "d.md", "--repo", "o/r"]);
-  assert.equal(post.code, 0, post.out);
-  assert.equal(w.writes().length, 1);
+  assert.notEqual(post.code, 0, post.out);
+  assert.match(post.out, /^refused: d\.md was linted for no PR, not o\/r#701; run draft-lint\.mjs pr-comment d\.md --repo o\/r from the checkout of o\/r, then ask the user again$/m);
+  assert.deepEqual(w.writes(), []);
 });

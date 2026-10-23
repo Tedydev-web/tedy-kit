@@ -122,21 +122,22 @@ async function loadPrd(comments) {
   return prd;
 }
 
-async function recheckSources(file, lintMode, texts) {
+async function recheckSources(file, relint, texts) {
   if (typeof file !== "string") {
     console.log("refused: pass the body as --body-file <file> so draft-lint can pin its sources");
     return null;
   }
-  const { refusals, notices, warnings } = await recheckPinned(file, `draft-lint.mjs ${lintMode} ${file}`, { texts });
+  const { refusals, notices, warnings } = await recheckPinned(file, relint, { texts });
   for (const line of refusals) console.log(line);
   return refusals.length ? null : { notices, warnings };
 }
 
-function pullTargetRefusal(file, repo, pr) {
+const prHead = (repo, pr) => gh(["pr", "view", String(pr), "--repo", repo, "--json", "headRefOid", "-q", ".headRefOid"]).trim();
+
+function pullTargetRefusal(file, repo, pr, relint, head = prHead(repo, pr)) {
   const pulls = (pinnedSources(file, "").sources ?? []).filter((pin) => pin.kind === "git" && pin.pr !== undefined);
   const pin = pulls.find((candidate) => candidate.pr === Number(pr) && candidate.github?.toLowerCase() === repo.toLowerCase());
-  if (!pin) return `refused: ${file} was linted for ${pulls.map((candidate) => `${candidate.github}#${candidate.pr}`).join(", ") || "no PR"}, not ${repo}#${pr}; run draft-lint.mjs pr-reply ${file} --pr ${pr} --repo ${repo} from the checkout of ${repo}, then ask the user again`;
-  const head = gh(["pr", "view", String(pr), "--repo", repo, "--json", "headRefOid", "-q", ".headRefOid"]).trim();
+  if (!pin) return `refused: ${file} was linted for ${pulls.map((candidate) => `${candidate.github}#${candidate.pr}`).join(", ") || "no PR"}, not ${repo}#${pr}; run ${relint} from the checkout of ${repo}, then ask the user again`;
   if (head !== pin.sha) return `refused: GitHub shows ${repo}#${pr} at ${head.slice(0, 8) || "no head"}, not at the pinned ${pin.sha.slice(0, 8)}, so the PR changed; re-read it, lint again and ask the user again`;
   return null;
 }
@@ -160,7 +161,7 @@ async function post(file, flags) {
     for (const item of final.problems) console.log(`${item.index}. ${item.location}: ${item.problem}`);
     return 1;
   }
-  const head = gh(["pr", "view", String(final.pr), "--repo", repo, "--json", "headRefOid", "-q", ".headRefOid"]).trim();
+  const head = prHead(repo, final.pr);
   if (!head.startsWith(final.sha)) {
     console.log(`refused: PR head moved from ${final.sha} to ${head.slice(0, 8)}; review the new commits and redraft`);
     return 1;
@@ -177,8 +178,14 @@ async function post(file, flags) {
   const twins = alreadyOnPr(prComments(repo, final.pr), final.comments);
   for (const twin of twins) console.log(`refused ${twin.comment.index}. ${twin.comment.path}:${twin.comment.line}: already on the PR as comment ${twin.id}; drop it from the draft`);
   if (twins.length) return 1;
-  const fresh = await recheckSources(file, "pr-comment", final.comments.map((comment) => comment.body));
+  const relint = `draft-lint.mjs pr-comment ${file} --repo ${repo}`;
+  const fresh = await recheckSources(file, relint, final.comments.map((comment) => comment.body));
   if (!fresh) return 1;
+  const target = pullTargetRefusal(file, repo, final.pr, relint, head);
+  if (target) {
+    console.log(target);
+    return 1;
+  }
   const payload = buildReviewPayload(final.comments, head);
   console.log(`WRITE → ${repo}#${final.pr} : 1 review · ${final.comments.length} comments`);
   if (flags["dry-run"]) {
@@ -210,10 +217,15 @@ function readBody(flags) {
 async function edit(id, flags) {
   const repo = currentRepo(flags);
   const body = readBody(flags);
-  const fresh = await recheckSources(flags["body-file"], "pr-reply", [body]);
-  if (!fresh) return 1;
   const pr = JSON.parse(gh(["api", `repos/${repo}/pulls/comments/${id}`])).pull_request_url?.match(/\/pulls\/(\d+)$/)?.[1];
-  const refusal = pr ? pullTargetRefusal(flags["body-file"], repo, pr) : `refused: review comment ${id} in ${repo} names no pull request; nothing edited`;
+  if (!pr) {
+    console.log(`refused: review comment ${id} in ${repo} names no pull request; nothing edited`);
+    return 1;
+  }
+  const relint = `draft-lint.mjs pr-reply ${flags["body-file"]} --pr ${pr} --repo ${repo}`;
+  const fresh = await recheckSources(flags["body-file"], relint, [body]);
+  if (!fresh) return 1;
+  const refusal = pullTargetRefusal(flags["body-file"], repo, pr, relint);
   if (refusal) {
     console.log(refusal);
     return 1;
@@ -263,9 +275,10 @@ async function reply(pr, id, flags) {
     console.log(`refused: reply ${twin} under ${id} already says this; nothing posted`);
     return 1;
   }
-  const fresh = await recheckSources(flags["body-file"], "pr-reply", [body]);
+  const relint = `draft-lint.mjs pr-reply ${flags["body-file"]} --pr ${pr} --repo ${repo}`;
+  const fresh = await recheckSources(flags["body-file"], relint, [body]);
   if (!fresh) return 1;
-  const refusal = pullTargetRefusal(flags["body-file"], repo, pr);
+  const refusal = pullTargetRefusal(flags["body-file"], repo, pr, relint);
   if (refusal) {
     console.log(refusal);
     return 1;

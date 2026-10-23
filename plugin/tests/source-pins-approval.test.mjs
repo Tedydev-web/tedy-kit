@@ -32,10 +32,10 @@ const changeWeb = (w, change) => w.file("web.json", JSON.stringify({ ...web(w), 
 const moveFigma = (w) => changeWeb(w, { figmaModified: "2026-10-02T00:00:00Z" });
 const sent = (w) => w.writes().filter((line) => !line.endsWith("/form"));
 
-function gitWorld(gh = POSTED) {
+function gitWorld({ head, ...gh } = POSTED) {
   const sibling = siblingRepo();
   const w = world({ pr: 701, gh, map: { name: "p", repos: [{ path: sibling.clone, role: "BE", branch: "dev" }], language: { pr_review: "en" } } });
-  return { w, sibling };
+  return { w, sibling, draft: DRAFT.replaceAll("abc1234", w.checkout.pr(701).slice(0, 7)) };
 }
 
 const LINKED_ITEM = { ...ITEM, comment: `Which wallet pays the fee, as ${FIGMA_NODE} shows?` };
@@ -52,19 +52,19 @@ async function withOpenProject(run) {
 
 const CASES = [
   ["github-write post", async () => {
-    const { w, sibling } = gitWorld();
-    w.file("d.md", DRAFT);
-    return { w, lint: [["draft-lint", ["pr-comment", "d.md"]]], move: () => sibling.push("src/b.ts", "b2\n", "chore: unrelated"), script: "github-write", args: ["post", "d.md", "--repo", "o/r"], texts: [DRAFT] };
+    const { w, sibling, draft } = gitWorld();
+    w.file("d.md", draft);
+    return { w, lint: [["draft-lint", ["pr-comment", "d.md", "--repo", "o/r"]]], move: () => sibling.push("src/b.ts", "b2\n", "chore: unrelated"), script: "github-write", args: ["post", "d.md", "--repo", "o/r"], texts: [draft] };
   }],
   ["github-write reply", async () => {
     const { w, sibling } = gitWorld({});
     w.file("r.md", "The label is still wrong.\n");
-    return { w, lint: [["draft-lint", ["pr-reply", "r.md", "--pr", "701"]]], move: () => sibling.push("src/b.ts", "b2\n", "chore: unrelated"), script: "github-write", args: ["reply", "701", "123", "--repo", "o/r", "--body-file", "r.md"], texts: ["The label is still wrong."] };
+    return { w, lint: [["draft-lint", ["pr-reply", "r.md", "--pr", "701", "--repo", "o/r"]]], move: () => sibling.push("src/b.ts", "b2\n", "chore: unrelated"), script: "github-write", args: ["reply", "701", "123", "--repo", "o/r", "--body-file", "r.md"], texts: ["The label is still wrong."] };
   }],
   ["github-write edit", async () => {
     const { w, sibling } = gitWorld({ writeBody: "The label is still wrong." });
     w.file("r.md", "The label is still wrong.\n");
-    return { w, lint: [["draft-lint", ["pr-reply", "r.md", "--pr", "701"]]], move: () => sibling.push("src/b.ts", "b2\n", "chore: unrelated"), script: "github-write", args: ["edit", "5", "--body-file", "r.md", "--repo", "o/r"], texts: ["The label is still wrong."] };
+    return { w, lint: [["draft-lint", ["pr-reply", "r.md", "--pr", "701", "--repo", "o/r"]]], move: () => sibling.push("src/b.ts", "b2\n", "chore: unrelated"), script: "github-write", args: ["edit", "5", "--body-file", "r.md", "--repo", "o/r"], texts: ["The label is still wrong."] };
   }],
   ["figma-comments post", async () => {
     const w = world({ web: { figma: [] } });
@@ -147,9 +147,9 @@ test("on every writer a moved pin's notice is printed only once the approval is 
 test("a stale-source refusal leaves the approval ticket unused, on every path that rechecks pins", async () => {
   const stale = [
     ["github-write post", async () => {
-      const { w, sibling } = gitWorld();
-      w.file("d.md", DRAFT);
-      return { w, lint: ["draft-lint", ["pr-comment", "d.md"]], move: () => sibling.push("src/a.ts", "a2\n", "fix: writer sets the field"), script: "github-write", args: ["post", "d.md", "--repo", "o/r"], texts: [DRAFT], refusal: /^refused: .* changed a file the text being posted names$/m };
+      const { w, sibling, draft } = gitWorld();
+      w.file("d.md", draft);
+      return { w, lint: ["draft-lint", ["pr-comment", "d.md", "--repo", "o/r"]], move: () => sibling.push("src/a.ts", "a2\n", "fix: writer sets the field"), script: "github-write", args: ["post", "d.md", "--repo", "o/r"], texts: [draft], refusal: /^refused: .* changed a file the text being posted names$/m };
     }],
     ["gdoc-comments reply", async () => {
       const w = world({ web: { drive: [thread], document: textDoc("A\n") } });
@@ -176,12 +176,12 @@ test("a stale-source refusal leaves the approval ticket unused, on every path th
     ["github-write reply", async () => {
       const { w, sibling } = gitWorld({});
       w.file("r.md", "The label is still wrong, see src/a.ts.\n");
-      return { w, lint: ["draft-lint", ["pr-reply", "r.md", "--pr", "701"]], move: () => sibling.push("src/a.ts", "a2\n", "fix: writer sets the field"), script: "github-write", args: ["reply", "701", "123", "--repo", "o/r", "--body-file", "r.md"], texts: ["The label is still wrong, see src/a.ts."], refusal: /^refused: .* changed a file the text being posted names$/m };
+      return { w, lint: ["draft-lint", ["pr-reply", "r.md", "--pr", "701", "--repo", "o/r"]], move: () => sibling.push("src/a.ts", "a2\n", "fix: writer sets the field"), script: "github-write", args: ["reply", "701", "123", "--repo", "o/r", "--body-file", "r.md"], texts: ["The label is still wrong, see src/a.ts."], refusal: /^refused: .* changed a file the text being posted names$/m };
     }],
     ["github-write edit", async () => {
       const { w } = gitWorld({ writeBody: "The label is still wrong." });
       w.file("r.md", "The label is still wrong.\n");
-      return { w, lint: ["draft-lint", ["pr-reply", "r.md", "--pr", "701"]], move: () => w.checkout.pushPr("src/z.ts", "z\n", "fix: author pushed"), script: "github-write", args: ["edit", "5", "--body-file", "r.md", "--repo", "o/r"], texts: ["The label is still wrong."], refusal: /^refused: \S+ pull\/701\/head moved from .* so the PR under review changed$/m };
+      return { w, lint: ["draft-lint", ["pr-reply", "r.md", "--pr", "701", "--repo", "o/r"]], move: () => w.checkout.pushPr("src/z.ts", "z\n", "fix: author pushed"), script: "github-write", args: ["edit", "5", "--body-file", "r.md", "--repo", "o/r"], texts: ["The label is still wrong."], refusal: /^refused: \S+ pull\/701\/head moved from .* so the PR under review changed$/m };
     }],
     ["openproject comment-edit", async (op) => {
       const w = world({ opUrl: op.url, web: { document: textDoc("A\n") } });
@@ -234,7 +234,7 @@ test("a stale-source refusal leaves the approval ticket unused, on every path th
 
 test("a write refused for a missing sources record leaves its approval ticket unused", async () => {
   const cases = [
-    ["github-write", ["edit", "5", "--body-file", "b.md", "--repo", "o/r"], "The label is still wrong.", { gh: { write: { id: 5, html_url: "u", body: "x" } } }, /refused: b\.md has no pinned sources; run draft-lint\.mjs pr-reply b\.md \[--pinned-at <file pin-sources ran for>\],/],
+    ["github-write", ["edit", "5", "--body-file", "b.md", "--repo", "o/r"], "The label is still wrong.", { gh: { write: { id: 5, html_url: "u", body: "x" }, comment: { pull_request_url: "https://api.github.com/repos/o/r/pulls/701" } } }, /refused: b\.md has no pinned sources; run draft-lint\.mjs pr-reply b\.md --pr 701 --repo o\/r \[--pinned-at <file pin-sources ran for>\],/],
     ["figma-comments", ["post", "1:2", "--body-file", "b.md", "--file", "F1"], "@lam Màn này thiếu trạng thái rỗng.", { web: { figma: [] } }, /refused: b\.md has no pinned sources; run draft-lint\.mjs figma-comment b\.md --file F1 --node 1:2 \[--pinned-at <file pin-sources ran for>\],/],
     ["gdoc-comments", ["anchor", "--tab", "t.1", "--quote", "the fee in GRAM", "--body-file", "b.md", "--doc", "D"], "Which wallet pays the fee?", { web: { drive: [], document: textDoc(TAB) } }, /refused: b\.md has no pinned sources; run draft-lint\.mjs doc-comment b\.md --doc D \[--pinned-at <file pin-sources ran for>\],/],
     ["gdoc-comments", ["edit", "c2", "--body-file", "b.md", "--doc", "D"], "Which wallet pays the fee?", { web: { drive: [own], document: textDoc(TAB) } }, /refused: b\.md has no pinned sources; run draft-lint\.mjs doc-comment b\.md --doc D \[--pinned-at <file pin-sources ran for>\],/],

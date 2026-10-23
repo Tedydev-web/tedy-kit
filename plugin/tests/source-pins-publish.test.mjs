@@ -21,13 +21,14 @@ function project(draft = DRAFT) {
   const be = siblingRepo();
   const fe = siblingRepo();
   const prSha = fe.pr(701);
+  const atHead = (text) => text.replaceAll("abc1234", prSha.slice(0, 7));
   const profileDir = profileWith({ language: { chat: "en" } });
   mkdirSync(join(profileDir, "projects"));
   const map = { name: "p", paths: [fe.clone], repos: [{ path: ".", role: "FE", branch: "dev" }, { path: be.clone, role: "BE", branch: "dev" }], language: { pr_review: "en" } };
   writeFileSync(join(profileDir, "projects", "p.md"), `\`\`\`json\n${JSON.stringify(map)}\n\`\`\`\n`);
   const work = tempDir("tedy-work-");
   writeFileSync(join(work, "pr.diff"), CLEAN_DIFF);
-  writeFileSync(join(work, "d.md"), draft);
+  writeFileSync(join(work, "d.md"), atHead(draft));
   const options = { cwd: fe.clone, stateDir: tempDir("tedy-pinstate-"), profileDir };
   const at = (name) => join(work, name);
   return {
@@ -35,11 +36,12 @@ function project(draft = DRAFT) {
     fe,
     at,
     prSha,
+    short: prSha.slice(0, 7),
     beSha: git(be.clone, "rev-parse", "refs/remotes/origin/dev"),
     feSha: git(fe.clone, "rev-parse", "refs/remotes/origin/dev"),
-    lint: (...args) => runWithFakeGh(LINT, args, options),
-    write: (args, fixture = POSTED) => runWithFakeGh(WRITE, args, { ...options, fixture }),
-    rewrite: (name, text) => writeFileSync(join(work, name), text),
+    lint: (...args) => runWithFakeGh(LINT, args.includes("--pr") && !args.includes("--repo") ? [...args, "--repo", "o/r"] : args, options),
+    write: (args, fixture = { ...POSTED, head: prSha }) => runWithFakeGh(WRITE, args, { ...options, fixture }),
+    rewrite: (name, text) => writeFileSync(join(work, name), atHead(text)),
   };
 }
 
@@ -48,7 +50,7 @@ test("draft-lint pins the other map repos and the PR head, with full shas, and s
   const pushed = p.be.push("src/c.ts", "c1\n", "feat: pushed after the clone fetched");
   const result = p.lint("pr-comment", p.at("d.md"), "--diff", p.at("pr.diff"));
   assert.equal(result.status, 0, result.out);
-  assert.match(result.out, /^clean: 1 comments, PR #701, head abc1234$/m);
+  assert.match(result.out, new RegExp(`^clean: 1 comments, PR #701, head ${p.short}$`, "m"));
   assert.ok(result.out.includes(`pinned: ${p.be.clone} origin/dev@${pushed} (at lint)\npinned: . pull/701/head@${p.prSha} (at lint)\n`), result.out);
   assert.doesNotMatch(result.out, /^pinned: \. origin\/dev@/m);
   assert.equal(git(p.be.clone, "rev-parse", "refs/remotes/origin/dev"), pushed);
@@ -92,12 +94,12 @@ test("post refuses a draft that was never linted, and one edited after its pins 
   const p = project();
   const unlinted = p.write(["post", p.at("d.md"), "--repo", "o/r"]);
   assert.equal(unlinted.status, 1);
-  assert.ok(unlinted.out.includes(`refused: ${p.at("d.md")} has no pinned sources; run draft-lint.mjs pr-comment ${p.at("d.md")} [--pinned-at <file pin-sources ran for>], then ask the user again\n`), unlinted.out);
+  assert.ok(unlinted.out.includes(`refused: ${p.at("d.md")} has no pinned sources; run draft-lint.mjs pr-comment ${p.at("d.md")} --repo o/r [--pinned-at <file pin-sources ran for>], then ask the user again\n`), unlinted.out);
   assert.equal(unlinted.writes.length, 0);
   assert.equal(p.lint("pr-comment", p.at("d.md"), "--diff", p.at("pr.diff")).status, 0);
-  writeFileSync(p.at("d.md"), DRAFT.replace("wrong", "off"));
+  p.rewrite("d.md", DRAFT.replace("wrong", "off"));
   const edited = p.write(["post", p.at("d.md"), "--repo", "o/r"]);
-  assert.match(edited.out, /^refused: .*d\.md changed after its sources were pinned; run draft-lint\.mjs pr-comment .*d\.md \[--pinned-at <file pin-sources ran for>\], then ask the user again$/m);
+  assert.match(edited.out, /^refused: .*d\.md changed after its sources were pinned; run draft-lint\.mjs pr-comment .*d\.md --repo o\/r \[--pinned-at <file pin-sources ran for>\], then ask the user again$/m);
   assert.equal(edited.writes.length, 0);
 });
 
@@ -149,9 +151,10 @@ test("reply and edit need a pr-reply lint with --pr, then refuse when a changed 
   writeFileSync(p.at("r.txt"), "The label is still wrong, see src/a.ts.\n");
   const reply = ["reply", "701", "123", "--repo", "o/r", "--body-file", p.at("r.txt")];
   const unlinted = p.write(reply, { write: { id: 5, html_url: "u" } });
-  assert.match(unlinted.out, /^refused: .*r\.txt has no pinned sources; run draft-lint\.mjs pr-reply .*r\.txt \[--pinned-at <file pin-sources ran for>\], then ask the user again$/m);
+  assert.match(unlinted.out, /^refused: .*r\.txt has no pinned sources; run draft-lint\.mjs pr-reply .*r\.txt --pr 701 --repo o\/r \[--pinned-at <file pin-sources ran for>\], then ask the user again$/m);
   assert.equal(unlinted.writes.length, 0);
   assert.match(p.lint("pr-reply", p.at("r.txt")).out, /pr-reply and pin-sources for a review need --pr <number>/);
+  assert.match(runWithFakeGh(LINT, ["pr-reply", p.at("r.txt"), "--pr", "701"], { cwd: p.fe.clone }).out, /^draft-lint: --pr 701 needs --repo <owner\/repo>, the repository the reply or review goes to, so the PR head is pinned from that repository only$/m);
   const lint = p.lint("pr-reply", p.at("r.txt"), "--pr", "701");
   assert.equal(lint.status, 0, lint.out);
   assert.ok(lint.out.includes(`clean: pr-reply\npinned: ${p.be.clone} origin/dev@${p.beSha} (at lint)\npinned: . pull/701/head@${p.prSha} (at lint)\n`), lint.out);
@@ -177,7 +180,7 @@ test("reply and edit need a pr-reply lint with --pr, then refuse when a changed 
 test("a lint outside every project map fails and says so, instead of pinning nothing", () => {
   const dir = tempDir("tedy-nomap-");
   writeFileSync(join(dir, "r.txt"), "The label is still wrong.\n");
-  for (const args of [["pr-reply", join(dir, "r.txt"), "--pr", "701"], ["doc-comment", join(dir, "r.txt")], ["pin-sources", join(dir, "r.txt")]]) {
+  for (const args of [["pr-reply", join(dir, "r.txt"), "--pr", "701", "--repo", "o/r"], ["doc-comment", join(dir, "r.txt")], ["pin-sources", join(dir, "r.txt")]]) {
     const result = runWithFakeGh(LINT, args, { cwd: dir });
     assert.equal(result.status, 1, result.out);
     assert.match(result.out, /^sources: no project map covers .+, so its repos cannot be pinned; run this from a folder of a mapped project, or map it with \/tedy:setup$/m, args[0]);
@@ -209,7 +212,7 @@ test("reply and edit write only to the repository and PR the lint pinned, while 
   const mismatch = wrongCwd.lint("pr-reply", wrongCwd.file, "--pr", "701", "--repo", "o/fe");
   assert.equal(mismatch.status, 1, mismatch.out);
   assert.match(mismatch.out, new RegExp(`^sources: cannot pin the head of PR #701: --repo o/fe is not the repository checked out at ${escape(wrongCwd.be.clone)}, whose origin is .*o/be\\.git; run from the checkout of o/fe$`, "m"));
-  assert.equal(wrongCwd.lint("pr-reply", wrongCwd.file, "--pr", "701").status, 0);
+  assert.equal(wrongCwd.lint("pr-reply", wrongCwd.file, "--pr", "701", "--repo", "o/be").status, 0);
   const feHead = wrongCwd.fe.pr(701);
   const repoRefusal = new RegExp(`^refused: ${escape(wrongCwd.file)} was linted for o/be#701, not o/fe#701; run draft-lint\\.mjs pr-reply ${escape(wrongCwd.file)} --pr 701 --repo o/fe from the checkout of o/fe, then ask the user again$`, "m");
   const reply = wrongCwd.write(["reply", "701", "123", "--repo", "o/fe", "--body-file", wrongCwd.file], { head: feHead });
@@ -234,6 +237,12 @@ test("reply and edit write only to the repository and PR the lint pinned, while 
   const noPr = wrongPr.write(["edit", "5", "--repo", "o/fe", "--body-file", wrongPr.file], { head: pinned, comment: {} });
   assert.equal(noPr.status, 1, noPr.out);
   assert.match(noPr.out, /^refused: review comment 5 in o\/fe names no pull request; nothing edited$/m);
+  for (const head of [`${pinned.slice(0, 8)}${"0".repeat(32)}`, ""]) {
+    const near = wrongPr.write(["reply", "701", "123", "--repo", "o/fe", "--body-file", wrongPr.file], { head });
+    assert.equal(near.status, 1, near.out);
+    assert.match(near.out, /^refused: GitHub shows o\/fe#701 at .+?, not at the pinned [0-9a-f]{8}, so the PR changed;/m);
+    assert.equal(near.writes.length, 0);
+  }
   const moved = wrongPr.write(["reply", "701", "123", "--repo", "o/fe", "--body-file", wrongPr.file], { head: "f".repeat(40) });
   assert.equal(moved.status, 1, moved.out);
   assert.match(moved.out, new RegExp(`^refused: GitHub shows o/fe#701 at ffffffff, not at the pinned ${pinned.slice(0, 8)}, so the PR changed; re-read it, lint again and ask the user again$`, "m"));
@@ -244,6 +253,19 @@ test("reply and edit write only to the repository and PR the lint pinned, while 
   const edited = wrongPr.write(["edit", "5", "--repo", "o/fe", "--body-file", wrongPr.file], { head: pinned, comment: commentOn("o/fe", 701) });
   assert.equal(edited.status, 0, edited.out);
   assert.equal(edited.writes.length, 1);
+});
+
+test("post writes only to the repository and PR the lint pinned, while GitHub shows the pinned head", () => {
+  const wrongCwd = twoRepos(({ be }) => be.clone);
+  const feHead = wrongCwd.fe.pr(701);
+  const draftAt = (sha) => `# PR #701: comment line by line (head ${sha.slice(0, 7)})\n\n## 1. \`src/a.ts:10\`\nThe label is wrong.\n`;
+  writeFileSync(wrongCwd.file, draftAt(feHead));
+  writeFileSync(join(wrongCwd.file, "..", "pr.diff"), CLEAN_DIFF);
+  assert.equal(wrongCwd.lint("pr-comment", wrongCwd.file, "--diff", join(wrongCwd.file, "..", "pr.diff"), "--repo", "o/be").status, 0);
+  const posted = wrongCwd.write(["post", wrongCwd.file, "--repo", "o/fe"], { diff: CLEAN_DIFF, head: feHead });
+  assert.equal(posted.status, 1, posted.out);
+  assert.match(posted.out, new RegExp(`^refused: ${escape(wrongCwd.file)} was linted for o/be#701, not o/fe#701; run draft-lint\\.mjs pr-comment ${escape(wrongCwd.file)} --repo o/fe from the checkout of o/fe, then ask the user again$`, "m"));
+  assert.equal(posted.writes.length, 0);
 });
 
 test("without a read pin the lint pins at lint time and its warning names what it pinned", () => {

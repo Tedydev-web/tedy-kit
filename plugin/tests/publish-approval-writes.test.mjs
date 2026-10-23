@@ -33,14 +33,20 @@ async function onceOnly(w, script, args, preview, count) {
   assert.equal(count(), written, `${script} ${args.join(" ")} wrote twice on one ticket`);
 }
 
+function prWorld(gh) {
+  const w = world({ pr: 701, gh });
+  const head = w.checkout.pr(701);
+  return { w, head, draft: DRAFT.replaceAll("abc1234", head.slice(0, 7)) };
+}
+
 test("github-write post, edit and minimize write only with a ticket, once", async () => {
-  const post = world({ pr: 701, gh: { diff: DIFF, head: HEAD, reviewComments: [{ id: 1, path: "src/a.ts", line: 10, side: "RIGHT", commit_id: HEAD }] } });
-  post.file("d.md", DRAFT);
-  const postWarnings = await lint(post, "draft-lint", ["pr-comment", "d.md"]);
-  await onceOnly(post, "github-write", ["post", "d.md", "--repo", "o/r"], (line) => `${DRAFT}\n${postWarnings}${line}`, () => post.writes().length);
+  const { w: post, draft } = prWorld({ diff: DIFF, reviewComments: [{ id: 1, path: "src/a.ts", line: 10, side: "RIGHT", commit_id: HEAD }] });
+  post.file("d.md", draft);
+  const postWarnings = await lint(post, "draft-lint", ["pr-comment", "d.md", "--repo", "o/r"]);
+  await onceOnly(post, "github-write", ["post", "d.md", "--repo", "o/r"], (line) => `${draft}\n${postWarnings}${line}`, () => post.writes().length);
   const edit = world({ pr: 1, gh: { write: { id: 5, html_url: "u", body: "Fixed it." } } });
   edit.file("b.md", "Fixed it.\n");
-  const editWarnings = await lint(edit, "draft-lint", ["pr-reply", "b.md", "--pr", "1"]);
+  const editWarnings = await lint(edit, "draft-lint", ["pr-reply", "b.md", "--pr", "1", "--repo", "o/r"]);
   await onceOnly(edit, "github-write", ["edit", "5", "--body-file", "b.md", "--repo", "o/r"], (line) => `Fixed it.\n${editWarnings}${line}`, () => edit.writes().length);
   const minimize = world({ gh: { graphql: { data: { minimizeComment: { minimizedComment: { isMinimized: true } } } } } });
   await onceOnly(minimize, "github-write", ["minimize", "IC_x"], (line) => line, () => minimize.writes().length);
@@ -129,11 +135,11 @@ test("doc-comment-file post --apply writes only with a ticket, once", async () =
 });
 
 test("a post ticket binds the PR, head, path and line, not only the comment text", async () => {
-  const w = world({ pr: 701, gh: { diff: DIFF, head: HEAD, reviewComments: [{ id: 1, path: "src/a.ts", line: 10, side: "RIGHT", commit_id: HEAD }] } });
-  w.file("d.md", DRAFT);
-  await lint(w, "draft-lint", ["pr-comment", "d.md"]);
+  const { w, draft } = prWorld({ diff: DIFF, reviewComments: [{ id: 1, path: "src/a.ts", line: 10, side: "RIGHT", commit_id: HEAD }] });
+  w.file("d.md", draft);
+  await lint(w, "draft-lint", ["pr-comment", "d.md", "--repo", "o/r"]);
   const args = ["post", "d.md", "--repo", "o/r"];
-  w.approve(`${DRAFT.replace("src/a.ts:10", "src/b.ts:4")}\n${w.line("github-write", args)}`);
+  w.approve(`${draft.replace("src/a.ts:10", "src/b.ts:4")}\n${w.line("github-write", args)}`);
   const moved = await w.run("github-write", args);
   assert.match(moved.out, /no unused approval/);
   w.approve(`The label is wrong.\n${w.line("github-write", args)}`);
@@ -142,15 +148,15 @@ test("a post ticket binds the PR, head, path and line, not only the comment text
 });
 
 test("a run refused before it writes leaves its ticket unused", async () => {
-  const post = world({ pr: 701, gh: { diff: "diff --git a/other.ts b/other.ts\n--- a/other.ts\n+++ b/other.ts\n@@ -1,1 +1,1 @@\n+x\n", head: HEAD } });
-  post.file("d.md", DRAFT);
+  const { w: post, head, draft } = prWorld({ diff: "diff --git a/other.ts b/other.ts\n--- a/other.ts\n+++ b/other.ts\n@@ -1,1 +1,1 @@\n+x\n" });
+  post.file("d.md", draft);
   post.file("pr.diff", DIFF);
-  const warnings = await lint(post, "draft-lint", ["pr-comment", "d.md", "--diff", "pr.diff"]);
+  const warnings = await lint(post, "draft-lint", ["pr-comment", "d.md", "--diff", "pr.diff", "--repo", "o/r"]);
   const args = ["post", "d.md", "--repo", "o/r"];
-  post.approve(`${DRAFT}\n${warnings}${post.line("github-write", args)}`);
+  post.approve(`${draft}\n${warnings}${post.line("github-write", args)}`);
   assert.notEqual((await post.run("github-write", args)).code, 0);
   assert.equal(post.tickets(), 1);
-  post.file("gh.json", JSON.stringify({ diff: DIFF, head: HEAD, reviewComments: [{ id: 1, path: "src/a.ts", line: 10, side: "RIGHT", commit_id: HEAD }] }));
+  post.file("gh.json", JSON.stringify({ diff: DIFF, head, reviewComments: [{ id: 1, path: "src/a.ts", line: 10, side: "RIGHT", commit_id: HEAD }] }));
   await post.run("github-write", args);
   assert.equal(post.writes().length, 1);
   assert.equal(post.tickets(), 0);
@@ -278,8 +284,8 @@ test("a null field the payload still sends shows in the approval lines", async (
 });
 
 test("in answer mode a real dry run of post or pr-body needs no --repo and spends nothing", async () => {
-  const post = world({ pr: 701, gh: { diff: DIFF, head: HEAD } });
-  post.file("d.md", DRAFT);
+  const { w: post, draft } = prWorld({ diff: DIFF });
+  post.file("d.md", draft);
   await lint(post, "draft-lint", ["pr-comment", "d.md"]);
   const dry = await post.run("github-write", ["post", "d.md", "--dry-run"]);
   assert.equal(dry.code, 0, dry.out);

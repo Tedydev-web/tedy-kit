@@ -188,6 +188,7 @@ function chatTargets(kind, flag) {
 function prOf(flag) {
   const pr = flag("--pr");
   if (!/^\d+$/.test(pr ?? "")) throw new Error("pr-reply and pin-sources for a review need --pr <number>, so the PR head is pinned too");
+  if (flag("--repo") === undefined) throw new Error(`--pr ${pr} needs --repo <owner/repo>, the repository the reply or review goes to, so the PR head is pinned from that repository only`);
   return pr;
 }
 

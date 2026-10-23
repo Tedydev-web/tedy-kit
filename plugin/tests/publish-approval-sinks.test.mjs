@@ -56,7 +56,7 @@ function place(mode = "answer") {
   const shell = (command, args) => spawnSync(command, args, { cwd: dir, env, encoding: "utf8" });
   const run = (script, args) => shell("node", [script, ...args]);
   const lint = () => {
-    const result = run(join(SCRIPTS, "draft-lint.mjs"), ["pr-reply", "b.md", "--pr", "1"]);
+    const result = run(join(SCRIPTS, "draft-lint.mjs"), ["pr-reply", "b.md", "--pr", "1", "--repo", "o/r"]);
     assert.equal(result.status, 0, result.stdout);
     return result.stdout.split("\n").filter((line) => line.startsWith("warning: ")).join("\n");
   };

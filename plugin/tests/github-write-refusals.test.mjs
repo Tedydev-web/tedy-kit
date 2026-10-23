@@ -94,7 +94,7 @@ test("edit throws when the comment body differs after the PATCH read-back", () =
   const stateDir = tempDir("tedy-ghstate-");
   const head = pullRequestCheckout(dir, 1).pr(1);
   const profileDir = mappedProfile(dir);
-  assert.equal(runWithFakeGh(new URL("../lib/draft-lint.mjs", import.meta.url).pathname, ["pr-reply", body, "--pr", "1"], { cwd: dir, stateDir, profileDir }).status, 0);
+  assert.equal(runWithFakeGh(new URL("../lib/draft-lint.mjs", import.meta.url).pathname, ["pr-reply", body, "--pr", "1", "--repo", "o/r"], { cwd: dir, stateDir, profileDir }).status, 0);
   const result = run(["edit", "123", "--repo", "o/r", "--body-file", body], { fixture: { write: { body: "something else", html_url: "u" }, head, comment: { pull_request_url: "https://api.github.com/repos/o/r/pulls/1" } }, cwd: dir, stateDir, profileDir });
   assert.notEqual(result.status, 0);
   assert.match(result.out, /body differs after PATCH/);
