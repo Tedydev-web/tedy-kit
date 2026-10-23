@@ -356,7 +356,7 @@ test("a pin-sources that fails keeps the draft's frozen original", () => {
   assert.ok(existsSync(frozen));
 });
 
-test("a lint with read pins asks origin only once per ref it pins, and git never prompts for credentials", () => {
+function originCalls(env = {}) {
   const p = project();
   assert.equal(p.lint("pin-sources", p.at("d.md"), "--pr", "701").status, 0);
   p.rewrite("d.md", DRAFT);
@@ -365,23 +365,40 @@ test("a lint with read pins asks origin only once per ref it pins, and git never
   const bin = tempDir("tedy-gitlog-");
   const log = join(bin, "calls.log");
   const real = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
-  writeFileSync(join(bin, "git"), `#!/usr/bin/env node\nimport { appendFileSync } from "node:fs";\nimport { spawnSync } from "node:child_process";\nconst args = process.argv.slice(2);\nappendFileSync(${JSON.stringify(log)}, \`\${process.env.GIT_TERMINAL_PROMPT ?? "-"} [\${process.env.GIT_SSH_COMMAND ?? "-"}] \${args.join(" ")}\\n\`);\nprocess.exit(spawnSync(${JSON.stringify(real)}, args, { stdio: "inherit" }).status ?? 1);\n`);
+  writeFileSync(join(bin, "git"), `#!/usr/bin/env node\nimport { appendFileSync } from "node:fs";\nimport { spawnSync } from "node:child_process";\nconst args = process.argv.slice(2);\nappendFileSync(${JSON.stringify(log)}, \`\${process.env.GIT_TERMINAL_PROMPT ?? "-"} [\${process.env.GIT_SSH_COMMAND ?? "-"}] {\${process.env.GIT_SSH ?? "-"}} \${args.join(" ")}\\n\`);\nprocess.exit(spawnSync(${JSON.stringify(real)}, args, { stdio: "inherit" }).status ?? 1);\n`);
   chmodSync(join(bin, "git"), 0o755);
   writeFileSync(log, "");
-  const path = process.env.PATH;
-  process.env.PATH = `${bin}:${path}`;
+  const saved = { PATH: process.env.PATH, GIT_SSH_COMMAND: process.env.GIT_SSH_COMMAND, GIT_SSH: process.env.GIT_SSH };
+  delete process.env.GIT_SSH_COMMAND;
+  delete process.env.GIT_SSH;
+  Object.assign(process.env, env, { PATH: `${bin}:${saved.PATH}` });
   try {
     const result = p.lint("pr-comment", p.at("d.md"), "--diff", p.at("pr.diff"));
     assert.equal(result.status, 0, result.out);
   } finally {
-    process.env.PATH = path;
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
   }
-  const calls = readFileSync(log, "utf8").split("\n").filter(Boolean);
-  const remote = calls.filter((line) => / (ls-remote|fetch) /.test(line));
+  return { p, remote: readFileSync(log, "utf8").split("\n").filter((line) => / (ls-remote|fetch) /.test(line)) };
+}
+
+test("ssh runs in batch mode with GIT_SSH_COMMAND over core.sshCommand, and a GIT_SSH alone is left to git", () => {
+  const forced = originCalls({ GIT_SSH_COMMAND: "ssh -p 2222" });
+  assert.ok(forced.remote.length && forced.remote.every((line) => line.startsWith("0 [ssh -p 2222 -o BatchMode=yes] ")), forced.remote.join("\n"));
+  const wrapper = originCalls({ GIT_SSH: "/usr/local/bin/ssh-wrapper" });
+  assert.ok(wrapper.remote.some((line) => line.startsWith("0 [ssh -i /keys/review -o BatchMode=yes] {/usr/local/bin/ssh-wrapper} ") && line.includes(`-C ${wrapper.p.fe.clone} `)), wrapper.remote.join("\n"));
+  const beLines = wrapper.remote.filter((line) => line.includes(`-C ${wrapper.p.be.clone} `));
+  assert.ok(beLines.length && beLines.every((line) => line.startsWith("0 [-] {/usr/local/bin/ssh-wrapper} ")), wrapper.remote.join("\n"));
+});
+
+test("a lint with read pins asks origin only once per ref it pins, and git never prompts for credentials", () => {
+  const { p, remote } = originCalls();
   assert.deepEqual(remote.filter((line) => line.includes("ls-remote")).length, 2, remote.join("\n"));
   assert.ok(remote.every((line) => line.startsWith("0 ")), remote.join("\n"));
-  assert.ok(remote.some((line) => line.startsWith("0 [ssh -i /keys/review -o BatchMode=yes] ") && line.includes(`-C ${p.fe.clone} `)), remote.join("\n"));
-  assert.ok(remote.some((line) => line.startsWith("0 [ssh -o BatchMode=yes] ") && line.includes(`-C ${p.be.clone} `)), remote.join("\n"));
+  assert.ok(remote.some((line) => line.startsWith("0 [ssh -i /keys/review -o BatchMode=yes] {-} ") && line.includes(`-C ${p.fe.clone} `)), remote.join("\n"));
+  assert.ok(remote.some((line) => line.startsWith("0 [ssh -o BatchMode=yes] {-} ") && line.includes(`-C ${p.be.clone} `)), remote.join("\n"));
   assert.ok(remote.some((line) => / fetch /.test(line)), remote.join("\n"));
   assert.ok(remote.every((line) => line.includes("-o BatchMode=yes] ")), remote.join("\n"));
 });
