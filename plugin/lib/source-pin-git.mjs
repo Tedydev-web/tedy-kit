@@ -9,7 +9,7 @@ export const RECHECK = "re-read the changed sources, fix the draft, lint it agai
 const NAME_BEFORE = "(?<![\\p{L}\\p{N}\\p{M}_.-])";
 const NAME_AFTER = "(?![\\p{L}\\p{N}\\p{M}_-]|\\.[\\p{L}\\p{N}])";
 const FOLDER = /(?<![\p{L}\p{N}\p{M}_.\/-])(\/?(?:[\p{L}\p{N}\p{M}_.-]+\/)+)(?=$|[\s`'"()<>,;:!?*_]|\.(?![\p{L}\p{N}]))/gu;
-const TREE_LINK = /\/tree\/[^/\s?#]+\/([^\s?#)"'`<>]+)/g;
+const TREE_LINK = /\/tree\/([^\s?#)"'`<>]+)/g;
 const execFileAsync = promisify(execFile);
 
 const unique = (list) => [...new Set(list)];
@@ -33,11 +33,17 @@ const folderPrefixes = (folder, roots) => {
   const plain = folder.replace(/^(?:\.\/)+/, "").toLowerCase();
   const sibling = plain.replace(/^(?:\.\.\/)+[^/]+\//, "");
   const rooted = [plain, sibling].flatMap((form) => roots.filter((root) => form.startsWith(root)).map((root) => form.slice(root.length)));
-  return unique([plain, sibling, ...rooted]).filter(Boolean);
+  return unique([plain, plain.replace(/^\/+/, ""), sibling, ...rooted]).filter(Boolean);
 };
 
+const treeFolders = (candidate) =>
+  [...candidate.matchAll(TREE_LINK)].flatMap((match) => {
+    const segments = match[1].replace(/[.,;:!?]+$/, "").split("/").filter(Boolean);
+    return segments.slice(1).map((_, cut) => `${segments.slice(cut + 1).join("/")}/`);
+  });
+
 const underFolder = (candidate, path, roots) =>
-  [...[...candidate.matchAll(FOLDER)].map((match) => match[1]), ...[...candidate.matchAll(TREE_LINK)].map((match) => match[1].replace(/\/?$/, "/"))].some((folder) =>
+  [...[...candidate.matchAll(FOLDER)].map((match) => match[1]), ...treeFolders(candidate)].some((folder) =>
     folderPrefixes(folder, roots).some((prefix) => path.startsWith(prefix) || path.includes(`/${prefix}`)),
   );
 

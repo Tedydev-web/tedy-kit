@@ -60,6 +60,17 @@ test("namedIn reads a cited folder through a sibling path, the repo's name, its 
     assert.equal(namedIn([text], "src/authz/guard.ts", roots), false, text);
   }
   assert.equal(namedIn(["see /elsewhere/backend2/src/auth/ there"], "src/auth/guard.ts", roots), false);
+  const cases = [
+    ["the code under /src/auth/ checks the token", true],
+    ["see https://github.com/o/be/tree/feature/login/src/auth for it", true],
+    ["see https://github.com/o/be/tree/main/src/auth.", true],
+    ["see https://github.com/o/be/tree/main/src/auth, which checks", true],
+    ["see [auth](https://github.com/o/be/tree/main/src/auth)", true],
+    ["see https://github.com/o/be/tree/main/src/auth?plain=1", true],
+    ["backend/ owns the token", false],
+    ["https://github.com/o/be/tree/main/ is the repo", false],
+  ];
+  for (const [text, named] of cases) assert.equal(namedIn([text], "src/auth/login.ts", roots), named, text);
 });
 
 test("branchTokens reads only the branch of a path:line@branch cite, so mentions, mail and decorators are not branches", async () => {
