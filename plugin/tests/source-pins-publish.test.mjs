@@ -36,6 +36,7 @@ function project(draft = DRAFT) {
     fe,
     at,
     prSha,
+    stateDir: options.stateDir,
     short: prSha.slice(0, 7),
     beSha: git(be.clone, "rev-parse", "refs/remotes/origin/dev"),
     feSha: git(fe.clone, "rev-parse", "refs/remotes/origin/dev"),
@@ -359,6 +360,26 @@ test("a lint with read pins asks origin only once per ref it pins, and git never
   const remote = calls.filter((line) => / (ls-remote|fetch) /.test(line));
   assert.deepEqual(remote.filter((line) => line.includes("ls-remote")).length, 2, remote.join("\n"));
   assert.ok(remote.every((line) => line.startsWith("0 ")), remote.join("\n"));
+});
+
+test("a branch or PR the read pins lack is pinned at lint with a warning the record keeps, and a --branch read pin the draft does not cite is kept", () => {
+  const p = project(draftWith("The label is wrong, `src/a.ts:1@dev` sets it."));
+  git(p.be.root, "--git-dir", p.be.origin, "branch", "feature/x", "dev");
+  assert.equal(p.lint("pin-sources", p.at("ledger.md"), "--pr", "701", "--branch", `${p.be.clone}:feature/x`).status, 0);
+  p.rewrite("d.md", draftWith("The label is wrong, `src/a.ts:1@dev` sets it."));
+  const lint = p.lint("pr-comment", p.at("d.md"), "--diff", p.at("pr.diff"), "--pinned-at", p.at("ledger.md"));
+  assert.equal(lint.status, 0, lint.out);
+  const warning = `warning: . origin/dev was not pinned by draft-lint.mjs pin-sources ${p.at("ledger.md")}, so it was pinned now, at lint`;
+  assert.ok(lint.out.includes(`${warning}\n`), lint.out);
+  assert.match(lint.out, new RegExp(`^pinned: ${escape(p.be.clone)} origin/feature/x@${p.beSha} \\(read \\S+\\)$`, "m"));
+  const record = (file) => JSON.parse(readFileSync(join(p.stateDir, "drafts", `${file.replace(/\//g, "_")}.sources.json`), "utf8"));
+  assert.deepEqual(record(p.at("d.md")).warnings, [warning]);
+  assert.ok(record(p.at("d.md")).sources.some((pin) => pin.ref === "origin/feature/x" && pin.stage === "read"));
+  p.fe.pr(702);
+  p.rewrite("r.txt", "The label is still wrong.\n");
+  const other = p.lint("pr-reply", p.at("r.txt"), "--pr", "702", "--pinned-at", p.at("ledger.md"));
+  assert.equal(other.status, 0, other.out);
+  assert.deepEqual(record(p.at("r.txt")).warnings, [`warning: . pull/702/head was not pinned by draft-lint.mjs pin-sources ${p.at("ledger.md")}, so it was pinned now, at lint`]);
 });
 
 test("a push to the PR head during the read fails the lint", () => {
