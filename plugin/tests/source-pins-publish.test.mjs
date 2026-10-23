@@ -42,15 +42,35 @@ function project(draft = DRAFT) {
   };
 }
 
-test("draft-lint pins the FE and the BE repo of the map and the PR head, with full shas, and says they were pinned at lint", () => {
+test("draft-lint pins the other map repos and the PR head, with full shas, and says they were pinned at lint", () => {
   const p = project();
   const pushed = p.be.push("src/c.ts", "c1\n", "feat: pushed after the clone fetched");
   const result = p.lint("pr-comment", p.at("d.md"), "--diff", p.at("pr.diff"));
   assert.equal(result.status, 0, result.out);
   assert.match(result.out, /^clean: 1 comments, PR #701, head abc1234$/m);
-  assert.ok(result.out.includes(`pinned: . origin/dev@${p.feSha} (at lint)\npinned: ${p.be.clone} origin/dev@${pushed} (at lint)\npinned: . pull/701/head@${p.prSha} (at lint)\n`), result.out);
+  assert.ok(result.out.includes(`pinned: ${p.be.clone} origin/dev@${pushed} (at lint)\npinned: . pull/701/head@${p.prSha} (at lint)\n`), result.out);
+  assert.doesNotMatch(result.out, /^pinned: \. origin\/dev@/m);
   assert.equal(git(p.be.clone, "rev-parse", "refs/remotes/origin/dev"), pushed);
   assert.equal(git(p.fe.clone, "rev-parse", "refs/pr/701"), p.prSha);
+});
+
+test("a merge into the reviewed repo's own branch does not stop a post on its PR, unless a cite names that branch; the other repos still refuse", () => {
+  const merged = project(draftWith("The label is wrong, src/a.ts sets it."));
+  assert.equal(merged.lint("pr-comment", merged.at("d.md"), "--diff", merged.at("pr.diff")).status, 0);
+  merged.fe.push("src/a.ts", "a2\n", "fix: another PR merged into dev");
+  const posted = merged.write(["post", merged.at("d.md"), "--repo", "o/r"]);
+  assert.equal(posted.status, 0, posted.out);
+  assert.equal(posted.writes.length, 1);
+  const cited = project(draftWith("The label is wrong, `src/a.ts:1@dev` sets it."));
+  assert.equal(cited.lint("pr-comment", cited.at("d.md"), "--diff", cited.at("pr.diff")).status, 0);
+  cited.fe.push("src/a.ts", "a2\n", "fix: another PR merged into dev");
+  const refused = cited.write(["post", cited.at("d.md"), "--repo", "o/r"]);
+  assert.equal(refused.status, 1, refused.out);
+  assert.match(refused.out, /^refused: \. origin\/dev moved from .* and changed a file the text being posted names$/m);
+  const be = project(draftWith("The label is wrong, src/a.ts sets it."));
+  assert.equal(be.lint("pr-comment", be.at("d.md"), "--diff", be.at("pr.diff")).status, 0);
+  be.be.push("src/a.ts", "a2\n", "fix: the backend writer changed");
+  assert.equal(be.write(["post", be.at("d.md"), "--repo", "o/r"]).status, 1);
 });
 
 test("draft-lint fails when a map repo or the PR head cannot be pinned, and passes a bare cite now that cites are not parsed", () => {
@@ -133,7 +153,7 @@ test("reply and edit need a pr-reply lint with --pr, then refuse when a changed 
   assert.match(p.lint("pr-reply", p.at("r.txt")).out, /pr-reply and pin-sources for a review need --pr <number>/);
   const lint = p.lint("pr-reply", p.at("r.txt"), "--pr", "701");
   assert.equal(lint.status, 0, lint.out);
-  assert.ok(lint.out.includes(`clean: pr-reply\npinned: . origin/dev@${p.feSha} (at lint)\npinned: ${p.be.clone} origin/dev@${p.beSha} (at lint)\npinned: . pull/701/head@${p.prSha} (at lint)\n`), lint.out);
+  assert.ok(lint.out.includes(`clean: pr-reply\npinned: ${p.be.clone} origin/dev@${p.beSha} (at lint)\npinned: . pull/701/head@${p.prSha} (at lint)\n`), lint.out);
   const posted = p.write(reply, { write: { id: 5, html_url: "u" }, head: p.prSha });
   assert.equal(posted.status, 0, posted.out);
   assert.equal(posted.writes.length, 1);
@@ -229,13 +249,13 @@ test("without a read pin the lint pins at lint time and its warning names what i
   const p = project();
   const result = p.lint("pr-comment", p.at("d.md"), "--diff", p.at("pr.diff"));
   assert.equal(result.status, 0, result.out);
-  assert.ok(result.out.includes(`warning: no read pins for ${p.at("d.md")}, so these were pinned now, at lint, and a change made while you read them is not seen: . origin/dev; ${p.be.clone} origin/dev; . pull/701/head; next time run draft-lint.mjs pin-sources ${p.at("d.md")} before reading\n`), result.out);
+  assert.ok(result.out.includes(`warning: no read pins for ${p.at("d.md")}, so these were pinned now, at lint, and a change made while you read them is not seen: ${p.be.clone} origin/dev; . pull/701/head; next time run draft-lint.mjs pin-sources ${p.at("d.md")} before reading\n`), result.out);
 });
 
 test("a read pin taken before the read holds: a push before the lint fails it when the draft names a changed file, else prints a notice, and post diffs from the read", () => {
   const draft = draftWith("The label is wrong, `src/a.ts:1@dev` sets it.");
   const p = project(draft);
-  const pinned = p.lint("pin-sources", p.at("d.md"), "--pr", "701");
+  const pinned = p.lint("pin-sources", p.at("d.md"), "--pr", "701", "--branch", ".:dev");
   assert.equal(pinned.status, 0, pinned.out);
   assert.match(pinned.out, new RegExp(`^read pins for ${escape(p.at("d.md"))}:\\npinned: \\. origin/dev@${p.feSha} \\(read \\S+\\)\\npinned: ${escape(p.be.clone)} origin/dev@${p.beSha} \\(read \\S+\\)\\npinned: \\. pull/701/head@${p.prSha} \\(read \\S+\\)$`, "m"));
   const early = p.lint("pr-comment", p.at("d.md"), "--diff", p.at("pr.diff"));
@@ -257,7 +277,7 @@ test("a read pin taken before the read holds: a push before the lint fails it wh
   assert.ok(failed.out.includes(`sources: refused: ${p.be.clone} origin/dev moved from ${p.beSha.slice(0, 8)} to ${cited.slice(0, 8)} since it was pinned and changed a file the text being posted names\n`), failed.out);
   assert.ok(failed.out.includes(`sources: a source changed while it was being read; run draft-lint.mjs pin-sources ${p.at("d.md")} again, re-read what changed, fix the draft and lint it again\n`), failed.out);
   assert.doesNotMatch(failed.out, /^clean:/m);
-  assert.equal(p.lint("pin-sources", p.at("d.md"), "--pr", "701").status, 0);
+  assert.equal(p.lint("pin-sources", p.at("d.md"), "--pr", "701", "--branch", ".:dev").status, 0);
   assert.equal(p.lint("pr-comment", p.at("d.md"), "--diff", p.at("pr.diff")).status, 1);
   p.rewrite("d.md", draft);
   assert.equal(p.lint("pr-comment", p.at("d.md"), "--diff", p.at("pr.diff")).status, 0);

@@ -53,8 +53,8 @@ export async function pinSourcesOf(text, extra = {}, { pr, repo, branches = [] }
   const resolved = resolveMap(process.cwd());
   if (!resolved) return { pins: [], problems: [`no project map covers ${process.cwd()}, so its repos cannot be pinned; run this from a folder of a mapped project, or map it with /tedy:setup`] };
   const repos = mapRepos(resolved.map);
-  const git = await pinRepos(repos, text, { extra: branches });
   const head = pr === undefined ? { pins: [], problems: [] } : pinPullHead(pr, repos, { repo });
+  const git = await pinRepos(repos, text, { extra: branches, reviewed: head.pins[0]?.repo });
   const problems = [...git.problems, ...head.problems];
   if (problems.length) return { pins: [], problems };
   return { pins: [...git.pins, ...head.pins, ...(await linkPins(text, extra))], problems: [] };

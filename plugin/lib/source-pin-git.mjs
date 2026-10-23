@@ -136,7 +136,8 @@ function askedBranches(repos, extra) {
 }
 
 async function pinRepo(repo, asked, tokens, heads, git) {
-  if (!repo.branches.length) return { pins: [], problems: [`${repo.name} has no branch in the project map and origin/HEAD is unset; set its branch in the map or run git -C ${repo.dir} remote set-head origin --auto`] };
+  if (repo.reviewed && !asked.length && !tokens.length) return { pins: [], problems: [] };
+  if (!repo.reviewed && !repo.branches.length) return { pins: [], problems: [`${repo.name} has no branch in the project map and origin/HEAD is unset; set its branch in the map or run git -C ${repo.dir} remote set-head origin --auto`] };
   let tips;
   try {
     tips = await heads(repo.dir);
@@ -144,9 +145,9 @@ async function pinRepo(repo, asked, tokens, heads, git) {
     return { pins: [], problems: [`cannot pin ${repo.name}: its origin cannot be reached (${gitReason(error)}); check the network and git -C ${repo.dir} remote -v, or fix the repo path in the project map`] };
   }
   const problems = asked.filter((branch) => !tips.has(branch)).map((branch) => `--branch ${repo.name}:${branch}: origin of ${repo.name} has no branch ${branch}`);
-  if (!repo.branches.some((branch) => tips.has(branch))) problems.push(`${repo.name} has no ${repo.branches.map((branch) => `origin/${branch}`).join(" or ")}; fix the branch in the project map or fetch the repo`);
+  if (!repo.reviewed && !repo.branches.some((branch) => tips.has(branch))) problems.push(`${repo.name} has no ${repo.branches.map((branch) => `origin/${branch}`).join(" or ")}; fix the branch in the project map or fetch the repo`);
   const pins = [];
-  for (const branch of unique([...repo.branches, ...asked, ...tokens]).filter((candidate) => tips.has(candidate))) {
+  for (const branch of unique([...(repo.reviewed ? [] : repo.branches), ...asked, ...tokens]).filter((candidate) => tips.has(candidate))) {
     try {
       pins.push(takeTip(git, repo.dir, branchPin(repo, branch, tips.get(branch))));
     } catch (error) {
@@ -157,10 +158,10 @@ async function pinRepo(repo, asked, tokens, heads, git) {
   return { pins, problems };
 }
 
-export async function pinRepos(repos, text, { extra = [], heads = lsRemoteHeads, git = runGit } = {}) {
+export async function pinRepos(repos, text, { extra = [], reviewed, heads = lsRemoteHeads, git = runGit } = {}) {
   const tokens = branchTokens(text);
   const { asked, problems } = askedBranches(repos, extra);
-  const results = await Promise.all(repos.map((repo) => pinRepo(repo, asked.get(repo.name), tokens, heads, git)));
+  const results = await Promise.all(repos.map((repo) => pinRepo({ ...repo, reviewed: repo.name === reviewed }, asked.get(repo.name), tokens, heads, git)));
   return { pins: results.flatMap((result) => result.pins), problems: [...problems, ...results.flatMap((result) => result.problems)] };
 }
 
