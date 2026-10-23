@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { branchTokens, lsRemoteHeads, mapRepos, namedIn, pinRepos, recheckRepos, runGit } from "../lib/source-pin-git.mjs";
+import { branchTokens, lsRemoteHeads, mapRepos, namedIn, pinRepos, recheckRepos, remoteTips, runGit, tipKey } from "../lib/source-pin-git.mjs";
 import { linkedDocs, nodeId } from "../lib/source-pin-links.mjs";
 import { pinnedSources, sourcesPath, versionCheck, writeSources } from "../lib/source-pins.mjs";
 import { git, siblingRepo } from "./git-sibling-for-tests.mjs";
@@ -92,6 +92,35 @@ test("a lint asks each repo's origin once for all its heads, and asks every repo
   assert.equal(most, 2);
 });
 
+test("the recheck asks each repo's origin once for all its pinned refs, every repo at the same time, and skips refs whose tip it was given", async () => {
+  const one = siblingRepo();
+  const two = siblingRepo();
+  git(one.root, "--git-dir", one.origin, "branch", "feature/v2", "dev");
+  const repos = [{ name: "one", dir: one.clone, branches: ["dev"] }, { name: "two", dir: two.clone, branches: ["dev"] }];
+  const { pins } = await pinRepos(repos, "`src/a.ts:1@feature/v2`");
+  const calls = [];
+  let open = 0;
+  let most = 0;
+  const ask = async (dir, refs) => {
+    calls.push([dir, refs]);
+    open += 1;
+    most = Math.max(most, open);
+    await new Promise((done) => setTimeout(done, 30));
+    try {
+      return await remoteTips(dir, refs);
+    } finally {
+      open -= 1;
+    }
+  };
+  assert.deepEqual(await recheckRepos(pins, repos, [], undefined, { ask }), { refusals: [], notices: [] });
+  assert.equal(most, 2);
+  assert.deepEqual(calls.map(([dir, refs]) => [dir === one.clone ? "one" : "two", refs]).sort(), [["one", ["refs/heads/dev", "refs/heads/feature/v2"]], ["two", ["refs/heads/dev"]]]);
+  calls.length = 0;
+  const tips = new Map(pins.filter((pin) => pin.repo === "one").map((pin) => [tipKey(pin), pin.sha]));
+  assert.deepEqual(await recheckRepos(pins, repos, [], undefined, { ask, tips }), { refusals: [], notices: [] });
+  assert.deepEqual(calls.map(([dir]) => dir), [two.clone]);
+});
+
 test("pin-sources --branch pins a branch the map does not name, and fails on a repo the map lacks or a branch origin lacks", async () => {
   const sibling = siblingRepo();
   git(sibling.root, "--git-dir", sibling.origin, "branch", "feature/x", "dev");
@@ -150,10 +179,10 @@ test("a PR head pin refuses any move of the head, whatever the text names", asyn
   const sibling = siblingRepo();
   const first = sibling.pr(701);
   const pin = { kind: "git", repo: "fe", dir: sibling.clone, pr: 701, ref: "pull/701/head", remote: "refs/pull/701/head", local: "refs/pr/701", sha: first };
-  assert.deepEqual(recheckRepos([pin], [], ["nothing named"]), { refusals: [], notices: [] });
+  assert.deepEqual(await recheckRepos([pin], [], ["nothing named"]), { refusals: [], notices: [] });
   sibling.push("src/b.ts", "b2\n", "fix: the author pushes during the read");
   const moved = sibling.pr(701);
-  const { refusals } = recheckRepos([pin], [], ["nothing named"]);
+  const { refusals } = await recheckRepos([pin], [], ["nothing named"]);
   assert.match(refusals[0], new RegExp(`^refused: fe pull/701/head moved from ${first.slice(0, 8)} to ${moved.slice(0, 8)} since it was pinned, so the PR under review changed\\n  commit ${moved.slice(0, 7)} fix: the author pushes during the read\\n`));
 });
 
@@ -171,15 +200,15 @@ test("the recheck: unchanged is silent, a change no posted text names is a notic
   const repos = repoOf(sibling.clone);
   const { pins } = await pinRepos(repos, "");
   const sha = pins[0].sha.slice(0, 8);
-  assert.deepEqual(recheckRepos(pins, repos, ["The writer `src/a.ts:1@dev` sets it."]), { refusals: [], notices: [] });
+  assert.deepEqual(await recheckRepos(pins, repos, ["The writer `src/a.ts:1@dev` sets it."]), { refusals: [], notices: [] });
   const other = sibling.push("src/b.ts", "b2\n", "chore: touch another file");
-  assert.deepEqual(recheckRepos(pins, repos, ["The writer `src/a.ts:1@dev` sets it."]), {
+  assert.deepEqual(await recheckRepos(pins, repos, ["The writer `src/a.ts:1@dev` sets it."]), {
     refusals: [],
     notices: [`notice: ../backend origin/dev moved from ${sha} to ${other.slice(0, 8)} since it was pinned; no changed file is named in the text being posted, so it posts as drafted`],
   });
   const cited = sibling.push("src/a.ts", "a2\n", "fix: change the writer");
   for (const text of ["```\nsrc/a.ts\n```", "`see src/a.ts:3,5@dev here`", "https://github.com/o/be/blob/dev/src/a.ts#L3", "only a.ts sets it", "src/a.ts#L10@dev"]) {
-    const { refusals, notices } = recheckRepos(pins, repos, ["The label is wrong.", text]);
+    const { refusals, notices } = await recheckRepos(pins, repos, ["The label is wrong.", text]);
     assert.deepEqual(notices, [], text);
     assert.equal(
       refusals[0],
@@ -196,8 +225,8 @@ test("a rename lists both names, so text naming either the old or the new one re
   git(sibling.upstream, "mv", "src/a.ts", "src/fee.ts");
   git(sibling.upstream, "commit", "-q", "-m", "refactor: rename the writer");
   git(sibling.upstream, "push", "-q", "origin", "dev");
-  assert.match(recheckRepos(pins, repos, ["see a.ts"]).refusals[0], /files: src\/a\.ts\n/);
-  assert.match(recheckRepos(pins, repos, ["see src/fee.ts"]).refusals[0], /files: src\/fee\.ts\n/);
+  assert.match((await recheckRepos(pins, repos, ["see a.ts"])).refusals[0], /files: src\/a\.ts\n/);
+  assert.match((await recheckRepos(pins, repos, ["see src/fee.ts"])).refusals[0], /files: src\/fee\.ts\n/);
 });
 
 test("a cited folder refuses a change under it however the text spells the folder, and a status letter is never read as a path", async () => {
@@ -219,15 +248,15 @@ test("a cite path is matched literally, so brackets, parentheses, @ and spaces n
   const repos = repoOf(sibling.clone);
   const { pins } = await pinRepos(repos, "");
   sibling.push("pages/users/i.tsx", "decoy\n", "chore: add a file the bracket glob would match");
-  assert.deepEqual(recheckRepos(pins, repos, ["`pages/users/[id].tsx:5@dev`"]).refusals, []);
+  assert.deepEqual((await recheckRepos(pins, repos, ["`pages/users/[id].tsx:5@dev`"])).refusals, []);
   sibling.push("pages/users/[id].tsx", "y\n", "fix: change the bracket page");
   sibling.push("internal/wallet service.go", "y\n", "fix: change the spaced file");
-  assert.match(recheckRepos(pins, repos, ["`pages/users/[id].tsx:5@dev`"]).refusals[0], /files: pages\/users\/\[id\]\.tsx\n/);
-  assert.match(recheckRepos(pins, repos, ["`internal/wallet service.go:3-4@dev`"]).refusals[0], /files: internal\/wallet service\.go\n/);
+  assert.match((await recheckRepos(pins, repos, ["`pages/users/[id].tsx:5@dev`"])).refusals[0], /files: pages\/users\/\[id\]\.tsx\n/);
+  assert.match((await recheckRepos(pins, repos, ["`internal/wallet service.go:3-4@dev`"])).refusals[0], /files: internal\/wallet service\.go\n/);
 });
 
 test("a pinned repo the map no longer lists refuses", async () => {
-  const { refusals } = recheckRepos([{ kind: "git", repo: "../gone", ref: "origin/dev", sha: "a".repeat(40) }], [], []);
+  const { refusals } = await recheckRepos([{ kind: "git", repo: "../gone", ref: "origin/dev", sha: "a".repeat(40) }], [], []);
   assert.match(refusals[0], /^refused: \.\.\/gone is pinned but the project map no longer lists it/);
 });
 
@@ -236,11 +265,11 @@ test("a deleted branch, an unreachable origin and a lost pinned commit refuse wi
   const repos = repoOf(sibling.clone);
   const { pins } = await pinRepos(repos, "");
   const lost = [{ ...pins[0], sha: "f".repeat(40) }];
-  assert.match(recheckRepos(lost, repos, []).refusals[0], /^refused: \.\.\/backend origin\/dev: the pinned commit ffffffff is not in the clone, so what changed cannot be listed; fetch it or lint again, then ask the user again$/);
+  assert.match((await recheckRepos(lost, repos, [])).refusals[0], /^refused: \.\.\/backend origin\/dev: the pinned commit ffffffff is not in the clone, so what changed cannot be listed; fetch it or lint again, then ask the user again$/);
   git(sibling.root, "--git-dir", sibling.origin, "update-ref", "-d", "refs/heads/dev");
-  assert.match(recheckRepos(pins, repos, []).refusals[0], /^refused: \.\.\/backend origin\/dev no longer exists on origin; /);
+  assert.match((await recheckRepos(pins, repos, [])).refusals[0], /^refused: \.\.\/backend origin\/dev no longer exists on origin; /);
   git(sibling.clone, "remote", "set-url", "origin", join(sibling.root, "gone.git"));
-  assert.match(recheckRepos(pins, repos, []).refusals[0], /^refused: \.\.\/backend origin\/dev could not be rechecked \(.+\); fetch it, then publish again$/);
+  assert.match((await recheckRepos(pins, repos, [])).refusals[0], /^refused: \.\.\/backend origin\/dev could not be rechecked \(.+\); fetch it, then publish again$/);
 });
 
 test("a failing git diff or log is reported as a refusal, not thrown", async () => {
@@ -252,8 +281,8 @@ test("a failing git diff or log is reported as a refusal, not thrown", async () 
     if (args[0] === verb) throw Object.assign(new Error("boom"), { stderr: `fatal: ${verb} failed` });
     return runGit(dir, args);
   };
-  assert.match(recheckRepos(pins, repos, ["a.ts"], broken("diff")).refusals[0], /^refused: \.\.\/backend origin\/dev could not be rechecked \(fatal: diff failed\); fetch it, then publish again$/);
-  assert.match(recheckRepos(pins, repos, ["a.ts"], broken("log")).refusals[0], /^refused: \.\.\/backend origin\/dev could not be rechecked \(fatal: log failed\); fetch it, then publish again$/);
+  assert.match((await recheckRepos(pins, repos, ["a.ts"], broken("diff"))).refusals[0], /^refused: \.\.\/backend origin\/dev could not be rechecked \(fatal: diff failed\); fetch it, then publish again$/);
+  assert.match((await recheckRepos(pins, repos, ["a.ts"], broken("log"))).refusals[0], /^refused: \.\.\/backend origin\/dev could not be rechecked \(fatal: log failed\); fetch it, then publish again$/);
 });
 
 test("the recheck takes the branch tip from ls-remote, so another process rewriting FETCH_HEAD cannot hide a change", async () => {
@@ -266,7 +295,7 @@ test("the recheck takes the branch tip from ls-remote, so another process rewrit
     if (args[0] === "fetch") writeFileSync(join(dir, ".git", "FETCH_HEAD"), `${pins[0].sha}\t\tbranch 'dev' of elsewhere\n`);
     return out;
   };
-  const { refusals } = recheckRepos(pins, repos, ["a.ts"], racing);
+  const { refusals } = await recheckRepos(pins, repos, ["a.ts"], racing);
   assert.match(refusals[0], new RegExp(`moved from ${pins[0].sha.slice(0, 8)} to ${cited.slice(0, 8)}`));
 });
 

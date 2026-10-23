@@ -1,7 +1,8 @@
 import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runWithFakeGh } from "./fake-gh-for-tests.mjs";
 import { git, siblingRepo } from "./git-sibling-for-tests.mjs";
@@ -312,6 +313,30 @@ test("a post refused for a moved PR head is redrafted on the same path: pin-sour
   const posted = runWithFakeGh(WRITE, ["post", draft, "--repo", "o/fe"], { ...options, fixture: { diff: CLEAN_DIFF, head: second, write: { id: 9, html_url: "u" }, reviewComments: [{ id: 1, path: "src/a.ts", line: 10, commit_id: second }] } });
   assert.equal(posted.status, 0, posted.out);
   assert.equal(posted.writes.length, 1);
+});
+
+test("a lint with read pins asks origin only once per ref it pins, and git never prompts for credentials", () => {
+  const p = project();
+  assert.equal(p.lint("pin-sources", p.at("d.md"), "--pr", "701").status, 0);
+  p.rewrite("d.md", DRAFT);
+  const bin = tempDir("tedy-gitlog-");
+  const log = join(bin, "calls.log");
+  const real = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
+  writeFileSync(join(bin, "git"), `#!/usr/bin/env node\nimport { appendFileSync } from "node:fs";\nimport { spawnSync } from "node:child_process";\nconst args = process.argv.slice(2);\nappendFileSync(${JSON.stringify(log)}, \`\${process.env.GIT_TERMINAL_PROMPT ?? "-"} \${args.join(" ")}\\n\`);\nprocess.exit(spawnSync(${JSON.stringify(real)}, args, { stdio: "inherit" }).status ?? 1);\n`);
+  chmodSync(join(bin, "git"), 0o755);
+  writeFileSync(log, "");
+  const path = process.env.PATH;
+  process.env.PATH = `${bin}:${path}`;
+  try {
+    const result = p.lint("pr-comment", p.at("d.md"), "--diff", p.at("pr.diff"));
+    assert.equal(result.status, 0, result.out);
+  } finally {
+    process.env.PATH = path;
+  }
+  const calls = readFileSync(log, "utf8").split("\n").filter(Boolean);
+  const remote = calls.filter((line) => / (ls-remote|fetch) /.test(line));
+  assert.deepEqual(remote.filter((line) => line.includes("ls-remote")).length, 2, remote.join("\n"));
+  assert.ok(remote.every((line) => line.startsWith("0 ")), remote.join("\n"));
 });
 
 test("a push to the PR head during the read fails the lint", () => {

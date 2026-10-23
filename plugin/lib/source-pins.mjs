@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "no
 import { dirname, join, resolve } from "node:path";
 import { STATE_DIR } from "./hook-io.mjs";
 import { resolveMap } from "./project-map.mjs";
-import { mapRepos, pinPullHead, pinRepos, RECHECK, recheckRepos } from "./source-pin-git.mjs";
+import { mapRepos, pinPullHead, pinRepos, RECHECK, recheckRepos, tipKey } from "./source-pin-git.mjs";
 import { linkedDocs } from "./source-pin-links.mjs";
 
 const unique = (list) => [...new Set(list)];
@@ -72,9 +72,9 @@ async function recheckLinked(pin) {
   return { refusal: `refused: the sources record holds a pin of unknown kind ${JSON.stringify(pin.kind)}; ${RECHECK}` };
 }
 
-export async function recheckPins(sources, { texts = [] } = {}) {
+export async function recheckPins(sources, { texts = [], tips } = {}) {
   const git = sources.filter((pin) => pin.kind === "git");
-  const { refusals, notices } = git.length ? recheckRepos(git, mapRepos(resolveMap(process.cwd())?.map), texts) : { refusals: [], notices: [] };
+  const { refusals, notices } = git.length ? await recheckRepos(git, mapRepos(resolveMap(process.cwd())?.map), texts, undefined, { tips }) : { refusals: [], notices: [] };
   for (const pin of sources.filter((candidate) => candidate.kind !== "git")) {
     let verdict;
     try {
@@ -197,7 +197,8 @@ export async function settleReadPins(key, pins, { texts, file } = {}) {
   if (read.problem) return { pins: [], problems: [read.problem], lines: [] };
   if (file && existsSync(file) && Date.parse(read.at) > statSync(file).mtimeMs) return { pins: [], problems: [`the read pins for ${key} were taken at ${read.at}, after ${file} was last written: pin-sources ran again but the draft was not re-read and rewritten; re-read the sources, update ${file}, then lint it again`], lines: [] };
   const { kept, extra } = matchReadPins(read.sources, pins);
-  const { refusals, notices } = await recheckPins(kept, { texts });
+  const tips = new Map(pins.filter((pin) => pin.kind === "git").map((pin) => [tipKey(pin), pin.sha]));
+  const { refusals, notices } = await recheckPins(kept, { texts, tips });
   return {
     pins: [...kept, ...extra.map(({ pin }) => pin)],
     problems: refusals.length ? [...refusals, `a source changed while it was being read; run draft-lint.mjs pin-sources ${key} again, re-read what changed, fix the draft and lint it again`] : [],

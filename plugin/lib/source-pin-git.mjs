@@ -54,19 +54,27 @@ const rootsOf = (pin, dir) => [...(pin.repo === "." ? [] : [pin.repo]), basename
 
 export const branchTokens = (text) => unique([...text.matchAll(/:\d+(?:[-,]\d+)*@(\w[\w./-]*)/g)].map((match) => match[1].replace(/[./-]+$/, "")));
 
-export const runGit = (dir, args) => execFileSync("git", ["--literal-pathspecs", "-C", dir, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_BUFFER }).trim();
+const gitEnv = () => ({ ...process.env, GIT_TERMINAL_PROMPT: "0" });
 
-export async function lsRemoteHeads(dir) {
-  const { stdout } = await execFileAsync("git", ["-C", dir, "ls-remote", "--heads", "origin"], { encoding: "utf8", timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_BUFFER });
+export const runGit = (dir, args) => execFileSync("git", ["--literal-pathspecs", "-C", dir, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_BUFFER, env: gitEnv() }).trim();
+
+async function lsRemote(dir, args) {
+  const { stdout } = await execFileAsync("git", ["-C", dir, "ls-remote", ...args], { encoding: "utf8", timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_BUFFER, env: gitEnv() });
   return new Map(
     stdout
       .split("\n")
       .filter(Boolean)
-      .map((line) => {
-        const [sha, ref] = line.split("\t");
-        return [ref.replace(/^refs\/heads\//, ""), sha];
-      }),
+      .map((line) => line.split("\t").reverse()),
   );
+}
+
+export async function lsRemoteHeads(dir) {
+  return new Map([...(await lsRemote(dir, ["--heads", "origin"]))].map(([ref, sha]) => [ref.replace(/^refs\/heads\//, ""), sha]));
+}
+
+export async function remoteTips(dir, refs) {
+  const found = await lsRemote(dir, ["origin", ...refs]);
+  return new Map(refs.map((ref) => [ref, found.get(ref) ?? null]));
 }
 
 function originHead(dir, git) {
@@ -89,6 +97,8 @@ const gitReason = (error) => (error.code === "ETIMEDOUT" || error.killed ? `time
 const branchPin = (repo, branch, sha) => ({ kind: "git", repo: repo.name, ref: `origin/${branch}`, remote: `refs/heads/${branch}`, local: `refs/remotes/origin/${branch}`, sha });
 
 const remoteOf = (pin) => pin.remote ?? `refs/heads/${pin.ref.replace(/^origin\//, "")}`;
+
+export const tipKey = (pin) => `${pin.repo}\0${remoteOf(pin)}`;
 
 function remoteTip(git, dir, ref) {
   const line = git(dir, ["ls-remote", "origin", ref]).split("\n").find((entry) => entry.split("\t")[1] === ref);
@@ -213,9 +223,8 @@ function changedPaths(git, dir, from, to) {
 
 const commitLines = (git, dir, from, to, paths) => git(dir, ["log", "--format=%h %s", `${from}..${to}`, "--", ...paths]).split("\n").filter(Boolean).map((line) => `  commit ${line}`);
 
-function recheckRepo(pin, dir, texts, git) {
+function recheckRepo(pin, dir, texts, git, now) {
   const remote = remoteOf(pin);
-  const now = remoteTip(git, dir, remote);
   if (!now) return { refusal: `refused: ${pin.repo} ${pin.ref} no longer exists on origin; ${RECHECK}` };
   if (now === pin.sha) return {};
   fetchCommit(git, dir, remote, now);
@@ -227,18 +236,32 @@ function recheckRepo(pin, dir, texts, git) {
   return { refusal: [`refused: ${moved} and changed a file the text being posted names`, `  files: ${named.join(", ")}`, ...commitLines(git, dir, pin.sha, now, named), `  ${RECHECK}`].join("\n") };
 }
 
-export function recheckRepos(pins, repos, texts, git = runGit) {
+export async function recheckRepos(pins, repos, texts, git = runGit, { tips = new Map(), ask = remoteTips } = {}) {
+  const located = pins.filter((candidate) => candidate.kind === "git").map((pin) => ({ pin, dir: pin.dir ?? repos.find((candidate) => candidate.name === pin.repo)?.dir }));
+  const answers = new Map(
+    await Promise.all(
+      unique(located.flatMap(({ dir }) => (dir ? [dir] : []))).map(async (dir) => {
+        const refs = unique(located.filter((entry) => entry.dir === dir && !tips.has(tipKey(entry.pin))).map((entry) => remoteOf(entry.pin)));
+        try {
+          return [dir, refs.length ? await ask(dir, refs) : new Map()];
+        } catch (error) {
+          return [dir, error];
+        }
+      }),
+    ),
+  );
   const refusals = [];
   const notices = [];
-  for (const pin of pins.filter((candidate) => candidate.kind === "git")) {
-    const dir = pin.dir ?? repos.find((candidate) => candidate.name === pin.repo)?.dir;
+  for (const { pin, dir } of located) {
     if (!dir) {
       refusals.push(`refused: ${pin.repo} is pinned but the project map no longer lists it; ${RECHECK}`);
       continue;
     }
     let verdict;
     try {
-      verdict = recheckRepo(pin, dir, texts, git);
+      const answer = answers.get(dir);
+      if (answer instanceof Error) throw answer;
+      verdict = recheckRepo(pin, dir, texts, git, tips.has(tipKey(pin)) ? tips.get(tipKey(pin)) : answer.get(remoteOf(pin)));
     } catch (error) {
       verdict = { refusal: `refused: ${pin.repo} ${pin.ref} could not be rechecked (${gitReason(error)}); fetch it, then publish again` };
     }
