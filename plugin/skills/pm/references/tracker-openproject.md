@@ -45,11 +45,11 @@ A JSON array, one object per work package:
 | `set <id> … --apply --lock <n>` | yes | Patches only the named fields; refuses when the work package moved past the previewed lock; reads it back |
 | `rollback` | no | Lists the work packages the last `apply` created, with status and last update |
 | `rollback --project <id> --apply [--delete]` | yes | Closes them, or deletes them with `--delete`, children first; never touches anything that apply updated or merged; a deleted slug leaves the sidecar |
-| `apply <drafts.json> --project <id>` | yes | Refuses unless preview is clean, and when a pinned Figma file or Google Doc changed since the preview: a Figma file passes with a notice only when every linked node is unchanged, any Doc change refuses; creates, updates or merges, adds relations and status, adds new slugs to the sidecar, reads every work package back and prints `verified N/N` |
-| `comment <id> --body-file <file>` | no | Preview of one comment on a work package; refuses a comment that is already there |
-| `comment <id> --body-file <file> --apply` | yes | Posts the comment and reads it back |
-| `comment-edit <activity-id> --body-file <file>` | no | Preview of rewriting a comment the token's user posted (activity id from `get <id> --activities`); refuses anyone else's |
-| `comment-edit <activity-id> --body-file <file> --apply` | yes | Rewrites it and reads it back |
+| `apply <drafts.json> --project <id>` | yes | Refuses unless preview is clean, and when a pinned Figma file or Google Doc changed since the preview: a changed or deleted linked node refuses, a file change elsewhere passes with a notice, a file linked with no node refuses on any change, any Doc text change refuses; creates, updates or merges, adds relations and status, adds new slugs to the sidecar, reads every work package back and prints `verified N/N` |
+| `comment <id> --body-file <file>` | no | Preview of one comment on a work package; refuses a comment that is already there; pins every Figma file and Google Doc the body links and prints a `pinned:` line each for the approval `preview` |
+| `comment <id> --body-file <file> --apply` | yes | Refuses without that preview, when the body changed since, or when a pinned link changed as `apply` does; posts the comment and reads it back |
+| `comment-edit <activity-id> --body-file <file>` | no | Preview of rewriting a comment the token's user posted (activity id from `get <id> --activities`); refuses anyone else's; pins the body's links like `comment` |
+| `comment-edit <activity-id> --body-file <file> --apply` | yes | Refuses like `comment --apply`; rewrites it and reads it back |
 | `relation <from-id> <to-id> --type <type>` | no | Preview of setting the one relation between two work packages (`relates`, `blocks`, `precedes`, `follows`, `duplicates`, `includes`, `requires`); OpenProject allows only one relation per pair, so an existing one is shown as replaced |
 | `relation <from-id> <to-id> --type <type> --apply` | yes | Deletes the pair's old relation, creates the new one and reads it back; if the create is refused (HTTP 422 circular dependency) it recreates the old relation and prints both work packages' relations so the loop can be found |
 | `relation-delete <relation-id> [--apply]` | with `--apply` | Removes one relation (id from `get <id> --relations`) and checks it is gone |

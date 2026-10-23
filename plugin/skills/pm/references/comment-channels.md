@@ -4,9 +4,15 @@ Every write below prints a `WRITE →` line, lints the body first, and reads the
 
 ## Pinned sources
 
-A clean `draft-lint.mjs figma-comment <file>` pins the map's Figma file at its current version; a clean `doc-comment <file>` pins the SHA-256 of the PRD Doc's text: across all tabs through the Docs API without suggestions (`via docs-text`, own OAuth client), else from the Drive `text/plain` export (`via drive-export`, which may hold only the first tab of a multi-tab Doc); comments and other metadata do not move it, and the recheck reads the same way. A Doc neither way can read gives no pin, so the lint fails and the write refuses. `doc-comment-file.mjs <items.json>` pins the Doc the same way when it writes the HTML file. Each prints a `pinned:` line; it goes into the approval `preview`. Every write below refuses a body with no pin or edited since its lint, and rechecks before writing:
+Lint every body before its approval, naming the target as the write will:
 
-- Figma `post` and `reply`: an unchanged version posts. A changed version compares the commented node (the reply's root node) at the pinned and the latest version: same subtree, `notice: …` and it posts; changed, gone, or no node to compare, `refused: …`.
+- `draft-lint.mjs figma-comment <file> --file <key> --node <node-id>`: `--node` is the node the comment goes on, or the thread's node from `list` for a reply. It pins the hash of that node's live JSON and the file's `lastModified`. Without `--node` it pins the whole file, which any edit to it moves.
+- `draft-lint.mjs doc-comment <file> --doc <id>`: pins the SHA-256 of the Doc's text, across all tabs through the Docs API without suggestions (`via docs-text`, own OAuth client), else from the Drive `text/plain` export with its comment markers and comment list removed (`via drive-export`, which may hold only the first tab of a multi-tab Doc); the recheck reads the same way. A Doc neither way can read gives no pin, so the lint fails and the write refuses.
+- `doc-comment-file.mjs <items.json>` pins the PRD Doc the same way when it writes the HTML file.
+
+Figma and Doc links in a `figma-comment` or `doc-comment` body are pinned too; a published `/document/d/e/…/pub` link fails the lint. Each pin prints a `pinned:` line; it goes into the approval `preview`. Every write below refuses a body with no sources record, an unreadable one, or one edited since its lint, and rechecks every pin before it spends the approval:
+
+- Figma `post` and `reply`: the target node must be pinned (or the whole file). A changed or deleted node refuses; a moved `lastModified` with every pinned node unchanged posts with a `notice:`; a whole-file pin refuses on any change. A comment is not part of the node JSON, so a batch of replies does not refuse itself.
 - Doc `reply`, `anchor` and `edit`: any change to the Doc's text refuses, because no anchor-level diff exists.
 - `doc-comment-file.mjs post --apply`: changed Doc text only prints a notice, because the same run re-finds every highlighted passage exactly once before anchoring. It marks each posted item in the items file, so a run that stopped partway needs `doc-comment-file.mjs <items.json>` again and a new approval for the rest.
 

@@ -28,11 +28,12 @@ One `AskUserQuestion`, header `post.header`, after the whole draft is quoted in 
 
 ## Pinned sources
 
-A clean `draft-lint.mjs pr-comment` records every sibling repo that the draft and the newest `plans/reports/review-*-pr<n>-findings.md` cite in backticks as `path:line@branch`, the path taken literally; a cite outside backticks fails the lint (`--findings <file>` picks another file): `origin/<branch>@<sha>` as the local remote ref stands, never fetched, plus the cited paths. It prints one `pinned:` line per repo, or `pinned: no path:line@branch cite …`; a cite no map repo holds fails the lint. `github-write.mjs post` refuses a draft with no sources record, one written for another file, one edited since its last lint, or one whose own cites have no pin, then fetches each pinned repo:
+A clean `draft-lint.mjs pr-comment` pins every repo in the project map, FE and BE, at the tip origin has now (`git ls-remote`): the map's branch, `origin/HEAD` and `dev` when it names none, and any branch an `@branch` token in the draft names. It prints one `pinned: <repo> origin/<branch>@<sha>` line per pin; a map repo it cannot reach fails the lint. Lint right after reading, because a push between the read and the lint is pinned unseen. `github-write.mjs post` refuses a draft with no sources record, an unreadable one, one written for another file or one edited since its last lint, then asks origin for each pinned tip:
 
 - unchanged: it posts;
-- moved without touching a cited path: it prints `notice: … no cited path changed, so it posts as drafted` and posts; the notice goes to the terminal only, so the PR gets the draft exactly as approved;
-- moved and touched a cited path: it prints `refused: … changed what the draft cites`, the files and the commits. Read the new commits (`git -C <repo> show <sha>`), fix the findings and the draft, lint, and ask again; a lint without that read re-pins the new sha unchecked.
+- moved, and no changed file (path or file name, also inside backticks, fences or a blob URL) is named in any comment: it prints `notice: … no changed file is named in the text being posted, so it posts as drafted` and posts; the notice goes to the terminal only, so the PR gets the draft exactly as approved. Read it: a claim that names no file may rest on code that changed;
+- moved, and a comment names a changed file: it prints `refused: … changed a file the text being posted names`, the files and the commits. Read the new commits (`git -C <repo> show <sha>`), fix the findings and the draft, lint, and ask again; a lint without that read re-pins the new sha unchecked.
+- a deleted branch, a lost pinned commit or a git error or timeout: `refused: …`; fetch, lint, ask again.
 
 The pins are rechecked before the approval ticket is spent, so a refused post leaves the approval unused. That approval covers only the draft text it showed, so once the draft is fixed the re-ask needs a new one.
 
