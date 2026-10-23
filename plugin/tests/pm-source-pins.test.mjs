@@ -129,6 +129,9 @@ test("a Drive export entry the comments API shows differently keeps a label that
   }
   assert.equal(new Set(pins).size, 1);
   assert.equal(exportWithoutComments(`Fee rule[a]\r\nRefund rule[b]\r\n\r\n[a]Which wallet?\r\n[b]${odd}\r\n`, [thread("Which wallet?")]), `Fee rule\nRefund rule[?]\n\n[?]${odd}`);
+  const options = (pick) => `Option ${pick} here[a][b][c]\r\n\r\n[a]Which wallet?\r\n[b]Shown differently X\r\n[c]Shown differently Y\r\n`;
+  assert.equal(exportWithoutComments(options("[b]"), [thread("Which wallet?")]), "Option [b] here[?][?]\n\n[?]Shown differently X\n[?]Shown differently Y");
+  assert.notEqual(exportWithoutComments(options("[b]"), [thread("Which wallet?")]), exportWithoutComments(options("[c]"), [thread("Which wallet?")]));
   assert.notEqual((await viewer(`Fee rule[a]\r\nRefund rule changed[b]\r\n\r\n[a]Which wallet?\r\n[b]${odd}\r\n`, [thread("Which wallet?")])).text, pins[0]);
 });
 
