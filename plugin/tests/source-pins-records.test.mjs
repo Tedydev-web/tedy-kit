@@ -27,7 +27,7 @@ test("openproject apply refuses drafts edited after the preview pinned them", as
     op.calls.length = 0;
     const apply = await w.run("openproject", ["apply", "drafts.json", "--project", "183"]);
     assert.notEqual(apply.code, 0);
-    assert.match(apply.out, /refused: drafts\.json changed after its sources were pinned; run openproject\.mjs preview drafts\.json --project 183, then ask the user again/);
+    assert.match(apply.out, /refused: drafts\.json changed after its sources were pinned; run openproject\.mjs preview drafts\.json --project 183 \[--pinned-at <file pin-sources ran for>\], then ask the user again/);
     assert.deepEqual(op.calls, []);
   } finally {
     op.server.close();
@@ -55,9 +55,9 @@ test("github-write reads no cites out of the draft: a matching record without pi
   writeFileSync(recordPath(w, "d.md"), JSON.stringify({ file: join(w.dir, "d.md"), sha256: createHash("sha256").update(`${draft}x`).digest("hex"), sources: [] }));
   const stale = await w.run("github-write", ["post", "d.md", "--repo", "o/r"]);
   assert.notEqual(stale.code, 0);
-  assert.match(stale.out, /^refused: d\.md changed after its sources were pinned; run draft-lint\.mjs pr-comment d\.md, then ask the user again$/m);
+  assert.match(stale.out, /^refused: d\.md changed after its sources were pinned; run draft-lint\.mjs pr-comment d\.md \[--pinned-at <file pin-sources ran for>\], then ask the user again$/m);
   assert.deepEqual(w.writes(), []);
-  writeFileSync(recordPath(w, "d.md"), JSON.stringify({ file: join(w.dir, "d.md"), sha256: createHash("sha256").update(draft).digest("hex"), sources: [] }));
+  writeFileSync(recordPath(w, "d.md"), JSON.stringify({ file: join(w.dir, "d.md"), sha256: createHash("sha256").update(draft).digest("hex"), warnings: [], sources: [] }));
   const post = await w.run("github-write", ["post", "d.md", "--repo", "o/r"]);
   assert.equal(post.code, 0, post.out);
   assert.equal(w.writes().length, 1);

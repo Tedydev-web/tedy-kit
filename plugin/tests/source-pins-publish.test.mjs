@@ -71,12 +71,12 @@ test("post refuses a draft that was never linted, and one edited after its pins 
   const p = project();
   const unlinted = p.write(["post", p.at("d.md"), "--repo", "o/r"]);
   assert.equal(unlinted.status, 1);
-  assert.ok(unlinted.out.includes(`refused: ${p.at("d.md")} has no pinned sources; run draft-lint.mjs pr-comment ${p.at("d.md")}, then ask the user again\n`), unlinted.out);
+  assert.ok(unlinted.out.includes(`refused: ${p.at("d.md")} has no pinned sources; run draft-lint.mjs pr-comment ${p.at("d.md")} [--pinned-at <file pin-sources ran for>], then ask the user again\n`), unlinted.out);
   assert.equal(unlinted.writes.length, 0);
   assert.equal(p.lint("pr-comment", p.at("d.md"), "--diff", p.at("pr.diff")).status, 0);
   writeFileSync(p.at("d.md"), DRAFT.replace("wrong", "off"));
   const edited = p.write(["post", p.at("d.md"), "--repo", "o/r"]);
-  assert.match(edited.out, /^refused: .*d\.md changed after its sources were pinned; run draft-lint\.mjs pr-comment .*d\.md, then ask the user again$/m);
+  assert.match(edited.out, /^refused: .*d\.md changed after its sources were pinned; run draft-lint\.mjs pr-comment .*d\.md \[--pinned-at <file pin-sources ran for>\], then ask the user again$/m);
   assert.equal(edited.writes.length, 0);
 });
 
@@ -128,7 +128,7 @@ test("reply and edit need a pr-reply lint with --pr, then refuse when a changed 
   writeFileSync(p.at("r.txt"), "The label is still wrong, see src/a.ts.\n");
   const reply = ["reply", "701", "123", "--repo", "o/r", "--body-file", p.at("r.txt")];
   const unlinted = p.write(reply, { write: { id: 5, html_url: "u" } });
-  assert.match(unlinted.out, /^refused: .*r\.txt has no pinned sources; run draft-lint\.mjs pr-reply .*r\.txt, then ask the user again$/m);
+  assert.match(unlinted.out, /^refused: .*r\.txt has no pinned sources; run draft-lint\.mjs pr-reply .*r\.txt \[--pinned-at <file pin-sources ran for>\], then ask the user again$/m);
   assert.equal(unlinted.writes.length, 0);
   assert.match(p.lint("pr-reply", p.at("r.txt")).out, /pr-reply and pin-sources for a review need --pr <number>/);
   const lint = p.lint("pr-reply", p.at("r.txt"), "--pr", "701");

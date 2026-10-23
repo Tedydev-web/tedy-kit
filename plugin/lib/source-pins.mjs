@@ -100,35 +100,38 @@ const statePath = (file, suffix) => join(STATE_DIR, "drafts", `${resolve(file).r
 
 export const sourcesPath = (file) => statePath(file, ".sources.json");
 
-export function writeSources(file, sources, text) {
+export function writeSources(file, sources, text, { warnings = [], pinnedAt } = {}) {
   const path = sourcesPath(file);
   mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify({ file: resolve(file), at: new Date().toISOString(), ...(text === undefined ? {} : { sha256: digest(text) }), sources }, null, 1)}\n`);
+  writeFileSync(path, `${JSON.stringify({ file: resolve(file), at: new Date().toISOString(), ...(text === undefined ? {} : { sha256: digest(text) }), ...(pinnedAt === undefined ? {} : { pinnedAt: resolve(pinnedAt) }), warnings, sources }, null, 1)}\n`);
   return path;
 }
 
+const relintWith = (relint, pinnedAt) => `${relint} ${typeof pinnedAt === "string" ? `--pinned-at ${pinnedAt}` : "[--pinned-at <file pin-sources ran for>]"}`;
+
 export function pinnedSources(file, relint) {
   const path = sourcesPath(file);
-  const again = `run ${relint}, then ask the user again`;
-  if (!existsSync(path)) return { refusal: `refused: ${file} has no pinned sources; ${again}` };
+  const again = (pinnedAt) => `run ${relintWith(relint, pinnedAt)}, then ask the user again`;
+  if (!existsSync(path)) return { refusal: `refused: ${file} has no pinned sources; ${again()}` };
   let record;
   try {
     record = JSON.parse(readFileSync(path, "utf8"));
     if (!Array.isArray(record?.sources)) throw new Error("no sources list");
   } catch (error) {
-    return { refusal: `refused: the sources record for ${file} cannot be read (${error.message}); ${again}` };
+    return { refusal: `refused: the sources record for ${file} cannot be read (${error.message}); ${again()}` };
   }
-  if (record.file !== resolve(file)) return { refusal: `refused: the sources record for ${file} was written for ${record.file}; ${again}` };
-  if (typeof record.sha256 !== "string") return { refusal: `refused: ${file} has a sources record with no digest of its text; ${again}` };
-  if (record.sha256 !== digest(readFileSync(file, "utf8"))) return { refusal: `refused: ${file} changed after its sources were pinned; ${again}` };
-  return { sources: record.sources };
+  if (record.file !== resolve(file)) return { refusal: `refused: the sources record for ${file} was written for ${record.file}; ${again()}` };
+  if (typeof record.sha256 !== "string") return { refusal: `refused: ${file} has a sources record with no digest of its text; ${again(record.pinnedAt)}` };
+  if (record.sha256 !== digest(readFileSync(file, "utf8"))) return { refusal: `refused: ${file} changed after its sources were pinned; ${again(record.pinnedAt)}` };
+  if (!Array.isArray(record.warnings) || record.warnings.some((line) => typeof line !== "string")) return { refusal: `refused: the sources record for ${file} has no list of the lint's warnings; ${again(record.pinnedAt)}` };
+  return { sources: record.sources, warnings: record.warnings, pinnedAt: record.pinnedAt };
 }
 
 export async function recheckPinned(file, relint, { texts, covers, what } = {}) {
-  const { sources, refusal } = pinnedSources(file, relint);
-  if (refusal) return { refusals: [refusal], notices: [] };
-  if (covers && !sources.some(covers)) return { refusals: [`refused: ${file} has no pinned ${what}; run ${relint}, then ask the user again`], notices: [] };
-  return recheckPins(sources, { texts });
+  const { sources, warnings, pinnedAt, refusal } = pinnedSources(file, relint);
+  if (refusal) return { refusals: [refusal], notices: [], warnings: [] };
+  if (covers && !sources.some(covers)) return { refusals: [`refused: ${file} has no pinned ${what}; run ${relintWith(relint, pinnedAt)}, then ask the user again`], notices: [], warnings };
+  return { ...(await recheckPins(sources, { texts })), warnings };
 }
 
 export const readPinsPath = (file) => statePath(file, ".read-pins.json");
@@ -185,7 +188,7 @@ function matchReadPins(read, pins) {
 
 export async function settleReadPins(key, pins, { texts, file } = {}) {
   const read = loadReadPins(key);
-  if (read === null) return { pins, problems: [], lines: pins.length ? [`warning: no read pins for ${key}, so these were pinned now, at lint, and a change made while you read them is not seen: ${pins.map((pin) => pinLabel(pin)).join("; ")}; next time run draft-lint.mjs pin-sources ${key} before reading`] : [] };
+  if (read === null) return { pins, problems: [], read: false, lines: pins.length ? [`warning: no read pins for ${key}, so these were pinned now, at lint, and a change made while you read them is not seen: ${pins.map((pin) => pinLabel(pin)).join("; ")}; next time run draft-lint.mjs pin-sources ${key} before reading`] : [] };
   if (read.problem) return { pins: [], problems: [read.problem], lines: [] };
   if (file && existsSync(file) && Date.parse(read.at) > statSync(file).mtimeMs) return { pins: [], problems: [`the read pins for ${key} were taken at ${read.at}, after ${file} was last written: pin-sources ran again but the draft was not re-read and rewritten; re-read the sources, update ${file}, then lint it again`], lines: [] };
   const { kept, extra } = matchReadPins(read.sources, pins);
@@ -193,23 +196,25 @@ export async function settleReadPins(key, pins, { texts, file } = {}) {
   return {
     pins: [...kept, ...extra.map(({ pin }) => pin)],
     problems: refusals.length ? [...refusals, `a source changed while it was being read; run draft-lint.mjs pin-sources ${key} again, re-read what changed, fix the draft and lint it again`] : [],
+    read: true,
     lines: [...notices, ...extra.map(({ label }) => `warning: ${label} was not pinned by draft-lint.mjs pin-sources ${key}, so it was pinned now, at lint`)],
   };
 }
 
-export async function recordPins(file, text, pins, { pinnedAt = file, texts } = {}) {
+export async function recordPins(file, text, pins, { pinnedAt = file, texts, warnings = [] } = {}) {
   const settled = await settleReadPins(pinnedAt, pins, { texts, file });
-  for (const line of settled.lines) console.log(line);
+  const lines = [...warnings, ...settled.lines];
+  for (const line of lines) console.log(line);
   for (const problem of settled.problems) console.log(`sources: ${problem}`);
   if (settled.problems.length) return null;
-  writeSources(file, settled.pins, text);
+  writeSources(file, settled.pins, text, { warnings: lines.filter((line) => line.startsWith("warning: ")), ...(settled.read ? { pinnedAt } : {}) });
   return settled.pins;
 }
 
 export async function requireFresh(file, relint, options) {
-  const { refusals, notices } = await recheckPinned(file, relint, options);
+  const { refusals, notices, warnings } = await recheckPinned(file, relint, options);
   if (refusals.length) throw new Error(refusals.join("\n"));
-  return notices;
+  return { notices, warnings };
 }
 
 export const sayNotices = (notices) => {

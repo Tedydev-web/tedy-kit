@@ -178,11 +178,11 @@ function chatTargets(kind, flag) {
     const file = flag("--file") ?? map?.figma?.file;
     const node = flag("--node");
     if (node !== undefined && !nodeId(node)) throw new Error(`--node ${node} is not a Figma node id such as 12-34 or 12:34`);
-    if (file && !node) console.log(`warning: no --node, so Figma ${file} is pinned as a whole file and any edit to it refuses the post; lint with --node <node-id> of the node the comment goes on`);
-    return file ? { figma: [{ file, nodes: node ? [nodeId(node)] : [], whole: !node }] } : {};
+    const warnings = file && !node ? [`warning: no --node, so Figma ${file} is pinned as a whole file and any edit to it refuses the post; lint with --node <node-id> of the node the comment goes on`] : [];
+    return { extra: file ? { figma: [{ file, nodes: node ? [nodeId(node)] : [], whole: !node }] } : {}, warnings };
   }
   const doc = flag("--doc") ?? map?.prd?.doc;
-  return doc ? { docs: [doc] } : {};
+  return { extra: doc ? { docs: [doc] } : {}, warnings: [] };
 }
 
 function prOf(flag) {
@@ -197,8 +197,8 @@ function repoOf(flag) {
   return repo;
 }
 
-async function record(file, text, pins, { clean, none, texts, pinnedAt, freeze = true }) {
-  const kept = await recordPins(file, text, pins, { pinnedAt, texts });
+async function record(file, text, pins, { clean, none, texts, pinnedAt, warnings, freeze = true }) {
+  const kept = await recordPins(file, text, pins, { pinnedAt, texts, warnings });
   if (!kept) return 1;
   console.log(clean);
   console.log(kept.length ? kept.map(describePin).join("\n") : `pinned: ${none}`);
@@ -232,10 +232,11 @@ async function main([kind, file, ...flags]) {
     const problems = lintChatComment(text, kind.replace("-comment", ""), mapLanguage("doc_figma"));
     for (const problem of problems) console.log(problem);
     if (problems.length) return 1;
-    const pins = await sourcePins(text, chatTargets(kind, flag));
+    const { extra, warnings } = chatTargets(kind, flag);
+    const pins = await sourcePins(text, extra);
     if (!pins) return 1;
     const none = kind === "figma-comment" ? "no Figma file in the project map and no link in the comment" : "no PRD doc in the project map and no link in the comment";
-    return record(file, text, pins, { clean: `clean: ${kind}`, none, texts: [text], pinnedAt });
+    return record(file, text, pins, { clean: `clean: ${kind}`, none, texts: [text], pinnedAt, warnings });
   }
   if (kind === "pr-reply" && file) {
     const pr = prOf(flag);

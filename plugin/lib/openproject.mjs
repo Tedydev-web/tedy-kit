@@ -83,9 +83,9 @@ async function check(client, project, drafts) {
 const locksPath = (file) => `${snapshotPath(file)}.locks.json`;
 
 async function recheckLinks(file, relint, texts) {
-  const { refusals, notices } = await recheckPinned(file, relint, { texts });
+  const { refusals, notices, warnings } = await recheckPinned(file, relint, { texts });
   for (const line of refusals) console.log(line);
-  return refusals.length ? null : notices;
+  return refusals.length ? null : { notices, warnings };
 }
 
 async function pinText(file, text, posted, pinnedAt) {
@@ -117,10 +117,10 @@ async function apply(client, project, drafts, file) {
     for (const [slug] of moved) console.log(`refused: ${slug} changed in OpenProject since the preview; read its activity, then preview again`);
     return 1;
   }
-  const notices = await recheckLinks(file, `openproject.mjs preview ${file} --project ${project}`, [readFileSync(file, "utf8")]);
-  if (!notices) return 1;
-  consumeApproval(process.argv, drafts.map((draft, index) => renderWorkPackageDraft(draft, plan[index])));
-  sayNotices(notices);
+  const fresh = await recheckLinks(file, `openproject.mjs preview ${file} --project ${project}`, [readFileSync(file, "utf8")]);
+  if (!fresh) return 1;
+  consumeApproval(process.argv, [...drafts.map((draft, index) => renderWorkPackageDraft(draft, plan[index])), ...fresh.warnings]);
+  sayNotices(fresh.notices);
   const path = sidecarPath(client.host, project);
   const created = {};
   const expected = {};
@@ -241,10 +241,10 @@ async function comment(client, id, flags) {
     console.log(`WRITE → ${client.host} · #${id} : 1 comment; run again with --apply`);
     return 0;
   }
-  const notices = await recheckLinks(file, `openproject.mjs comment ${id} --body-file ${file}`, [body]);
-  if (!notices) return 1;
-  consumeApproval(process.argv, [body]);
-  sayNotices(notices);
+  const fresh = await recheckLinks(file, `openproject.mjs comment ${id} --body-file ${file}`, [body]);
+  if (!fresh) return 1;
+  consumeApproval(process.argv, [body, ...fresh.warnings]);
+  sayNotices(fresh.notices);
   await client.request(`/api/v3/work_packages/${id}/activities`, { method: "POST", body: { comment: { raw: body } } });
   const read = sameComment((await client.request(`/api/v3/work_packages/${id}/activities`))._embedded.elements, body);
   console.log(read ? `commented #${id} activity ${read.id}` : `posted but not found on read-back; open #${id} and check`);
@@ -285,10 +285,10 @@ async function commentEdit(client, id, flags) {
     console.log(`WRITE → ${client.host} · #${current.id} : 1 comment edit; run again with --apply`);
     return 0;
   }
-  const notices = await recheckLinks(file, `openproject.mjs comment-edit ${id} --body-file ${file}`, [body]);
-  if (!notices) return 1;
-  consumeApproval(process.argv, [body]);
-  sayNotices(notices);
+  const fresh = await recheckLinks(file, `openproject.mjs comment-edit ${id} --body-file ${file}`, [body]);
+  if (!fresh) return 1;
+  consumeApproval(process.argv, [body, ...fresh.warnings]);
+  sayNotices(fresh.notices);
   await client.request(`/api/v3/activities/${id}`, { method: "PATCH", body: { comment: { raw: body } } });
   const read = (await client.request(`/api/v3/activities/${id}`)).comment?.raw?.trim() === body;
   console.log(read ? `edited #${current.id} activity ${id}` : `sent but the read-back differs; open #${current.id} and check activity ${id}`);

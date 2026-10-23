@@ -65,7 +65,7 @@ test("a Figma post needs the lint's pin of the node and refuses when that node c
   ];
   const unlinted = run("figma-comments", ["post", "1-2", "--body-file", "c.txt"], figma("t1", frame("Pay")));
   assert.equal(unlinted.status, 1);
-  assert.match(unlinted.out, /^figma-comments: refused: c\.txt has no pinned sources; run draft-lint\.mjs figma-comment c\.txt --file F1 --node 1:2, then ask the user again$/m);
+  assert.match(unlinted.out, /^figma-comments: refused: c\.txt has no pinned sources; run draft-lint\.mjs figma-comment c\.txt --file F1 --node 1:2 \[--pinned-at <file pin-sources ran for>\], then ask the user again$/m);
   assert.equal(unlinted.posts.length, 0);
   const lint = run("draft-lint", ["figma-comment", "c.txt", "--node", "1-2"], figma("t1", frame("Pay")));
   assert.equal(lint.status, 0, lint.out);

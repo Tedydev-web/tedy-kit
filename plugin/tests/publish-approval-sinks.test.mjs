@@ -55,9 +55,13 @@ function place(mode = "answer") {
   const approve = (preview, text = "Đăng?") => recordApprovals({ session_id: "s", tool_use_id: "t", tool_input: { questions: [{ question: text, header: "x", options: [{ label: VI["post.asIs"], description: "d", preview }, { label: VI["post.hold"], description: "n" }] }] }, tool_response: { answers: { [text]: VI["post.asIs"] }, annotations: { [text]: { preview } } } }, { dir: join(state, "approvals"), accepted: ACCEPTED });
   const shell = (command, args) => spawnSync(command, args, { cwd: dir, env, encoding: "utf8" });
   const run = (script, args) => shell("node", [script, ...args]);
-  const lint = () => assert.equal(run(join(SCRIPTS, "draft-lint.mjs"), ["pr-reply", "b.md", "--pr", "1"]).status, 0);
-  lint();
-  return { dir, env, state, writes, approve, run, shell, lint };
+  const lint = () => {
+    const result = run(join(SCRIPTS, "draft-lint.mjs"), ["pr-reply", "b.md", "--pr", "1"]);
+    assert.equal(result.status, 0, result.stdout);
+    return result.stdout.split("\n").filter((line) => line.startsWith("warning: ")).join("\n");
+  };
+  const warnings = lint();
+  return { dir, env, state, writes, approve, run, shell, lint, warnings };
 }
 
 const reply = ["reply", "1", "2", "--repo", "o/r", "--body-file", "b.md"];
@@ -74,8 +78,8 @@ test("answer mode: github-write refuses a write with no ticket, and writes nothi
 });
 
 test("answer mode: a ticket with the command line and the body allows one write, then is spent", () => {
-  const { run, writes, approve } = place();
-  approve(`Trả lời thread 2:\n\n${BODY}\n\n${REPLY_LINE}`);
+  const { run, writes, approve, warnings } = place();
+  approve(`Trả lời thread 2:\n\n${BODY}\n${warnings}\n\n${REPLY_LINE}`);
   assert.equal(run(GH, reply).status, 0);
   assert.equal(writes().length, 1);
   assert.equal(run(GH, reply).status, 1);
@@ -107,21 +111,21 @@ test("answer mode: a comment or a redirect that hides --dry-run from the shell s
 });
 
 test("answer mode: a wrapper, a symlink or a script calling the CLI is checked the same way", () => {
-  const { shell, writes, approve, dir } = place();
+  const { shell, writes, approve, dir, warnings } = place();
   const link = join(dir, "gw.mjs");
   symlinkSync(GH, link);
   writeFileSync(join(dir, "publish.mjs"), `import { execFileSync } from "node:child_process";\nexecFileSync("node", [${JSON.stringify(GH)}, ...${JSON.stringify(reply)}], { stdio: "inherit" });\n`);
   for (const [command, args] of [["env", ["node", GH, ...reply]], ["node", [link, ...reply]], ["node", [join(dir, "publish.mjs")]]]) assert.notEqual(shell(command, args).status, 0, args.join(" "));
   assert.deepEqual(writes(), []);
-  approve(`${BODY}\n\n${REPLY_LINE}`);
+  approve(`${BODY}\n${warnings}\n\n${REPLY_LINE}`);
   assert.notEqual(shell("node", [link, ...reply]).status, 0);
   assert.equal(shell("env", ["node", GH, ...reply]).status, 0);
   assert.equal(writes().length, 1);
 });
 
 test("answer mode: two processes with one ticket, only one writes", async () => {
-  const { env, writes, approve, dir } = place();
-  approve(`${BODY}\n\n${REPLY_LINE}`);
+  const { env, writes, approve, dir, warnings } = place();
+  approve(`${BODY}\n${warnings}\n\n${REPLY_LINE}`);
   const exec = promisify(execFile);
   const codes = await Promise.all(Array.from({ length: 4 }, () => exec("node", [GH, ...reply], { cwd: dir, env }).then(() => 0, (error) => error.code)));
   assert.equal(codes.filter((code) => code === 0).length, 1, codes.join(","));

@@ -127,9 +127,9 @@ async function recheckSources(file, lintMode, texts) {
     console.log("refused: pass the body as --body-file <file> so draft-lint can pin its sources");
     return null;
   }
-  const { refusals, notices } = await recheckPinned(file, `draft-lint.mjs ${lintMode} ${file}`, { texts });
+  const { refusals, notices, warnings } = await recheckPinned(file, `draft-lint.mjs ${lintMode} ${file}`, { texts });
   for (const line of refusals) console.log(line);
-  return refusals.length ? null : notices;
+  return refusals.length ? null : { notices, warnings };
 }
 
 function pullTargetRefusal(file, repo, pr) {
@@ -177,17 +177,17 @@ async function post(file, flags) {
   const twins = alreadyOnPr(prComments(repo, final.pr), final.comments);
   for (const twin of twins) console.log(`refused ${twin.comment.index}. ${twin.comment.path}:${twin.comment.line}: already on the PR as comment ${twin.id}; drop it from the draft`);
   if (twins.length) return 1;
-  const notices = await recheckSources(file, "pr-comment", final.comments.map((comment) => comment.body));
-  if (!notices) return 1;
+  const fresh = await recheckSources(file, "pr-comment", final.comments.map((comment) => comment.body));
+  if (!fresh) return 1;
   const payload = buildReviewPayload(final.comments, head);
   console.log(`WRITE → ${repo}#${final.pr} : 1 review · ${final.comments.length} comments`);
   if (flags["dry-run"]) {
-    say(notices);
+    say(fresh.notices);
     console.log(JSON.stringify(payload, null, 2));
     return 0;
   }
-  consumeApproval(process.argv, [finalText]);
-  say(notices);
+  consumeApproval(process.argv, [finalText, ...fresh.warnings]);
+  say(fresh.notices);
   const review = JSON.parse(gh(["api", "-X", "POST", `repos/${repo}/pulls/${final.pr}/reviews`, "--input", "-"], JSON.stringify(payload)));
   const posted = JSON.parse(gh(["api", "--paginate", "--slurp", `repos/${repo}/pulls/${final.pr}/reviews/${review.id}/comments`])).flat();
   for (const comment of posted) console.log(`${comment.id} ${comment.path}:${comment.line ?? comment.original_line} ${comment.side ?? "RIGHT"} ${comment.commit_id.slice(0, 8)}`);
@@ -210,8 +210,8 @@ function readBody(flags) {
 async function edit(id, flags) {
   const repo = currentRepo(flags);
   const body = readBody(flags);
-  const notices = await recheckSources(flags["body-file"], "pr-reply", [body]);
-  if (!notices) return 1;
+  const fresh = await recheckSources(flags["body-file"], "pr-reply", [body]);
+  if (!fresh) return 1;
   const pr = JSON.parse(gh(["api", `repos/${repo}/pulls/comments/${id}`])).pull_request_url?.match(/\/pulls\/(\d+)$/)?.[1];
   const refusal = pr ? pullTargetRefusal(flags["body-file"], repo, pr) : `refused: review comment ${id} in ${repo} names no pull request; nothing edited`;
   if (refusal) {
@@ -219,8 +219,8 @@ async function edit(id, flags) {
     return 1;
   }
   console.log(`WRITE → ${repo} : edit review comment ${id}`);
-  consumeApproval(process.argv, [body]);
-  say(notices);
+  consumeApproval(process.argv, [body, ...fresh.warnings]);
+  say(fresh.notices);
   const updated = JSON.parse(gh(["api", "-X", "PATCH", `repos/${repo}/pulls/comments/${id}`, "--input", "-"], JSON.stringify({ body })));
   logEdits([{ repo, key: String(id), label: "post-edit", draft: null, posted: body }]);
   if (normalise(updated.body) !== normalise(body)) throw new Error(`comment ${id} body differs after PATCH`);
@@ -263,16 +263,16 @@ async function reply(pr, id, flags) {
     console.log(`refused: reply ${twin} under ${id} already says this; nothing posted`);
     return 1;
   }
-  const notices = await recheckSources(flags["body-file"], "pr-reply", [body]);
-  if (!notices) return 1;
+  const fresh = await recheckSources(flags["body-file"], "pr-reply", [body]);
+  if (!fresh) return 1;
   const refusal = pullTargetRefusal(flags["body-file"], repo, pr);
   if (refusal) {
     console.log(refusal);
     return 1;
   }
   console.log(`WRITE → ${repo}#${pr} : reply to ${id}`);
-  consumeApproval(process.argv, [body]);
-  say(notices);
+  consumeApproval(process.argv, [body, ...fresh.warnings]);
+  say(fresh.notices);
   const created = JSON.parse(gh(["api", "-X", "POST", `repos/${repo}/pulls/${pr}/comments/${id}/replies`, "--input", "-"], JSON.stringify({ body })));
   logEdits([{ repo, pr: Number(pr), key: String(id), label: "reply", draft: null, posted: body }]);
   console.log(`replied ${created.id}: ${created.html_url}`);

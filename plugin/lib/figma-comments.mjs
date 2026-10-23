@@ -167,9 +167,9 @@ async function main([command, target, ...rest]) {
     if (!box) throw new Error(`node ${node} not found in ${figma.file}`);
     const twin = duplicateOnNode((await figma.request(`/files/${figma.file}/comments`)).comments, node, body);
     if (twin) throw new Error(`comment ${twin.id} on node ${node} already says this; nothing posted`);
-    const notices = await recheckTarget(figma, flags, node, body);
+    const { notices, warnings } = await recheckTarget(figma, flags, node, body);
     console.log(`WRITE → Figma ${figma.file} node ${node} : 1 comment`);
-    consumeApproval(process.argv, [body]);
+    consumeApproval(process.argv, [body, ...warnings]);
     sayNotices(notices);
     const created = await figma.request(`/files/${figma.file}/comments`, { method: "POST", body: { message: body, client_meta: { node_id: node, node_offset: pinOffset(box) } } });
     await verify(figma, created.id, body);
@@ -182,9 +182,9 @@ async function main([command, target, ...rest]) {
     const root = rootOf(comments, target);
     const twin = duplicateReply(comments, root.id, body);
     if (twin) throw new Error(`reply ${twin.id} in thread ${root.id} already says this; nothing posted`);
-    const notices = await recheckTarget(figma, flags, root.client_meta?.node_id ?? null, body);
+    const { notices, warnings } = await recheckTarget(figma, flags, root.client_meta?.node_id ?? null, body);
     console.log(`WRITE → Figma ${figma.file} thread ${root.id} : 1 reply`);
-    consumeApproval(process.argv, [body]);
+    consumeApproval(process.argv, [body, ...warnings]);
     sayNotices(notices);
     const created = await figma.request(`/files/${figma.file}/comments`, { method: "POST", body: { message: body, comment_id: root.id } });
     await verify(figma, created.id, body);

@@ -24,7 +24,7 @@ const root = { id: "100", message: "Root question", user: { handle: "lam" }, cre
 async function lint(w, script, args) {
   const result = await w.run(script, args);
   assert.equal(result.code, 0, `${script} ${args.join(" ")}: ${result.out}`);
-  return result.out.split("\n").filter((line) => line.startsWith("pinned: "));
+  return result.out.split("\n").filter((line) => /^(pinned|warning): /.test(line));
 }
 
 const web = (w) => JSON.parse(readFileSync(join(w.dir, "web.json"), "utf8"));
@@ -124,12 +124,19 @@ test("on every writer a moved pin's notice is printed only once the approval is 
       assert.match(unapproved.out, /no unused approval matches this write/, `${name}: ${unapproved.out}`);
       assert.doesNotMatch(unapproved.out, /notice:/, name);
       assert.deepEqual(sent(w), [], name);
+      const warnings = pins.filter((line) => line.startsWith("warning: "));
+      assert.ok(warnings.length, `${name}: no warning: line`);
+      w.approve([...texts, ...pins.filter((line) => !warnings.includes(line)), w.line(script, args)].join("\n"));
+      const unwarned = await w.run(script, args);
+      assert.match(unwarned.out, /no unused approval matches this write/, `${name}: ${unwarned.out}`);
+      assert.equal(w.tickets(), 1, name);
+      assert.deepEqual([...sent(w), ...op.calls], [], name);
       op.calls.length = 0;
       w.approve([...texts, ...pins, w.line(script, args)].join("\n"));
       const posted = await w.run(script, args);
       assert.match(posted.out, /^notice: .* so it posts as drafted$/m, `${name}: ${posted.out}`);
       assert.doesNotMatch(posted.out, /refused/, `${name}: ${posted.out}`);
-      assert.equal(w.tickets(), 0, name);
+      assert.equal(w.tickets(), 1, name);
       const written = [...sent(w), ...op.calls].join("\n");
       assert.ok(written.length, `${name}: nothing written`);
       assert.doesNotMatch(written, /notice|posts as drafted/, name);
@@ -227,12 +234,12 @@ test("a stale-source refusal leaves the approval ticket unused, on every path th
 
 test("a write refused for a missing sources record leaves its approval ticket unused", async () => {
   const cases = [
-    ["github-write", ["edit", "5", "--body-file", "b.md", "--repo", "o/r"], "The label is still wrong.", { gh: { write: { id: 5, html_url: "u", body: "x" } } }, /refused: b\.md has no pinned sources; run draft-lint\.mjs pr-reply b\.md,/],
-    ["figma-comments", ["post", "1:2", "--body-file", "b.md", "--file", "F1"], "@lam Màn này thiếu trạng thái rỗng.", { web: { figma: [] } }, /refused: b\.md has no pinned sources; run draft-lint\.mjs figma-comment b\.md --file F1 --node 1:2,/],
-    ["gdoc-comments", ["anchor", "--tab", "t.1", "--quote", "the fee in GRAM", "--body-file", "b.md", "--doc", "D"], "Which wallet pays the fee?", { web: { drive: [], document: textDoc(TAB) } }, /refused: b\.md has no pinned sources; run draft-lint\.mjs doc-comment b\.md --doc D,/],
-    ["gdoc-comments", ["edit", "c2", "--body-file", "b.md", "--doc", "D"], "Which wallet pays the fee?", { web: { drive: [own], document: textDoc(TAB) } }, /refused: b\.md has no pinned sources; run draft-lint\.mjs doc-comment b\.md --doc D,/],
-    ["doc-comment-file", ["post", "items.json", "--html", "out.html", "--apply", "--doc", "D"], null, { web: { tabs: { "t.1": TAB }, document: textDoc(TAB) }, map: PRD_MAP }, /refused: items\.json has no pinned sources; run doc-comment-file\.mjs items\.json,/],
-    ["openproject", ["comment", "21298", "--apply", "--body-file", "b.md"], "The pop-up needs the Pro price.", {}, /refused: b\.md has no pinned sources; run openproject\.mjs comment 21298 --body-file b\.md,/],
+    ["github-write", ["edit", "5", "--body-file", "b.md", "--repo", "o/r"], "The label is still wrong.", { gh: { write: { id: 5, html_url: "u", body: "x" } } }, /refused: b\.md has no pinned sources; run draft-lint\.mjs pr-reply b\.md \[--pinned-at <file pin-sources ran for>\],/],
+    ["figma-comments", ["post", "1:2", "--body-file", "b.md", "--file", "F1"], "@lam Màn này thiếu trạng thái rỗng.", { web: { figma: [] } }, /refused: b\.md has no pinned sources; run draft-lint\.mjs figma-comment b\.md --file F1 --node 1:2 \[--pinned-at <file pin-sources ran for>\],/],
+    ["gdoc-comments", ["anchor", "--tab", "t.1", "--quote", "the fee in GRAM", "--body-file", "b.md", "--doc", "D"], "Which wallet pays the fee?", { web: { drive: [], document: textDoc(TAB) } }, /refused: b\.md has no pinned sources; run draft-lint\.mjs doc-comment b\.md --doc D \[--pinned-at <file pin-sources ran for>\],/],
+    ["gdoc-comments", ["edit", "c2", "--body-file", "b.md", "--doc", "D"], "Which wallet pays the fee?", { web: { drive: [own], document: textDoc(TAB) } }, /refused: b\.md has no pinned sources; run draft-lint\.mjs doc-comment b\.md --doc D \[--pinned-at <file pin-sources ran for>\],/],
+    ["doc-comment-file", ["post", "items.json", "--html", "out.html", "--apply", "--doc", "D"], null, { web: { tabs: { "t.1": TAB }, document: textDoc(TAB) }, map: PRD_MAP }, /refused: items\.json has no pinned sources; run doc-comment-file\.mjs items\.json \[--pinned-at <file pin-sources ran for>\],/],
+    ["openproject", ["comment", "21298", "--apply", "--body-file", "b.md"], "The pop-up needs the Pro price.", {}, /refused: b\.md has no pinned sources; run openproject\.mjs comment 21298 --body-file b\.md \[--pinned-at <file pin-sources ran for>\],/],
   ];
   for (const [script, args, body, options, refusal] of cases) {
     await withOpenProject(async (op) => {
@@ -273,7 +280,7 @@ test("a Figma post on a node the lint did not pin refuses and names the lint to 
   await lint(w, "draft-lint", ["figma-comment", "f.md", "--file", "F1", "--node", "1-2"]);
   const result = await w.run("figma-comments", ["post", "3-4", "--body-file", "f.md", "--file", "F1"]);
   assert.notEqual(result.code, 0);
-  assert.match(result.out, /refused: f\.md has no pinned Figma F1 node 3:4; run draft-lint\.mjs figma-comment f\.md --file F1 --node 3:4, then ask the user again/);
+  assert.match(result.out, /refused: f\.md has no pinned Figma F1 node 3:4; run draft-lint\.mjs figma-comment f\.md --file F1 --node 3:4 \[--pinned-at <file pin-sources ran for>\], then ask the user again/);
   assert.deepEqual(w.writes(), []);
 });
 
@@ -301,7 +308,7 @@ test("without an own OAuth client a Doc is pinned by its Drive text export: repl
   const bodies = ["Which wallet pays the fee?", "Is the fee shown before paying?", "Does USDT cover the fee too?"];
   for (const [index, body] of bodies.entries()) w.file(`g${index}.md`, `${body}\n`);
   const pins = await lint(w, "draft-lint", ["doc-comment", "g0.md", "--doc", "D"]);
-  assert.match(pins[0], /^pinned: Google Doc D text [0-9a-f]{12} via drive-export \(at lint\)$/);
+  assert.match(pins.find((line) => line.startsWith("pinned: ")), /^pinned: Google Doc D text [0-9a-f]{12} via drive-export \(at lint\)$/);
   for (const index of [1, 2]) await lint(w, "draft-lint", ["doc-comment", `g${index}.md`, "--doc", "D"]);
   const withTail = (body, count) => `${body}${"[a][b]".slice(0, 3 * count)}\r\n\r\n${["[a]Which wallet?", "[b]Which wallet pays the fee?"].slice(0, count).join("\r\n")}\r\n`;
   const replied = { ...thread, replies: [{ id: "r1", content: "Which wallet pays the fee?", deleted: false, author: { me: true, displayName: "me" }, createdTime: "2026-10-22T00:00:00Z" }] };
@@ -482,6 +489,8 @@ test("every lint pins the links in its text and the map repos, and figma-comment
   assert.ok(pinned.some((line) => line.startsWith("pinned: Google Doc D2 ")), pinned.join("\n"));
   assert.ok(pinned.some((line) => line.startsWith("pinned: . origin/dev@")), pinned.join("\n"));
   assert.match((await figma.run("draft-lint", ["figma-comment", "f.md", "--file", "F1"])).out, /^warning: no --node, so Figma F1 is pinned as a whole file and any edit to it refuses the post/m);
+  const record = JSON.parse(readFileSync(join(figma.dir, "state", "drafts", `${join(figma.dir, "f.md").replace(/\//g, "_")}.sources.json`), "utf8"));
+  assert.deepEqual(record.warnings.map((line) => line.split(",")[0]), ["warning: no --node", "warning: no read pins for f.md"]);
   const review = world({ pr: 701, gh: POSTED, web: { document: textDoc(TAB) }, map: { name: "p", repos: [{ path: ".", role: "FE", branch: "dev" }], language: { pr_review: "en" } } });
   review.file("d.md", DRAFT.replace("sets it.", `sets it, see ${FIGMA_NODE}.`));
   const reviewPins = await lint(review, "draft-lint", ["pr-comment", "d.md"]);
@@ -523,6 +532,6 @@ test("a corrupt sources record refuses with a clear message and writes nothing",
   writeFileSync(join(drafts, record), "{ broken");
   const result = await w.run("gdoc-comments", ["reply", "c1", "--body-file", "g.md", "--doc", "D"]);
   assert.notEqual(result.code, 0);
-  assert.match(result.out, /refused: the sources record for g\.md cannot be read \(.+\); run draft-lint\.mjs doc-comment g\.md --doc D, then ask the user again/);
+  assert.match(result.out, /refused: the sources record for g\.md cannot be read \(.+\); run draft-lint\.mjs doc-comment g\.md --doc D \[--pinned-at <file pin-sources ran for>\], then ask the user again/);
   assert.deepEqual(w.writes(), []);
 });
