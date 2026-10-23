@@ -342,10 +342,11 @@ test("a lint with read pins asks origin only once per ref it pins, and git never
   const p = project();
   assert.equal(p.lint("pin-sources", p.at("d.md"), "--pr", "701").status, 0);
   p.rewrite("d.md", DRAFT);
+  git(p.fe.clone, "config", "core.sshCommand", "ssh -i /keys/review");
   const bin = tempDir("tedy-gitlog-");
   const log = join(bin, "calls.log");
   const real = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
-  writeFileSync(join(bin, "git"), `#!/usr/bin/env node\nimport { appendFileSync } from "node:fs";\nimport { spawnSync } from "node:child_process";\nconst args = process.argv.slice(2);\nappendFileSync(${JSON.stringify(log)}, \`\${process.env.GIT_TERMINAL_PROMPT ?? "-"} \${args.join(" ")}\\n\`);\nprocess.exit(spawnSync(${JSON.stringify(real)}, args, { stdio: "inherit" }).status ?? 1);\n`);
+  writeFileSync(join(bin, "git"), `#!/usr/bin/env node\nimport { appendFileSync } from "node:fs";\nimport { spawnSync } from "node:child_process";\nconst args = process.argv.slice(2);\nappendFileSync(${JSON.stringify(log)}, \`\${process.env.GIT_TERMINAL_PROMPT ?? "-"} [\${process.env.GIT_SSH_COMMAND ?? "-"}] \${args.join(" ")}\\n\`);\nprocess.exit(spawnSync(${JSON.stringify(real)}, args, { stdio: "inherit" }).status ?? 1);\n`);
   chmodSync(join(bin, "git"), 0o755);
   writeFileSync(log, "");
   const path = process.env.PATH;
@@ -360,6 +361,9 @@ test("a lint with read pins asks origin only once per ref it pins, and git never
   const remote = calls.filter((line) => / (ls-remote|fetch) /.test(line));
   assert.deepEqual(remote.filter((line) => line.includes("ls-remote")).length, 2, remote.join("\n"));
   assert.ok(remote.every((line) => line.startsWith("0 ")), remote.join("\n"));
+  assert.ok(remote.some((line) => line.startsWith("0 [ssh -i /keys/review -o BatchMode=yes] ") && line.includes(`-C ${p.fe.clone} `)), remote.join("\n"));
+  assert.ok(remote.some((line) => line.startsWith("0 [ssh -o BatchMode=yes] ") && line.includes(`-C ${p.be.clone} `)), remote.join("\n"));
+  assert.ok(remote.every((line) => line.includes("-o BatchMode=yes] ")), remote.join("\n"));
 });
 
 test("a branch or PR the read pins lack is pinned at lint with a warning the record keeps, and a --branch read pin the draft does not cite is kept", () => {

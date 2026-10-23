@@ -62,10 +62,21 @@ export const branchTokens = (text) => unique([...text.matchAll(/:\d+(?:[-,]\d+)*
 
 const gitEnv = () => ({ ...process.env, GIT_TERMINAL_PROMPT: "0" });
 
-export const runGit = (dir, args) => execFileSync("git", ["--literal-pathspecs", "-C", dir, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_BUFFER, env: gitEnv() }).trim();
+function sshCommand(dir) {
+  if (process.env.GIT_SSH_COMMAND) return process.env.GIT_SSH_COMMAND;
+  try {
+    return execFileSync("git", ["-C", dir, "config", "--get", "core.sshCommand"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: GIT_TIMEOUT_MS }).trim() || "ssh";
+  } catch {
+    return "ssh";
+  }
+}
+
+const networkEnv = (dir) => ({ ...gitEnv(), GIT_SSH_COMMAND: `${sshCommand(dir)} -o BatchMode=yes` });
+
+export const runGit = (dir, args) => execFileSync("git", ["--literal-pathspecs", "-C", dir, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_BUFFER, env: ["fetch", "ls-remote"].includes(args[0]) ? networkEnv(dir) : gitEnv() }).trim();
 
 async function lsRemote(dir, args) {
-  const { stdout } = await execFileAsync("git", ["-C", dir, "ls-remote", ...args], { encoding: "utf8", timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_BUFFER, env: gitEnv() });
+  const { stdout } = await execFileAsync("git", ["-C", dir, "ls-remote", ...args], { encoding: "utf8", timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_BUFFER, env: networkEnv(dir) });
   return new Map(
     stdout
       .split("\n")
