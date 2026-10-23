@@ -508,6 +508,21 @@ test("a branch cite that no repo pins warns at the lint, and the post needs that
   assert.equal(sent(w).length, 1);
 });
 
+test("a cite of the reviewed repo's own branch warns that it pins nothing, unless a pin-sources --branch read pin holds it", async () => {
+  const review = () => world({ pr: 701, gh: POSTED, map: { name: "p", repos: [{ path: ".", role: "FE", branch: "dev" }], language: { pr_review: "en" } } });
+  const draft = (w) => DRAFT.replaceAll("abc1234", w.checkout.pr(701).slice(0, 7));
+  const bare = review();
+  bare.file("d.md", draft(bare));
+  const warned = await lint(bare, "draft-lint", ["pr-comment", "d.md", "--repo", "o/r"]);
+  assert.ok(warned.includes("warning: the cite @dev pins nothing: only the reviewed repo . has origin/dev, its own branch, which is pinned only by pin-sources --branch .:dev; add that before the read, or cite the branch where the line lives"), warned.join("\n"));
+  const held = review();
+  assert.equal((await held.run("draft-lint", ["pin-sources", "d.md", "--pr", "701", "--repo", "o/r", "--branch", ".:dev"])).code, 0);
+  held.file("d.md", draft(held));
+  const pins = await lint(held, "draft-lint", ["pr-comment", "d.md", "--repo", "o/r"]);
+  assert.ok(pins.some((line) => /^pinned: \. origin\/dev@[0-9a-f]{40} \(read \S+\)$/.test(line)), pins.join("\n"));
+  assert.deepEqual(pins.filter((line) => line.startsWith("warning: ")), []);
+});
+
 test("the Doc and OpenProject lints record the warning of a branch cite that no repo pins", async () => {
   const warning = "warning: the cite @release/9 pins nothing: no repo in the project map has origin/release/9; check the branch name, or add pin-sources --branch <repo>:release/9 before the read";
   const cite = "Does src/fee.ts:4@release/9 still charge the payer?";

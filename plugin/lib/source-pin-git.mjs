@@ -191,14 +191,14 @@ async function pinRepo(repo, asked, tokens, heads, git) {
   return { pins, problems };
 }
 
-export async function pinRepos(repos, text, { extra = [], reviewed, heads = lsRemoteHeads, git = runGit } = {}) {
+export async function pinRepos(repos, text, { extra = [], reviewed, readRefs = [], heads = lsRemoteHeads, git = runGit } = {}) {
   const tokens = branchTokens(text);
   const { asked, problems } = askedBranches(repos, extra);
   const results = await Promise.all(repos.map((repo) => pinRepo({ ...repo, reviewed: repo.name === reviewed }, asked.get(repo.name), tokens, heads, git)));
   const pins = results.flatMap((result) => result.pins);
   const own = repos.find((repo) => repo.name === reviewed);
   const warnings = tokens
-    .filter((token) => !pins.some((pin) => pin.ref === `origin/${token}`))
+    .filter((token) => !pins.some((pin) => pin.ref === `origin/${token}`) && !readRefs.includes(`origin/${token}`))
     .map((token) =>
       own?.branches.includes(token)
         ? `warning: the cite @${token} pins nothing: only the reviewed repo ${own.name} has origin/${token}, its own branch, which is pinned only by pin-sources --branch ${own.name}:${token}; add that before the read, or cite the branch where the line lives`

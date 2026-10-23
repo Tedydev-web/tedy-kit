@@ -94,6 +94,13 @@ test("a cite of another branch of the reviewed repo pins that branch, and a push
   const refused = p.write(["post", p.at("d.md"), "--repo", "o/r"]);
   assert.equal(refused.status, 1, refused.out);
   assert.match(refused.out, /^refused: \. origin\/feature\/x moved from .* and changed a file the text being posted names$/m);
+  const read = project(draftWith(body));
+  git(read.fe.root, "--git-dir", read.fe.origin, "branch", "feature/x", "dev");
+  assert.equal(read.lint("pin-sources", read.at("d.md"), "--pr", "701").status, 0);
+  read.rewrite("d.md", draftWith(body));
+  const warned = read.lint("pr-comment", read.at("d.md"), "--diff", read.at("pr.diff"));
+  assert.equal(warned.status, 0, warned.out);
+  assert.ok(warned.out.includes(`warning: . origin/feature/x was not pinned by draft-lint.mjs pin-sources ${read.at("d.md")}, so it was pinned now, at lint\n`), warned.out);
 });
 
 test("draft-lint fails when a map repo or the PR head cannot be pinned, and passes a bare cite now that cites are not parsed", () => {
