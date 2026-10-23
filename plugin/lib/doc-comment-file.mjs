@@ -10,7 +10,7 @@ import { fetchTab, quoteCount } from "./prd-section.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { approvalLines, renderDocComment } from "./publish-approval-render.mjs";
-import { describePin, pinSourcesOf, readPinnedDocs, recordPins, sayNotices } from "./source-pins.mjs";
+import { describePin, pinnedSources, pinSourcesOf, readPinnedDocs, recordPins, sayNotices } from "./source-pins.mjs";
 
 const GROUPS = ["A", "B"];
 
@@ -97,7 +97,10 @@ async function post(itemsFile, flags) {
   }
   console.log(approvalLines(todo.map((item) => renderDocComment(item, tabOf(item.epic)))));
   console.log(`WRITE → Google Doc ${map.prd.doc} : ${todo.length} anchored comments (${data.items.length - todo.length} already posted)`);
-  if (!flags.apply) return 0;
+  if (!flags.apply) {
+    for (const line of pinnedSources(itemsFile, "").warnings ?? []) console.log(line);
+    return 0;
+  }
   requireExplicitTarget("doc", flags.doc, { expected: map.prd.doc });
   const google = await session({ doc: map.prd.doc }, true);
   const { notices, warnings } = await recheckDocTarget(map.prd.doc, itemsFile, `doc-comment-file.mjs ${itemsFile}`, { texts: todo.map((item) => item.comment) });

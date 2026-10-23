@@ -391,6 +391,17 @@ test("read pins of the Doc and of Figma nodes taken before the read hold at the 
   assert.equal(sent(w).length, 0);
 });
 
+test("doc-comment-file post without --apply prints the warnings its lint recorded, for the approval preview", async () => {
+  const w = world({ mode: "ask", web: { document: textDoc(TAB), tabs: { "t.1": TAB } }, map: PRD_MAP });
+  w.file("items.json", JSON.stringify({ title: "PRD", items: [ITEM] }));
+  const lintWarnings = (await lint(w, "doc-comment-file", ["items.json"])).filter((line) => line.startsWith("warning: "));
+  assert.ok(lintWarnings.length);
+  const dry = await w.run("doc-comment-file", ["post", "items.json", "--html", "out.html"]);
+  assert.equal(dry.code, 0, dry.out);
+  assert.deepEqual(dry.out.split("\n").filter((line) => line.startsWith("warning: ")), lintWarnings);
+  assert.deepEqual(sent(w), []);
+});
+
 test("doc-comment-file pins the Doc before it reads the tabs, and with a read pin of the Doc reads it only for the recheck", async () => {
   const w = world({ mode: "ask", web: { document: textDoc(TAB), tabs: { "t.1": TAB } }, map: PRD_MAP });
   const docReads = (from) => w.reads().slice(from).filter((line) => line.startsWith("docs."));
