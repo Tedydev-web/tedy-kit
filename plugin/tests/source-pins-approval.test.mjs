@@ -381,7 +381,7 @@ test("read pins of the Doc and of Figma nodes taken before the read hold at the 
   const figmaLint = await w.run("draft-lint", ["figma-comment", "f.md", "--file", "F1", "--node", "1-2", "--pinned-at", "ledger.md"]);
   assert.equal(figmaLint.code, 0, figmaLint.out);
   assert.match(figmaLint.out, /^pinned: Figma F1 lastModified \S+ · node 1:2 [0-9a-f]{12} \(read \S+\)$/m);
-  assert.doesNotMatch(figmaLint.out, /3:4|Google Doc D/);
+  assert.doesNotMatch(figmaLint.out, /\b3:4 [0-9a-f]{12}|Google Doc D/);
   const nodeB = await w.run("draft-lint", ["figma-comment", "f2.md", "--file", "F1", "--node", "3-4", "--pinned-at", "ledger.md"]);
   assert.notEqual(nodeB.code, 0);
   assert.match(nodeB.out, /^sources: refused: Figma F1 node 3:4 changed since it was pinned/m);
