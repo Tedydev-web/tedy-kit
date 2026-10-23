@@ -36,7 +36,7 @@ git -C <repo> show <sha>:<path>
 git -C <repo> grep -n "<pattern>" <sha> -- <path>
 ```
 
-- Run `pin-sources` before the first read; `<sha>` is the full sha its `pinned: <repo> origin/<branch>@<sha>` line prints for that repo. It also moves `origin/<branch>` to that sha, so `origin/<branch>` reads the same code until the next pin; never fetch between the pin and the read.
+- Run `pin-sources` before the first read; `<sha>` is the full sha its `pinned: <repo> origin/<branch>@<sha>` line prints for that repo. It also moves `origin/<branch>` to that sha, and so does every later lint, which pins the tip origin has then; so read only by `<sha>`, never by `origin/<branch>`, and never fetch between the pin and the read.
 - `<branch>` is the integration branch in the map (`origin/HEAD` when unset, as `project-map.mjs doctor` and the pins read it). Read from the pinned commit; never check out, edit or commit in a sibling or `readonly` repo.
 - Check the writer, not the schema: a field on a DTO or model is real only when code that saves it sets it. Name the writer `path:line@branch`.
 - Cite a backend fact as `path:line@branch`. The lint and the publish step ask origin again and refuse when a changed file is named in the text.
