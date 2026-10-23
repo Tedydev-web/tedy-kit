@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { STATE_DIR, gateSwitches, logGate, readHookInput } from "./hook-io.mjs";
 import { CLAUDE_SETTINGS, readSettings, stateDenyRules } from "./publish-approval-settings.mjs";
 import { chatLanguage, labels } from "./labels.mjs";
@@ -9,6 +9,7 @@ import { tokenize } from "./shell-segments.mjs";
 
 export const APPROVAL_TTL_MS = 30 * 60 * 1000;
 const APPROVAL_KEYS = ["post.asIs", "approve.all"];
+const PROFILE_SCRIPT = fileURLToPath(new URL("../scripts/profile.mjs", import.meta.url));
 
 export const approvalsDir = (state = STATE_DIR) => join(state, "approvals");
 
@@ -96,7 +97,7 @@ export function requireExplicitTarget(flag, given, { expected, mode = gateSwitch
 }
 
 function requireStateDeny(settings, state) {
-  const again = "run node <plugin>/scripts/profile.mjs publish-approval answer, then this command again. Nothing was written.";
+  const again = `run node ${PROFILE_SCRIPT} publish-approval answer, then this command again. Nothing was written.`;
   let deny;
   try {
     ({ deny } = readSettings(settings));
