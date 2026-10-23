@@ -481,6 +481,23 @@ test("a figma-comment lint on a node the read pins lack pins it at lint and warn
   assert.match(result.out, /^warning: Figma F1 node 5:6 was not pinned by draft-lint\.mjs pin-sources ledger\.md, so it was pinned now, at lint$/m);
 });
 
+test("a read pin of some nodes does not narrow a draft that links the whole file: the whole file is pinned at lint and any edit refuses", async () => {
+  const w = world({ mode: "ask", web: { figma: [] } });
+  w.file("ledger.md", "# ledger\n");
+  assert.equal((await w.run("draft-lint", ["pin-sources", "ledger.md", "--file", "F1", "--node", "1-2"])).code, 0);
+  w.file("f.md", "@lam Màn này thiếu trạng thái rỗng, xem https://www.figma.com/design/F1/App.\n");
+  const result = await w.run("draft-lint", ["figma-comment", "f.md", "--file", "F1", "--node", "1-2", "--pinned-at", "ledger.md"]);
+  assert.equal(result.code, 0, result.out);
+  assert.match(result.out, /^pinned: Figma F1 lastModified \S+ · node 1:2 [0-9a-f]{12} \(read \S+\)$/m);
+  assert.match(result.out, /^pinned: Figma F1 lastModified \S+ · node 1:2 [0-9a-f]{12} · whole file \(at lint\)$/m);
+  assert.match(result.out, /^warning: Figma F1 file was not pinned by draft-lint\.mjs pin-sources ledger\.md, so it was pinned now, at lint$/m);
+  moveFigma(w);
+  const posted = await w.run("figma-comments", ["post", "1-2", "--body-file", "f.md", "--file", "F1"]);
+  assert.notEqual(posted.code, 0);
+  assert.match(posted.out, /refused: Figma F1 lastModified changed from \S+ to \S+ since it was pinned and the draft links the whole file, not a node/);
+  assert.deepEqual(sent(w), []);
+});
+
 test("every lint pins the links in its text and the map repos, and figma-comment warns without --node", async () => {
   const doc = "https://docs.google.com/document/d/D2/edit";
   const figma = world({ mode: "ask", web: { figma: [], document: textDoc(TAB) }, map: { name: "p", repos: [{ path: ".", role: "FE", branch: "dev" }], language: { doc_figma: "en", pr_review: "en" } } });
