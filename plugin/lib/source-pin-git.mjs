@@ -168,7 +168,8 @@ function askedBranches(repos, extra) {
 }
 
 async function pinRepo(repo, asked, tokens, heads, git) {
-  if (repo.reviewed && !asked.length) return { pins: [], problems: [] };
+  const wanted = repo.reviewed ? unique([...asked, ...tokens.filter((token) => !repo.branches.includes(token))]) : unique([...repo.branches, ...asked, ...tokens]);
+  if (repo.reviewed && !wanted.length) return { pins: [], problems: [] };
   if (!repo.reviewed && !repo.branches.length) return { pins: [], problems: [`${repo.name} has no branch in the project map and origin/HEAD is unset; set its branch in the map or run git -C ${repo.dir} remote set-head origin --auto`] };
   let tips;
   try {
@@ -179,7 +180,7 @@ async function pinRepo(repo, asked, tokens, heads, git) {
   const problems = asked.filter((branch) => !tips.has(branch)).map((branch) => `--branch ${repo.name}:${branch}: origin of ${repo.name} has no branch ${branch}`);
   if (!repo.reviewed && !repo.branches.some((branch) => tips.has(branch))) problems.push(`${repo.name} has no ${repo.branches.map((branch) => `origin/${branch}`).join(" or ")}; fix the branch in the project map or fetch the repo`);
   const pins = [];
-  for (const branch of (repo.reviewed ? unique(asked) : unique([...repo.branches, ...asked, ...tokens])).filter((candidate) => tips.has(candidate))) {
+  for (const branch of wanted.filter((candidate) => tips.has(candidate))) {
     try {
       pins.push(takeTip(git, repo.dir, branchPin(repo, branch, tips.get(branch))));
     } catch (error) {
@@ -194,7 +195,16 @@ export async function pinRepos(repos, text, { extra = [], reviewed, heads = lsRe
   const tokens = branchTokens(text);
   const { asked, problems } = askedBranches(repos, extra);
   const results = await Promise.all(repos.map((repo) => pinRepo({ ...repo, reviewed: repo.name === reviewed }, asked.get(repo.name), tokens, heads, git)));
-  return { pins: results.flatMap((result) => result.pins), problems: [...problems, ...results.flatMap((result) => result.problems)] };
+  const pins = results.flatMap((result) => result.pins);
+  const own = repos.find((repo) => repo.name === reviewed);
+  const warnings = tokens
+    .filter((token) => !pins.some((pin) => pin.ref === `origin/${token}`))
+    .map((token) =>
+      own?.branches.includes(token)
+        ? `warning: the cite @${token} pins nothing: only the reviewed repo ${own.name} has origin/${token}, its own branch, which is pinned only by pin-sources --branch ${own.name}:${token}; add that before the read, or cite the branch where the line lives`
+        : `warning: the cite @${token} pins nothing: no repo in the project map has origin/${token}; check the branch name, or add pin-sources --branch <repo>:${token} before the read`,
+    );
+  return { pins, problems: [...problems, ...results.flatMap((result) => result.problems)], warnings };
 }
 
 export function repoSlug(url) {

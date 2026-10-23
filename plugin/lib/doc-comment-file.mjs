@@ -154,7 +154,7 @@ async function main([itemsFile, ...rest]) {
     console.error(`doc-comment-file: no file written; fix these first:\n${problems.map((problem) => `- ${problem}`).join("\n")}`);
     return 1;
   }
-  const pins = await recordPins(itemsFile, text, taken.pins, { pinnedAt, texts: comments });
+  const pins = await recordPins(itemsFile, text, taken.pins, { pinnedAt, texts: comments, warnings: taken.warnings });
   if (!pins) return 1;
   for (const each of pins) console.log(describePin(each));
   const dir = join(map.paths[0], "plans", "drafts");

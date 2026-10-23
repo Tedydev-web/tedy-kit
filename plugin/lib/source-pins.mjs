@@ -60,13 +60,13 @@ export async function linkPins(text, extra = {}, read = []) {
 
 export async function pinSourcesOf(text, extra = {}, { pr, repo, branches = [], readKey } = {}) {
   const resolved = resolveMap(process.cwd());
-  if (!resolved) return { pins: [], problems: [`no project map covers ${process.cwd()}, so its repos cannot be pinned; run this from a folder of a mapped project, or map it with /tedy:setup`] };
+  if (!resolved) return { pins: [], problems: [`no project map covers ${process.cwd()}, so its repos cannot be pinned; run this from a folder of a mapped project, or map it with /tedy:setup`], warnings: [] };
   const repos = mapRepos(resolved.map);
   const head = pr === undefined ? { pins: [], problems: [] } : pinPullHead(pr, repos, { repo });
   const git = await pinRepos(repos, text, { extra: branches, reviewed: head.pins[0]?.repo });
   const problems = [...git.problems, ...head.problems];
-  if (problems.length) return { pins: [], problems };
-  return { pins: [...git.pins, ...head.pins, ...(await linkPins(text, extra, readKey === undefined ? [] : (loadReadPins(readKey)?.sources ?? [])))], problems: [] };
+  if (problems.length) return { pins: [], problems, warnings: [] };
+  return { pins: [...git.pins, ...head.pins, ...(await linkPins(text, extra, readKey === undefined ? [] : (loadReadPins(readKey)?.sources ?? [])))], problems: [], warnings: git.warnings };
 }
 
 async function recheckLinked(pin) {

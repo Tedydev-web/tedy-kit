@@ -490,6 +490,24 @@ test("openproject preview, comment and comment-edit keep the read pins of --pinn
   });
 });
 
+test("a branch cite that no repo pins warns at the lint, and the post needs that warning in its approval", async () => {
+  const { w, draft } = gitWorld();
+  const cited = draft.replace("`src/a.ts:1@dev`", "`src/a.ts:1@release/9`");
+  w.file("d.md", cited);
+  const pins = await lint(w, "draft-lint", ["pr-comment", "d.md", "--repo", "o/r"]);
+  const warning = "warning: the cite @release/9 pins nothing: no repo in the project map has origin/release/9; check the branch name, or add pin-sources --branch <repo>:release/9 before the read";
+  assert.ok(pins.includes(warning), pins.join("\n"));
+  const args = ["post", "d.md", "--repo", "o/r"];
+  w.approve([cited, ...pins.filter((line) => line !== warning), w.line("github-write", args)].join("\n"));
+  const unwarned = await w.run("github-write", args);
+  assert.match(unwarned.out, /no unused approval matches this write/, unwarned.out);
+  assert.deepEqual(sent(w), []);
+  w.approve([cited, ...pins, w.line("github-write", args)].join("\n"));
+  const posted = await w.run("github-write", args);
+  assert.equal(posted.code, 0, posted.out);
+  assert.equal(sent(w).length, 1);
+});
+
 test("a Doc writer rechecks the read git pins against the body it posts", async () => {
   const sibling = siblingRepo();
   const w = world({ mode: "ask", web: { drive: [thread], document: textDoc(TAB) }, map: { name: "p", repos: [{ path: sibling.clone, role: "BE", branch: "dev" }], language: { doc_figma: "en" } } });

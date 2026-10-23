@@ -132,7 +132,7 @@ test("the recheck asks each repo's origin once for all its pinned refs, every re
   assert.deepEqual(calls.map(([dir]) => dir), [two.clone]);
 });
 
-test("the reviewed repo pins only the branches --branch names, never one a cite of another repo names", async () => {
+test("the reviewed repo skips a cite of its own integration branch but pins a cite of any other branch it has", async () => {
   const repos = [{ name: ".", dir: "/fake/fe", branches: ["main"] }, { name: "../be", dir: "/fake/be", branches: ["main"] }];
   const asked = [];
   const heads = async (dir) => {
@@ -140,12 +140,27 @@ test("the reviewed repo pins only the branches --branch names, never one a cite 
     return new Map([["main", "a".repeat(40)], ["feature/x", "b".repeat(40)]]);
   };
   const git = () => "";
+  const own = await pinRepos(repos, "The backend never sets it: src/user/user.service.ts:42@main.", { reviewed: ".", heads, git });
+  assert.deepEqual(own.pins.map((pin) => `${pin.repo} ${pin.ref}`), ["../be origin/main"]);
+  assert.deepEqual(asked, ["/fake/be"]);
+  assert.deepEqual(own.warnings, []);
   const text = "The backend never sets it: src/user/user.service.ts:42@main, and src/pages/profile.tsx:7@feature/x shows it empty.";
   const cited = await pinRepos(repos, text, { reviewed: ".", heads, git });
-  assert.deepEqual(cited.pins.map((pin) => `${pin.repo} ${pin.ref}`), ["../be origin/main", "../be origin/feature/x"]);
-  assert.deepEqual(asked, ["/fake/be"]);
-  const named = await pinRepos(repos, text, { reviewed: ".", extra: [".:feature/x"], heads, git });
-  assert.deepEqual(named.pins.map((pin) => `${pin.repo} ${pin.ref}`), [". origin/feature/x", "../be origin/main", "../be origin/feature/x"]);
+  assert.deepEqual(cited.pins.map((pin) => `${pin.repo} ${pin.ref}`), [". origin/feature/x", "../be origin/main", "../be origin/feature/x"]);
+  const named = await pinRepos(repos, "", { reviewed: ".", extra: [".:main"], heads, git });
+  assert.deepEqual(named.pins.map((pin) => `${pin.repo} ${pin.ref}`), [". origin/main", "../be origin/main"]);
+});
+
+test("a branch cite that no repo pins is a warning: a branch no repo has, or the reviewed repo's own branch", async () => {
+  const repos = [{ name: ".", dir: "/fake/fe", branches: ["main"] }, { name: "../be", dir: "/fake/be", branches: ["dev"] }];
+  const heads = async (dir) => new Map(dir === "/fake/fe" ? [["main", "a".repeat(40)]] : [["dev", "b".repeat(40)]]);
+  const git = () => "";
+  const result = await pinRepos(repos, "See src/a.ts:1@main and src/b.ts:2@release/9.", { reviewed: ".", heads, git });
+  assert.deepEqual(result.pins.map((pin) => `${pin.repo} ${pin.ref}`), ["../be origin/dev"]);
+  assert.deepEqual(result.warnings, [
+    "warning: the cite @main pins nothing: only the reviewed repo . has origin/main, its own branch, which is pinned only by pin-sources --branch .:main; add that before the read, or cite the branch where the line lives",
+    "warning: the cite @release/9 pins nothing: no repo in the project map has origin/release/9; check the branch name, or add pin-sources --branch <repo>:release/9 before the read",
+  ]);
 });
 
 test("pin-sources --branch pins a branch the map does not name, and fails on a repo the map lacks or a branch origin lacks", async () => {
@@ -170,7 +185,7 @@ test("mapRepos resolves map repos against the first path; an unset branch means 
   ]);
   assert.deepEqual(mapRepos(undefined), []);
   git(sibling.clone, "symbolic-ref", "--delete", "refs/remotes/origin/HEAD");
-  assert.deepEqual(await pinRepos(mapRepos({ paths: ["/w"], repos: [{ path: sibling.clone, role: "FE" }] }), ""), { pins: [], problems: [`${sibling.clone} has no branch in the project map and origin/HEAD is unset; set its branch in the map or run git -C ${sibling.clone} remote set-head origin --auto`] });
+  assert.deepEqual(await pinRepos(mapRepos({ paths: ["/w"], repos: [{ path: sibling.clone, role: "FE" }] }), ""), { pins: [], problems: [`${sibling.clone} has no branch in the project map and origin/HEAD is unset; set its branch in the map or run git -C ${sibling.clone} remote set-head origin --auto`], warnings: [] });
 });
 
 test("a lint pins every map repo at the tip origin has now, not the clone's stale remote ref, and adds branches the draft names", async () => {

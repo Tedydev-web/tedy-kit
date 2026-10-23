@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runWithFakeGh } from "./fake-gh-for-tests.mjs";
-import { git, siblingRepo } from "./git-sibling-for-tests.mjs";
+import { commitFile, git, siblingRepo } from "./git-sibling-for-tests.mjs";
 import { profileWith, tempDir } from "./temp-dir-for-tests.mjs";
 
 const LINT = new URL("../lib/draft-lint.mjs", import.meta.url).pathname;
@@ -79,6 +79,21 @@ test("a merge into the reviewed repo's own branch does not stop a post on its PR
   assert.equal(be.lint("pr-comment", be.at("d.md"), "--diff", be.at("pr.diff")).status, 0);
   be.be.push("src/a.ts", "a2\n", "fix: the backend writer changed");
   assert.equal(be.write(["post", be.at("d.md"), "--repo", "o/r"]).status, 1);
+});
+
+test("a cite of another branch of the reviewed repo pins that branch, and a push to it refuses the post", () => {
+  const body = "The label is wrong, `src/a.ts:1@feature/x` sets it.";
+  const p = project(draftWith(body));
+  git(p.fe.root, "--git-dir", p.fe.origin, "branch", "feature/x", "dev");
+  const lint = p.lint("pr-comment", p.at("d.md"), "--diff", p.at("pr.diff"));
+  assert.equal(lint.status, 0, lint.out);
+  assert.match(lint.out, new RegExp(`^pinned: \\. origin/feature/x@${p.feSha} \\(at lint\\)$`, "m"));
+  assert.doesNotMatch(lint.out, /pins nothing/);
+  commitFile(p.fe.upstream, "src/a.ts", "a2\n", "fix: the label writer changed");
+  git(p.fe.upstream, "push", "-q", "origin", "dev:feature/x");
+  const refused = p.write(["post", p.at("d.md"), "--repo", "o/r"]);
+  assert.equal(refused.status, 1, refused.out);
+  assert.match(refused.out, /^refused: \. origin\/feature\/x moved from .* and changed a file the text being posted names$/m);
 });
 
 test("draft-lint fails when a map repo or the PR head cannot be pinned, and passes a bare cite now that cites are not parsed", () => {

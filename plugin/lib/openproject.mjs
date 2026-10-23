@@ -92,7 +92,7 @@ async function pinText(file, text, posted, pinnedAt) {
   const taken = await pinSourcesOf(posted, {}, { readKey: pinnedAt ?? file });
   for (const problem of taken.problems) console.log(`sources: ${problem}`);
   if (taken.problems.length) return null;
-  return recordPins(file, text, taken.pins, { pinnedAt, texts: [posted] });
+  return recordPins(file, text, taken.pins, { pinnedAt, texts: [posted], warnings: taken.warnings });
 }
 
 async function pinComment(file, text, posted, pinnedAt) {
