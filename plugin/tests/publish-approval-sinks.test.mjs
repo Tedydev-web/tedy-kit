@@ -8,6 +8,8 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { recordApprovals } from "../lib/publish-approval-ticket.mjs";
 import { LABELS } from "../lib/labels.mjs";
+import { stateDenyRules } from "../lib/publish-approval-settings.mjs";
+import { pullRequestCheckout } from "./git-sibling-for-tests.mjs";
 import { profileWith, tempDir } from "./temp-dir-for-tests.mjs";
 
 const VI = LABELS.vi;
@@ -44,12 +46,15 @@ function place(mode = "answer") {
   writeFileSync(fixture, JSON.stringify({ write: { id: 77, html_url: "https://x/77" }, graphql: { data: { resolveReviewThread: { thread: { isResolved: true } } } }, prView: { number: 3, isDraft: true, author: { login: "me" }, body: "old" }, login: "me" }));
   const log = join(dir, "gh.log");
   writeFileSync(log, "");
-  const env = { ...process.env, PATH: `${BIN}:${process.env.PATH}`, GH_FIXTURE: fixture, GH_LOG: log, HOME: dir, TEDY_STATE_DIR: state, TEDY_PROFILE_DIR: profileWith({ gates: mode ? { publishApproval: mode } : {}, language: { chat: "en" } }) };
+  pullRequestCheckout(dir, 1);
+  const settings = join(dir, "claude-settings.json");
+  writeFileSync(settings, JSON.stringify({ permissions: { deny: stateDenyRules(state) } }));
+  const env = { ...process.env, TEDY_CLAUDE_SETTINGS: settings, PATH: `${BIN}:${process.env.PATH}`, GH_FIXTURE: fixture, GH_LOG: log, HOME: dir, TEDY_STATE_DIR: state, TEDY_PROFILE_DIR: profileWith({ gates: mode ? { publishApproval: mode } : {}, language: { chat: "en" } }) };
   const writes = () => readFileSync(log, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)).filter((args) => args.some((token) => /^-X/.test(token)) || (args.includes("graphql") && args.some((token) => /mutation/.test(token))));
   const approve = (preview, text = "Đăng?") => recordApprovals({ session_id: "s", tool_use_id: "t", tool_input: { questions: [{ question: text, header: "x", options: [{ label: VI["post.asIs"], description: "d", preview }, { label: VI["post.hold"], description: "n" }] }] }, tool_response: { answers: { [text]: VI["post.asIs"] }, annotations: { [text]: { preview } } } }, { dir: join(state, "approvals"), accepted: ACCEPTED });
   const shell = (command, args) => spawnSync(command, args, { cwd: dir, env, encoding: "utf8" });
   const run = (script, args) => shell("node", [script, ...args]);
-  const lint = () => assert.equal(run(join(SCRIPTS, "draft-lint.mjs"), ["pr-reply", "b.md"]).status, 0);
+  const lint = () => assert.equal(run(join(SCRIPTS, "draft-lint.mjs"), ["pr-reply", "b.md", "--pr", "1"]).status, 0);
   lint();
   return { dir, env, state, writes, approve, run, shell, lint };
 }

@@ -9,7 +9,9 @@ import { logPostedText } from "./edit-log.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { notBefore, sinceTime } from "./since.mjs";
-import { nodeId, RECHECK, requireFresh, sayNotices, versionCheck } from "./source-pins.mjs";
+import { RECHECK } from "./source-pin-git.mjs";
+import { nodeId } from "./source-pin-links.mjs";
+import { pinnedSources, requireFresh, sayNotices, versionCheck } from "./source-pins.mjs";
 
 const API = "https://api.figma.com/v1";
 
@@ -36,11 +38,25 @@ export function threadsSince(comments, since) {
     .filter(({ root, replies }) => !since || [root, ...replies].some((comment) => notBefore(comment.created_at, since)));
 }
 
+async function figmaRequest(token, path, options) {
+  try {
+    return await requestJson(`${API}${path}`, { ...options, retry429: false, headers: { "X-Figma-Token": token } });
+  } catch (error) {
+    if (error.status !== 429) throw error;
+    throw new Error(`Figma answered HTTP 429 to ${path.split("?")[0]}${error.retryAfter ? ` (Retry-After ${error.retryAfter} s)` : ""}; it is rate limited, so nothing more was sent: wait, then run the same command again`);
+  }
+}
+
+const clients = new Map();
+
 export function client(flags) {
-  const token = readFileSync(join(homedir(), ".config", "figma", "token"), "utf8").trim();
   const file = flags.file ?? resolveMap(process.cwd())?.map.figma?.file;
   if (!file) throw new Error("no --file and no figma.file in the project map");
-  return { file, request: (path, options = {}) => requestJson(`${API}${path}`, { ...options, headers: { "X-Figma-Token": token } }) };
+  if (!clients.has(file)) {
+    const token = readFileSync(join(homedir(), ".config", "figma", "token"), "utf8").trim();
+    clients.set(file, { file, request: (path, options = {}) => figmaRequest(token, path, options) });
+  }
+  return clients.get(file);
 }
 
 export const canonicalJson = (value) =>
@@ -53,16 +69,41 @@ export const canonicalJson = (value) =>
           .join(",")}}`
       : JSON.stringify(value);
 
+const fileRead = (figma) => {
+  figma.read ??= { lastModified: null, nodes: new Map() };
+  return figma.read;
+};
+
+async function readNodes(figma, ids) {
+  const read = fileRead(figma);
+  const missing = [...new Set(ids)].filter((id) => !read.nodes.has(id));
+  if (missing.length) {
+    const data = await figma.request(`/files/${figma.file}/nodes?ids=${encodeURIComponent(missing.join(","))}`);
+    if (typeof data?.lastModified === "string") read.lastModified ??= data.lastModified;
+    for (const id of missing) read.nodes.set(id, data?.nodes?.[id] ?? null);
+  }
+  return read;
+}
+
 async function lastModified(figma) {
-  const modified = (await figma.request(`/files/${figma.file}?depth=1`))?.lastModified;
-  if (typeof modified !== "string") throw new Error(`Figma ${figma.file} returned no lastModified`);
-  return modified;
+  const read = fileRead(figma);
+  if (!read.lastModified) {
+    const modified = (await figma.request(`/files/${figma.file}?depth=1`))?.lastModified;
+    if (typeof modified !== "string") throw new Error(`Figma ${figma.file} returned no lastModified`);
+    read.lastModified = modified;
+  }
+  return read.lastModified;
 }
 
 async function nodeHashes(figma, ids) {
   if (!ids.length) return {};
-  const data = await figma.request(`/files/${figma.file}/nodes?ids=${encodeURIComponent(ids.join(","))}`);
-  return Object.fromEntries(ids.map((id) => [id, data?.nodes?.[id] ? createHash("sha256").update(canonicalJson(data.nodes[id])).digest("hex") : null]));
+  const read = await readNodes(figma, ids);
+  return Object.fromEntries(ids.map((id) => [id, read.nodes.get(id) ? createHash("sha256").update(canonicalJson(read.nodes.get(id))).digest("hex") : null]));
+}
+
+function pinnedNodes(file, key) {
+  const { sources } = pinnedSources(file, "");
+  return (sources ?? []).flatMap((pin) => (pin.kind === "figma" && pin.file === key ? Object.keys(pin.nodes ?? {}) : []));
 }
 
 export async function figmaPin(figma, nodes = [], whole = !nodes.length) {
@@ -121,8 +162,8 @@ async function main([command, target, ...rest]) {
     const body = readBody(flags);
     const node = nodeId(target);
     if (!node) throw new Error(`${target} is not a Figma node id such as 12-34 or 12:34`);
-    const nodes = await figma.request(`/files/${figma.file}/nodes?ids=${encodeURIComponent(node)}`);
-    const box = nodes.nodes?.[node]?.document?.absoluteBoundingBox;
+    const read = await readNodes(figma, [node, ...pinnedNodes(flags["body-file"], figma.file)]);
+    const box = read.nodes.get(node)?.document?.absoluteBoundingBox;
     if (!box) throw new Error(`node ${node} not found in ${figma.file}`);
     const twin = duplicateOnNode((await figma.request(`/files/${figma.file}/comments`)).comments, node, body);
     if (twin) throw new Error(`comment ${twin.id} on node ${node} already says this; nothing posted`);

@@ -3,7 +3,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { branchTokens, linkedDocs, mapRepos, namedIn, nodeId, pinnedSources, pinRepos, recheckRepos, runGit, sourcesPath, versionCheck, writeSources } from "../lib/source-pins.mjs";
+import { branchTokens, mapRepos, namedIn, pinRepos, recheckRepos, runGit } from "../lib/source-pin-git.mjs";
+import { linkedDocs, nodeId } from "../lib/source-pin-links.mjs";
+import { pinnedSources, sourcesPath, versionCheck, writeSources } from "../lib/source-pins.mjs";
 import { git, siblingRepo } from "./git-sibling-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
@@ -26,6 +28,14 @@ test("namedIn finds a changed path by its full path or its basename wherever the
   for (const text of ["fee-service.tsx sets it.", "old-fee-service.ts sets it.", "fee-service.ts2 sets it.", "fee_service.ts sets it.", "nothing here"]) assert.equal(namedIn([text], path), false, text);
   assert.equal(namedIn(["one", "two names tài-liệu.md here"], "docs/tài-liệu.md"), true);
   assert.equal(namedIn(["https://github.com/o/be/blob/dev/docs/t%C3%A0i-li%E1%BB%87u.md"], "docs/tài-liệu.md"), true);
+});
+
+test("namedIn matches a file with no extension by its full path only, and reads through markdown escapes and emphasis", () => {
+  assert.equal(namedIn(["The api changed."], "docs/api"), false);
+  assert.equal(namedIn(["See docs/api for the routes."], "docs/api"), true);
+  assert.equal(namedIn(["The Makefile target."], "Makefile"), true);
+  for (const text of ["Set in fee\\_service.ts.", "Set in _fee_service.ts_.", "Set in *fee_service.ts*.", "Set in __fee_service.ts__."]) assert.equal(namedIn([text], "src/fee_service.ts"), true, text);
+  assert.equal(namedIn(["Set in _fee.ts_ today."], "src/fee.ts"), true);
 });
 
 test("branchTokens reads every @branch token, trailing punctuation dropped", () => {
@@ -55,10 +65,35 @@ test("a lint pins every map repo at the tip origin has now, not the clone's stal
   const { pins, problems } = pinRepos(repoOf(sibling.clone), "Writer `src/a.ts:1@feature/v2`, mail me@example.com.");
   assert.deepEqual(problems, []);
   assert.deepEqual(pins, [
-    { kind: "git", repo: "../backend", ref: "origin/dev", sha: pushed },
-    { kind: "git", repo: "../backend", ref: "origin/feature/v2", sha: pushed },
+    { kind: "git", repo: "../backend", ref: "origin/dev", remote: "refs/heads/dev", local: "refs/remotes/origin/dev", sha: pushed },
+    { kind: "git", repo: "../backend", ref: "origin/feature/v2", remote: "refs/heads/feature/v2", local: "refs/remotes/origin/feature/v2", sha: pushed },
   ]);
   git(sibling.clone, "cat-file", "-e", `${pushed}^{commit}`);
+});
+
+test("a pin moves the remote-tracking ref to the pinned tip even when the commit was already in the clone, so origin/<branch> reads what was pinned", () => {
+  const sibling = siblingRepo();
+  const before = git(sibling.clone, "rev-parse", "refs/remotes/origin/dev");
+  const tip = sibling.push("src/a.ts", "a2\n", "fix: backend writer changed");
+  git(sibling.upstream, "checkout", "-q", "-b", "feature/y");
+  git(sibling.upstream, "push", "-q", "origin", "feature/y");
+  git(sibling.clone, "fetch", "-q", "origin", "feature/y:refs/heads/local-y");
+  assert.equal(git(sibling.clone, "rev-parse", "refs/remotes/origin/dev"), before);
+  const { pins } = pinRepos(repoOf(sibling.clone), "");
+  assert.equal(pins[0].sha, tip);
+  assert.equal(git(sibling.clone, "rev-parse", "refs/remotes/origin/dev"), tip);
+  assert.equal(git(sibling.clone, "show", "origin/dev:src/a.ts"), "a2");
+});
+
+test("a PR head pin refuses any move of the head, whatever the text names", () => {
+  const sibling = siblingRepo();
+  const first = sibling.pr(701);
+  const pin = { kind: "git", repo: "fe", dir: sibling.clone, pr: 701, ref: "pull/701/head", remote: "refs/pull/701/head", local: "refs/pr/701", sha: first };
+  assert.deepEqual(recheckRepos([pin], [], ["nothing named"]), { refusals: [], notices: [] });
+  sibling.push("src/b.ts", "b2\n", "fix: the author pushes during the read");
+  const moved = sibling.pr(701);
+  const { refusals } = recheckRepos([pin], [], ["nothing named"]);
+  assert.match(refusals[0], new RegExp(`^refused: fe pull/701/head moved from ${first.slice(0, 8)} to ${moved.slice(0, 8)} since it was pinned, so the PR under review changed\\n  commit ${moved.slice(0, 7)} fix: the author pushes during the read\\n`));
 });
 
 test("a lint fails on a map repo whose branch origin does not have, or whose origin cannot be reached", () => {
@@ -219,4 +254,22 @@ test("linkedDocs finds Figma files with their nodes, branch files, and Google Do
   const published = linkedDocs("Read https://docs.google.com/document/d/e/2PACX-1vT/pub please");
   assert.deepEqual(published.docs, []);
   assert.deepEqual(published.problems, ["https://docs.google.com/document/d/e/2PACX-1vT/pub is a published-to-web copy of a Google Doc, which cannot be pinned; link the Doc itself (docs.google.com/document/d/<id>)"]);
+});
+
+test("linkedDocs reads slides, make, site and embed Figma links, &amp; in a link, and Drive file and open links", () => {
+  const text = [
+    "https://www.figma.com/slides/Sl1/Deck?node-id=1-2",
+    "https://www.figma.com/make/Mk1/App",
+    "https://www.figma.com/site/St1/Site",
+    "https://www.figma.com/embed?embed_host=share&url=https%3A%2F%2Fwww.figma.com%2Fdesign%2FEm1%2FX%3Fnode-id%3D7-8",
+    "https://www.figma.com/design/Am1/X?t=zz&amp;node-id=3-4",
+    "https://drive.google.com/file/d/Df1/view",
+    "https://docs.google.com/open?id=Do1",
+    "https://docs.google.com/document/d/Dt1/edit?tab=t.0",
+  ].join(" and ");
+  assert.deepEqual(linkedDocs(text), {
+    figma: [{ file: "Sl1", nodes: ["1:2"], whole: false }, { file: "Mk1", nodes: [], whole: true }, { file: "St1", nodes: [], whole: true }, { file: "Am1", nodes: ["3:4"], whole: false }, { file: "Em1", nodes: ["7:8"], whole: false }],
+    docs: ["Df1", "Do1", "Dt1"],
+    problems: [],
+  });
 });

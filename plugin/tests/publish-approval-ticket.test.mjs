@@ -3,9 +3,11 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile, spawnSync } from "node:child_process";
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { APPROVAL_TTL_MS, consumeApproval, recordApprovals } from "../lib/publish-approval-ticket.mjs";
+import { stateDenyRules } from "../lib/publish-approval-settings.mjs";
 import { LABELS } from "../lib/labels.mjs";
 import { profileWith, tempDir } from "./temp-dir-for-tests.mjs";
 
@@ -26,7 +28,19 @@ function ticketWith(preview, { created = Date.now() } = {}) {
 }
 
 const tickets = (dir) => readdirSync(dir).filter((name) => name.endsWith(".json"));
-const consume = (dir, args, texts, extra = {}) => consumeApproval(argv(...args), texts, { dir, mode: "answer", ...extra });
+const SETTINGS = join(tempDir("tedy-claude-settings-"), "settings.json");
+writeFileSync(SETTINGS, JSON.stringify({ permissions: { deny: stateDenyRules(tmpdir()) } }));
+const consume = (dir, args, texts, extra = {}) => consumeApproval(argv(...args), texts, { dir, mode: "answer", settings: SETTINGS, ...extra });
+
+test("answer mode refuses to spend a ticket while settings lack a state deny rule, and says how to add them", () => {
+  const { dir } = ticketWith(`ok a\n${REPLY}`);
+  const partial = join(tempDir("tedy-claude-settings-"), "settings.json");
+  writeFileSync(partial, JSON.stringify({ permissions: { deny: stateDenyRules(tmpdir()).slice(0, 2) } }));
+  assert.throws(() => consume(dir, ["reply", "1", "2", "--body-file", "b.md"], ["ok a"], { settings: partial }), /lacks Edit\(\/\/.*drafts\/\*\*\) in permissions\.deny.*run node <plugin>\/scripts\/profile\.mjs publish-approval answer, then this command again\. Nothing was written\./);
+  assert.throws(() => consume(dir, ["reply", "1", "2", "--body-file", "b.md"], ["ok a"], { settings: join(tempDir("tedy-none-"), "settings.json") }), /publish approval is in answer mode, but .*settings\.json: not readable as JSON/);
+  assert.equal(tickets(dir).length, 1);
+  assert.ok(consume(dir, ["reply", "1", "2", "--body-file", "b.md"], ["ok a"]));
+});
 
 test("the hook writes one 600 ticket per approved question, holding the chosen option's preview", () => {
   const dir = tempDir("tedy-tickets-");
@@ -111,7 +125,7 @@ test("a prefix, a strict-prefix body, a dry-run line, a comment or a redirect in
   ];
   for (const [preview, [script, ...args], texts] of cases) {
     const { dir } = ticketWith(preview);
-    assert.throws(() => consumeApproval(["node", script, ...args], texts, { dir, mode: "answer" }), /no unused approval/, preview);
+    assert.throws(() => consumeApproval(["node", script, ...args], texts, { dir, mode: "answer", settings: SETTINGS }), /no unused approval/, preview);
   }
 });
 
@@ -143,8 +157,8 @@ test("two processes racing for one ticket: exactly one wins", async () => {
   const { dir } = ticketWith(`ok a\n${REPLY}`);
   const racer = join(tempDir("tedy-racer-"), "race.mjs");
   const lib = new URL("../lib/publish-approval-ticket.mjs", import.meta.url).href;
-  writeFileSync(racer, `import { consumeApproval } from ${JSON.stringify(lib)};\ntry { consumeApproval(["node", "/k/github-write.mjs", "reply", "1", "2", "--body-file", "b.md"], ["ok a"], { dir: process.argv[2], mode: "answer" }); console.log("won"); } catch { console.log("lost"); }\n`);
+  writeFileSync(racer, `import { consumeApproval } from ${JSON.stringify(lib)};\ntry { consumeApproval(["node", "/k/github-write.mjs", "reply", "1", "2", "--body-file", "b.md"], ["ok a"], { dir: process.argv[2], mode: "answer", settings: process.argv[3] }); console.log("won"); } catch { console.log("lost"); }\n`);
   const run = promisify(execFile);
-  const results = await Promise.all(Array.from({ length: 6 }, () => run("node", [racer, dir]).then((result) => result.stdout.trim())));
+  const results = await Promise.all(Array.from({ length: 6 }, () => run("node", [racer, dir, SETTINGS]).then((result) => result.stdout.trim())));
   assert.deepEqual(results.filter((result) => result === "won").length, 1, results.join(","));
 });

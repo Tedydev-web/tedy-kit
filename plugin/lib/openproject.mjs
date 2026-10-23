@@ -12,7 +12,7 @@ import { approvalLines, renderRollbackItem, renderWorkPackageDraft } from "./pub
 import { snapshotOnce, snapshotPath } from "./draft-lint.mjs";
 import { appendEditLog, frozenOriginal, labelText } from "./edit-log.mjs";
 import { chatLanguage } from "./labels.mjs";
-import { describePin, linkPins, recheckPinned, recordPins, sayNotices } from "./source-pins.mjs";
+import { describePin, pinSourcesOf, recheckPinned, recordPins, sayNotices } from "./source-pins.mjs";
 import { countWords, lintDrafts, lintWorkPackage, readiness, readinessLine } from "./task-lint.mjs";
 
 function projectOf(flags) {
@@ -89,8 +89,15 @@ async function recheckLinks(file, relint, texts) {
 }
 
 async function pinText(file, text, posted, pinnedAt) {
-  const pins = await recordPins(file, text, await linkPins(posted), { pinnedAt, texts: [posted] });
-  if (pins) console.log(pins.length ? pins.map(describePin).join("\n") : "pinned: no Figma or Google Doc link in the text");
+  const taken = await pinSourcesOf(posted);
+  for (const problem of taken.problems) console.log(`sources: ${problem}`);
+  if (taken.problems.length) return null;
+  return recordPins(file, text, taken.pins, { pinnedAt, texts: [posted] });
+}
+
+async function pinComment(file, text, posted, pinnedAt) {
+  const pins = await pinText(file, text, posted, pinnedAt);
+  if (pins) console.log(pins.length ? pins.map(describePin).join("\n") : "pinned: no repo in the project map and no Figma or Google Doc link in the text");
   return pins;
 }
 
@@ -230,7 +237,7 @@ async function comment(client, id, flags) {
   }
   console.log(`${describe(current)} | comment of ${body.length} characters`);
   if (flags.apply === undefined) {
-    if (!(await pinText(file, text, body, flags["pinned-at"]))) return 1;
+    if (!(await pinComment(file, text, body, flags["pinned-at"]))) return 1;
     console.log(`WRITE → ${client.host} · #${id} : 1 comment; run again with --apply`);
     return 0;
   }
@@ -274,7 +281,7 @@ async function commentEdit(client, id, flags) {
   }
   console.log(`${describe(current)} | activity ${id} | comment of ${old.length} → ${body.length} characters`);
   if (flags.apply === undefined) {
-    if (!(await pinText(file, text, body, flags["pinned-at"]))) return 1;
+    if (!(await pinComment(file, text, body, flags["pinned-at"]))) return 1;
     console.log(`WRITE → ${client.host} · #${current.id} : 1 comment edit; run again with --apply`);
     return 0;
   }
@@ -391,7 +398,7 @@ async function main([command, target, ...rest]) {
       const { failed, locks, plan } = await check(client, project, drafts);
       if (failed) return 1;
       const text = readFileSync(target, "utf8");
-      const pins = await recordPins(target, text, await linkPins(text), { pinnedAt: flags["pinned-at"], texts: [text] });
+      const pins = await pinText(target, text, text, flags["pinned-at"]);
       if (!pins) return 1;
       if (snapshotOnce(target, text)) console.log("original drafts frozen for the edit log");
       writeFileSync(locksPath(target), JSON.stringify(locks));

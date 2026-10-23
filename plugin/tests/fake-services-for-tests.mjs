@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { LABELS } from "../lib/labels.mjs";
 import { recordApprovals } from "../lib/publish-approval-ticket.mjs";
+import { stateDenyRules } from "../lib/publish-approval-settings.mjs";
+import { pullRequestCheckout } from "./git-sibling-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const exec = promisify(execFile);
@@ -46,9 +48,11 @@ globalThis.fetch = async (input, options = {}) => {
   if (url.host === "oauth2.googleapis.com") return json({ access_token: "a" });
   if (method !== "GET") appendFileSync(process.env.WRITES, \`\${url.host} \${method} \${url.pathname}\\n\`);
   if (url.host === "api.figma.com") {
+    if (method === "GET") appendFileSync(process.env.READS, \`\${url.pathname}\${url.search}\\n\`);
+    if (web.figma429) return new Response(JSON.stringify({ status: 429, err: "Rate limit exceeded" }), { status: 429, headers: { "content-type": "application/json", "retry-after": "30" } });
     if (url.pathname === "/v1/me") return json({ handle: "me" });
     if (/^\\/v1\\/files\\/[^/]+$/.test(url.pathname)) return json({ version: "1", lastModified: web.figmaModified ?? "2026-10-01T00:00:00Z" });
-    if (url.pathname.endsWith("/nodes")) return json({ nodes: Object.fromEntries(url.searchParams.get("ids").split(",").map((id) => [id, web.figmaNodes?.[id] === undefined ? { document: { id, absoluteBoundingBox: { x: 0, y: 0, width: 100, height: 40 } } } : web.figmaNodes[id]])) });
+    if (url.pathname.endsWith("/nodes")) return json({ lastModified: web.figmaModified ?? "2026-10-01T00:00:00Z", nodes: Object.fromEntries(url.searchParams.get("ids").split(",").map((id) => [id, web.figmaNodes?.[id] === undefined ? { document: { id, absoluteBoundingBox: { x: 0, y: 0, width: 100, height: 40 } } } : web.figmaNodes[id]])) });
     const one = url.pathname.match(/\\/comments\\/([^/]+)$/);
     if (one && method === "DELETE") {
       web.figma = web.figma.filter((comment) => comment.id !== one[1]);
@@ -191,8 +195,9 @@ export function fakeOpenProject({ closedStatus = true } = {}) {
   return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve({ server, calls, workPackages, url: `http://127.0.0.1:${server.address().port}` })));
 }
 
-export function world({ mode = "answer", gh = {}, web = {}, map = null, opUrl = null } = {}) {
+export function world({ mode = "answer", gh = {}, web = {}, map = null, opUrl = null, pr } = {}) {
   const dir = tempDir("tedy-world-");
+  const checkout = pr !== undefined || map?.repos?.some((repo) => repo.path === ".") ? pullRequestCheckout(dir, pr ?? 701) : null;
   const bin = join(dir, "bin");
   mkdirSync(bin);
   writeFileSync(join(bin, "gh"), FAKE_GH);
@@ -204,6 +209,8 @@ export function world({ mode = "answer", gh = {}, web = {}, map = null, opUrl = 
   writeFileSync(join(dir, "web.json"), JSON.stringify({ figma: [], drive: [], tabs: {}, document: {}, ...web }));
   const writesLog = join(dir, "writes.log");
   writeFileSync(writesLog, "");
+  const readsLog = join(dir, "reads.log");
+  writeFileSync(readsLog, "");
   const profile = join(dir, "profile");
   mkdirSync(join(profile, "projects"), { recursive: true });
   writeFileSync(join(profile, "config.json"), JSON.stringify({ gates: mode ? { publishApproval: mode } : {}, language: { chat: "en" } }));
@@ -213,7 +220,9 @@ export function world({ mode = "answer", gh = {}, web = {}, map = null, opUrl = 
   mkdirSync(join(dir, ".config", "figma"), { recursive: true });
   writeFileSync(join(dir, ".config", "figma", "token"), "figd_test\n");
   const state = join(dir, "state");
-  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, HOME: dir, WRITES: writesLog, GH_FIXTURE: join(dir, "gh.json"), FAKE_WEB: join(dir, "web.json"), TEDY_STATE_DIR: state, TEDY_PROFILE_DIR: profile, OP_SYNC_DIR: join(dir, ".config", "op", "sync"), NODE_OPTIONS: `--import=${join(dir, "fake-fetch.mjs")}` };
+  const settings = join(dir, "claude-settings.json");
+  writeFileSync(settings, JSON.stringify({ permissions: { deny: stateDenyRules(state) } }));
+  const env = { ...process.env, TEDY_CLAUDE_SETTINGS: settings, PATH: `${bin}:${process.env.PATH}`, HOME: dir, WRITES: writesLog, READS: readsLog, GH_FIXTURE: join(dir, "gh.json"), FAKE_WEB: join(dir, "web.json"), TEDY_STATE_DIR: state, TEDY_PROFILE_DIR: profile, OP_SYNC_DIR: join(dir, ".config", "op", "sync"), NODE_OPTIONS: `--import=${join(dir, "fake-fetch.mjs")}` };
   const approve = (preview, question = "Q?") => recordApprovals({ session_id: "s", tool_use_id: "t", tool_input: { questions: [{ question, header: "x", multiSelect: false, options: [{ label: VI["post.asIs"], description: "d", preview }, { label: VI["post.hold"], description: "n" }] }] }, tool_response: { questions: [], answers: { [question]: VI["post.asIs"] }, annotations: { [question]: { preview } } } }, { dir: join(state, "approvals"), accepted: [VI["post.asIs"], VI["approve.all"]] });
   const run = (script, args) => exec("node", [join(SCRIPTS, `${script}.mjs`), ...args], { cwd: dir, env, timeout: 30_000 }).then((result) => ({ code: 0, out: `${result.stdout}${result.stderr}` }), (error) => ({ code: error.code, out: `${error.stdout ?? ""}${error.stderr ?? ""}` }));
   const writes = () => readFileSync(writesLog, "utf8").split("\n").filter(Boolean);
@@ -229,5 +238,6 @@ export function world({ mode = "answer", gh = {}, web = {}, map = null, opUrl = 
       return 0;
     }
   };
-  return { dir, env, approve, run, writes, file, tickets, line: (script, args) => `node ${join(SCRIPTS, `${script}.mjs`)} ${args.map(quote).join(" ")}` };
+  const reads = () => readFileSync(readsLog, "utf8").split("\n").filter(Boolean);
+  return { dir, env, checkout, approve, run, writes, reads, settings, file, tickets, line: (script, args) => `node ${join(SCRIPTS, `${script}.mjs`)} ${args.map(quote).join(" ")}` };
 }

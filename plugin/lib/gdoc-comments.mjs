@@ -114,7 +114,7 @@ export async function gdocPin(google) {
     try {
       return { kind: "gdoc", doc: google.doc, method: "docs-text", text: await TEXT_READERS["docs-text"](google) };
     } catch (error) {
-      if (error.status !== 403) throw new Error(`refused: the text of Google Doc ${google.doc} could not be read through docs-text (${error.message}), so its pin cannot be taken`);
+      if (error.status !== 403 || error.quota) throw new Error(`refused: the text of Google Doc ${google.doc} could not be read through docs-text (${error.message}), so its pin cannot be taken`);
       failures.push(`docs-text: ${error.message}`);
     }
   }
@@ -126,7 +126,7 @@ export async function gdocPin(google) {
   throw new Error(`refused: the text of Google Doc ${google.doc} could not be read (${failures.join("; ")}), so its pin cannot be taken`);
 }
 
-export async function recheckGdoc(google, pin, kept) {
+export async function recheckGdoc(google, pin) {
   if (typeof pin.text !== "string" || !Object.hasOwn(TEXT_READERS, pin.method ?? "")) return { refusal: `refused: the pin of Google Doc ${pin.doc} predates text pins; lint the draft again and ask the user again` };
   let now;
   try {
@@ -135,10 +135,10 @@ export async function recheckGdoc(google, pin, kept) {
     throw new Error(`refused: the text of Google Doc ${pin.doc} could not be read through ${pin.method} (${error.message}), so its pin cannot be checked`);
   }
   if (now === pin.text) return {};
-  return versionCheck(`Google Doc ${pin.doc} text`, pin.text.slice(0, 12), now.startsWith(pin.text.slice(0, 12)) ? now : now.slice(0, 12), kept ? { kept } : {});
+  return versionCheck(`Google Doc ${pin.doc} text`, pin.text.slice(0, 12), now.startsWith(pin.text.slice(0, 12)) ? now : now.slice(0, 12));
 }
 
-export const recheckDocTarget = (doc, file, relint, { kept, texts } = {}) => requireFresh(file, relint, { kept, texts, covers: (pin) => pin.kind === "gdoc" && pin.doc === doc, what: `text of Google Doc ${doc}` });
+export const recheckDocTarget = (doc, file, relint, { texts } = {}) => requireFresh(file, relint, { texts, covers: (pin) => pin.kind === "gdoc" && pin.doc === doc, what: `text of Google Doc ${doc}` });
 
 const relintDoc = (file, doc) => `draft-lint.mjs doc-comment ${file} --doc ${doc}`;
 

@@ -137,15 +137,43 @@ test("a Google Doc pin is the SHA-256 of the text of every tab, read without sug
   assert.notEqual((await gdocPin(googleStub(docBody(["Fees\n", "Crypto takes the price in USDT\n"])).google)).text, pin.text);
 });
 
-test("the Google Doc recheck refuses a text change unless the caller proved every anchor intact", async () => {
+test("the Google Doc recheck refuses any text change, with no way for a caller to wave it through", async () => {
   const pin = await gdocPin(googleStub(docBody(["A\n"])).google);
   const short = pin.text.slice(0, 12);
   assert.deepEqual(await recheckGdoc(googleStub(docBody(["A\n"])).google, pin), {});
   const changed = await recheckGdoc(googleStub(docBody(["B\n"])).google, pin);
   assert.match(changed.refusal, new RegExp(`^refused: Google Doc D1 text changed from ${short} to [0-9a-f]{12} since it was pinned; ${RECHECK}$`));
-  assert.match((await recheckGdoc(googleStub(docBody(["B\n"])).google, pin, "every highlighted passage still appears exactly once")).notice, /^notice: Google Doc D1 text changed from .* every highlighted passage still appears exactly once, so it posts as drafted$/);
-  assert.match((await recheckGdoc(googleStub(docBody(["A\n"])).google, { kind: "gdoc", doc: "D1", field: "revisionId" }, "kept")).refusal, /predates text pins/);
-  assert.match((await recheckGdoc(googleStub(docBody(["A\n"])).google, { kind: "gdoc", doc: "D1", text: pin.text }, "kept")).refusal, /predates text pins/);
+  assert.match((await recheckGdoc(googleStub(docBody(["B\n"])).google, pin, "every highlighted passage still appears exactly once")).refusal, /^refused: Google Doc D1 text changed/);
+  assert.match((await recheckGdoc(googleStub(docBody(["A\n"])).google, { kind: "gdoc", doc: "D1", field: "revisionId" })).refusal, /predates text pins/);
+  assert.match((await recheckGdoc(googleStub(docBody(["A\n"])).google, { kind: "gdoc", doc: "D1", text: pin.text })).refusal, /predates text pins/);
+});
+
+test("the Docs API text reads child tabs, so a change in a nested tab moves the pin", async () => {
+  const nested = (text) => ({ documentId: "D1", tabs: [{ tabProperties: { tabId: "t.0" }, documentTab: { body: { content: [paragraph("Top\n")] } }, childTabs: [{ tabProperties: { tabId: "t.1" }, documentTab: { body: { content: [paragraph(text)] } }, childTabs: [] }] }] });
+  assert.notEqual((await gdocPin(googleStub(nested("Fee 1%\n")).google)).text, (await gdocPin(googleStub(nested("Fee 2%\n")).google)).text);
+});
+
+test("the Drive export pin lists comments across every page of the comments API", async () => {
+  const many = Array.from({ length: 150 }, (_, index) => ({ id: `c${index}`, content: `Question number ${index}?`, resolved: false, author: { me: false, displayName: "PM" }, replies: [] }));
+  const label = (index) => (index < 26 ? String.fromCharCode(97 + index) : String.fromCharCode(96 + Math.floor(index / 26)) + String.fromCharCode(97 + (index % 26)));
+  const exported = `Body${many.map((_, index) => `[${label(index)}]`).join("")}\r\n\r\n${many.map((comment, index) => `[${label(index)}]${comment.content}`).join("\r\n")}\r\n`;
+  const calls = [];
+  const request = async (url, options = {}) => {
+    calls.push(url);
+    if (url.includes("/export")) return exported;
+    const page = url.includes("pageToken=p2") ? 1 : 0;
+    return { comments: many.slice(page * 100, page * 100 + 100), ...(page ? {} : { nextPageToken: "p2" }) };
+  };
+  const pin = await gdocPin({ doc: "D1", ownClient: false, request });
+  assert.equal(pin.text, (await gdocPin(googleStub(status(403), { ownClient: false, exported: "Body\r\n" }).google)).text);
+  assert.equal(calls.filter((url) => url.includes("/comments?")).length, 2);
+});
+
+test("a quota 403 from the Docs API refuses instead of falling back to the export", async () => {
+  const quota = Object.assign(new Error("GET /v1/documents/D1 returned HTTP 403: Quota exceeded"), { status: 403, quota: true });
+  const stub = googleStub(quota, { exported: "x\n" });
+  await assert.rejects(gdocPin(stub.google), /could not be read through docs-text \(.*Quota exceeded\)/);
+  assert.ok(!stub.calls.some((url) => url.includes("/export")));
 });
 
 test("a Google Doc whose text cannot be read gives no pin and no pass", async () => {

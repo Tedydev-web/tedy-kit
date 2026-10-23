@@ -5,6 +5,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 import { runWithFakeGh } from "./fake-gh-for-tests.mjs";
+import { pullRequestCheckout } from "./git-sibling-for-tests.mjs";
 
 const SCRIPT = new URL("../lib/github-write.mjs", import.meta.url).pathname;
 
@@ -91,7 +92,8 @@ test("edit throws when the comment body differs after the PATCH read-back", () =
   const body = join(dir, "b.txt");
   writeFileSync(body, "Fixed the label.\n");
   const stateDir = tempDir("tedy-ghstate-");
-  assert.equal(runWithFakeGh(new URL("../lib/draft-lint.mjs", import.meta.url).pathname, ["pr-reply", body], { cwd: dir, stateDir }).status, 0);
+  pullRequestCheckout(dir, 1);
+  assert.equal(runWithFakeGh(new URL("../lib/draft-lint.mjs", import.meta.url).pathname, ["pr-reply", body, "--pr", "1"], { cwd: dir, stateDir }).status, 0);
   const result = run(["edit", "123", "--repo", "o/r", "--body-file", body], { fixture: { write: { body: "something else", html_url: "u" } }, cwd: dir, stateDir });
   assert.notEqual(result.status, 0);
   assert.match(result.out, /body differs after PATCH/);

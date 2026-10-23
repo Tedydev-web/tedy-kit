@@ -31,5 +31,24 @@ export function siblingRepo() {
     git(upstream, "push", "-q", "origin", "dev");
     return sha;
   };
-  return { root, upstream, clone, push };
+  const pr = (number = 701) => {
+    const sha = git(upstream, "rev-parse", "HEAD");
+    git(root, "--git-dir", origin, "update-ref", `refs/pull/${number}/head`, sha);
+    return sha;
+  };
+  return { root, upstream, clone, push, pr };
+}
+
+export function pullRequestCheckout(dir, number = 701) {
+  const sibling = siblingRepo();
+  sibling.pr(number);
+  git(dir, "init", "-q", "-b", "dev");
+  git(dir, "remote", "add", "origin", join(sibling.root, "origin.git"));
+  git(dir, "fetch", "-q", "origin");
+  git(dir, "remote", "set-head", "origin", "dev");
+  const pushPr = (path, text, subject) => {
+    sibling.push(path, text, subject);
+    return sibling.pr(number);
+  };
+  return { ...sibling, pushPr };
 }

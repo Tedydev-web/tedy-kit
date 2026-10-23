@@ -6,7 +6,8 @@ import { STATE_DIR } from "./hook-io.mjs";
 import { UC_ID } from "./prd-section.mjs";
 import { chatLanguage } from "./labels.mjs";
 import { resolveMap } from "./project-map.mjs";
-import { describePin, linkPins, mapRepos, nodeId, pinRepos, recordPins, writeReadPins } from "./source-pins.mjs";
+import { nodeId } from "./source-pin-links.mjs";
+import { describePin, pinSourcesOf, recordPins, writeReadPins } from "./source-pins.mjs";
 
 export const MAX_BODY = 360;
 export const MAX_CHAT = 600;
@@ -165,22 +166,29 @@ export function readDiff(pr, repo, run = (args) => execFileSync("gh", args, { en
 
 export const mapLanguage = (field) => resolveMap(process.cwd())?.map.language?.[field] ?? chatLanguage();
 
-function repoPins(text) {
-  const { pins, problems } = pinRepos(mapRepos(resolveMap(process.cwd())?.map), text);
+async function sourcePins(text, extra, options) {
+  const { pins, problems } = await pinSourcesOf(text, extra, options);
   for (const problem of problems) console.log(`sources: ${problem}`);
   return problems.length ? null : pins;
 }
 
-async function chatPins(kind, text, flag) {
+function chatTargets(kind, flag) {
   const map = resolveMap(process.cwd())?.map;
   if (kind === "figma-comment") {
     const file = flag("--file") ?? map?.figma?.file;
     const node = flag("--node");
     if (node !== undefined && !nodeId(node)) throw new Error(`--node ${node} is not a Figma node id such as 12-34 or 12:34`);
-    return linkPins(text, file ? { figma: [{ file, nodes: node ? [nodeId(node)] : [], whole: !node }] } : {});
+    if (file && !node) console.log(`warning: no --node, so Figma ${file} is pinned as a whole file and any edit to it refuses the post; lint with --node <node-id> of the node the comment goes on`);
+    return file ? { figma: [{ file, nodes: node ? [nodeId(node)] : [], whole: !node }] } : {};
   }
   const doc = flag("--doc") ?? map?.prd?.doc;
-  return linkPins(text, doc ? { docs: [doc] } : {});
+  return doc ? { docs: [doc] } : {};
+}
+
+function prOf(flag) {
+  const pr = flag("--pr");
+  if (!/^\d+$/.test(pr ?? "")) throw new Error("pr-reply and pin-sources for a review need --pr <number>, so the PR head is pinned too");
+  return pr;
 }
 
 async function record(file, text, pins, { clean, none, texts, pinnedAt, freeze = true }) {
@@ -200,14 +208,11 @@ async function pinSources(file, flag) {
   if (figma && !nodes.length) throw new Error("pin-sources --file needs --node <node-id>[,<node-id>…]: a whole-file read pin would refuse on any edit to the file");
   const bad = nodes.filter((node) => !nodeId(node));
   if (bad.length) throw new Error(`--node ${bad.join(", ")} is not a Figma node id such as 12-34 or 12:34`);
-  const { pins, problems } = pinRepos(mapRepos(map), "");
-  for (const problem of problems) console.log(`sources: ${problem}`);
-  if (problems.length) return 1;
   const doc = flag("--doc");
-  const linked = await linkPins("", { docs: doc ? [doc] : [], figma: figma ? [{ file: figma, nodes: nodes.map(nodeId), whole: false }] : [] });
-  writeReadPins(file, [...pins, ...linked]);
+  const pins = await sourcePins("", { docs: doc ? [doc] : [], figma: figma ? [{ file: figma, nodes: nodes.map(nodeId), whole: false }] : [] }, { pr: flag("--pr") === undefined ? undefined : prOf(flag) });
+  if (!pins) return 1;
   console.log(`read pins for ${file}:`);
-  for (const pin of [...pins, ...linked]) console.log(describePin(pin));
+  for (const pin of writeReadPins(file, pins)) console.log(describePin(pin));
   return 0;
 }
 
@@ -220,21 +225,23 @@ async function main([kind, file, ...flags]) {
     const problems = lintChatComment(text, kind.replace("-comment", ""), mapLanguage("doc_figma"));
     for (const problem of problems) console.log(problem);
     if (problems.length) return 1;
-    const pins = await chatPins(kind, text, flag);
+    const pins = await sourcePins(text, chatTargets(kind, flag));
+    if (!pins) return 1;
     const none = kind === "figma-comment" ? "no Figma file in the project map and no link in the comment" : "no PRD doc in the project map and no link in the comment";
     return record(file, text, pins, { clean: `clean: ${kind}`, none, texts: [text], pinnedAt });
   }
   if (kind === "pr-reply" && file) {
+    const pr = prOf(flag);
     const text = readFileSync(file, "utf8");
     const problems = lintComment(text.trim(), mapLanguage("pr_review"));
     for (const problem of problems) console.log(problem);
     if (problems.length) return 1;
-    const pins = repoPins(text);
+    const pins = await sourcePins(text, {}, { pr });
     if (!pins) return 1;
     return record(file, text, pins, { clean: "clean: pr-reply", none: "no repo in the project map", texts: [text], pinnedAt, freeze: false });
   }
   if (kind !== "pr-comment" || !file) {
-    console.error("usage: draft-lint.mjs pin-sources <draft or ledger> [--doc <id>] [--file <key> --node <node-id>[,<node-id>…]] | pr-comment <draft.md> [--diff <file>] [--repo <owner/repo>] [--pinned-at <file>] | pr-reply <body.txt> [--pinned-at <file>] | doc-comment <body.txt> [--doc <id>] [--pinned-at <file>] | figma-comment <body.txt> [--file <key>] [--node <node-id>] [--pinned-at <file>]");
+    console.error("usage: draft-lint.mjs pin-sources <draft or ledger> [--pr <n>] [--doc <id>] [--file <key> --node <node-id>[,<node-id>…]] | pr-comment <draft.md> [--diff <file>] [--repo <owner/repo>] [--pinned-at <file>] | pr-reply <body.txt> --pr <n> [--pinned-at <file>] | doc-comment <body.txt> [--doc <id>] [--pinned-at <file>] | figma-comment <body.txt> [--file <key>] [--node <node-id>] [--pinned-at <file>]");
     return 2;
   }
   const text = readFileSync(file, "utf8");
@@ -245,9 +252,10 @@ async function main([kind, file, ...flags]) {
     for (const item of result.problems) console.log(`${item.index}. ${item.location}: ${item.problem}`);
     return 1;
   }
-  const pins = repoPins(text);
+  const bodies = result.comments.map((comment) => comment.body);
+  const pins = await sourcePins(bodies.join("\n"), {}, { pr });
   if (!pins) return 1;
-  return record(file, text, pins, { clean: `clean: ${result.comments.length} comments, PR #${result.pr}, head ${result.sha}`, none: "no repo in the project map", texts: result.comments.map((comment) => comment.body), pinnedAt });
+  return record(file, text, pins, { clean: `clean: ${result.comments.length} comments, PR #${result.pr}, head ${result.sha}`, none: "no repo in the project map", texts: bodies, pinnedAt });
 }
 
 export function run() {

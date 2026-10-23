@@ -34,9 +34,12 @@ const sent = (w) => w.writes().filter((line) => !line.endsWith("/form"));
 
 function gitWorld(gh = POSTED) {
   const sibling = siblingRepo();
-  const w = world({ gh, map: { name: "p", repos: [{ path: sibling.clone, role: "BE", branch: "dev" }], language: { pr_review: "en" } } });
+  const w = world({ pr: 701, gh, map: { name: "p", repos: [{ path: sibling.clone, role: "BE", branch: "dev" }], language: { pr_review: "en" } } });
   return { w, sibling };
 }
+
+const LINKED_ITEM = { ...ITEM, comment: `Which wallet pays the fee, as ${FIGMA_NODE} shows?` };
+const itemLines = (item) => `EPIC 09 · tab t.1 · UC_SW_13 BR1\nquote: ${item.quote}\n${item.comment}`;
 
 async function withOpenProject(run) {
   const op = await fakeOpenProject();
@@ -56,12 +59,12 @@ const CASES = [
   ["github-write reply", async () => {
     const { w, sibling } = gitWorld();
     w.file("r.md", "The label is still wrong.\n");
-    return { w, lint: [["draft-lint", ["pr-reply", "r.md"]]], move: () => sibling.push("src/b.ts", "b2\n", "chore: unrelated"), script: "github-write", args: ["reply", "701", "123", "--repo", "o/r", "--body-file", "r.md"], texts: ["The label is still wrong."] };
+    return { w, lint: [["draft-lint", ["pr-reply", "r.md", "--pr", "701"]]], move: () => sibling.push("src/b.ts", "b2\n", "chore: unrelated"), script: "github-write", args: ["reply", "701", "123", "--repo", "o/r", "--body-file", "r.md"], texts: ["The label is still wrong."] };
   }],
   ["github-write edit", async () => {
     const { w, sibling } = gitWorld({ writeBody: "The label is still wrong." });
     w.file("r.md", "The label is still wrong.\n");
-    return { w, lint: [["draft-lint", ["pr-reply", "r.md"]]], move: () => sibling.push("src/b.ts", "b2\n", "chore: unrelated"), script: "github-write", args: ["edit", "5", "--body-file", "r.md", "--repo", "o/r"], texts: ["The label is still wrong."] };
+    return { w, lint: [["draft-lint", ["pr-reply", "r.md", "--pr", "701"]]], move: () => sibling.push("src/b.ts", "b2\n", "chore: unrelated"), script: "github-write", args: ["edit", "5", "--body-file", "r.md", "--repo", "o/r"], texts: ["The label is still wrong."] };
   }],
   ["figma-comments post", async () => {
     const w = world({ web: { figma: [] } });
@@ -85,9 +88,9 @@ const CASES = [
   }]),
   ["doc-comment-file post", async () => {
     const w = world({ web: { tabs: { "t.1": TAB }, document: textDoc(TAB) }, map: PRD_MAP });
-    w.file("items.json", JSON.stringify({ title: "PRD", items: [ITEM] }));
+    w.file("items.json", JSON.stringify({ title: "PRD", items: [LINKED_ITEM] }));
     const args = ["post", "items.json", "--html", "out.html", "--apply", "--doc", "D"];
-    return { w, lint: [["doc-comment-file", ["items.json"]]], move: () => changeWeb(w, { document: textDoc(`${TAB}A new paragraph\n`) }), script: "doc-comment-file", args, texts: [`EPIC 09 · tab t.1 · UC_SW_13 BR1\nquote: ${ITEM.quote}\n${ITEM.comment}`] };
+    return { w, lint: [["doc-comment-file", ["items.json"]]], move: () => moveFigma(w), script: "doc-comment-file", args, texts: [itemLines(LINKED_ITEM)] };
   }],
   ["openproject apply", async (op) => {
     const w = world({ opUrl: op.url });
@@ -162,6 +165,47 @@ test("a stale-source refusal leaves the approval ticket unused, on every path th
       const body = `The pop-up needs the Pro price, as ${FIGMA_NODE} shows.`;
       w.file("c.md", `${body}\n`);
       return { w, lint: ["openproject", ["comment", "21298", "--body-file", "c.md"]], move: () => changeWeb(w, { figmaNodes: { "1:2": null } }), script: "openproject", args: ["comment", "21298", "--apply", "--body-file", "c.md"], texts: [body], refusal: /refused: Figma F1 node 1:2 changed since it was pinned/ };
+    }],
+    ["github-write reply", async () => {
+      const { w, sibling } = gitWorld();
+      w.file("r.md", "The label is still wrong, see src/a.ts.\n");
+      return { w, lint: ["draft-lint", ["pr-reply", "r.md", "--pr", "701"]], move: () => sibling.push("src/a.ts", "a2\n", "fix: writer sets the field"), script: "github-write", args: ["reply", "701", "123", "--repo", "o/r", "--body-file", "r.md"], texts: ["The label is still wrong, see src/a.ts."], refusal: /^refused: .* changed a file the text being posted names$/m };
+    }],
+    ["github-write edit", async () => {
+      const { w } = gitWorld({ writeBody: "The label is still wrong." });
+      w.file("r.md", "The label is still wrong.\n");
+      return { w, lint: ["draft-lint", ["pr-reply", "r.md", "--pr", "701"]], move: () => w.checkout.pushPr("src/z.ts", "z\n", "fix: author pushed"), script: "github-write", args: ["edit", "5", "--body-file", "r.md", "--repo", "o/r"], texts: ["The label is still wrong."], refusal: /^refused: \S+ pull\/701\/head moved from .* so the PR under review changed$/m };
+    }],
+    ["openproject comment-edit", async (op) => {
+      const w = world({ opUrl: op.url, web: { document: textDoc("A\n") } });
+      const body = "The pop-up needs the Pro price, as https://docs.google.com/document/d/D2/edit says.";
+      w.file("e.md", `${body}\n`);
+      return { w, lint: ["openproject", ["comment-edit", "9", "--body-file", "e.md"]], move: () => changeWeb(w, { document: textDoc("B\n") }), script: "openproject", args: ["comment-edit", "9", "--apply", "--body-file", "e.md"], texts: [body], refusal: /refused: Google Doc D2 text changed/ };
+    }],
+    ["doc-comment-file post --apply", async () => {
+      const w = world({ web: { tabs: { "t.1": TAB }, document: textDoc(TAB) }, map: PRD_MAP });
+      w.file("items.json", JSON.stringify({ title: "PRD", items: [ITEM] }));
+      return { w, lint: ["doc-comment-file", ["items.json"]], move: () => changeWeb(w, { document: textDoc(`${TAB}A new paragraph\n`) }), script: "doc-comment-file", args: ["post", "items.json", "--html", "out.html", "--apply", "--doc", "D"], texts: [itemLines(ITEM)], refusal: /refused: Google Doc D text changed from [0-9a-f]{12} to [0-9a-f]{12} since it was pinned/ };
+    }],
+    ["figma-comments post when the Figma API fails at publish", async () => {
+      const w = world({ web: { figma: [] } });
+      w.file("f.md", "@lam Màn này thiếu trạng thái rỗng.\n");
+      return { w, lint: ["draft-lint", ["figma-comment", "f.md", "--file", "F1", "--node", "1-2"]], move: () => changeWeb(w, { figma429: true }), script: "figma-comments", args: ["post", "1-2", "--body-file", "f.md", "--file", "F1"], texts: ["@lam Màn này thiếu trạng thái rỗng."], refusal: /Figma answered HTTP 429 to \/files\/F1\/nodes \(Retry-After 30 s\); it is rate limited, so nothing more was sent/ };
+    }],
+    ["gdoc-comments reply when the Doc cannot be read at publish", async () => {
+      const w = world({ web: { drive: [thread], document: textDoc("A\n") } });
+      w.file("g.md", "Which wallet pays the fee?\n");
+      return { w, lint: ["draft-lint", ["doc-comment", "g.md", "--doc", "D"]], move: () => changeWeb(w, { document: { error: "gone" } }), script: "gdoc-comments", args: ["reply", "c1", "--body-file", "g.md", "--doc", "D"], texts: ["Which wallet pays the fee?"], refusal: /refused: the text of Google Doc D could not be read through docs-text/ };
+    }],
+    ["gdoc-comments reply on a Doc the sources record does not pin", async () => {
+      const w = world({ web: { drive: [thread], document: textDoc("A\n") } });
+      w.file("g.md", "Which wallet pays the fee?\n");
+      return { w, lint: ["draft-lint", ["doc-comment", "g.md", "--doc", "D"]], move: () => {}, script: "gdoc-comments", args: ["reply", "c1", "--body-file", "g.md", "--doc", "OTHER"], texts: ["Which wallet pays the fee?"], refusal: /refused: g\.md has no pinned text of Google Doc OTHER; run draft-lint\.mjs doc-comment g\.md --doc OTHER/ };
+    }],
+    ["figma-comments post to a file the sources record does not pin", async () => {
+      const w = world({ web: { figma: [] } });
+      w.file("f.md", "@lam Màn này thiếu trạng thái rỗng.\n");
+      return { w, lint: ["draft-lint", ["figma-comment", "f.md", "--file", "F1", "--node", "1-2"]], move: () => {}, script: "figma-comments", args: ["post", "1-2", "--body-file", "f.md", "--file", "F2"], texts: ["@lam Màn này thiếu trạng thái rỗng."], refusal: /refused: f\.md has no pinned Figma F2 node 1:2/ };
     }],
   ];
   for (const [name, setup] of stale) {
@@ -257,7 +301,7 @@ test("without an own OAuth client a Doc is pinned by its Drive text export: repl
   const bodies = ["Which wallet pays the fee?", "Is the fee shown before paying?", "Does USDT cover the fee too?"];
   for (const [index, body] of bodies.entries()) w.file(`g${index}.md`, `${body}\n`);
   const pins = await lint(w, "draft-lint", ["doc-comment", "g0.md", "--doc", "D"]);
-  assert.match(pins[0], /^pinned: Google Doc D text [0-9a-f]{12} via drive-export$/);
+  assert.match(pins[0], /^pinned: Google Doc D text [0-9a-f]{12} via drive-export \(at lint\)$/);
   for (const index of [1, 2]) await lint(w, "draft-lint", ["doc-comment", `g${index}.md`, "--doc", "D"]);
   const withTail = (body, count) => `${body}${"[a][b]".slice(0, 3 * count)}\r\n\r\n${["[a]Which wallet?", "[b]Which wallet pays the fee?"].slice(0, count).join("\r\n")}\r\n`;
   const replied = { ...thread, replies: [{ id: "r1", content: "Which wallet pays the fee?", deleted: false, author: { me: true, displayName: "me" }, createdTime: "2026-10-22T00:00:00Z" }] };
@@ -313,11 +357,13 @@ test("read pins of the Doc and of Figma nodes taken before the read hold at the 
   w.file("ledger.md", "# ledger\n");
   const read = await w.run("draft-lint", ["pin-sources", "ledger.md", "--doc", "D", "--file", "F1", "--node", "1-2,3-4"]);
   assert.equal(read.code, 0, read.out);
-  assert.match(read.out, /^pinned: Google Doc D text [0-9a-f]{12} via docs-text$/m);
-  assert.match(read.out, /^pinned: Figma F1 lastModified \S+ · node 1:2 [0-9a-f]{12}, 3:4 [0-9a-f]{12}$/m);
+  assert.match(read.out, /^pinned: Google Doc D text [0-9a-f]{12} via docs-text \(read \S+\)$/m);
+  assert.match(read.out, /^pinned: Figma F1 lastModified \S+ · node 1:2 [0-9a-f]{12}, 3:4 [0-9a-f]{12} \(read \S+\)$/m);
   assert.match((await w.run("draft-lint", ["pin-sources", "ledger.md", "--file", "F1"])).out, /pin-sources --file needs --node <node-id>\[,<node-id>…\]/);
   w.file("g.md", "Which wallet pays the fee?\n");
   w.file("f.md", "@lam Màn này thiếu trạng thái rỗng.\n");
+  w.file("f2.md", "@lam Nút này thiếu trạng thái tắt.\n");
+  w.file("items.json", JSON.stringify({ title: "PRD", items: [ITEM] }));
   const doc = await w.run("draft-lint", ["doc-comment", "g.md", "--doc", "D", "--pinned-at", "ledger.md"]);
   assert.equal(doc.code, 0, doc.out);
   assert.doesNotMatch(doc.out, /warning:|notice:/);
@@ -326,13 +372,31 @@ test("read pins of the Doc and of Figma nodes taken before the read hold at the 
   assert.notEqual(docLint.code, 0);
   assert.match(docLint.out, /^sources: refused: Google Doc D text changed from [0-9a-f]{12} to [0-9a-f]{12} since it was pinned/m);
   const figmaLint = await w.run("draft-lint", ["figma-comment", "f.md", "--file", "F1", "--node", "1-2", "--pinned-at", "ledger.md"]);
-  assert.notEqual(figmaLint.code, 0);
-  assert.match(figmaLint.out, /^sources: refused: Figma F1 node 3:4 changed since it was pinned/m);
-  w.file("items.json", JSON.stringify({ title: "PRD", items: [ITEM] }));
+  assert.equal(figmaLint.code, 0, figmaLint.out);
+  assert.match(figmaLint.out, /^pinned: Figma F1 lastModified \S+ · node 1:2 [0-9a-f]{12} \(read \S+\)$/m);
+  assert.doesNotMatch(figmaLint.out, /3:4|Google Doc D/);
+  const nodeB = await w.run("draft-lint", ["figma-comment", "f2.md", "--file", "F1", "--node", "3-4", "--pinned-at", "ledger.md"]);
+  assert.notEqual(nodeB.code, 0);
+  assert.match(nodeB.out, /^sources: refused: Figma F1 node 3:4 changed since it was pinned/m);
   const items = await w.run("doc-comment-file", ["items.json", "--pinned-at", "ledger.md"]);
   assert.notEqual(items.code, 0);
-  assert.match(items.out, /refused: Figma F1 node 3:4 changed since it was pinned/);
+  assert.match(items.out, /refused: Google Doc D text changed/);
   assert.equal(sent(w).length, 0);
+});
+
+test("a designer's edit to node A does not stop a post on node B, and a Doc change does not stop a Figma post that does not cite the Doc", async () => {
+  const w = world({ web: { figma: [], document: textDoc(TAB) } });
+  w.file("ledger.md", "# ledger\n");
+  assert.equal((await w.run("draft-lint", ["pin-sources", "ledger.md", "--doc", "D", "--file", "F1", "--node", "1-2,3-4"])).code, 0);
+  w.file("f.md", "@lam Màn này thiếu trạng thái rỗng.\n");
+  const pins = await lint(w, "draft-lint", ["figma-comment", "f.md", "--file", "F1", "--node", "3-4", "--pinned-at", "ledger.md"]);
+  changeWeb(w, { figmaModified: "2026-10-02T00:00:00Z", figmaNodes: { "1:2": { document: { id: "1:2", name: "designer edit" } } }, document: textDoc("Rewritten PRD\n") });
+  const args = ["post", "3-4", "--body-file", "f.md", "--file", "F1"];
+  w.approve(["@lam Màn này thiếu trạng thái rỗng.", ...pins, w.line("figma-comments", args)].join("\n"));
+  const posted = await w.run("figma-comments", args);
+  assert.equal(posted.code, 0, posted.out);
+  assert.match(posted.out, /^notice: Figma F1 lastModified changed .* node 3:4 is unchanged, so it posts as drafted$/m);
+  assert.equal(sent(w).length, 1);
 });
 
 test("openproject preview, comment and comment-edit keep the read pins of --pinned-at, fail on a change since the read, and warn without them", async () => {
@@ -357,6 +421,11 @@ test("openproject preview, comment and comment-edit keep the read pins of --pinn
     const read = await w.run("draft-lint", ["pin-sources", "ledger.md", "--file", "F1", "--node", "1-2"]);
     assert.equal(read.code, 0, read.out);
     const readLines = read.out.split("\n").filter((line) => line.startsWith("pinned: "));
+    const guarded = await w.run("openproject", ["preview", "drafts.json", "--project", "183", "--pinned-at", "ledger.md"]);
+    assert.notEqual(guarded.code, 0);
+    assert.match(guarded.out, /^sources: the read pins for ledger\.md were taken at \S+, after drafts\.json was last written/m);
+    w.file("drafts.json", JSON.stringify([draft]));
+    w.file("c.md", `${body}\n`);
     for (const [name, args] of runs) {
       const kept = await w.run("openproject", [...args, "--pinned-at", "ledger.md"]);
       assert.equal(kept.code, 0, `${name}: ${kept.out}`);
@@ -403,6 +472,32 @@ test("a figma-comment lint on a node the read pins lack pins it at lint and warn
   const result = await w.run("draft-lint", ["figma-comment", "f.md", "--file", "F1", "--node", "5-6", "--pinned-at", "ledger.md"]);
   assert.equal(result.code, 0, result.out);
   assert.match(result.out, /^warning: Figma F1 node 5:6 was not pinned by draft-lint\.mjs pin-sources ledger\.md, so it was pinned now, at lint$/m);
+});
+
+test("every lint pins the links in its text and the map repos, and figma-comment warns without --node", async () => {
+  const doc = "https://docs.google.com/document/d/D2/edit";
+  const figma = world({ mode: "ask", web: { figma: [], document: textDoc(TAB) }, map: { name: "p", repos: [{ path: ".", role: "FE", branch: "dev" }], language: { doc_figma: "en", pr_review: "en" } } });
+  figma.file("f.md", `@lam Màn này thiếu trạng thái rỗng như ${doc} ghi.\n`);
+  const pinned = await lint(figma, "draft-lint", ["figma-comment", "f.md", "--file", "F1"]);
+  assert.ok(pinned.some((line) => line.startsWith("pinned: Google Doc D2 ")), pinned.join("\n"));
+  assert.ok(pinned.some((line) => line.startsWith("pinned: . origin/dev@")), pinned.join("\n"));
+  assert.match((await figma.run("draft-lint", ["figma-comment", "f.md", "--file", "F1"])).out, /^warning: no --node, so Figma F1 is pinned as a whole file and any edit to it refuses the post/m);
+  const review = world({ pr: 701, gh: POSTED, web: { document: textDoc(TAB) }, map: { name: "p", repos: [{ path: ".", role: "FE", branch: "dev" }], language: { pr_review: "en" } } });
+  review.file("d.md", DRAFT.replace("sets it.", `sets it, see ${FIGMA_NODE}.`));
+  const reviewPins = await lint(review, "draft-lint", ["pr-comment", "d.md"]);
+  assert.ok(reviewPins.some((line) => line.startsWith("pinned: Figma F1 ")), reviewPins.join("\n"));
+  assert.ok(reviewPins.some((line) => line.startsWith("pinned: . pull/701/head@")), reviewPins.join("\n"));
+});
+
+test("a Figma post on an instance node reads and posts the whole instance id", async () => {
+  const w = world({ mode: "ask", web: { figma: [] } });
+  w.file("f.md", "@lam Màn này thiếu trạng thái rỗng.\n");
+  await lint(w, "draft-lint", ["figma-comment", "f.md", "--file", "F1", "--node", "I1-2;3-4"]);
+  const posted = await w.run("figma-comments", ["post", "I1-2;3-4", "--body-file", "f.md", "--file", "F1"]);
+  assert.equal(posted.code, 0, posted.out);
+  assert.match(posted.out, /^WRITE → Figma F1 node I1:2;3:4 : 1 comment$/m);
+  assert.equal(web(w).figma.length, 0);
+  assert.ok(w.reads().some((line) => line.includes("ids=I1%3A2%3B3%3A4")), w.reads().join("\n"));
 });
 
 test("a corrupt sources record refuses with a clear message and writes nothing", async () => {

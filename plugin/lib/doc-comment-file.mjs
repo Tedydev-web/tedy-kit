@@ -3,17 +3,16 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { lintChatComment } from "./draft-lint.mjs";
 import { logPostedText } from "./edit-log.mjs";
-import { findQuoteRange, gdocPin, insertAnchored, readDocument, recheckDocTarget, session } from "./gdoc-comments.mjs";
+import { findQuoteRange, insertAnchored, readDocument, recheckDocTarget, session } from "./gdoc-comments.mjs";
 import { chatLanguage, fill, labels } from "./labels.mjs";
 import { slugOf, stamp } from "./handoff.mjs";
 import { fetchTab, quoteCount } from "./prd-section.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { approvalLines, renderDocComment } from "./publish-approval-render.mjs";
-import { describePin, recordPins, sayNotices, takePin } from "./source-pins.mjs";
+import { describePin, pinSourcesOf, recordPins, sayNotices } from "./source-pins.mjs";
 
 const GROUPS = ["A", "B"];
-const KEPT = "every highlighted passage still appears exactly once";
 
 const escape = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -101,7 +100,7 @@ async function post(itemsFile, flags) {
   if (!flags.apply) return 0;
   requireExplicitTarget("doc", flags.doc, { expected: map.prd.doc });
   const google = await session({ doc: map.prd.doc }, true);
-  const notices = await recheckDocTarget(map.prd.doc, itemsFile, `doc-comment-file.mjs ${itemsFile}`, { kept: KEPT, texts: todo.map((item) => item.comment) });
+  const notices = await recheckDocTarget(map.prd.doc, itemsFile, `doc-comment-file.mjs ${itemsFile}`, { texts: todo.map((item) => item.comment) });
   const document = await readDocument(google);
   const ranges = todo.map((item) => findQuoteRange(document, tabOf(item.epic), item.quote));
   consumeApproval(process.argv, todo.map((item) => renderDocComment(item, tabOf(item.epic))));
@@ -147,8 +146,11 @@ async function main([itemsFile, ...rest]) {
     console.error(`doc-comment-file: no file written; fix these first:\n${problems.map((problem) => `- ${problem}`).join("\n")}`);
     return 1;
   }
-  const pin = await takePin(`Google Doc ${map.prd.doc}`, async () => gdocPin(await session({ doc: map.prd.doc })));
-  const pins = await recordPins(itemsFile, text, [pin], { pinnedAt: flagValue(rest, "--pinned-at"), texts: items.map((item) => item.comment ?? ""), kept: KEPT });
+  const comments = items.map((item) => item.comment ?? "");
+  const taken = await pinSourcesOf(comments.join("\n"), { docs: [map.prd.doc] });
+  for (const problem of taken.problems) console.log(`sources: ${problem}`);
+  if (taken.problems.length) return 1;
+  const pins = await recordPins(itemsFile, text, taken.pins, { pinnedAt: flagValue(rest, "--pinned-at"), texts: comments });
   if (!pins) return 1;
   for (const each of pins) console.log(describePin(each));
   const dir = join(map.paths[0], "plans", "drafts");

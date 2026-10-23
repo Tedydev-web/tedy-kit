@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { pullRequestCheckout } from "./git-sibling-for-tests.mjs";
 import { profileWith, tempDir } from "./temp-dir-for-tests.mjs";
 
 const lib = (name) => new URL(`../lib/${name}.mjs`, import.meta.url).pathname;
@@ -26,6 +27,7 @@ if (process.argv[2] === "config") process.stdout.write(JSON.stringify({ gdrive: 
 
 function setup() {
   const work = tempDir("tedy-pm-pub-");
+  pullRequestCheckout(work);
   const stub = join(work, "fetch-stub.mjs");
   writeFileSync(stub, FETCH_STUB);
   const bin = join(work, "bin");
@@ -44,7 +46,7 @@ function setup() {
     writeFileSync(env.FETCH_LOG, "");
     const result = spawnSync("node", ["--import", stub, lib(script), ...args], { cwd: work, encoding: "utf8", env });
     const calls = readFileSync(env.FETCH_LOG, "utf8").trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
-    return { status: result.status, out: `${result.stdout}${result.stderr}`, posts: calls.filter(([method]) => method === "POST") };
+    return { status: result.status, out: `${result.stdout}${result.stderr}`, posts: calls.filter(([method]) => method === "POST"), gets: calls.filter(([method]) => method === "GET").map(([, url]) => url) };
   };
   return { work, run };
 }
@@ -67,7 +69,7 @@ test("a Figma post needs the lint's pin of the node and refuses when that node c
   assert.equal(unlinted.posts.length, 0);
   const lint = run("draft-lint", ["figma-comment", "c.txt", "--node", "1-2"], figma("t1", frame("Pay")));
   assert.equal(lint.status, 0, lint.out);
-  assert.match(lint.out, /^pinned: Figma F1 lastModified t1 · node 1:2 [0-9a-f]{12}$/m);
+  assert.match(lint.out, /^pinned: Figma F1 lastModified t1 · node 1:2 [0-9a-f]{12} \(at lint\)$/m);
   const changed = run("figma-comments", ["post", "1-2", "--body-file", "c.txt"], figma("t2", frame("Pay now")));
   assert.equal(changed.status, 1);
   assert.match(changed.out, /^figma-comments: refused: Figma F1 node 1:2 changed since it was pinned; re-read the changed sources, fix the draft, lint it again and ask the user again$/m);
@@ -76,6 +78,9 @@ test("a Figma post needs the lint's pin of the node and refuses when that node c
   assert.equal(kept.status, 0, kept.out);
   assert.match(kept.out, /^notice: Figma F1 lastModified changed from t1 to t2 since it was pinned; node 1:2 is unchanged, so it posts as drafted$/m);
   assert.equal(kept.posts.length, 1);
+  assert.equal(kept.gets.filter((url) => url.includes("/nodes")).length, 1, kept.gets.join("\n"));
+  assert.equal(kept.gets.filter((url) => url.includes("depth=1")).length, 0, kept.gets.join("\n"));
+  assert.equal(lint.gets.filter((url) => url.includes("api.figma.com")).length, 1, lint.gets.join("\n"));
 });
 
 test("a Google Doc reply refuses when the Doc changed after the lint pinned it", () => {
@@ -88,7 +93,7 @@ test("a Google Doc reply refuses when the Doc changed after the lint pinned it",
   ];
   const lint = run("draft-lint", ["doc-comment", "r.txt"], doc(7));
   assert.equal(lint.status, 0, lint.out);
-  assert.match(lint.out, /^pinned: Google Doc D1 text [0-9a-f]{12} via drive-export$/m);
+  assert.match(lint.out, /^pinned: Google Doc D1 text [0-9a-f]{12} via drive-export \(at lint\)$/m);
   const changed = run("gdoc-comments", ["reply", "t1", "--body-file", "r.txt"], doc(8).map((route, index) => (index === 1 ? [route[0], route[1], { comments: [] }] : route)));
   assert.equal(changed.status, 1);
   assert.match(changed.out, /^gdoc-comments: refused: Google Doc D1 text changed from [0-9a-f]{12} to [0-9a-f]{12} since it was pinned; re-read the changed sources, fix the draft, lint it again and ask the user again$/m);

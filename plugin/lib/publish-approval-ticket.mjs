@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { chmodSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { STATE_DIR, gateSwitches, logGate, readHookInput } from "./hook-io.mjs";
+import { CLAUDE_SETTINGS, readSettings, stateDenyRules } from "./publish-approval-settings.mjs";
 import { chatLanguage, labels } from "./labels.mjs";
 import { tokenize } from "./shell-segments.mjs";
 
@@ -94,8 +95,21 @@ export function requireExplicitTarget(flag, given, { expected, mode = gateSwitch
   }
 }
 
-export function consumeApproval(argv, texts = [], { dir = approvalsDir(), now = Date.now(), mode = gateSwitches().publishApproval } = {}) {
+function requireStateDeny(settings, state) {
+  const again = "run node <plugin>/scripts/profile.mjs publish-approval answer, then this command again. Nothing was written.";
+  let deny;
+  try {
+    ({ deny } = readSettings(settings));
+  } catch (error) {
+    throw new Error(`publish approval is in answer mode, but ${error.message}; ${again}`);
+  }
+  const missing = stateDenyRules(state).filter((rule) => !deny.includes(rule));
+  if (missing.length) throw new Error(`publish approval is in answer mode, but ${settings} lacks ${missing.join(", ")} in permissions.deny, so file tools could write the kit's approvals, PR body records or sources records; ${again}`);
+}
+
+export function consumeApproval(argv, texts = [], { dir = approvalsDir(), now = Date.now(), mode = gateSwitches().publishApproval, settings = CLAUDE_SETTINGS } = {}) {
   if (mode !== "answer") return null;
+  requireStateDeny(settings, dirname(dir));
   const command = [basename(argv[1] ?? ""), ...argv.slice(2)];
   const blocks = texts.map(contentLines).filter((block) => block.length);
   let names = [];

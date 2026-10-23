@@ -50,6 +50,21 @@ test("redact masks key-value secrets and token-shaped values but keeps the rest 
   assert.equal(redact("Subject can't be blank."), "Subject can't be blank.");
 });
 
+test("a failed request carries its HTTP status, whether it was a quota 403, and Retry-After", async () => {
+  globalThis.fetch = async () => new Response('{"error":{"message":"The caller does not have permission"}}', { status: 403 });
+  await assert.rejects(requestJson("https://docs.example/v1/documents/D"), (error) => error.status === 403 && error.quota === false);
+  globalThis.fetch = async () => new Response('{"error":{"message":"Quota exceeded for quota metric"}}', { status: 403 });
+  await assert.rejects(requestJson("https://docs.example/v1/documents/D", { retries: 0 }), (error) => error.status === 403 && error.quota === true);
+  const calls = stubFetch([429]);
+  await assert.rejects(requestJson("https://api.figma.example/v1/files/F/nodes", { retry429: false, wait: noWait }), (error) => error.status === 429 && error.retryAfter === null);
+  assert.equal(calls.length, 1);
+});
+
+test("a request that takes longer than its timeout fails with a clear message", async () => {
+  globalThis.fetch = (url, options) => new Promise((resolve, reject) => options.signal.addEventListener("abort", () => reject(options.signal.reason)));
+  await assert.rejects(requestJson("https://slow.example/a", { timeout: 50 }), /GET \/a timed out after 0\.05 s/);
+});
+
 test("an error body that echoes a secret is redacted before it reaches the thrown message", async () => {
   globalThis.fetch = async () => new Response("bad request for apikey=topsecretvalue123", { status: 400 });
   await assert.rejects(requestJson("https://op.example/api/v3/x"), (error) => !error.message.includes("topsecretvalue123") && /apikey=\*\*\*/.test(error.message));
