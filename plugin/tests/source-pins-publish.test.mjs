@@ -263,6 +263,37 @@ test("a read pin taken before the read holds: a push before the lint fails it wh
   assert.equal(p.lint("pr-comment", p.at("d.md"), "--diff", p.at("pr.diff")).status, 0);
 });
 
+test("a post refused for a moved PR head is redrafted on the same path: pin-sources again, rewrite, lint, post", () => {
+  const fe = siblingRepo({ slug: "o/fe" });
+  const first = fe.pr(701);
+  const profileDir = profileWith({ language: { chat: "en" } });
+  mkdirSync(join(profileDir, "projects"));
+  writeFileSync(join(profileDir, "projects", "p.md"), `\`\`\`json\n${JSON.stringify({ name: "p", paths: [fe.clone], repos: [{ path: ".", role: "FE", branch: "dev" }], language: { pr_review: "en" } })}\n\`\`\`\n`);
+  const work = tempDir("tedy-work-");
+  const draft = join(work, "d.md");
+  const draftAt = (sha) => `# PR #701: comment line by line (head ${sha.slice(0, 7)})\n\n## 1. \`src/a.ts:10\`\nThe label is wrong.\n`;
+  writeFileSync(join(work, "pr.diff"), CLEAN_DIFF);
+  const options = { cwd: fe.clone, stateDir: tempDir("tedy-pinstate-"), profileDir };
+  const lint = (...args) => runWithFakeGh(LINT, args, options);
+  assert.equal(lint("pin-sources", draft, "--pr", "701", "--repo", "o/fe").status, 0);
+  writeFileSync(draft, draftAt(first));
+  assert.equal(lint("pr-comment", draft, "--diff", join(work, "pr.diff"), "--repo", "o/fe").status, 0);
+  fe.push("src/z.ts", "z\n", "fix: the author pushed");
+  const second = fe.pr(701);
+  const refused = runWithFakeGh(WRITE, ["post", draft, "--repo", "o/fe"], { ...options, fixture: { diff: CLEAN_DIFF, head: second } });
+  assert.equal(refused.status, 1, refused.out);
+  assert.equal(refused.writes.length, 0);
+  const again = lint("pin-sources", draft, "--pr", "701", "--repo", "o/fe");
+  assert.equal(again.status, 0, again.out);
+  writeFileSync(draft, draftAt(second));
+  const relinted = lint("pr-comment", draft, "--diff", join(work, "pr.diff"), "--repo", "o/fe");
+  assert.equal(relinted.status, 0, relinted.out);
+  assert.match(relinted.out, /^original frozen for the edit log: /m);
+  const posted = runWithFakeGh(WRITE, ["post", draft, "--repo", "o/fe"], { ...options, fixture: { diff: CLEAN_DIFF, head: second, write: { id: 9, html_url: "u" }, reviewComments: [{ id: 1, path: "src/a.ts", line: 10, commit_id: second }] } });
+  assert.equal(posted.status, 0, posted.out);
+  assert.equal(posted.writes.length, 1);
+});
+
 test("a push to the PR head during the read fails the lint", () => {
   const p = project();
   assert.equal(p.lint("pin-sources", p.at("d.md"), "--pr", "701").status, 0);

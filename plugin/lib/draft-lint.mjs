@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { STATE_DIR } from "./hook-io.mjs";
@@ -219,6 +219,10 @@ async function pinSources(file, flag, flags) {
   if (!pins) return 1;
   console.log(`read pins for ${file}:`);
   for (const pin of writeReadPins(file, pins)) console.log(describePin(pin));
+  if (existsSync(snapshotPath(file))) {
+    rmSync(snapshotPath(file));
+    console.log(`a new read, so the frozen original of ${file} is dropped; its next clean lint freezes the redraft`);
+  }
   return 0;
 }
 
