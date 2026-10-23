@@ -564,6 +564,12 @@ test("a Figma comment costs at most one Tier 1 call: the lint reuses read pins t
   const posted = await w.run("figma-comments", ["post", "1-2", "--body-file", "f.md", "--file", "F1"]);
   assert.equal(posted.code, 0, posted.out);
   assert.equal(tierOne(w, from).length, 1, w.reads().slice(from).join("\n"));
+  w.file("f3.md", "@lam Màn này lệch với https://www.figma.com/design/F1/App?node-id=3-4 nha.\n");
+  await lint(w, "draft-lint", ["figma-comment", "f3.md", "--file", "F1", "--node", "1-2", "--pinned-at", "ledger.md"]);
+  from = w.reads().length;
+  const linked = await w.run("figma-comments", ["post", "1-2", "--body-file", "f3.md", "--file", "F1"]);
+  assert.equal(linked.code, 0, linked.out);
+  assert.deepEqual(tierOne(w, from), ["/v1/files/F1/nodes?ids=1%3A2%2C3%3A4"]);
   changeWeb(w, { figmaNodes: { "1:2": { document: { id: "1:2", name: "changed", absoluteBoundingBox: { x: 0, y: 0, width: 100, height: 40 } } } } });
   w.file("f2.md", "@lam Nút này thiếu trạng thái tắt.\n");
   await lint(w, "draft-lint", ["figma-comment", "f2.md", "--file", "F1", "--node", "1-2", "--pinned-at", "ledger.md"]);
