@@ -65,6 +65,19 @@ test("a request that takes longer than its timeout fails with a clear message", 
   await assert.rejects(requestJson("https://slow.example/a", { timeout: 50 }), /GET \/a timed out after 0\.05 s/);
 });
 
+test("a response whose body stalls past the timeout fails with the same clear message", async () => {
+  globalThis.fetch = async (url, options) =>
+    new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode("{"));
+          options.signal.addEventListener("abort", () => controller.error(options.signal.reason));
+        },
+      }),
+    );
+  await assert.rejects(requestJson("https://slow.example/b", { timeout: 50 }), /^Error: GET \/b timed out after 0\.05 s$/);
+});
+
 test("an error body that echoes a secret is redacted before it reaches the thrown message", async () => {
   globalThis.fetch = async () => new Response("bad request for apikey=topsecretvalue123", { status: 400 });
   await assert.rejects(requestJson("https://op.example/api/v3/x"), (error) => !error.message.includes("topsecretvalue123") && /apikey=\*\*\*/.test(error.message));

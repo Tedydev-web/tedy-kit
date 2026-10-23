@@ -22,9 +22,10 @@ function apiMessage(data, text) {
 
 export const REQUEST_TIMEOUT_MS = 60_000;
 
-async function send(url, init, timeout) {
+export async function send(url, init, timeout = REQUEST_TIMEOUT_MS) {
   try {
-    return await fetch(url, { ...init, signal: AbortSignal.timeout(timeout) });
+    const response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeout) });
+    return { response, text: await response.text() };
   } catch (error) {
     if (error.name === "TimeoutError") throw new Error(`${init.method} ${new URL(url).pathname} timed out after ${timeout / 1000} s`);
     throw error;
@@ -33,8 +34,7 @@ async function send(url, init, timeout) {
 
 export async function requestJson(url, { method = "GET", headers = {}, body, as = "json", retries = 3, retry429 = true, timeout = REQUEST_TIMEOUT_MS, wait = (seconds) => new Promise((done) => setTimeout(done, seconds * 1000)) } = {}) {
   for (let attempt = 0; ; attempt += 1) {
-    const response = await send(url, { method, headers: body === undefined ? headers : { "Content-Type": "application/json", ...headers }, body: body === undefined ? undefined : JSON.stringify(body) }, timeout);
-    const text = await response.text();
+    const { response, text } = await send(url, { method, headers: body === undefined ? headers : { "Content-Type": "application/json", ...headers }, body: body === undefined ? undefined : JSON.stringify(body) }, timeout);
     const data = text ? parse(text) : null;
     const quota = response.status === 403 && QUOTA.test(apiMessage(data, text) + JSON.stringify(data?.error?.errors ?? []));
     if (((response.status === 429 && retry429) || quota || (method === "GET" && SERVER_ERRORS.has(response.status))) && attempt < retries) {

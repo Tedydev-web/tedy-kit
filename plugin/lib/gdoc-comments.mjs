@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { redact, requestJson } from "./api-request.mjs";
+import { redact, REQUEST_TIMEOUT_MS, requestJson, send } from "./api-request.mjs";
 import { lintChatComment, mapLanguage } from "./draft-lint.mjs";
 import { logPostedText } from "./edit-log.mjs";
 import { canonicalJson } from "./figma-comments.mjs";
@@ -54,18 +54,27 @@ export function findQuoteRange(document, tabId, quote) {
   return { startIndex: indexAt(hit.index), endIndex: indexAt(hit.index + hit[0].length - 1) + 1, tabId };
 }
 
+export function rclone(args, { timeout = REQUEST_TIMEOUT_MS } = {}) {
+  try {
+    return execFileSync("rclone", args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout });
+  } catch (error) {
+    if (error.code === "ETIMEDOUT") throw new Error(`rclone ${args.join(" ")} timed out after ${timeout / 1000} s; check the network and rclone listremotes`);
+    throw error;
+  }
+}
+
 async function accessToken(remote, needOwnClient) {
-  const dump = () => tokenFromDump(execFileSync("rclone", ["config", "dump"], { encoding: "utf8" }), remote);
+  const dump = () => tokenFromDump(rclone(["config", "dump"]), remote);
   let token = dump();
   if (needOwnClient && !token.clientId) throw new Error(OWN_CLIENT_STEPS);
   if (token.clientId) {
     const body = new URLSearchParams({ client_id: token.clientId, client_secret: token.clientSecret, refresh_token: token.refresh, grant_type: "refresh_token" });
-    const response = await fetch("https://oauth2.googleapis.com/token", { method: "POST", body });
+    const { response, text } = await send("https://oauth2.googleapis.com/token", { method: "POST", body });
     if (!response.ok) throw new Error(`token refresh returned HTTP ${response.status}; run rclone config reconnect ${remote}:`);
-    return { bearer: (await response.json()).access_token, ownClient: true };
+    return { bearer: JSON.parse(text).access_token, ownClient: true };
   }
   if (!(token.expiry > Date.now() + 60_000)) {
-    execFileSync("rclone", ["lsjson", `${remote}:`, "--max-depth", "1", "--dirs-only"], { stdio: "ignore" });
+    rclone(["lsjson", `${remote}:`, "--max-depth", "1", "--dirs-only"]);
     token = dump();
   }
   return { bearer: token.access, ownClient: false };
@@ -298,9 +307,8 @@ async function main([command, target, ...rest]) {
   }
   if (command === "export") {
     const google = await session(flags);
-    const response = await fetch(`${DRIVE}/files/${google.doc}/export?mimeType=text/plain`, { headers: { Authorization: `Bearer ${google.bearer}` } });
-    if (!response.ok) throw new Error(`export returned HTTP ${response.status}: ${redact((await response.text()).slice(0, 200))}`);
-    const text = await response.text();
+    const { response, text } = await send(`${DRIVE}/files/${google.doc}/export?mimeType=text/plain`, { method: "GET", headers: { Authorization: `Bearer ${google.bearer}` } });
+    if (!response.ok) throw new Error(`export returned HTTP ${response.status}: ${redact(text.slice(0, 200))}`);
     if (!flags.out) {
       process.stdout.write(text);
       return 0;
