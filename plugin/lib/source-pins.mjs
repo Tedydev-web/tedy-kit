@@ -39,9 +39,12 @@ export async function linkPins(text, extra = {}) {
     for (const [file, { nodes, whole }] of figma) pins.push(await takePin(`Figma file ${file}`, async () => figmaPin(client({ file }), nodes, whole)));
   }
   const docs = unique([...(extra.docs ?? []), ...links.docs]);
-  if (docs.length) {
+  const held = docs.filter((doc) => extra.held?.includes(doc));
+  pins.push(...held.map((doc) => ({ kind: "gdoc", doc })));
+  const fresh = docs.filter((doc) => !held.includes(doc));
+  if (fresh.length) {
     const { gdocPin, session } = await import("./gdoc-comments.mjs");
-    for (const doc of docs) pins.push(await takePin(`Google Doc ${doc}`, async () => gdocPin(await session({ doc }))));
+    for (const doc of fresh) pins.push(await takePin(`Google Doc ${doc}`, async () => gdocPin(await session({ doc }))));
   }
   return pins;
 }
@@ -156,6 +159,8 @@ function loadReadPins(key) {
     return { problem: `the read pins for ${key} cannot be read (${error.message}); run draft-lint.mjs pin-sources ${key} again, re-read the sources and lint again` };
   }
 }
+
+export const readPinnedDocs = (key) => (loadReadPins(key)?.sources ?? []).flatMap((pin) => (pin.kind === "gdoc" && typeof pin.text === "string" ? [pin.doc] : []));
 
 const pinLabel = (pin, nodes = Object.keys(pin.nodes ?? {})) => (pin.kind === "git" ? `${pin.repo} ${pin.ref}` : pin.kind === "gdoc" ? `Google Doc ${pin.doc}` : nodes.length ? `Figma ${pin.file} node ${nodes.join(", ")}` : `Figma ${pin.file} file`);
 

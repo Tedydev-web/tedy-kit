@@ -66,6 +66,7 @@ globalThis.fetch = async (input, options = {}) => {
     }
     return json({ comments: web.figma });
   }
+  if (method === "GET" && url.host.startsWith("docs.google")) appendFileSync(process.env.READS, \`\${url.host}\${url.pathname}\\n\`);
   if (url.host === "docs.google.com") return new Response(web.tabs[url.searchParams.get("tab")] ?? "", { status: 200 });
   if (url.host === "docs.googleapis.com") {
     if (method === "POST") {

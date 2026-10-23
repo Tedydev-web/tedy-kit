@@ -10,7 +10,7 @@ import { fetchTab, quoteCount } from "./prd-section.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { approvalLines, renderDocComment } from "./publish-approval-render.mjs";
-import { describePin, pinSourcesOf, recordPins, sayNotices } from "./source-pins.mjs";
+import { describePin, pinSourcesOf, readPinnedDocs, recordPins, sayNotices } from "./source-pins.mjs";
 
 const GROUPS = ["A", "B"];
 
@@ -136,6 +136,11 @@ async function main([itemsFile, ...rest]) {
   const { map } = resolved;
   const text = readFileSync(itemsFile, "utf8");
   const { title, items } = JSON.parse(text);
+  const pinnedAt = flagValue(rest, "--pinned-at");
+  const comments = items.map((item) => item.comment ?? "");
+  const taken = await pinSourcesOf(comments.join("\n"), { docs: [map.prd.doc], held: readPinnedDocs(pinnedAt ?? itemsFile) });
+  for (const problem of taken.problems) console.log(`sources: ${problem}`);
+  if (taken.problems.length) return 1;
   const tabOf = (epic) => map.prd?.tabs?.[epic]?.tab;
   const tabsText = {};
   for (const tab of new Set(items.map((item) => tabOf(item.epic)).filter(Boolean))) tabsText[tab] = await fetchTab(map.prd.doc, tab);
@@ -146,11 +151,7 @@ async function main([itemsFile, ...rest]) {
     console.error(`doc-comment-file: no file written; fix these first:\n${problems.map((problem) => `- ${problem}`).join("\n")}`);
     return 1;
   }
-  const comments = items.map((item) => item.comment ?? "");
-  const taken = await pinSourcesOf(comments.join("\n"), { docs: [map.prd.doc] });
-  for (const problem of taken.problems) console.log(`sources: ${problem}`);
-  if (taken.problems.length) return 1;
-  const pins = await recordPins(itemsFile, text, taken.pins, { pinnedAt: flagValue(rest, "--pinned-at"), texts: comments });
+  const pins = await recordPins(itemsFile, text, taken.pins, { pinnedAt, texts: comments });
   if (!pins) return 1;
   for (const each of pins) console.log(describePin(each));
   const dir = join(map.paths[0], "plans", "drafts");

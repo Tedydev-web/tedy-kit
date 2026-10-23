@@ -391,6 +391,24 @@ test("read pins of the Doc and of Figma nodes taken before the read hold at the 
   assert.equal(sent(w).length, 0);
 });
 
+test("doc-comment-file pins the Doc before it reads the tabs, and with a read pin of the Doc reads it only for the recheck", async () => {
+  const w = world({ mode: "ask", web: { document: textDoc(TAB), tabs: { "t.1": TAB } }, map: PRD_MAP });
+  const docReads = (from) => w.reads().slice(from).filter((line) => line.startsWith("docs."));
+  w.file("items.json", JSON.stringify({ title: "PRD", items: [ITEM] }));
+  const bare = await w.run("doc-comment-file", ["items.json"]);
+  assert.equal(bare.code, 0, bare.out);
+  assert.deepEqual(docReads(0), ["docs.googleapis.com/v1/documents/D", "docs.google.com/document/d/D/export"]);
+  w.file("ledger.md", "# ledger\n");
+  assert.equal((await w.run("draft-lint", ["pin-sources", "ledger.md", "--doc", "D"])).code, 0);
+  const before = w.reads().length;
+  w.file("items.json", JSON.stringify({ title: "PRD", items: [ITEM] }));
+  const read = await w.run("doc-comment-file", ["items.json", "--pinned-at", "ledger.md"]);
+  assert.equal(read.code, 0, read.out);
+  assert.match(read.out, /^pinned: Google Doc D text [0-9a-f]{12} via docs-text \(read \S+\)$/m);
+  assert.doesNotMatch(read.out, /warning:|\(at lint\)/);
+  assert.deepEqual(docReads(before), ["docs.google.com/document/d/D/export", "docs.googleapis.com/v1/documents/D"]);
+});
+
 test("a designer's edit to node A does not stop a post on node B, and a Doc change does not stop a Figma post that does not cite the Doc", async () => {
   const w = world({ web: { figma: [], document: textDoc(TAB) } });
   w.file("ledger.md", "# ledger\n");
