@@ -63,13 +63,13 @@ export function rclone(args, { timeout = REQUEST_TIMEOUT_MS } = {}) {
   }
 }
 
-async function accessToken(remote, needOwnClient) {
+export async function accessToken(remote, needOwnClient, { timeout } = {}) {
   const dump = () => tokenFromDump(rclone(["config", "dump"]), remote);
   let token = dump();
   if (needOwnClient && !token.clientId) throw new Error(OWN_CLIENT_STEPS);
   if (token.clientId) {
     const body = new URLSearchParams({ client_id: token.clientId, client_secret: token.clientSecret, refresh_token: token.refresh, grant_type: "refresh_token" });
-    const { response, text } = await send("https://oauth2.googleapis.com/token", { method: "POST", body });
+    const { response, text } = await send("https://oauth2.googleapis.com/token", { method: "POST", body }, timeout);
     if (!response.ok) throw new Error(`token refresh returned HTTP ${response.status}; run rclone config reconnect ${remote}:`);
     return { bearer: JSON.parse(text).access_token, ownClient: true };
   }

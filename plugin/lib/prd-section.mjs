@@ -1,4 +1,5 @@
 import { pathToFileURL } from "node:url";
+import { send } from "./api-request.mjs";
 
 export const MAX_WORDS = 400;
 const MAX_TEXT_HITS = 10;
@@ -125,10 +126,9 @@ export function quoteCount(quote, text) {
   return cleanLines(text).reduce((count, line) => count + normalise(line).toLowerCase().split(needle).length - 1, 0);
 }
 
-export async function fetchTab(doc, tab) {
+export async function fetchTab(doc, tab, { timeout } = {}) {
   const url = `https://docs.google.com/document/d/${encodeURIComponent(doc)}/export?format=txt&tab=${encodeURIComponent(tab)}`;
-  const response = await fetch(url, { redirect: "follow" });
-  const body = await response.text();
+  const { response, text: body } = await send(url, { method: "GET", redirect: "follow" }, timeout);
   if (!response.ok || /^\s*<(!doctype|html)/i.test(body)) {
     throw new Error(`PRD ${doc} tab ${tab} is not readable without login (HTTP ${response.status}); ask the user to share the doc by link or export the tab`);
   }
