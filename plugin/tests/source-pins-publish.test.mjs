@@ -360,6 +360,7 @@ test("a lint with read pins asks origin only once per ref it pins, and git never
   const p = project();
   assert.equal(p.lint("pin-sources", p.at("d.md"), "--pr", "701").status, 0);
   p.rewrite("d.md", DRAFT);
+  p.be.push("src/c.ts", "c1\n", "chore: pushed after the read, so the lint fetches it");
   git(p.fe.clone, "config", "core.sshCommand", "ssh -i /keys/review");
   const bin = tempDir("tedy-gitlog-");
   const log = join(bin, "calls.log");
@@ -381,6 +382,7 @@ test("a lint with read pins asks origin only once per ref it pins, and git never
   assert.ok(remote.every((line) => line.startsWith("0 ")), remote.join("\n"));
   assert.ok(remote.some((line) => line.startsWith("0 [ssh -i /keys/review -o BatchMode=yes] ") && line.includes(`-C ${p.fe.clone} `)), remote.join("\n"));
   assert.ok(remote.some((line) => line.startsWith("0 [ssh -o BatchMode=yes] ") && line.includes(`-C ${p.be.clone} `)), remote.join("\n"));
+  assert.ok(remote.some((line) => / fetch /.test(line)), remote.join("\n"));
   assert.ok(remote.every((line) => line.includes("-o BatchMode=yes] ")), remote.join("\n"));
 });
 
