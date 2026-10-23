@@ -508,6 +508,25 @@ test("a branch cite that no repo pins warns at the lint, and the post needs that
   assert.equal(sent(w).length, 1);
 });
 
+test("the Doc and OpenProject lints record the warning of a branch cite that no repo pins", async () => {
+  const warning = "warning: the cite @release/9 pins nothing: no repo in the project map has origin/release/9; check the branch name, or add pin-sources --branch <repo>:release/9 before the read";
+  const cite = "Does src/fee.ts:4@release/9 still charge the payer?";
+  const sibling = siblingRepo();
+  const map = { ...PRD_MAP, repos: [{ path: sibling.clone, role: "BE", branch: "dev" }] };
+  const recorded = (w, name) => JSON.parse(readFileSync(join(w.dir, "state", "drafts", `${join(w.dir, name).replace(/\//g, "_")}.sources.json`), "utf8")).warnings;
+  await withOpenProject(async (op) => {
+    const w = world({ mode: "ask", opUrl: op.url, web: { tabs: { "t.1": TAB }, document: textDoc(TAB) }, map });
+    w.file("g.md", `${cite}\n`);
+    w.file("items.json", JSON.stringify({ title: "PRD", items: [{ ...ITEM, comment: cite }] }));
+    w.file("c.md", `${cite}\n`);
+    for (const [name, script, args] of [["g.md", "draft-lint", ["doc-comment", "g.md", "--doc", "D"]], ["items.json", "doc-comment-file", ["items.json"]], ["c.md", "openproject", ["comment", "21298", "--body-file", "c.md"]]]) {
+      const pins = await lint(w, script, args);
+      assert.ok(pins.includes(warning), `${script}: ${pins.join("\n")}`);
+      assert.ok(recorded(w, name).includes(warning), script);
+    }
+  });
+});
+
 test("a Doc writer rechecks the read git pins against the body it posts", async () => {
   const sibling = siblingRepo();
   const w = world({ mode: "ask", web: { drive: [thread], document: textDoc(TAB) }, map: { name: "p", repos: [{ path: sibling.clone, role: "BE", branch: "dev" }], language: { doc_figma: "en" } } });
