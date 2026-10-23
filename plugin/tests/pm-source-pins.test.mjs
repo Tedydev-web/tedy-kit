@@ -48,14 +48,14 @@ test("the Figma recheck refuses a changed or deleted node, notes a file change e
   const reordered = { styles: {}, components: {}, document: { ...node("Pay").document } };
   assert.deepEqual(await recheckFigma(figmaStub({ nodes: { "1:2": reordered } }).figma, pin), {});
   assert.deepEqual(await recheckFigma(figmaStub({ lastModified: "2026-10-02T00:00:00Z", nodes: { "1:2": node("Pay") } }).figma, pin), {
-    notice: "notice: Figma F1 lastModified changed from 2026-10-01T00:00:00Z to 2026-10-02T00:00:00Z since the draft was linted; node 1:2 is unchanged, so it posts as drafted",
+    notice: "notice: Figma F1 lastModified changed from 2026-10-01T00:00:00Z to 2026-10-02T00:00:00Z since it was pinned; node 1:2 is unchanged, so it posts as drafted",
   });
-  assert.deepEqual(await recheckFigma(figmaStub({ nodes: { "1:2": node("Pay now") } }).figma, pin), { refusal: `refused: Figma F1 node 1:2 changed since the draft was linted; ${RECHECK}` });
-  assert.deepEqual(await recheckFigma(figmaStub({}).figma, pin), { refusal: `refused: Figma F1 node 1:2 changed since the draft was linted; ${RECHECK}` });
+  assert.deepEqual(await recheckFigma(figmaStub({ nodes: { "1:2": node("Pay now") } }).figma, pin), { refusal: `refused: Figma F1 node 1:2 changed since it was pinned; ${RECHECK}` });
+  assert.deepEqual(await recheckFigma(figmaStub({}).figma, pin), { refusal: `refused: Figma F1 node 1:2 changed since it was pinned; ${RECHECK}` });
   const whole = await figmaPin(figmaStub({}).figma, [], true);
   assert.deepEqual(await recheckFigma(figmaStub({}).figma, whole), {});
   assert.deepEqual(await recheckFigma(figmaStub({ lastModified: "2026-10-02T00:00:00Z" }).figma, whole), {
-    refusal: `refused: Figma F1 lastModified changed from 2026-10-01T00:00:00Z to 2026-10-02T00:00:00Z since the draft was linted and the draft links the whole file, not a node; ${RECHECK}`,
+    refusal: `refused: Figma F1 lastModified changed from 2026-10-01T00:00:00Z to 2026-10-02T00:00:00Z since it was pinned and the draft links the whole file, not a node; ${RECHECK}`,
   });
   assert.match((await recheckFigma(figmaStub({}).figma, { kind: "figma", file: "F1", version: "v1" })).refusal, /predates node pins/);
 });
@@ -63,10 +63,11 @@ test("the Figma recheck refuses a changed or deleted node, notes a file change e
 const paragraph = (text, extra = {}) => ({ paragraph: { elements: [{ startIndex: 1, textRun: { content: text, ...extra } }] } });
 const docBody = (texts, extra = {}) => ({ documentId: "D1", ...extra, tabs: texts.map((text, index) => ({ tabProperties: { tabId: `t.${index}` }, documentTab: { body: { content: [paragraph(text)] } }, childTabs: [] })) });
 
-function googleStub(document, { ownClient = true, exported = status(404) } = {}) {
+function googleStub(document, { ownClient = true, exported = status(404), comments = [] } = {}) {
   const calls = [];
   const request = async (url, options = {}) => {
     calls.push(url);
+    if (url.startsWith("https://www.googleapis.com/drive/v3/files/D1/comments?")) return { comments };
     if (url === "https://docs.googleapis.com/v1/documents/D1?includeTabsContent=true&suggestionsViewMode=PREVIEW_WITHOUT_SUGGESTIONS") {
       if (document instanceof Error) throw document;
       return document;
@@ -94,25 +95,34 @@ test("a Doc is pinned through its Drive text export without an own client, or wh
   await assert.rejects(gdocPin(googleStub({}, { exported: "x\n" }).google), /could not be read through docs-text \(the Docs API returned no tabs\)/);
   assert.equal((await gdocPin(googleStub(docBody(["A\n"]), { exported: "Crypto takes the price in USDT\n" }).google)).method, "docs-text");
   assert.deepEqual(await recheckGdoc(googleStub(docBody(["changed\n"]), { exported: "Crypto takes the price in USDT\n" }).google, viewer), {});
-  assert.match((await recheckGdoc(googleStub(status(500), { ownClient: false, exported: "Crypto takes the price in BTC\n" }).google, viewer)).refusal, /^refused: Google Doc D1 text changed from [0-9a-f]{12} to [0-9a-f]{12} since the draft was linted/);
+  assert.match((await recheckGdoc(googleStub(status(500), { ownClient: false, exported: "Crypto takes the price in BTC\n" }).google, viewer)).refusal, /^refused: Google Doc D1 text changed from [0-9a-f]{12} to [0-9a-f]{12} since it was pinned/);
   await assert.rejects(gdocPin(googleStub(status(403), { exported: status(403) }).google), /^Error: refused: the text of Google Doc D1 could not be read \(docs-text: .*; drive-export: .*\)/);
   await assert.rejects(recheckGdoc(googleStub(docBody(["A\n"]), { exported: status(500) }).google, viewer), /^Error: refused: the text of Google Doc D1 could not be read through drive-export/);
 });
 
-test("a Drive export pin drops the comment markers and the comment list the export appends, and nothing else", async () => {
+test("a Drive export pin drops only the comment entries the Drive comments API lists, and the markers", async () => {
   const exportOf = (body, comments) => `${body}\r\n\r\n${comments.map((text, index) => `[${String.fromCharCode(97 + index)}]${text}`).join("\r\n")}\r\n`;
-  const viewer = (text) => gdocPin(googleStub(status(403), { ownClient: false, exported: text }).google);
+  const thread = (content, replies = []) => ({ id: content, content, resolved: false, author: { me: false, displayName: "PM" }, replies: replies.map((reply) => ({ id: reply, content: reply, author: { me: true, displayName: "me" } })) });
+  const viewer = (text, comments = []) => gdocPin(googleStub(status(403), { ownClient: false, exported: text, comments }).google);
   const bare = await viewer("Crypto takes the price in USDT\r\nThe fee is in GRAM\r\n");
-  const one = await viewer(exportOf("Crypto takes the price in USDT[a]\r\nThe fee is in GRAM", ["Which wallet?"]));
-  const two = await viewer(exportOf("Crypto takes the price in USDT[a]\r\nThe fee is in GRAM[b]", ["Which wallet?", "Paid by whom?"]));
-  const reply = await viewer(exportOf("Crypto takes the price in USDT[a]\r\nThe fee is in GRAM[b][c]", ["Which wallet?", "Paid by whom?", "The payer."]));
+  const one = await viewer(exportOf("Crypto takes the price in USDT[a]\r\nThe fee is in GRAM", ["Which wallet?"]), [thread("Which wallet?")]);
+  const two = await viewer(exportOf("Crypto takes the price in USDT[a]\r\nThe fee is in GRAM[b]", ["Which wallet?", "Paid by whom?"]), [thread("Which wallet?"), thread("Paid by whom?")]);
+  const reply = await viewer(exportOf("Crypto takes the price in USDT[a]\r\nThe fee is in GRAM[b][c]", ["Which wallet?", "Paid by whom?", "The payer."]), [thread("Which wallet?"), thread("Paid by whom?", ["The payer."])]);
   assert.equal(one.text, bare.text);
   assert.equal(two.text, bare.text);
   assert.equal(reply.text, bare.text);
-  assert.notEqual((await viewer(exportOf("Crypto takes the price in BTC[a]\r\nThe fee is in GRAM", ["Which wallet?"]))).text, bare.text);
-  assert.notEqual((await viewer(exportOf("Crypto takes the price in USDT[a]\r\nThe fee is in GRAM, plus [z] here", ["Which wallet?"]))).text, bare.text);
-  const unmarked = exportOf("Crypto takes the price in USDT\r\nThe fee is in GRAM", ["Which wallet?"]);
-  assert.notEqual((await viewer(unmarked)).text, bare.text);
+  assert.notEqual((await viewer(exportOf("Crypto takes the price in BTC[a]\r\nThe fee is in GRAM", ["Which wallet?"]), [thread("Which wallet?")])).text, bare.text);
+  assert.notEqual((await viewer(exportOf("Crypto takes the price in USDT[a]\r\nThe fee is in GRAM[b]", ["Which wallet?", "Not a comment the API lists"]), [thread("Which wallet?")])).text, bare.text);
+});
+
+test("a body line that starts with [a] never hides the text after it from a Drive export pin", async () => {
+  const viewer = (text, comments = []) => gdocPin(googleStub(status(403), { ownClient: false, exported: text, comments }).google);
+  const body = (tail) => `Options, see [a] and [b] below:\r\n[a] pay in USDT\r\n[b] pay in GRAM\r\n${tail}\r\n`;
+  const before = await viewer(body("The fee is 1%."));
+  assert.notEqual((await viewer(body("The fee is 2%."))).text, before.text);
+  assert.notEqual((await viewer(body("The fee is 1%.").replace("pay in GRAM", "pay in BTC"))).text, before.text);
+  const comment = [{ id: "c1", content: "pay in USDT", resolved: false, author: { me: false, displayName: "PM" }, replies: [] }];
+  assert.notEqual((await viewer(body("The fee is 2%."), comment)).text, (await viewer(body("The fee is 1%."), comment)).text);
 });
 
 test("a Google Doc pin is the SHA-256 of the text of every tab, read without suggestions, never a revision field", async () => {
@@ -132,7 +142,7 @@ test("the Google Doc recheck refuses a text change unless the caller proved ever
   const short = pin.text.slice(0, 12);
   assert.deepEqual(await recheckGdoc(googleStub(docBody(["A\n"])).google, pin), {});
   const changed = await recheckGdoc(googleStub(docBody(["B\n"])).google, pin);
-  assert.match(changed.refusal, new RegExp(`^refused: Google Doc D1 text changed from ${short} to [0-9a-f]{12} since the draft was linted; ${RECHECK}$`));
+  assert.match(changed.refusal, new RegExp(`^refused: Google Doc D1 text changed from ${short} to [0-9a-f]{12} since it was pinned; ${RECHECK}$`));
   assert.match((await recheckGdoc(googleStub(docBody(["B\n"])).google, pin, "every highlighted passage still appears exactly once")).notice, /^notice: Google Doc D1 text changed from .* every highlighted passage still appears exactly once, so it posts as drafted$/);
   assert.match((await recheckGdoc(googleStub(docBody(["A\n"])).google, { kind: "gdoc", doc: "D1", field: "revisionId" }, "kept")).refusal, /predates text pins/);
   assert.match((await recheckGdoc(googleStub(docBody(["A\n"])).google, { kind: "gdoc", doc: "D1", text: pin.text }, "kept")).refusal, /predates text pins/);

@@ -149,7 +149,7 @@ test("a stale-source refusal leaves the approval ticket unused, on every path th
     ["figma-comments reply", async () => {
       const w = world({ web: { figma: [root] } });
       w.file("f.md", "@lam Đã thêm trạng thái rỗng.\n");
-      return { w, lint: ["draft-lint", ["figma-comment", "f.md", "--file", "F1", "--node", "1-2"]], move: () => changeWeb(w, { figmaNodes: { "1:2": { document: { id: "1:2", name: "changed" } } } }), script: "figma-comments", args: ["reply", "100", "--body-file", "f.md", "--file", "F1"], texts: ["@lam Đã thêm trạng thái rỗng."], refusal: /refused: Figma F1 node 1:2 changed since the draft was linted/ };
+      return { w, lint: ["draft-lint", ["figma-comment", "f.md", "--file", "F1", "--node", "1-2"]], move: () => changeWeb(w, { figmaNodes: { "1:2": { document: { id: "1:2", name: "changed" } } } }), script: "figma-comments", args: ["reply", "100", "--body-file", "f.md", "--file", "F1"], texts: ["@lam Đã thêm trạng thái rỗng."], refusal: /refused: Figma F1 node 1:2 changed since it was pinned/ };
     }],
     ["openproject apply", async (op) => {
       const w = world({ opUrl: op.url, web: { document: textDoc("A\n") } });
@@ -161,7 +161,7 @@ test("a stale-source refusal leaves the approval ticket unused, on every path th
       const w = world({ opUrl: op.url });
       const body = `The pop-up needs the Pro price, as ${FIGMA_NODE} shows.`;
       w.file("c.md", `${body}\n`);
-      return { w, lint: ["openproject", ["comment", "21298", "--body-file", "c.md"]], move: () => changeWeb(w, { figmaNodes: { "1:2": null } }), script: "openproject", args: ["comment", "21298", "--apply", "--body-file", "c.md"], texts: [body], refusal: /refused: Figma F1 node 1:2 changed since the draft was linted/ };
+      return { w, lint: ["openproject", ["comment", "21298", "--body-file", "c.md"]], move: () => changeWeb(w, { figmaNodes: { "1:2": null } }), script: "openproject", args: ["comment", "21298", "--apply", "--body-file", "c.md"], texts: [body], refusal: /refused: Figma F1 node 1:2 changed since it was pinned/ };
     }],
   ];
   for (const [name, setup] of stale) {
@@ -260,12 +260,13 @@ test("without an own OAuth client a Doc is pinned by its Drive text export: repl
   assert.match(pins[0], /^pinned: Google Doc D text [0-9a-f]{12} via drive-export$/);
   for (const index of [1, 2]) await lint(w, "draft-lint", ["doc-comment", `g${index}.md`, "--doc", "D"]);
   const withTail = (body, count) => `${body}${"[a][b]".slice(0, 3 * count)}\r\n\r\n${["[a]Which wallet?", "[b]Which wallet pays the fee?"].slice(0, count).join("\r\n")}\r\n`;
+  const replied = { ...thread, replies: [{ id: "r1", content: "Which wallet pays the fee?", deleted: false, author: { me: true, displayName: "me" }, createdTime: "2026-10-22T00:00:00Z" }] };
   changeWeb(w, { exported: withTail("Crypto takes the price in USDT", 1) });
   for (const index of [0, 1]) {
     const result = await w.run("gdoc-comments", ["reply", "c1", "--body-file", `g${index}.md`, "--doc", "D"]);
     assert.equal(result.code, 0, result.out);
     assert.doesNotMatch(result.out, /refused|notice/);
-    changeWeb(w, { exported: withTail("Crypto takes the price in USDT", 2) });
+    changeWeb(w, { drive: [replied], exported: withTail("Crypto takes the price in USDT", 2) });
   }
   changeWeb(w, { exported: withTail("Crypto takes the price in BTC", 2) });
   const refused = await w.run("gdoc-comments", ["reply", "c1", "--body-file", "g2.md", "--doc", "D"]);
@@ -304,6 +305,44 @@ test("a ready PR body refresh needs --repo and a ticket in answer mode, and neit
   } finally {
     op.server.close();
   }
+});
+
+test("read pins of the Doc and of Figma nodes taken before the read hold at the lint", async () => {
+  const sibling = siblingRepo();
+  const w = world({ mode: "ask", web: { drive: [thread], document: textDoc(TAB), tabs: { "t.1": TAB } }, map: { ...PRD_MAP, repos: [{ path: sibling.clone, role: "BE", branch: "dev" }] } });
+  w.file("ledger.md", "# ledger\n");
+  const read = await w.run("draft-lint", ["pin-sources", "ledger.md", "--doc", "D", "--file", "F1", "--node", "1-2,3-4"]);
+  assert.equal(read.code, 0, read.out);
+  assert.match(read.out, /^pinned: Google Doc D text [0-9a-f]{12} via docs-text$/m);
+  assert.match(read.out, /^pinned: Figma F1 lastModified \S+ · node 1:2 [0-9a-f]{12}, 3:4 [0-9a-f]{12}$/m);
+  assert.match((await w.run("draft-lint", ["pin-sources", "ledger.md", "--file", "F1"])).out, /pin-sources --file needs --node <node-id>\[,<node-id>…\]/);
+  w.file("g.md", "Which wallet pays the fee?\n");
+  w.file("f.md", "@lam Màn này thiếu trạng thái rỗng.\n");
+  const doc = await w.run("draft-lint", ["doc-comment", "g.md", "--doc", "D", "--pinned-at", "ledger.md"]);
+  assert.equal(doc.code, 0, doc.out);
+  assert.doesNotMatch(doc.out, /warning:|notice:/);
+  changeWeb(w, { document: textDoc(`${TAB}A new paragraph\n`), figmaNodes: { "3:4": { document: { id: "3:4", name: "changed" } } } });
+  const docLint = await w.run("draft-lint", ["doc-comment", "g.md", "--doc", "D", "--pinned-at", "ledger.md"]);
+  assert.notEqual(docLint.code, 0);
+  assert.match(docLint.out, /^sources: refused: Google Doc D text changed from [0-9a-f]{12} to [0-9a-f]{12} since it was pinned/m);
+  const figmaLint = await w.run("draft-lint", ["figma-comment", "f.md", "--file", "F1", "--node", "1-2", "--pinned-at", "ledger.md"]);
+  assert.notEqual(figmaLint.code, 0);
+  assert.match(figmaLint.out, /^sources: refused: Figma F1 node 3:4 changed since it was pinned/m);
+  w.file("items.json", JSON.stringify({ title: "PRD", items: [ITEM] }));
+  const items = await w.run("doc-comment-file", ["items.json", "--pinned-at", "ledger.md"]);
+  assert.notEqual(items.code, 0);
+  assert.match(items.out, /refused: Figma F1 node 3:4 changed since it was pinned/);
+  assert.equal(sent(w).length, 0);
+});
+
+test("a figma-comment lint on a node the read pins lack pins it at lint and warns", async () => {
+  const w = world({ mode: "ask", web: { figma: [] } });
+  w.file("ledger.md", "# ledger\n");
+  assert.equal((await w.run("draft-lint", ["pin-sources", "ledger.md", "--file", "F1", "--node", "1-2"])).code, 0);
+  w.file("f.md", "@lam Màn này thiếu trạng thái rỗng.\n");
+  const result = await w.run("draft-lint", ["figma-comment", "f.md", "--file", "F1", "--node", "5-6", "--pinned-at", "ledger.md"]);
+  assert.equal(result.code, 0, result.out);
+  assert.match(result.out, /^warning: Figma F1 node 5:6 was not pinned by draft-lint\.mjs pin-sources ledger\.md, so it was pinned now, at lint$/m);
 });
 
 test("a corrupt sources record refuses with a clear message and writes nothing", async () => {

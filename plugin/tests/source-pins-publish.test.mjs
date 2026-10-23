@@ -85,7 +85,7 @@ test("post goes ahead with a notice when a repo moved but no changed file is nam
   const moved = p.be.push("src/b.ts", "b2\n", "chore: unrelated");
   const result = p.write(["post", p.at("d.md"), "--repo", "o/r"]);
   assert.equal(result.status, 0, result.out);
-  assert.ok(result.out.includes(`notice: ${p.be.clone} origin/dev moved from ${p.beSha.slice(0, 8)} to ${moved.slice(0, 8)} since the draft was linted; no changed file is named in the text being posted, so it posts as drafted\n`), result.out);
+  assert.ok(result.out.includes(`notice: ${p.be.clone} origin/dev moved from ${p.beSha.slice(0, 8)} to ${moved.slice(0, 8)} since it was pinned; no changed file is named in the text being posted, so it posts as drafted\n`), result.out);
   assert.equal(result.writes.length, 1);
 });
 
@@ -102,7 +102,7 @@ test("post refuses when a changed file is named in a comment, however it is cite
     const moved = p.be.push("src/a.ts", "a2\n", "fix: writer sets the field");
     const result = p.write(["post", p.at("d.md"), "--repo", "o/r"]);
     assert.equal(result.status, 1, body);
-    assert.ok(result.out.includes(`refused: ${p.be.clone} origin/dev moved from ${p.beSha.slice(0, 8)} to ${moved.slice(0, 8)} since the draft was linted and changed a file the text being posted names\n  files: src/a.ts\n  commit ${moved.slice(0, 7)} fix: writer sets the field\n`), `${body}\n${result.out}`);
+    assert.ok(result.out.includes(`refused: ${p.be.clone} origin/dev moved from ${p.beSha.slice(0, 8)} to ${moved.slice(0, 8)} since it was pinned and changed a file the text being posted names\n  files: src/a.ts\n  commit ${moved.slice(0, 7)} fix: writer sets the field\n`), `${body}\n${result.out}`);
     assert.equal(result.writes.length, 0, body);
   }
   const fe = project(draftWith("The label is wrong, `src/b.ts:1@dev` sets it."));
@@ -131,6 +131,48 @@ test("reply and edit need a pr-reply lint, then refuse when a changed file is na
   assert.equal(edit.status, 1);
   assert.match(edit.out, /^refused: .* and changed a file the text being posted names$/m);
   assert.equal(edit.writes.length, 0);
+});
+
+test("without a read pin the lint pins at lint time and warns that a push during the read is not seen", () => {
+  const p = project();
+  const result = p.lint("pr-comment", p.at("d.md"), "--diff", p.at("pr.diff"));
+  assert.equal(result.status, 0, result.out);
+  assert.ok(result.out.includes(`warning: no read pins for ${p.at("d.md")}, so its sources were pinned now, at lint, and a change pushed while you read them is not seen; next time run draft-lint.mjs pin-sources ${p.at("d.md")} before reading\n`), result.out);
+});
+
+test("a read pin taken before the read holds: a push before the lint fails it when the draft names a changed file, else prints a notice, and post diffs from the read", () => {
+  const p = project(draftWith("The label is wrong, `src/a.ts:1@dev` sets it."));
+  const pinned = p.lint("pin-sources", p.at("d.md"));
+  assert.equal(pinned.status, 0, pinned.out);
+  assert.ok(pinned.out.includes(`read pins for ${p.at("d.md")}:\npinned: . origin/dev@${p.feSha.slice(0, 8)}\npinned: ${p.be.clone} origin/dev@${p.beSha.slice(0, 8)}\n`), pinned.out);
+  const other = p.be.push("src/b.ts", "b2\n", "chore: unrelated, pushed during the read");
+  const noted = p.lint("pr-comment", p.at("d.md"), "--diff", p.at("pr.diff"));
+  assert.equal(noted.status, 0, noted.out);
+  assert.ok(noted.out.includes(`notice: ${p.be.clone} origin/dev moved from ${p.beSha.slice(0, 8)} to ${other.slice(0, 8)} since it was pinned; no changed file is named in the text being posted, so it posts as drafted\n`), noted.out);
+  assert.ok(noted.out.includes(`pinned: ${p.be.clone} origin/dev@${p.beSha.slice(0, 8)}\n`), noted.out);
+  assert.doesNotMatch(noted.out, /warning:/);
+  const posted = p.write(["post", p.at("d.md"), "--repo", "o/r"]);
+  assert.equal(posted.status, 0, posted.out);
+  assert.match(posted.out, new RegExp(`^notice: .* moved from ${p.beSha.slice(0, 8)} to ${other.slice(0, 8)} since it was pinned;`, "m"));
+  const cited = p.be.push("src/a.ts", "a2\n", "fix: writer sets the field");
+  const failed = p.lint("pr-comment", p.at("d.md"), "--diff", p.at("pr.diff"));
+  assert.equal(failed.status, 1, failed.out);
+  assert.ok(failed.out.includes(`sources: refused: ${p.be.clone} origin/dev moved from ${p.beSha.slice(0, 8)} to ${cited.slice(0, 8)} since it was pinned and changed a file the text being posted names\n`), failed.out);
+  assert.ok(failed.out.includes(`sources: a source changed while it was being read; run draft-lint.mjs pin-sources ${p.at("d.md")} again, re-read what changed, fix the draft and lint it again\n`), failed.out);
+  assert.doesNotMatch(failed.out, /^clean:/m);
+  assert.equal(p.lint("pin-sources", p.at("d.md")).status, 0);
+  assert.equal(p.lint("pr-comment", p.at("d.md"), "--diff", p.at("pr.diff")).status, 0);
+});
+
+test("a reply lint reads the read pins of another file with --pinned-at", () => {
+  const p = project();
+  writeFileSync(p.at("r.txt"), "The label is still wrong, see src/a.ts.\n");
+  assert.equal(p.lint("pin-sources", p.at("ledger.md")).status, 0);
+  p.be.push("src/a.ts", "a2\n", "fix: writer sets the field");
+  const result = p.lint("pr-reply", p.at("r.txt"), "--pinned-at", p.at("ledger.md"));
+  assert.equal(result.status, 1, result.out);
+  assert.match(result.out, /^sources: refused: .* since it was pinned and changed a file the text being posted names$/m);
+  assert.ok(result.out.includes(`run draft-lint.mjs pin-sources ${p.at("ledger.md")} again`), result.out);
 });
 
 test("pr-reply lints the body like a review comment and writes no pin when it fails", () => {

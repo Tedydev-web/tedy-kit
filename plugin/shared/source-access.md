@@ -36,9 +36,9 @@ git -C <repo> show origin/<branch>:<path>
 git -C <repo> grep -n "<pattern>" origin/<branch> -- <path>
 ```
 
-- `<branch>` is the integration branch in the map (`dev` when unset). Read from the remote ref; never check out, edit or commit in a sibling or `readonly` repo.
+- `<branch>` is the integration branch in the map (`origin/HEAD` when unset, as `project-map.mjs doctor` and the pins read it). Read from the remote ref; never check out, edit or commit in a sibling or `readonly` repo.
 - Check the writer, not the schema: a field on a DTO or model is real only when code that saves it sets it. Name the writer `path:line@branch`.
-- Cite a backend fact as `path:line@branch`. `draft-lint.mjs` pins every map repo at the tip origin has at lint time, so fetch before reading and lint right after; the publish step asks origin again and refuses when a changed file is named in the text it posts.
+- Cite a backend fact as `path:line@branch`. `draft-lint.mjs pin-sources <draft>` before the read pins every map repo at the tip origin has then; the lint and the publish step ask origin again and refuse when a changed file is named in the text.
 
 ## Blast radius
 

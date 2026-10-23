@@ -32,16 +32,18 @@ test("branchTokens reads every @branch token, trailing punctuation dropped", () 
   assert.deepEqual(branchTokens("See `src/a.ts:3@feature/v2`, src/b.ts#L4@release-1. and mail me@example.com @dev."), ["feature/v2", "release-1", "example.com", "dev"]);
 });
 
-test("mapRepos resolves map repos against the first path; an unset branch means origin/HEAD and dev", () => {
+test("mapRepos resolves map repos against the first path; an unset branch means origin/HEAD, as the project map doctor reads it", () => {
   const sibling = siblingRepo();
   git(sibling.clone, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main");
   const map = { paths: ["/w/fe"], repos: [{ path: "../be", role: "BE" }, { path: "/abs/sc", role: "contract", branch: "main" }, { path: sibling.clone, role: "FE" }] };
   assert.deepEqual(mapRepos(map), [
-    { name: "../be", dir: "/w/be", branches: ["dev"] },
+    { name: "../be", dir: "/w/be", branches: [] },
     { name: "/abs/sc", dir: "/abs/sc", branches: ["main"] },
-    { name: sibling.clone, dir: sibling.clone, branches: ["main", "dev"] },
+    { name: sibling.clone, dir: sibling.clone, branches: ["main"] },
   ]);
   assert.deepEqual(mapRepos(undefined), []);
+  git(sibling.clone, "symbolic-ref", "--delete", "refs/remotes/origin/HEAD");
+  assert.deepEqual(pinRepos(mapRepos({ paths: ["/w"], repos: [{ path: sibling.clone, role: "FE" }] }), ""), { pins: [], problems: [`${sibling.clone} has no branch in the project map and origin/HEAD is unset; set its branch in the map or run git -C ${sibling.clone} remote set-head origin --auto`] });
 });
 
 test("a lint pins every map repo at the tip origin has now, not the clone's stale remote ref, and adds branches the draft names", () => {
@@ -77,7 +79,7 @@ test("the recheck: unchanged is silent, a change no posted text names is a notic
   const other = sibling.push("src/b.ts", "b2\n", "chore: touch another file");
   assert.deepEqual(recheckRepos(pins, repos, ["The writer `src/a.ts:1@dev` sets it."]), {
     refusals: [],
-    notices: [`notice: ../backend origin/dev moved from ${sha} to ${other.slice(0, 8)} since the draft was linted; no changed file is named in the text being posted, so it posts as drafted`],
+    notices: [`notice: ../backend origin/dev moved from ${sha} to ${other.slice(0, 8)} since it was pinned; no changed file is named in the text being posted, so it posts as drafted`],
   });
   const cited = sibling.push("src/a.ts", "a2\n", "fix: change the writer");
   for (const text of ["```\nsrc/a.ts\n```", "`see src/a.ts:3,5@dev here`", "https://github.com/o/be/blob/dev/src/a.ts#L3", "only a.ts sets it", "src/a.ts#L10@dev"]) {
@@ -85,7 +87,7 @@ test("the recheck: unchanged is silent, a change no posted text names is a notic
     assert.deepEqual(notices, [], text);
     assert.equal(
       refusals[0],
-      [`refused: ../backend origin/dev moved from ${sha} to ${cited.slice(0, 8)} since the draft was linted and changed a file the text being posted names`, "  files: src/a.ts", `  commit ${cited.slice(0, 7)} fix: change the writer`, `  ${RECHECK}`].join("\n"),
+      [`refused: ../backend origin/dev moved from ${sha} to ${cited.slice(0, 8)} since it was pinned and changed a file the text being posted names`, "  files: src/a.ts", `  commit ${cited.slice(0, 7)} fix: change the writer`, `  ${RECHECK}`].join("\n"),
       text,
     );
   }
@@ -160,8 +162,8 @@ test("the recheck takes the branch tip from ls-remote, so another process rewrit
 
 test("a version source: unchanged is silent, changed refuses unless the cited part is provably untouched", () => {
   assert.deepEqual(versionCheck("Figma F1 lastModified", "1", "1"), {});
-  assert.deepEqual(versionCheck("Figma F1 lastModified", "1", "2", { kept: "node 1:2 is unchanged" }), { notice: "notice: Figma F1 lastModified changed from 1 to 2 since the draft was linted; node 1:2 is unchanged, so it posts as drafted" });
-  assert.deepEqual(versionCheck("Figma F1 lastModified", "1", "2", { changed: "the draft links the whole file" }), { refusal: `refused: Figma F1 lastModified changed from 1 to 2 since the draft was linted and the draft links the whole file; ${RECHECK}` });
+  assert.deepEqual(versionCheck("Figma F1 lastModified", "1", "2", { kept: "node 1:2 is unchanged" }), { notice: "notice: Figma F1 lastModified changed from 1 to 2 since it was pinned; node 1:2 is unchanged, so it posts as drafted" });
+  assert.deepEqual(versionCheck("Figma F1 lastModified", "1", "2", { changed: "the draft links the whole file" }), { refusal: `refused: Figma F1 lastModified changed from 1 to 2 since it was pinned and the draft links the whole file; ${RECHECK}` });
 });
 
 test("the sources record is required at publish and refuses when missing, corrupt, for another file or stale", () => {

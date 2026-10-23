@@ -6,7 +6,7 @@ import { STATE_DIR } from "./hook-io.mjs";
 import { UC_ID } from "./prd-section.mjs";
 import { chatLanguage } from "./labels.mjs";
 import { resolveMap } from "./project-map.mjs";
-import { describePin, linkPins, mapRepos, nodeId, pinRepos, writeSources } from "./source-pins.mjs";
+import { describePin, linkPins, mapRepos, nodeId, pinRepos, recordPins, writeReadPins } from "./source-pins.mjs";
 
 export const MAX_BODY = 360;
 export const MAX_CHAT = 600;
@@ -183,24 +183,46 @@ async function chatPins(kind, text, flag) {
   return linkPins(text, doc ? { docs: [doc] } : {});
 }
 
-function record(file, text, pins, none, freeze = true) {
-  writeSources(file, pins, text);
-  console.log(pins.length ? pins.map(describePin).join("\n") : `pinned: ${none}`);
+async function record(file, text, pins, { clean, none, texts, pinnedAt, freeze = true }) {
+  const kept = await recordPins(file, text, pins, { pinnedAt, texts });
+  if (!kept) return 1;
+  console.log(clean);
+  console.log(kept.length ? kept.map(describePin).join("\n") : `pinned: ${none}`);
   const frozen = freeze && snapshotOnce(file, text);
   if (frozen) console.log(`original frozen for the edit log: ${frozen}`);
+  return 0;
+}
+
+async function pinSources(file, flag) {
+  const map = resolveMap(process.cwd())?.map;
+  const nodes = (flag("--node") ?? "").split(",").filter(Boolean);
+  const figma = flag("--file") ?? (nodes.length ? map?.figma?.file : undefined);
+  if (figma && !nodes.length) throw new Error("pin-sources --file needs --node <node-id>[,<node-id>…]: a whole-file read pin would refuse on any edit to the file");
+  const bad = nodes.filter((node) => !nodeId(node));
+  if (bad.length) throw new Error(`--node ${bad.join(", ")} is not a Figma node id such as 12-34 or 12:34`);
+  const { pins, problems } = pinRepos(mapRepos(map), "");
+  for (const problem of problems) console.log(`sources: ${problem}`);
+  if (problems.length) return 1;
+  const doc = flag("--doc");
+  const linked = await linkPins("", { docs: doc ? [doc] : [], figma: figma ? [{ file: figma, nodes: nodes.map(nodeId), whole: false }] : [] });
+  writeReadPins(file, [...pins, ...linked]);
+  console.log(`read pins for ${file}:`);
+  for (const pin of [...pins, ...linked]) console.log(describePin(pin));
+  return 0;
 }
 
 async function main([kind, file, ...flags]) {
   const flag = (name) => (flags.includes(name) ? flags[flags.indexOf(name) + 1] : undefined);
+  const pinnedAt = flag("--pinned-at");
+  if (kind === "pin-sources" && file) return pinSources(file, flag);
   if ((kind === "doc-comment" || kind === "figma-comment") && file) {
     const text = readFileSync(file, "utf8");
     const problems = lintChatComment(text, kind.replace("-comment", ""), mapLanguage("doc_figma"));
     for (const problem of problems) console.log(problem);
     if (problems.length) return 1;
     const pins = await chatPins(kind, text, flag);
-    console.log(`clean: ${kind}`);
-    record(file, text, pins, kind === "figma-comment" ? "no Figma file in the project map and no link in the comment" : "no PRD doc in the project map and no link in the comment");
-    return 0;
+    const none = kind === "figma-comment" ? "no Figma file in the project map and no link in the comment" : "no PRD doc in the project map and no link in the comment";
+    return record(file, text, pins, { clean: `clean: ${kind}`, none, texts: [text], pinnedAt });
   }
   if (kind === "pr-reply" && file) {
     const text = readFileSync(file, "utf8");
@@ -209,12 +231,10 @@ async function main([kind, file, ...flags]) {
     if (problems.length) return 1;
     const pins = repoPins(text);
     if (!pins) return 1;
-    console.log("clean: pr-reply");
-    record(file, text, pins, "no repo in the project map", false);
-    return 0;
+    return record(file, text, pins, { clean: "clean: pr-reply", none: "no repo in the project map", texts: [text], pinnedAt, freeze: false });
   }
   if (kind !== "pr-comment" || !file) {
-    console.error("usage: draft-lint.mjs pr-comment <draft.md> [--diff <file>] [--repo <owner/repo>] | pr-reply <body.txt> | doc-comment <body.txt> [--doc <id>] | figma-comment <body.txt> [--file <key>] [--node <node-id>]");
+    console.error("usage: draft-lint.mjs pin-sources <draft or ledger> [--doc <id>] [--file <key> --node <node-id>[,<node-id>…]] | pr-comment <draft.md> [--diff <file>] [--repo <owner/repo>] [--pinned-at <file>] | pr-reply <body.txt> [--pinned-at <file>] | doc-comment <body.txt> [--doc <id>] [--pinned-at <file>] | figma-comment <body.txt> [--file <key>] [--node <node-id>] [--pinned-at <file>]");
     return 2;
   }
   const text = readFileSync(file, "utf8");
@@ -227,9 +247,7 @@ async function main([kind, file, ...flags]) {
   }
   const pins = repoPins(text);
   if (!pins) return 1;
-  console.log(`clean: ${result.comments.length} comments, PR #${result.pr}, head ${result.sha}`);
-  record(file, text, pins, "no repo in the project map");
-  return 0;
+  return record(file, text, pins, { clean: `clean: ${result.comments.length} comments, PR #${result.pr}, head ${result.sha}`, none: "no repo in the project map", texts: result.comments.map((comment) => comment.body), pinnedAt });
 }
 
 export function run() {

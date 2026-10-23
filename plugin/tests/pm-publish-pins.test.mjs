@@ -70,11 +70,11 @@ test("a Figma post needs the lint's pin of the node and refuses when that node c
   assert.match(lint.out, /^pinned: Figma F1 lastModified t1 · node 1:2 [0-9a-f]{12}$/m);
   const changed = run("figma-comments", ["post", "1-2", "--body-file", "c.txt"], figma("t2", frame("Pay now")));
   assert.equal(changed.status, 1);
-  assert.match(changed.out, /^figma-comments: refused: Figma F1 node 1:2 changed since the draft was linted; re-read the changed sources, fix the draft, lint it again and ask the user again$/m);
+  assert.match(changed.out, /^figma-comments: refused: Figma F1 node 1:2 changed since it was pinned; re-read the changed sources, fix the draft, lint it again and ask the user again$/m);
   assert.equal(changed.posts.length, 0);
   const kept = run("figma-comments", ["post", "1-2", "--body-file", "c.txt"], figma("t2", frame("Pay")));
   assert.equal(kept.status, 0, kept.out);
-  assert.match(kept.out, /^notice: Figma F1 lastModified changed from t1 to t2 since the draft was linted; node 1:2 is unchanged, so it posts as drafted$/m);
+  assert.match(kept.out, /^notice: Figma F1 lastModified changed from t1 to t2 since it was pinned; node 1:2 is unchanged, so it posts as drafted$/m);
   assert.equal(kept.posts.length, 1);
 });
 
@@ -91,6 +91,6 @@ test("a Google Doc reply refuses when the Doc changed after the lint pinned it",
   assert.match(lint.out, /^pinned: Google Doc D1 text [0-9a-f]{12} via drive-export$/m);
   const changed = run("gdoc-comments", ["reply", "t1", "--body-file", "r.txt"], doc(8).map((route, index) => (index === 1 ? [route[0], route[1], { comments: [] }] : route)));
   assert.equal(changed.status, 1);
-  assert.match(changed.out, /^gdoc-comments: refused: Google Doc D1 text changed from [0-9a-f]{12} to [0-9a-f]{12} since the draft was linted; re-read the changed sources, fix the draft, lint it again and ask the user again$/m);
+  assert.match(changed.out, /^gdoc-comments: refused: Google Doc D1 text changed from [0-9a-f]{12} to [0-9a-f]{12} since it was pinned; re-read the changed sources, fix the draft, lint it again and ask the user again$/m);
   assert.equal(changed.posts.length, 0);
 });

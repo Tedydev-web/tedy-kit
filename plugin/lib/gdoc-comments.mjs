@@ -83,16 +83,16 @@ const tabsText = (tabs) => tabs.map((tab) => `${tab.tabProperties?.tabId}\n${run
 
 const sha256 = (text) => createHash("sha256").update(text).digest("hex");
 
-const markerLabel = (index) => (index < 26 ? String.fromCharCode(97 + index) : markerLabel(Math.floor(index / 26) - 1) + String.fromCharCode(97 + (index % 26)));
+const MARKER = /\[[a-z]{1,3}\]/g;
 
-export function exportWithoutComments(text) {
-  const start = text.lastIndexOf("\n[a]");
-  if (start < 0) return text.trimEnd();
-  const body = text.slice(0, start);
-  const labels = [...text.slice(start).matchAll(/\n\[([a-z]{1,3})\]/g)].map((match) => match[1]);
-  if (!labels.every((label, index) => label === markerLabel(index) && body.includes(`[${label}]`))) return text.trimEnd();
-  const known = new Set(labels);
-  return body.replace(/\[([a-z]{1,3})\]/g, (marker, label) => (known.has(label) ? "" : marker)).trimEnd();
+export function exportWithoutComments(text, comments) {
+  const listed = new Set(comments.flatMap((comment) => [comment, ...(comment.replies ?? [])]).map((item) => squash(item.content ?? "")).filter(Boolean));
+  return text
+    .split(/\r?\n(?=\[[a-z]{1,3}\])/)
+    .filter((chunk, index) => index === 0 || !listed.has(squash(chunk.replace(/^\[[a-z]{1,3}\]/, ""))))
+    .map((chunk) => chunk.replace(MARKER, "").trimEnd())
+    .join("\n")
+    .trimEnd();
 }
 
 const TEXT_READERS = {
@@ -104,7 +104,7 @@ const TEXT_READERS = {
   "drive-export": async (google) => {
     const text = await google.request(`${DRIVE}/files/${google.doc}/export?mimeType=text/plain`, { as: "text" });
     if (typeof text !== "string") throw new Error("the Drive export returned no text");
-    return sha256(exportWithoutComments(text));
+    return sha256(exportWithoutComments(text, await listComments(google)));
   },
 };
 

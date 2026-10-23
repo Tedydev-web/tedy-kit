@@ -10,9 +10,10 @@ import { fetchTab, quoteCount } from "./prd-section.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { approvalLines, renderDocComment } from "./publish-approval-render.mjs";
-import { describePin, sayNotices, takePin, writeSources } from "./source-pins.mjs";
+import { describePin, recordPins, sayNotices, takePin } from "./source-pins.mjs";
 
 const GROUPS = ["A", "B"];
+const KEPT = "every highlighted passage still appears exactly once";
 
 const escape = (text) => String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -100,7 +101,7 @@ async function post(itemsFile, flags) {
   if (!flags.apply) return 0;
   requireExplicitTarget("doc", flags.doc, { expected: map.prd.doc });
   const google = await session({ doc: map.prd.doc }, true);
-  const notices = await recheckDocTarget(map.prd.doc, itemsFile, `doc-comment-file.mjs ${itemsFile}`, "every highlighted passage still appears exactly once");
+  const notices = await recheckDocTarget(map.prd.doc, itemsFile, `doc-comment-file.mjs ${itemsFile}`, KEPT);
   const document = await readDocument(google);
   const ranges = todo.map((item) => findQuoteRange(document, tabOf(item.epic), item.quote));
   consumeApproval(process.argv, todo.map((item) => renderDocComment(item, tabOf(item.epic))));
@@ -123,12 +124,10 @@ async function post(itemsFile, flags) {
   return 0;
 }
 
+const flagValue = (args, name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
+
 async function main([itemsFile, ...rest]) {
-  if (itemsFile === "post") {
-    const html = rest.includes("--html") ? rest[rest.indexOf("--html") + 1] : undefined;
-    const doc = rest.includes("--doc") ? rest[rest.indexOf("--doc") + 1] : undefined;
-    return post(rest[0]?.startsWith("--") ? undefined : rest[0], { html, doc, apply: rest.includes("--apply") });
-  }
+  if (itemsFile === "post") return post(rest[0]?.startsWith("--") ? undefined : rest[0], { html: flagValue(rest, "--html"), doc: flagValue(rest, "--doc"), apply: rest.includes("--apply") });
   if (!itemsFile) {
     console.error('usage: doc-comment-file.mjs <items.json>   items.json = { "title": "...", "items": [{ "group": "A|B", "epic": "09", "where": "UC_SW_13 BR1", "quote": "...", "comment": "...", "note": "..." }] }');
     return 2;
@@ -149,8 +148,9 @@ async function main([itemsFile, ...rest]) {
     return 1;
   }
   const pin = await takePin(`Google Doc ${map.prd.doc}`, async () => gdocPin(await session({ doc: map.prd.doc })));
-  writeSources(itemsFile, [pin], text);
-  console.log(describePin(pin));
+  const pins = await recordPins(itemsFile, text, [pin], { pinnedAt: flagValue(rest, "--pinned-at"), texts: items.map((item) => item.comment ?? ""), kept: KEPT });
+  if (!pins) return 1;
+  for (const each of pins) console.log(describePin(each));
   const dir = join(map.paths[0], "plans", "drafts");
   mkdirSync(dir, { recursive: true });
   const path = join(dir, `pm-comments-${stamp()}-${slugOf(title)}.html`);

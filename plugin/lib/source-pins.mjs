@@ -75,7 +75,8 @@ function originHead(dir, git) {
 export const mapRepos = (map, git = runGit) =>
   (map?.repos ?? []).map((repo) => {
     const dir = isAbsolute(repo.path) ? repo.path : resolve(map.paths?.[0] ?? process.cwd(), repo.path);
-    return { name: repo.path, dir, branches: repo.branch ? [repo.branch] : unique([originHead(dir, git), "dev"].filter(Boolean)) };
+    const head = repo.branch ? null : originHead(dir, git);
+    return { name: repo.path, dir, branches: repo.branch ? [repo.branch] : head ? [head] : [] };
   });
 
 const gitReason = (error) => (error.code === "ETIMEDOUT" ? `timed out after ${GIT_TIMEOUT_MS / 1000} s` : (error.stderr?.toString().trim() || error.message).split("\n")[0]);
@@ -106,6 +107,10 @@ export function pinRepos(repos, text, git = runGit) {
   const pins = [];
   const problems = [];
   for (const repo of repos) {
+    if (!repo.branches.length) {
+      problems.push(`${repo.name} has no branch in the project map and origin/HEAD is unset; set its branch in the map or run git -C ${repo.dir} remote set-head origin --auto`);
+      continue;
+    }
     let found = false;
     let failed = false;
     for (const branch of unique([...repo.branches, ...tokens])) {
@@ -141,7 +146,7 @@ function recheckRepo(pin, repo, texts, git) {
   if (now === pin.sha) return {};
   fetchCommit(git, repo.dir, branch, now);
   if (!hasCommit(git, repo.dir, pin.sha)) return { refusal: `refused: ${pin.repo} ${pin.ref}: the pinned commit ${pin.sha.slice(0, 8)} is not in the clone, so what changed cannot be listed; fetch it or lint again, then ask the user again` };
-  const moved = `${pin.repo} ${pin.ref} moved from ${pin.sha.slice(0, 8)} to ${now.slice(0, 8)} since the draft was linted`;
+  const moved = `${pin.repo} ${pin.ref} moved from ${pin.sha.slice(0, 8)} to ${now.slice(0, 8)} since it was pinned`;
   const named = changedPaths(git, repo.dir, pin.sha, now).filter((path) => namedIn(texts, path));
   if (!named.length) return { notice: `notice: ${moved}; no changed file is named in the text being posted, so it posts as drafted` };
   const commits = git(repo.dir, ["log", "--format=%h %s", `${pin.sha}..${now}`, "--", ...named]).split("\n").filter(Boolean);
@@ -171,7 +176,7 @@ export function recheckRepos(pins, repos, texts, git = runGit) {
 
 export function versionCheck(source, before, now, { kept, changed } = {}) {
   if (before === now) return {};
-  const moved = `${source} changed from ${before} to ${now} since the draft was linted`;
+  const moved = `${source} changed from ${before} to ${now} since it was pinned`;
   if (kept) return { notice: `notice: ${moved}; ${kept}, so it posts as drafted` };
   return { refusal: `refused: ${moved}${changed ? ` and ${changed}` : ""}; ${RECHECK}` };
 }
@@ -275,6 +280,62 @@ export async function recheckPinned(file, relint, { texts, kept, covers, what } 
   if (refusal) return { refusals: [refusal], notices: [] };
   if (covers && !sources.some(covers)) return { refusals: [`refused: ${file} has no pinned ${what}; run ${relint}, then ask the user again`], notices: [] };
   return recheckPins(sources, { texts, kept });
+}
+
+export const readPinsPath = (file) => join(STATE_DIR, "drafts", `${resolve(file).replace(/\//g, "_")}.read-pins.json`);
+
+export function writeReadPins(file, sources) {
+  const path = readPinsPath(file);
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, `${JSON.stringify({ file: resolve(file), at: new Date().toISOString(), sources }, null, 1)}\n`);
+  return path;
+}
+
+function loadReadPins(key) {
+  const path = readPinsPath(key);
+  if (!existsSync(path)) return null;
+  try {
+    const record = JSON.parse(readFileSync(path, "utf8"));
+    if (record?.file !== resolve(key) || !Array.isArray(record.sources)) throw new Error(`not a read pin record for ${key}`);
+    return { sources: record.sources };
+  } catch (error) {
+    return { problem: `the read pins for ${key} cannot be read (${error.message}); run draft-lint.mjs pin-sources ${key} again, re-read the sources and lint again` };
+  }
+}
+
+const pinLabel = (pin, nodes) => (pin.kind === "git" ? `${pin.repo} ${pin.ref}` : pin.kind === "gdoc" ? `Google Doc ${pin.doc}` : nodes.length ? `Figma ${pin.file} node ${nodes.join(", ")}` : `Figma ${pin.file} file`);
+
+function uncovered(read, pin) {
+  const same = read.filter((candidate) => candidate.kind === pin.kind && (pin.kind === "git" ? candidate.repo === pin.repo && candidate.ref === pin.ref : pin.kind === "gdoc" ? candidate.doc === pin.doc : candidate.file === pin.file));
+  if (pin.kind !== "figma") return same.length ? null : pinLabel(pin, []);
+  const missing = Object.keys(pin.nodes ?? {}).filter((id) => !same.some((candidate) => Object.hasOwn(candidate.nodes ?? {}, id)));
+  if (missing.length) return pinLabel(pin, missing);
+  return pin.whole && !same.some((candidate) => candidate.whole) ? pinLabel(pin, []) : null;
+}
+
+export async function settleReadPins(key, pins, { texts, kept } = {}) {
+  const read = loadReadPins(key);
+  if (read === null) return { pins, problems: [], lines: [`warning: no read pins for ${key}, so its sources were pinned now, at lint, and a change pushed while you read them is not seen; next time run draft-lint.mjs pin-sources ${key} before reading`] };
+  if (read.problem) return { pins: [], problems: [read.problem], lines: [] };
+  const extra = pins.flatMap((pin) => {
+    const label = uncovered(read.sources, pin);
+    return label ? [{ pin, label }] : [];
+  });
+  const { refusals, notices } = await recheckPins(read.sources, { texts, kept });
+  return {
+    pins: [...read.sources, ...extra.map(({ pin }) => pin)],
+    problems: refusals.length ? [...refusals, `a source changed while it was being read; run draft-lint.mjs pin-sources ${key} again, re-read what changed, fix the draft and lint it again`] : [],
+    lines: [...notices, ...extra.map(({ label }) => `warning: ${label} was not pinned by draft-lint.mjs pin-sources ${key}, so it was pinned now, at lint`)],
+  };
+}
+
+export async function recordPins(file, text, pins, { pinnedAt = file, texts, kept } = {}) {
+  const settled = await settleReadPins(pinnedAt, pins, { texts, kept });
+  for (const line of settled.lines) console.log(line);
+  for (const problem of settled.problems) console.log(`sources: ${problem}`);
+  if (settled.problems.length) return null;
+  writeSources(file, settled.pins, text);
+  return settled.pins;
 }
 
 export async function requireFresh(file, relint, options) {

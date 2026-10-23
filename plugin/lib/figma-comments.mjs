@@ -77,7 +77,7 @@ export async function recheckFigma(figma, pin) {
   const ids = Object.keys(pin.nodes);
   const now = await nodeHashes(figma, ids);
   const changed = ids.filter((id) => now[id] !== pin.nodes[id]);
-  if (changed.length) return { refusal: `refused: Figma ${pin.file} node ${changed.join(", ")} changed since the draft was linted; ${RECHECK}` };
+  if (changed.length) return { refusal: `refused: Figma ${pin.file} node ${changed.join(", ")} changed since it was pinned; ${RECHECK}` };
   return versionCheck(`Figma ${pin.file} lastModified`, pin.lastModified, await lastModified(figma), pin.whole || !ids.length ? { changed: "the draft links the whole file, not a node" } : { kept: `node ${ids.join(", ")} is unchanged` });
 }
 
