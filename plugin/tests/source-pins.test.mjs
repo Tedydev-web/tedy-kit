@@ -400,4 +400,7 @@ test("linkedDocs reads slides, make, site and embed Figma links, &amp; in a link
     drive: ["Df1", "Do1"],
     problems: [],
   });
+  const files = linkedDocs("https://docs.google.com/spreadsheets/d/Sh1/edit#gid=0, https://docs.google.com/presentation/u/0/d/Pr1/edit, https://drive.google.com/drive/folders/Fo1, https://drive.google.com/drive/u/1/folders/Fo2 and https://docs.google.com/spreadsheets/d/e/2PACX-x/pubhtml");
+  assert.deepEqual(files.drive, ["Sh1", "Pr1", "Fo1", "Fo2"]);
+  assert.deepEqual(files.problems, ["https://docs.google.com/spreadsheets/d/e/2PACX-x/pubhtml is a published-to-web copy of a Google file, which cannot be pinned; link the file itself (docs.google.com/spreadsheets/d/<id>)"]);
 });

@@ -165,23 +165,39 @@ export async function recheckGdoc(google, pin) {
 }
 
 const DOC_MIME = "application/vnd.google-apps.document";
+const SHORTCUT_MIME = "application/vnd.google-apps.shortcut";
+const FOLDER_MIME = "application/vnd.google-apps.folder";
+
+const driveFile = (google, id) => google.request(`${DRIVE}/files/${id}?fields=mimeType,md5Checksum,modifiedTime,shortcutDetails&supportsAllDrives=true`);
+
+async function driveTarget(google) {
+  let id = google.doc;
+  let file = await driveFile(google, id);
+  if (file?.mimeType === SHORTCUT_MIME) {
+    id = file.shortcutDetails?.targetId;
+    if (typeof id !== "string") throw new Error(`Drive shortcut ${google.doc} names no target`);
+    file = await driveFile(google, id);
+  }
+  if (file?.mimeType === FOLDER_MIME) throw new Error(`${id} is a Drive folder, which cannot be pinned; link the files in it`);
+  return { id, file };
+}
 
 async function driveVersion(google) {
-  const file = await google.request(`${DRIVE}/files/${google.doc}?fields=mimeType,md5Checksum,modifiedTime&supportsAllDrives=true`);
-  if (file?.mimeType === DOC_MIME) return null;
-  if (typeof file?.md5Checksum === "string") return `md5 ${file.md5Checksum}`;
-  if (typeof file?.modifiedTime === "string") return `modified ${file.modifiedTime}`;
-  throw new Error(`Drive file ${google.doc} has no md5Checksum and no modifiedTime`);
+  const { id, file } = await driveTarget(google);
+  if (file?.mimeType === DOC_MIME) return { id, version: null };
+  if (typeof file?.md5Checksum === "string") return { id, version: `md5 ${file.md5Checksum}` };
+  if (typeof file?.modifiedTime === "string") return { id, version: `modified ${file.modifiedTime}` };
+  throw new Error(`Drive file ${id} has no md5Checksum and no modifiedTime`);
 }
 
 export async function drivePin(google) {
-  const version = await driveVersion(google);
-  return version === null ? gdocPin(google) : { kind: "drive", file: google.doc, version };
+  const { id, version } = await driveVersion(google);
+  return version === null ? gdocPin({ ...google, doc: id }) : { kind: "drive", file: id, version };
 }
 
 export async function recheckDrive(google, pin) {
   if (typeof pin.version !== "string") return { refusal: `refused: the pin of Drive file ${pin.file} has no version; lint the draft again and ask the user again` };
-  return versionCheck(`Drive file ${pin.file}`, pin.version, (await driveVersion(google)) ?? "a Google Doc");
+  return versionCheck(`Drive file ${pin.file}`, pin.version, (await driveVersion(google)).version ?? "a Google Doc");
 }
 
 export const recheckDocTarget = (doc, file, relint, { texts } = {}) => requireFresh(file, relint, { texts, covers: (pin) => pin.kind === "gdoc" && pin.doc === doc, what: `text of Google Doc ${doc}` });

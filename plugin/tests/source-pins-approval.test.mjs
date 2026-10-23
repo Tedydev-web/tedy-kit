@@ -606,6 +606,34 @@ test("a Drive file that is not a Doc is pinned by its md5Checksum, or its modifi
   assert.equal(w.writes().length, 1);
 });
 
+test("a Drive shortcut pins the file it points to, Sheets and Slides pin their modifiedTime, and a Drive folder fails the lint", async () => {
+  const pdf = { mimeType: "application/pdf", md5Checksum: "aa11" };
+  const files = {
+    Sc1pdf: { mimeType: "application/vnd.google-apps.shortcut", modifiedTime: "2026-09-01T00:00:00Z", shortcutDetails: { targetId: "Kq8pdf", targetMimeType: "application/pdf" } },
+    Sc2doc: { mimeType: "application/vnd.google-apps.shortcut", modifiedTime: "2026-09-01T00:00:00Z", shortcutDetails: { targetId: "Gd7doc", targetMimeType: "application/vnd.google-apps.document" } },
+    Kq8pdf: pdf,
+    Sh4fee: { mimeType: "application/vnd.google-apps.spreadsheet", modifiedTime: "2026-10-02T00:00:00Z" },
+    Pr5deck: { mimeType: "application/vnd.google-apps.presentation", modifiedTime: "2026-10-03T00:00:00Z" },
+    Fo6dir: { mimeType: "application/vnd.google-apps.folder", modifiedTime: "2026-10-04T00:00:00Z" },
+  };
+  const w = world({ mode: "ask", web: { drive: [thread], document: textDoc(TAB), driveFiles: files } });
+  w.file("g.md", "Do https://drive.google.com/file/d/Sc1pdf/view, https://drive.google.com/open?id=Sc2doc, https://docs.google.com/spreadsheets/d/Sh4fee/edit and https://docs.google.com/presentation/d/Pr5deck/edit agree on the fee?\n");
+  const pinned = await lint(w, "draft-lint", ["doc-comment", "g.md", "--doc", "D"]);
+  for (const line of ["pinned: Drive file Kq8pdf md5 aa11 (at lint)", "pinned: Drive file Sh4fee modified 2026-10-02T00:00:00Z (at lint)", "pinned: Drive file Pr5deck modified 2026-10-03T00:00:00Z (at lint)"]) assert.ok(pinned.includes(line), `${line}\n${pinned.join("\n")}`);
+  assert.ok(pinned.some((line) => /^pinned: Google Doc Gd7doc text [0-9a-f]{12} via docs-text \(at lint\)$/.test(line)), pinned.join("\n"));
+  changeWeb(w, { driveFiles: { ...files, Kq8pdf: { ...pdf, md5Checksum: "bb22" } } });
+  const refused = await w.run("gdoc-comments", ["reply", "c1", "--body-file", "g.md", "--doc", "D"]);
+  assert.notEqual(refused.code, 0);
+  assert.match(refused.out, /refused: Drive file Kq8pdf changed from md5 aa11 to md5 bb22 since it was pinned/);
+  for (const link of ["https://drive.google.com/drive/folders/Fo6dir", "https://drive.google.com/open?id=Fo6dir"]) {
+    w.file("h.md", `Is the fee sheet in ${link} still current?\n`);
+    const folder = await w.run("draft-lint", ["doc-comment", "h.md", "--doc", "D"]);
+    assert.notEqual(folder.code, 0, link);
+    assert.match(folder.out, /Fo6dir is a Drive folder, which cannot be pinned; link the files in it/, `${link}\n${folder.out}`);
+    assert.doesNotMatch(folder.out, /^clean:/m, link);
+  }
+});
+
 test("a Figma 429 refuses after one call, without retrying", async () => {
   const w = world({ mode: "ask", web: { figma: [] } });
   w.file("f.md", "@lam Màn này thiếu trạng thái rỗng.\n");
