@@ -143,6 +143,7 @@ test("a Drive export drops only listed entries of the trailing comment section, 
   assert.notEqual(exportWithoutComments("Lang [en] only\r\n", []), exportWithoutComments("Lang [vi] only\r\n", []));
   assert.notEqual(exportWithoutComments("Intro\r\n\r\nLang [en] only[a]\r\n\r\n[a]Which wallet?\r\n", comments), exportWithoutComments("Intro\r\n\r\nLang [vi] only[a]\r\n\r\n[a]Which wallet?\r\n", comments));
   assert.equal(exportWithoutComments("Intro\r\n\r\n[a] Ok\r\n[b] Không\r\n", comments), "Intro\n\n[a] Ok\n[b] Không");
+  assert.equal(exportWithoutComments("Intro\r\n\r\n[a] Ok\r\nFee[b]\r\n\r\n[b]Which wallet?\r\n", comments), "Intro\n\n[a] Ok\nFee");
   assert.equal(exportWithoutComments("Fee[a]\r\n\r\n[a]Which wallet?\r\nThe second paragraph of it.\r\n", [{ content: "Which wallet?\n\nThe second paragraph of it.", replies: [] }]), "Fee");
 });
 
