@@ -21,6 +21,7 @@ export function linkedDocs(raw) {
   const scanned = [text, ...[...text.matchAll(FIGMA_EMBED)].map((match) => decoded(match[1]))].join("\n");
   const figma = new Map();
   const docs = [];
+  const drive = [];
   const problems = [];
   for (const [, main, branch, rest] of scanned.matchAll(FIGMA_LINK)) {
     const file = branch ?? main;
@@ -32,7 +33,8 @@ export function linkedDocs(raw) {
   }
   for (const [link, published, doc, opened, file] of text.matchAll(DOC_LINK)) {
     if (published) problems.push(`${link} is a published-to-web copy of a Google Doc, which cannot be pinned; link the Doc itself (docs.google.com/document/d/<id>)`);
-    else docs.push(doc ?? opened ?? file);
+    else if (doc) docs.push(doc);
+    else drive.push(opened ?? file);
   }
-  return { figma: [...figma.values()], docs: [...new Set(docs)], problems };
+  return { figma: [...figma.values()], docs: [...new Set(docs)], drive: [...new Set(drive)].filter((id) => !docs.includes(id)), problems };
 }

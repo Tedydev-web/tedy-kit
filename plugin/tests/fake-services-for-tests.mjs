@@ -77,6 +77,8 @@ globalThis.fetch = async (input, options = {}) => {
   }
   if (url.host === "www.googleapis.com") {
     if (url.pathname.endsWith("/export")) return new Response(web.exported ?? "", { status: 200 });
+    const meta = url.pathname.match(/^\\/drive\\/v3\\/files\\/([^/]+)$/);
+    if (meta && method === "GET") return json(web.driveFiles?.[meta[1]] ?? { mimeType: "application/vnd.google-apps.document" });
     const reply = url.pathname.match(/\\/comments\\/([^/]+)\\/replies(?:\\/([^/]+))?$/);
     const comment = url.pathname.match(/\\/comments\\/([^/]+)$/);
     const thread = (id) => web.drive.find((item) => item.id === id);

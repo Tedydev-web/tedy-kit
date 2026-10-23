@@ -46,9 +46,14 @@ export async function linkPins(text, extra = {}, read = []) {
   const held = docs.filter((doc) => read.some((pin) => pin.kind === "gdoc" && pin.doc === doc && typeof pin.text === "string"));
   pins.push(...held.map((doc) => ({ kind: "gdoc", doc, held: true })));
   const fresh = docs.filter((doc) => !held.includes(doc));
-  if (fresh.length) {
-    const { gdocPin, session } = await import("./gdoc-comments.mjs");
+  const drive = links.drive.filter((id) => !docs.includes(id));
+  const heldDrive = drive.filter((id) => read.some((pin) => (pin.kind === "drive" && pin.file === id) || (pin.kind === "gdoc" && pin.doc === id && typeof pin.text === "string")));
+  pins.push(...heldDrive.map((id) => (read.some((pin) => pin.kind === "drive" && pin.file === id) ? { kind: "drive", file: id, held: true } : { kind: "gdoc", doc: id, held: true })));
+  const freshDrive = drive.filter((id) => !heldDrive.includes(id));
+  if (fresh.length || freshDrive.length) {
+    const { drivePin, gdocPin, session } = await import("./gdoc-comments.mjs");
     for (const doc of fresh) pins.push(await takePin(`Google Doc ${doc}`, async () => gdocPin(await session({ doc }))));
+    for (const id of freshDrive) pins.push(await takePin(`Drive file ${id}`, async () => drivePin(await session({ doc: id }))));
   }
   return pins;
 }
@@ -73,6 +78,10 @@ async function recheckLinked(pin) {
     const { recheckGdoc, session } = await import("./gdoc-comments.mjs");
     return recheckGdoc(await session({ doc: pin.doc }), pin);
   }
+  if (pin.kind === "drive") {
+    const { recheckDrive, session } = await import("./gdoc-comments.mjs");
+    return recheckDrive(await session({ doc: pin.file }), pin);
+  }
   return { refusal: `refused: the sources record holds a pin of unknown kind ${JSON.stringify(pin.kind)}; ${RECHECK}` };
 }
 
@@ -84,7 +93,7 @@ export async function recheckPins(sources, { texts = [], tips } = {}) {
     try {
       verdict = await recheckLinked(pin);
     } catch (error) {
-      verdict = { refusal: error.message.startsWith("refused:") ? error.message : `refused: ${pin.kind === "figma" ? `Figma ${pin.file}` : `Google Doc ${pin.doc}`} could not be rechecked (${error.message}); fix that, then publish again` };
+      verdict = { refusal: error.message.startsWith("refused:") ? error.message : `refused: ${pin.kind === "figma" ? `Figma ${pin.file}` : pin.kind === "drive" ? `Drive file ${pin.file}` : `Google Doc ${pin.doc}`} could not be rechecked (${error.message}); fix that, then publish again` };
     }
     if (verdict.refusal) refusals.push(verdict.refusal);
     if (verdict.notice) notices.push(verdict.notice);
@@ -97,6 +106,7 @@ const stageOf = (pin) => (pin.stage === "read" ? ` (read ${pin.at})` : " (at lin
 export const describePin = (pin) => {
   if (pin.kind === "git") return `pinned: ${pin.repo} ${pin.ref}@${pin.sha}${stageOf(pin)}`;
   if (pin.kind === "gdoc") return `pinned: Google Doc ${pin.doc} text ${pin.text.slice(0, 12)} via ${pin.method}${stageOf(pin)}`;
+  if (pin.kind === "drive") return `pinned: Drive file ${pin.file} ${pin.version}${stageOf(pin)}`;
   const nodes = Object.entries(pin.nodes);
   return `pinned: Figma ${pin.file} lastModified ${pin.lastModified}${nodes.length ? ` · node ${nodes.map(([id, hash]) => `${id} ${hash.slice(0, 12)}`).join(", ")}` : ""}${pin.whole ? " · whole file" : ""}${stageOf(pin)}`;
 };
@@ -164,7 +174,7 @@ function loadReadPins(key) {
   }
 }
 
-const pinLabel = (pin, nodes = Object.keys(pin.nodes ?? {})) => (pin.kind === "git" ? `${pin.repo} ${pin.ref}` : pin.kind === "gdoc" ? `Google Doc ${pin.doc}` : nodes.length ? `Figma ${pin.file} node ${nodes.join(", ")}` : `Figma ${pin.file} file`);
+const pinLabel = (pin, nodes = Object.keys(pin.nodes ?? {})) => (pin.kind === "git" ? `${pin.repo} ${pin.ref}` : pin.kind === "gdoc" ? `Google Doc ${pin.doc}` : pin.kind === "drive" ? `Drive file ${pin.file}` : nodes.length ? `Figma ${pin.file} node ${nodes.join(", ")}` : `Figma ${pin.file} file`);
 
 function matchReadPins(read, pins) {
   const kept = read.filter((pin) => pin.kind === "git");
@@ -180,7 +190,7 @@ function matchReadPins(read, pins) {
       extra.push({ pin, label: pinLabel(pin) });
       continue;
     }
-    if (pin.kind === "gdoc") {
+    if (pin.kind !== "figma") {
       kept.push(match);
       continue;
     }

@@ -364,16 +364,18 @@ test("nodeId accepts 12-34, 12:34 and 12%3A34, instance paths included, and noth
 
 test("linkedDocs finds Figma files with their nodes, branch files, and Google Docs in every link shape", async () => {
   const text = "See https://www.figma.com/design/AbC123/App?node-id=1-2&m=dev and https://www.figma.com/file/AbC123/x, (https://www.figma.com/design/Zz9/B?node-id=30%3A4) PRD https://docs.google.com/document/d/1x-Y_z/edit#heading";
-  assert.deepEqual(linkedDocs(text), { figma: [{ file: "AbC123", nodes: ["1:2"], whole: true }, { file: "Zz9", nodes: ["30:4"], whole: false }], docs: ["1x-Y_z"], problems: [] });
+  assert.deepEqual(linkedDocs(text), { figma: [{ file: "AbC123", nodes: ["1:2"], whole: true }, { file: "Zz9", nodes: ["30:4"], whole: false }], docs: ["1x-Y_z"], drive: [], problems: [] });
   const more = "Flow https://figma.com/proto/Pp1/z?node-id=3-4, board https://www.figma.com/board/Bd2/y, branch https://www.figma.com/design/Main1/branch/Br2/App?node-id=5:6 and PRD https://docs.google.com/document/u/0/d/D9-x/edit, https://docs.google.com/document/u/12/d/D10/view, https://docs.google.com/a/example.com/document/d/D11/edit, https://drive.google.com/open?id=D12 and https://drive.google.com/open?usp=x&id=D13";
   assert.deepEqual(linkedDocs(more), {
     figma: [{ file: "Pp1", nodes: ["3:4"], whole: false }, { file: "Bd2", nodes: [], whole: true }, { file: "Br2", nodes: ["5:6"], whole: false }],
-    docs: ["D9-x", "D10", "D11", "D12", "D13"],
+    docs: ["D9-x", "D10", "D11"],
+    drive: ["D12", "D13"],
     problems: [],
   });
   assert.deepEqual(linkedDocs("https://FIGMA.com/design/Up1/N?node-id=1-2, https://WWW.Figma.COM/embed?url=https%3A%2F%2Fwww.figma.com%2Fdesign%2FUp2%2FX, https://Docs.Google.com/document/d/UpD/edit and https://DRIVE.google.com/file/d/UpF/view"), {
     figma: [{ file: "Up1", nodes: ["1:2"], whole: false }, { file: "Up2", nodes: [], whole: true }],
-    docs: ["UpD", "UpF"],
+    docs: ["UpD"],
+    drive: ["UpF"],
     problems: [],
   });
   const published = linkedDocs("Read https://docs.google.com/document/d/e/2PACX-1vT/pub please");
@@ -394,7 +396,8 @@ test("linkedDocs reads slides, make, site and embed Figma links, &amp; in a link
   ].join(" and ");
   assert.deepEqual(linkedDocs(text), {
     figma: [{ file: "Sl1", nodes: ["1:2"], whole: false }, { file: "Mk1", nodes: [], whole: true }, { file: "St1", nodes: [], whole: true }, { file: "Am1", nodes: ["3:4"], whole: false }, { file: "Em1", nodes: ["7:8"], whole: false }],
-    docs: ["Df1", "Do1", "Dt1"],
+    docs: ["Dt1"],
+    drive: ["Df1", "Do1"],
     problems: [],
   });
 });

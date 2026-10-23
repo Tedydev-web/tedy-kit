@@ -580,6 +580,26 @@ test("a draft that links several nodes of one Figma file pins them with one call
   assert.equal(tierOne(w).length, 1, w.reads().join("\n"));
 });
 
+test("a Drive file that is not a Doc is pinned by its md5Checksum, or its modifiedTime, and a change to it refuses", async () => {
+  const pdf = { mimeType: "application/pdf", md5Checksum: "aa11", modifiedTime: "2026-10-01T00:00:00Z" };
+  const video = { mimeType: "video/mp4", modifiedTime: "2026-10-01T00:00:00Z" };
+  const w = world({ mode: "ask", web: { drive: [thread], document: textDoc(TAB), driveFiles: { Kq8pdf: pdf, Zt3vid: video } } });
+  w.file("g.md", "Is the fee in https://drive.google.com/file/d/Kq8pdf/view and https://drive.google.com/open?id=Zt3vid the same as https://drive.google.com/open?id=Gd7doc?\n");
+  const pinned = await lint(w, "draft-lint", ["doc-comment", "g.md", "--doc", "D"]);
+  assert.ok(pinned.some((line) => /^pinned: Google Doc Gd7doc text [0-9a-f]{12} via docs-text \(at lint\)$/.test(line)), pinned.join("\n"));
+  assert.ok(pinned.includes("pinned: Drive file Kq8pdf md5 aa11 (at lint)"), pinned.join("\n"));
+  assert.ok(pinned.includes("pinned: Drive file Zt3vid modified 2026-10-01T00:00:00Z (at lint)"), pinned.join("\n"));
+  const args = ["reply", "c1", "--body-file", "g.md", "--doc", "D"];
+  changeWeb(w, { driveFiles: { Kq8pdf: { ...pdf, md5Checksum: "bb22" }, Zt3vid: video } });
+  const refused = await w.run("gdoc-comments", args);
+  assert.notEqual(refused.code, 0);
+  assert.match(refused.out, /refused: Drive file Kq8pdf changed from md5 aa11 to md5 bb22 since it was pinned/);
+  changeWeb(w, { driveFiles: { Kq8pdf: pdf, Zt3vid: video } });
+  const posted = await w.run("gdoc-comments", args);
+  assert.equal(posted.code, 0, posted.out);
+  assert.equal(w.writes().length, 1);
+});
+
 test("a Figma 429 refuses after one call, without retrying", async () => {
   const w = world({ mode: "ask", web: { figma: [] } });
   w.file("f.md", "@lam Màn này thiếu trạng thái rỗng.\n");

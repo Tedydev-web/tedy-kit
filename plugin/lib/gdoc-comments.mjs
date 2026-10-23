@@ -163,6 +163,26 @@ export async function recheckGdoc(google, pin) {
   return versionCheck(`Google Doc ${pin.doc} text`, pin.text.slice(0, 12), now.startsWith(pin.text.slice(0, 12)) ? now : now.slice(0, 12));
 }
 
+const DOC_MIME = "application/vnd.google-apps.document";
+
+async function driveVersion(google) {
+  const file = await google.request(`${DRIVE}/files/${google.doc}?fields=mimeType,md5Checksum,modifiedTime&supportsAllDrives=true`);
+  if (file?.mimeType === DOC_MIME) return null;
+  if (typeof file?.md5Checksum === "string") return `md5 ${file.md5Checksum}`;
+  if (typeof file?.modifiedTime === "string") return `modified ${file.modifiedTime}`;
+  throw new Error(`Drive file ${google.doc} has no md5Checksum and no modifiedTime`);
+}
+
+export async function drivePin(google) {
+  const version = await driveVersion(google);
+  return version === null ? gdocPin(google) : { kind: "drive", file: google.doc, version };
+}
+
+export async function recheckDrive(google, pin) {
+  if (typeof pin.version !== "string") return { refusal: `refused: the pin of Drive file ${pin.file} has no version; lint the draft again and ask the user again` };
+  return versionCheck(`Drive file ${pin.file}`, pin.version, (await driveVersion(google)) ?? "a Google Doc");
+}
+
 export const recheckDocTarget = (doc, file, relint, { texts } = {}) => requireFresh(file, relint, { texts, covers: (pin) => pin.kind === "gdoc" && pin.doc === doc, what: `text of Google Doc ${doc}` });
 
 const relintDoc = (file, doc) => `draft-lint.mjs doc-comment ${file} --doc ${doc}`;
