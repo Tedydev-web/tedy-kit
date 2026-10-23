@@ -132,6 +132,22 @@ test("the recheck asks each repo's origin once for all its pinned refs, every re
   assert.deepEqual(calls.map(([dir]) => dir), [two.clone]);
 });
 
+test("the reviewed repo pins only the branches --branch names, never one a cite of another repo names", async () => {
+  const repos = [{ name: ".", dir: "/fake/fe", branches: ["main"] }, { name: "../be", dir: "/fake/be", branches: ["main"] }];
+  const asked = [];
+  const heads = async (dir) => {
+    asked.push(dir);
+    return new Map([["main", "a".repeat(40)], ["feature/x", "b".repeat(40)]]);
+  };
+  const git = () => "";
+  const text = "The backend never sets it: src/user/user.service.ts:42@main, and src/pages/profile.tsx:7@feature/x shows it empty.";
+  const cited = await pinRepos(repos, text, { reviewed: ".", heads, git });
+  assert.deepEqual(cited.pins.map((pin) => `${pin.repo} ${pin.ref}`), ["../be origin/main", "../be origin/feature/x"]);
+  assert.deepEqual(asked, ["/fake/be"]);
+  const named = await pinRepos(repos, text, { reviewed: ".", extra: [".:feature/x"], heads, git });
+  assert.deepEqual(named.pins.map((pin) => `${pin.repo} ${pin.ref}`), [". origin/feature/x", "../be origin/main", "../be origin/feature/x"]);
+});
+
 test("pin-sources --branch pins a branch the map does not name, and fails on a repo the map lacks or a branch origin lacks", async () => {
   const sibling = siblingRepo();
   git(sibling.root, "--git-dir", sibling.origin, "branch", "feature/x", "dev");

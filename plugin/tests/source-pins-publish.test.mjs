@@ -58,14 +58,18 @@ test("draft-lint pins the other map repos and the PR head, with full shas, and s
   assert.equal(git(p.fe.clone, "rev-parse", "refs/pr/701"), p.prSha);
 });
 
-test("a merge into the reviewed repo's own branch does not stop a post on its PR, unless a cite names that branch; the other repos still refuse", () => {
-  const merged = project(draftWith("The label is wrong, src/a.ts sets it."));
-  assert.equal(merged.lint("pr-comment", merged.at("d.md"), "--diff", merged.at("pr.diff")).status, 0);
-  merged.fe.push("src/a.ts", "a2\n", "fix: another PR merged into dev");
-  const posted = merged.write(["post", merged.at("d.md"), "--repo", "o/r"]);
-  assert.equal(posted.status, 0, posted.out);
-  assert.equal(posted.writes.length, 1);
+test("a merge into the reviewed repo's own branch does not stop a post on its PR, even when a cite names that branch, unless pin-sources --branch pinned it; the other repos still refuse", () => {
+  for (const body of ["The label is wrong, src/a.ts sets it.", "The label is wrong, `src/a.ts:1@dev` sets it."]) {
+    const merged = project(draftWith(body));
+    assert.equal(merged.lint("pr-comment", merged.at("d.md"), "--diff", merged.at("pr.diff")).status, 0, body);
+    merged.fe.push("src/a.ts", "a2\n", "fix: another PR merged into dev");
+    const posted = merged.write(["post", merged.at("d.md"), "--repo", "o/r"]);
+    assert.equal(posted.status, 0, `${body}\n${posted.out}`);
+    assert.equal(posted.writes.length, 1, body);
+  }
   const cited = project(draftWith("The label is wrong, `src/a.ts:1@dev` sets it."));
+  assert.equal(cited.lint("pin-sources", cited.at("d.md"), "--pr", "701", "--branch", ".:dev").status, 0);
+  cited.rewrite("d.md", draftWith("The label is wrong, `src/a.ts:1@dev` sets it."));
   assert.equal(cited.lint("pr-comment", cited.at("d.md"), "--diff", cited.at("pr.diff")).status, 0);
   cited.fe.push("src/a.ts", "a2\n", "fix: another PR merged into dev");
   const refused = cited.write(["post", cited.at("d.md"), "--repo", "o/r"]);
@@ -140,6 +144,8 @@ test("post refuses when a changed file is named in a comment, however it is cite
     assert.equal(result.writes.length, 0, body);
   }
   const fe = project(draftWith("The label is wrong, `src/b.ts:1@dev` sets it."));
+  assert.equal(fe.lint("pin-sources", fe.at("d.md"), "--pr", "701", "--branch", ".:dev").status, 0);
+  fe.rewrite("d.md", draftWith("The label is wrong, `src/b.ts:1@dev` sets it."));
   assert.equal(fe.lint("pr-comment", fe.at("d.md"), "--diff", fe.at("pr.diff")).status, 0);
   fe.fe.push("src/b.ts", "b2\n", "fix: merged into dev");
   const result = fe.write(["post", fe.at("d.md"), "--repo", "o/r"]);
@@ -367,13 +373,14 @@ test("a lint with read pins asks origin only once per ref it pins, and git never
 });
 
 test("a branch or PR the read pins lack is pinned at lint with a warning the record keeps, and a --branch read pin the draft does not cite is kept", () => {
-  const p = project(draftWith("The label is wrong, `src/a.ts:1@dev` sets it."));
+  const p = project(draftWith("The label is wrong, `src/a.ts:1@feature/y` sets it."));
   git(p.be.root, "--git-dir", p.be.origin, "branch", "feature/x", "dev");
+  git(p.be.root, "--git-dir", p.be.origin, "branch", "feature/y", "dev");
   assert.equal(p.lint("pin-sources", p.at("ledger.md"), "--pr", "701", "--branch", `${p.be.clone}:feature/x`).status, 0);
-  p.rewrite("d.md", draftWith("The label is wrong, `src/a.ts:1@dev` sets it."));
+  p.rewrite("d.md", draftWith("The label is wrong, `src/a.ts:1@feature/y` sets it."));
   const lint = p.lint("pr-comment", p.at("d.md"), "--diff", p.at("pr.diff"), "--pinned-at", p.at("ledger.md"));
   assert.equal(lint.status, 0, lint.out);
-  const warning = `warning: . origin/dev was not pinned by draft-lint.mjs pin-sources ${p.at("ledger.md")}, so it was pinned now, at lint`;
+  const warning = `warning: ${p.be.clone} origin/feature/y was not pinned by draft-lint.mjs pin-sources ${p.at("ledger.md")}, so it was pinned now, at lint`;
   assert.ok(lint.out.includes(`${warning}\n`), lint.out);
   assert.match(lint.out, new RegExp(`^pinned: ${escape(p.be.clone)} origin/feature/x@${p.beSha} \\(read \\S+\\)$`, "m"));
   const record = (file) => JSON.parse(readFileSync(join(p.stateDir, "drafts", `${file.replace(/\//g, "_")}.sources.json`), "utf8"));

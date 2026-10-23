@@ -163,7 +163,7 @@ function askedBranches(repos, extra) {
 }
 
 async function pinRepo(repo, asked, tokens, heads, git) {
-  if (repo.reviewed && !asked.length && !tokens.length) return { pins: [], problems: [] };
+  if (repo.reviewed && !asked.length) return { pins: [], problems: [] };
   if (!repo.reviewed && !repo.branches.length) return { pins: [], problems: [`${repo.name} has no branch in the project map and origin/HEAD is unset; set its branch in the map or run git -C ${repo.dir} remote set-head origin --auto`] };
   let tips;
   try {
@@ -174,7 +174,7 @@ async function pinRepo(repo, asked, tokens, heads, git) {
   const problems = asked.filter((branch) => !tips.has(branch)).map((branch) => `--branch ${repo.name}:${branch}: origin of ${repo.name} has no branch ${branch}`);
   if (!repo.reviewed && !repo.branches.some((branch) => tips.has(branch))) problems.push(`${repo.name} has no ${repo.branches.map((branch) => `origin/${branch}`).join(" or ")}; fix the branch in the project map or fetch the repo`);
   const pins = [];
-  for (const branch of unique([...(repo.reviewed ? [] : repo.branches), ...asked, ...tokens]).filter((candidate) => tips.has(candidate))) {
+  for (const branch of (repo.reviewed ? unique(asked) : unique([...repo.branches, ...asked, ...tokens])).filter((candidate) => tips.has(candidate))) {
     try {
       pins.push(takeTip(git, repo.dir, branchPin(repo, branch, tips.get(branch))));
     } catch (error) {
