@@ -633,6 +633,7 @@ test("a Drive shortcut pins the file it points to, Sheets and Slides pin their m
     Sh4fee: { mimeType: "application/vnd.google-apps.spreadsheet", modifiedTime: "2026-10-02T00:00:00Z" },
     Pr5deck: { mimeType: "application/vnd.google-apps.presentation", modifiedTime: "2026-10-03T00:00:00Z" },
     Fo6dir: { mimeType: "application/vnd.google-apps.folder", modifiedTime: "2026-10-04T00:00:00Z" },
+    Sc3dir: { mimeType: "application/vnd.google-apps.shortcut", modifiedTime: "2026-09-01T00:00:00Z", shortcutDetails: { targetId: "Fo6dir", targetMimeType: "application/vnd.google-apps.folder" } },
   };
   const w = world({ mode: "ask", web: { drive: [thread], document: textDoc(TAB), driveFiles: files } });
   w.file("g.md", "Do https://drive.google.com/file/d/Sc1pdf/view, https://drive.google.com/open?id=Sc2doc, https://docs.google.com/spreadsheets/d/Sh4fee/edit and https://docs.google.com/presentation/d/Pr5deck/edit agree on the fee?\n");
@@ -643,7 +644,7 @@ test("a Drive shortcut pins the file it points to, Sheets and Slides pin their m
   const refused = await w.run("gdoc-comments", ["reply", "c1", "--body-file", "g.md", "--doc", "D"]);
   assert.notEqual(refused.code, 0);
   assert.match(refused.out, /refused: Drive file Kq8pdf changed from md5 aa11 to md5 bb22 since it was pinned/);
-  for (const link of ["https://drive.google.com/drive/folders/Fo6dir", "https://drive.google.com/open?id=Fo6dir"]) {
+  for (const link of ["https://drive.google.com/drive/folders/Fo6dir", "https://drive.google.com/open?id=Fo6dir", "https://drive.google.com/open?id=Sc3dir"]) {
     w.file("h.md", `Is the fee sheet in ${link} still current?\n`);
     const folder = await w.run("draft-lint", ["doc-comment", "h.md", "--doc", "D"]);
     assert.notEqual(folder.code, 0, link);

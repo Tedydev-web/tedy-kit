@@ -67,6 +67,9 @@ test("namedIn reads a cited folder through a sibling path, the repo's name, its 
     ["see https://github.com/o/be/tree/main/src/auth, which checks", true],
     ["see [auth](https://github.com/o/be/tree/main/src/auth)", true],
     ["see https://github.com/o/be/tree/main/src/auth?plain=1", true],
+    ["see https://github.com/o/be/tree/main/src for it", true],
+    ["see https://github.com/o/be/tree/feature/login/src for it", true],
+    ["see https://github.com/o/be/tree/main/docs for it", false],
     ["backend/ owns the token", false],
     ["https://github.com/o/be/tree/main/ is the repo", false],
   ];
