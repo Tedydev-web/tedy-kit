@@ -55,3 +55,7 @@ Verify intent before flagging behaviour that is already merged: `git log -L` or 
 - Two services, hooks or stores with overlapping jobs where only one is on the live path; the other drifts.
 - A provider registered in a module that nothing injects.
 - Two schemas or types for one concept with most fields in common.
+
+## Not findings
+
+Leave these out of the findings file: what predates the PR, what a linter already catches, a `TODO` the author left, and Figma-identical placeholder data in a UI-only PR.

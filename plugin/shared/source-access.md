@@ -31,14 +31,15 @@ node <plugin>/scripts/prd-section.mjs find <doc> <tab> "UC_SW_08 BR3"
 ## Sibling repositories (backend, contract, admin)
 
 ```bash
-git -C <repo> fetch -q origin
-git -C <repo> show origin/<branch>:<path>
-git -C <repo> grep -n "<pattern>" origin/<branch> -- <path>
+node <plugin>/scripts/draft-lint.mjs pin-sources <draft or ledger>
+git -C <repo> show <sha>:<path>
+git -C <repo> grep -n "<pattern>" <sha> -- <path>
 ```
 
-- `<branch>` is the integration branch in the map (`origin/HEAD` when unset, as `project-map.mjs doctor` and the pins read it). Read from the remote ref; never check out, edit or commit in a sibling or `readonly` repo.
+- Run `pin-sources` before the first read; `<sha>` is the full sha its `pinned: <repo> origin/<branch>@<sha>` line prints for that repo. It also moves `origin/<branch>` to that sha, so `origin/<branch>` reads the same code until the next pin; never fetch between the pin and the read.
+- `<branch>` is the integration branch in the map (`origin/HEAD` when unset, as `project-map.mjs doctor` and the pins read it). Read from the pinned commit; never check out, edit or commit in a sibling or `readonly` repo.
 - Check the writer, not the schema: a field on a DTO or model is real only when code that saves it sets it. Name the writer `path:line@branch`.
-- Cite a backend fact as `path:line@branch`. `draft-lint.mjs pin-sources <draft>` before the read pins every map repo at the tip origin has then; the lint and the publish step ask origin again and refuse when a changed file is named in the text.
+- Cite a backend fact as `path:line@branch`. The lint and the publish step ask origin again and refuse when a changed file is named in the text.
 
 ## Blast radius
 
