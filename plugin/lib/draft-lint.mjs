@@ -191,6 +191,12 @@ function prOf(flag) {
   return pr;
 }
 
+function repoOf(flag) {
+  const repo = flag("--repo");
+  if (repo !== undefined && !/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error(`--repo ${repo} is not <owner>/<repo>`);
+  return repo;
+}
+
 async function record(file, text, pins, { clean, none, texts, pinnedAt, freeze = true }) {
   const kept = await recordPins(file, text, pins, { pinnedAt, texts });
   if (!kept) return 1;
@@ -201,7 +207,7 @@ async function record(file, text, pins, { clean, none, texts, pinnedAt, freeze =
   return 0;
 }
 
-async function pinSources(file, flag) {
+async function pinSources(file, flag, flags) {
   const map = resolveMap(process.cwd())?.map;
   const nodes = (flag("--node") ?? "").split(",").filter(Boolean);
   const figma = flag("--file") ?? (nodes.length ? map?.figma?.file : undefined);
@@ -209,7 +215,7 @@ async function pinSources(file, flag) {
   const bad = nodes.filter((node) => !nodeId(node));
   if (bad.length) throw new Error(`--node ${bad.join(", ")} is not a Figma node id such as 12-34 or 12:34`);
   const doc = flag("--doc");
-  const pins = await sourcePins("", { docs: doc ? [doc] : [], figma: figma ? [{ file: figma, nodes: nodes.map(nodeId), whole: false }] : [] }, { pr: flag("--pr") === undefined ? undefined : prOf(flag) });
+  const pins = await sourcePins("", { docs: doc ? [doc] : [], figma: figma ? [{ file: figma, nodes: nodes.map(nodeId), whole: false }] : [] }, { pr: flag("--pr") === undefined ? undefined : prOf(flag), repo: repoOf(flag), branches: flags("--branch") });
   if (!pins) return 1;
   console.log(`read pins for ${file}:`);
   for (const pin of writeReadPins(file, pins)) console.log(describePin(pin));
@@ -218,8 +224,9 @@ async function pinSources(file, flag) {
 
 async function main([kind, file, ...flags]) {
   const flag = (name) => (flags.includes(name) ? flags[flags.indexOf(name) + 1] : undefined);
+  const every = (name) => flags.flatMap((arg, index) => (arg === name && flags[index + 1] !== undefined ? [flags[index + 1]] : []));
   const pinnedAt = flag("--pinned-at");
-  if (kind === "pin-sources" && file) return pinSources(file, flag);
+  if (kind === "pin-sources" && file) return pinSources(file, flag, every);
   if ((kind === "doc-comment" || kind === "figma-comment") && file) {
     const text = readFileSync(file, "utf8");
     const problems = lintChatComment(text, kind.replace("-comment", ""), mapLanguage("doc_figma"));
@@ -236,24 +243,25 @@ async function main([kind, file, ...flags]) {
     const problems = lintComment(text.trim(), mapLanguage("pr_review"));
     for (const problem of problems) console.log(problem);
     if (problems.length) return 1;
-    const pins = await sourcePins(text, {}, { pr });
+    const pins = await sourcePins(text, {}, { pr, repo: repoOf(flag) });
     if (!pins) return 1;
     return record(file, text, pins, { clean: "clean: pr-reply", none: "no repo in the project map", texts: [text], pinnedAt, freeze: false });
   }
   if (kind !== "pr-comment" || !file) {
-    console.error("usage: draft-lint.mjs pin-sources <draft or ledger> [--pr <n>] [--doc <id>] [--file <key> --node <node-id>[,<node-id>…]] | pr-comment <draft.md> [--diff <file>] [--repo <owner/repo>] [--pinned-at <file>] | pr-reply <body.txt> --pr <n> [--pinned-at <file>] | doc-comment <body.txt> [--doc <id>] [--pinned-at <file>] | figma-comment <body.txt> [--file <key>] [--node <node-id>] [--pinned-at <file>]");
+    console.error("usage: draft-lint.mjs pin-sources <draft or ledger> [--pr <n> [--repo <owner/repo>]] [--branch <repo>:<branch>]… [--doc <id>] [--file <key> --node <node-id>[,<node-id>…]] | pr-comment <draft.md> [--diff <file>] [--repo <owner/repo>] [--pinned-at <file>] | pr-reply <body.txt> --pr <n> [--repo <owner/repo>] [--pinned-at <file>] | doc-comment <body.txt> [--doc <id>] [--pinned-at <file>] | figma-comment <body.txt> [--file <key>] [--node <node-id>] [--pinned-at <file>]");
     return 2;
   }
   const text = readFileSync(file, "utf8");
   const { pr } = parseDraft(text);
-  const diffText = flag("--diff") ? readFileSync(flag("--diff"), "utf8") : readDiff(pr, flag("--repo"));
+  const repo = repoOf(flag);
+  const diffText = flag("--diff") ? readFileSync(flag("--diff"), "utf8") : readDiff(pr, repo);
   const result = lintDraft(text, diffText, mapLanguage("pr_review"));
   if (result.problems.length) {
     for (const item of result.problems) console.log(`${item.index}. ${item.location}: ${item.problem}`);
     return 1;
   }
   const bodies = result.comments.map((comment) => comment.body);
-  const pins = await sourcePins(bodies.join("\n"), {}, { pr });
+  const pins = await sourcePins(bodies.join("\n"), {}, { pr, repo });
   if (!pins) return 1;
   return record(file, text, pins, { clean: `clean: ${result.comments.length} comments, PR #${result.pr}, head ${result.sha}`, none: "no repo in the project map", texts: bodies, pinnedAt });
 }

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { tempDir } from "./temp-dir-for-tests.mjs";
+import { mappedProfile, tempDir } from "./temp-dir-for-tests.mjs";
 import { runWithFakeGh } from "./fake-gh-for-tests.mjs";
 import { pullRequestCheckout } from "./git-sibling-for-tests.mjs";
 
@@ -92,9 +92,10 @@ test("edit throws when the comment body differs after the PATCH read-back", () =
   const body = join(dir, "b.txt");
   writeFileSync(body, "Fixed the label.\n");
   const stateDir = tempDir("tedy-ghstate-");
-  pullRequestCheckout(dir, 1);
-  assert.equal(runWithFakeGh(new URL("../lib/draft-lint.mjs", import.meta.url).pathname, ["pr-reply", body, "--pr", "1"], { cwd: dir, stateDir }).status, 0);
-  const result = run(["edit", "123", "--repo", "o/r", "--body-file", body], { fixture: { write: { body: "something else", html_url: "u" } }, cwd: dir, stateDir });
+  const head = pullRequestCheckout(dir, 1).pr(1);
+  const profileDir = mappedProfile(dir);
+  assert.equal(runWithFakeGh(new URL("../lib/draft-lint.mjs", import.meta.url).pathname, ["pr-reply", body, "--pr", "1"], { cwd: dir, stateDir, profileDir }).status, 0);
+  const result = run(["edit", "123", "--repo", "o/r", "--body-file", body], { fixture: { write: { body: "something else", html_url: "u" }, head, comment: { pull_request_url: "https://api.github.com/repos/o/r/pulls/1" } }, cwd: dir, stateDir, profileDir });
   assert.notEqual(result.status, 0);
   assert.match(result.out, /body differs after PATCH/);
   assert.equal(result.writes.length, 1);

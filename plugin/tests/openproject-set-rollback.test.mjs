@@ -6,7 +6,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { tempDir } from "./temp-dir-for-tests.mjs";
+import { mappedProfile, tempDir } from "./temp-dir-for-tests.mjs";
 
 const run = promisify(execFile);
 const SCRIPT = new URL("../lib/openproject.mjs", import.meta.url).pathname;
@@ -79,7 +79,7 @@ function workspace(url) {
   const home = tempDir("tedy-op-set-");
   mkdirSync(join(home, ".config", "op", "sync"), { recursive: true });
   writeFileSync(join(home, ".config", "op", "config.json"), JSON.stringify({ url, token: "test-" + "token-value" }));
-  const env = { ...process.env, HOME: home, TEDY_STATE_DIR: join(home, "state"), OP_SYNC_DIR: join(home, ".config", "op", "sync") };
+  const env = { ...process.env, HOME: home, TEDY_PROFILE_DIR: mappedProfile(home, {}), TEDY_STATE_DIR: join(home, "state"), OP_SYNC_DIR: join(home, ".config", "op", "sync") };
   const op = (...args) => run("node", [SCRIPT, ...args], { env, cwd: home }).then((result) => result.stdout, (error) => error.stdout);
   const sidecar = () => JSON.parse(readFileSync(join(home, ".config", "op", "sync", `127.0.0.1_${new URL(url).port}__183.map.json`), "utf8"));
   return { home, op, sidecar };

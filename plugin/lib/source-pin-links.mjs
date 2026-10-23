@@ -1,6 +1,6 @@
-const FIGMA_LINK = /figma\.com\/(?:design|file|proto|board|slides|make|site)\/([A-Za-z0-9]+)(?:\/branch\/([A-Za-z0-9]+))?([^\s)"'`<>]*)/g;
-const FIGMA_EMBED = /figma\.com\/embed\?[^\s)"'`<>]*?\burl=([^&\s)"'`<>]+)/g;
-const DOC_LINK = /(?:https?:\/\/)?(?:docs\.google\.com\/(?:a\/[^/\s]+\/)?document\/(?:u\/\d+\/)?d\/(e\/)?([\w-]+)|(?:drive|docs)\.google\.com\/open\?(?:[^\s#)"'`<>]*?&)?id=([\w-]+)|drive\.google\.com\/(?:u\/\d+\/)?file\/d\/([\w-]+))[^\s)"'`<>]*/g;
+const FIGMA_LINK = /figma\.com\/(?:design|file|proto|board|slides|make|site)\/([A-Za-z0-9]+)(?:\/branch\/([A-Za-z0-9]+))?([^\s)"'`<>]*)/gi;
+const FIGMA_EMBED = /figma\.com\/embed\?[^\s)"'`<>]*?\burl=([^&\s)"'`<>]+)/gi;
+const DOC_LINK = /(?:https?:\/\/)?(?:docs\.google\.com\/(?:a\/[^/\s]+\/)?document\/(?:u\/\d+\/)?d\/(e\/)?([\w-]+)|(?:drive|docs)\.google\.com\/open\?(?:[^\s#)"'`<>]*?&)?id=([\w-]+)|drive\.google\.com\/(?:u\/\d+\/)?file\/d\/([\w-]+))[^\s)"'`<>]*/gi;
 const NODE_ID = /^I?\d+:\d+(?:;\d+:\d+)*$/;
 
 const decoded = (text) => {

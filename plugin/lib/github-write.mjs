@@ -9,7 +9,7 @@ import { fetchTab, indexTab, quoteInText, UC_ID } from "./prd-section.mjs";
 import { generatedPrBodyOp } from "./openproject.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
-import { recheckPinned } from "./source-pins.mjs";
+import { pinnedSources, recheckPinned } from "./source-pins.mjs";
 
 const normalise = (text) => text.replace(/\s+/g, " ").trim();
 
@@ -132,6 +132,15 @@ async function recheckSources(file, lintMode, texts) {
   return refusals.length ? null : notices;
 }
 
+function pullTargetRefusal(file, repo, pr) {
+  const pulls = (pinnedSources(file, "").sources ?? []).filter((pin) => pin.kind === "git" && pin.pr !== undefined);
+  const pin = pulls.find((candidate) => candidate.pr === Number(pr) && candidate.github?.toLowerCase() === repo.toLowerCase());
+  if (!pin) return `refused: ${file} was linted for ${pulls.map((candidate) => `${candidate.github}#${candidate.pr}`).join(", ") || "no PR"}, not ${repo}#${pr}; run draft-lint.mjs pr-reply ${file} --pr ${pr} --repo ${repo} from the checkout of ${repo}, then ask the user again`;
+  const head = gh(["pr", "view", String(pr), "--repo", repo, "--json", "headRefOid", "-q", ".headRefOid"]).trim();
+  if (head !== pin.sha) return `refused: GitHub shows ${repo}#${pr} at ${head.slice(0, 8) || "no head"}, not at the pinned ${pin.sha.slice(0, 8)}, so the PR changed; re-read it, lint again and ask the user again`;
+  return null;
+}
+
 const say = (lines) => {
   for (const line of lines) console.log(line);
 };
@@ -203,6 +212,12 @@ async function edit(id, flags) {
   const body = readBody(flags);
   const notices = await recheckSources(flags["body-file"], "pr-reply", [body]);
   if (!notices) return 1;
+  const pr = JSON.parse(gh(["api", `repos/${repo}/pulls/comments/${id}`])).pull_request_url?.match(/\/pulls\/(\d+)$/)?.[1];
+  const refusal = pr ? pullTargetRefusal(flags["body-file"], repo, pr) : `refused: review comment ${id} in ${repo} names no pull request; nothing edited`;
+  if (refusal) {
+    console.log(refusal);
+    return 1;
+  }
   console.log(`WRITE → ${repo} : edit review comment ${id}`);
   consumeApproval(process.argv, [body]);
   say(notices);
@@ -250,6 +265,11 @@ async function reply(pr, id, flags) {
   }
   const notices = await recheckSources(flags["body-file"], "pr-reply", [body]);
   if (!notices) return 1;
+  const refusal = pullTargetRefusal(flags["body-file"], repo, pr);
+  if (refusal) {
+    console.log(refusal);
+    return 1;
+  }
   console.log(`WRITE → ${repo}#${pr} : reply to ${id}`);
   consumeApproval(process.argv, [body]);
   say(notices);

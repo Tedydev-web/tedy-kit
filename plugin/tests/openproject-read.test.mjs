@@ -8,7 +8,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { foreignActivity, setPayload, workPackageFilters, workPackageLine } from "../lib/openproject-client.mjs";
 import { getPaths } from "../lib/openproject.mjs";
-import { tempDir } from "./temp-dir-for-tests.mjs";
+import { mappedProfile, tempDir } from "./temp-dir-for-tests.mjs";
 
 const run = promisify(execFile);
 const SCRIPT = new URL("../lib/openproject.mjs", import.meta.url).pathname;
@@ -109,7 +109,7 @@ function workspace(url) {
   const home = tempDir("tedy-op-read-");
   mkdirSync(join(home, ".config", "op"), { recursive: true });
   writeFileSync(join(home, ".config", "op", "config.json"), JSON.stringify({ url, token: "test-" + "token-value" }));
-  const env = { ...process.env, HOME: home, TEDY_STATE_DIR: join(home, "state"), OP_SYNC_DIR: join(home, ".config", "op", "sync") };
+  const env = { ...process.env, HOME: home, TEDY_PROFILE_DIR: mappedProfile(home, {}), TEDY_STATE_DIR: join(home, "state"), OP_SYNC_DIR: join(home, ".config", "op", "sync") };
   const op = (...args) => run("node", [SCRIPT, ...args], { env, cwd: home }).then((result) => result.stdout, (error) => `${error.stdout}${error.stderr}`);
   return { home, op };
 }

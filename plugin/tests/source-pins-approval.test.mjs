@@ -57,7 +57,7 @@ const CASES = [
     return { w, lint: [["draft-lint", ["pr-comment", "d.md"]]], move: () => sibling.push("src/b.ts", "b2\n", "chore: unrelated"), script: "github-write", args: ["post", "d.md", "--repo", "o/r"], texts: [DRAFT] };
   }],
   ["github-write reply", async () => {
-    const { w, sibling } = gitWorld();
+    const { w, sibling } = gitWorld({});
     w.file("r.md", "The label is still wrong.\n");
     return { w, lint: [["draft-lint", ["pr-reply", "r.md", "--pr", "701"]]], move: () => sibling.push("src/b.ts", "b2\n", "chore: unrelated"), script: "github-write", args: ["reply", "701", "123", "--repo", "o/r", "--body-file", "r.md"], texts: ["The label is still wrong."] };
   }],
@@ -167,7 +167,7 @@ test("a stale-source refusal leaves the approval ticket unused, on every path th
       return { w, lint: ["openproject", ["comment", "21298", "--body-file", "c.md"]], move: () => changeWeb(w, { figmaNodes: { "1:2": null } }), script: "openproject", args: ["comment", "21298", "--apply", "--body-file", "c.md"], texts: [body], refusal: /refused: Figma F1 node 1:2 changed since it was pinned/ };
     }],
     ["github-write reply", async () => {
-      const { w, sibling } = gitWorld();
+      const { w, sibling } = gitWorld({});
       w.file("r.md", "The label is still wrong, see src/a.ts.\n");
       return { w, lint: ["draft-lint", ["pr-reply", "r.md", "--pr", "701"]], move: () => sibling.push("src/a.ts", "a2\n", "fix: writer sets the field"), script: "github-write", args: ["reply", "701", "123", "--repo", "o/r", "--body-file", "r.md"], texts: ["The label is still wrong, see src/a.ts."], refusal: /^refused: .* changed a file the text being posted names$/m };
     }],

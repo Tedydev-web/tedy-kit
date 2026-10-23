@@ -29,6 +29,7 @@ else if (args[0] === "api" && args[1] === "user") out(fx.login ?? "me");
 else if (write) out(fx.write ?? { id: 77, html_url: "https://x/77", body: fx.writeBody ?? "" });
 else if (args.some((token) => /\\/reviews\\/[^/]+\\/comments$/.test(token))) out([fx.reviewComments ?? []]);
 else if (args.some((token) => /\\/comments$/.test(token))) out([fx.comments ?? []]);
+else if (args.some((token) => /\\/pulls\\/comments\\/\\d+$/.test(token))) out(fx.comment ?? {});
 else out("");
 `;
 
@@ -195,9 +196,10 @@ export function fakeOpenProject({ closedStatus = true } = {}) {
   return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve({ server, calls, workPackages, url: `http://127.0.0.1:${server.address().port}` })));
 }
 
-export function world({ mode = "answer", gh = {}, web = {}, map = null, opUrl = null, pr } = {}) {
+export function world({ mode = "answer", gh = {}, web = {}, map = { name: "w" }, opUrl = null, pr } = {}) {
   const dir = tempDir("tedy-world-");
   const checkout = pr !== undefined || map?.repos?.some((repo) => repo.path === ".") ? pullRequestCheckout(dir, pr ?? 701) : null;
+  if (checkout) gh = { head: checkout.pr(pr ?? 701), comment: { pull_request_url: `https://api.github.com/repos/o/r/pulls/${pr ?? 701}` }, ...gh };
   const bin = join(dir, "bin");
   mkdirSync(bin);
   writeFileSync(join(bin, "gh"), FAKE_GH);

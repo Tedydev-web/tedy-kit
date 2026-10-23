@@ -18,6 +18,8 @@ const home = tempDir("tedy-shim-parity-");
 const profile = join(home, "profile");
 mkdirSync(profile);
 writeFileSync(join(profile, "rules.md"), "r\n");
+mkdirSync(join(profile, "projects"));
+writeFileSync(join(profile, "projects", "w.md"), `\`\`\`json\n${JSON.stringify({ name: "w", paths: [home] })}\n\`\`\`\n`);
 writeFileSync(join(home, "body.txt"), "ok text\n");
 writeFileSync(join(home, "drafts.json"), "[]\n");
 mkdirSync(join(home, "tree"));

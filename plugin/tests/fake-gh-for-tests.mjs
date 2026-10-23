@@ -19,6 +19,7 @@ else if (args[0] === "api" && args[1] === "user") out(fx.login ?? "");
 else if (args.some((t) => /^-X/.test(t))) out(fx.write ?? {});
 else if (args.some((t) => /\\/reviews\\/[^/]+\\/comments$/.test(t))) out([fx.reviewComments ?? []]);
 else if (args.some((t) => /\\/comments$/.test(t))) out([fx.comments ?? []]);
+else if (args.some((t) => /\\/pulls\\/comments\\/\\d+$/.test(t))) out(fx.comment ?? {});
 else out(fx.default ?? "");
 `;
 

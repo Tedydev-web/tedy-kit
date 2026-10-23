@@ -15,13 +15,14 @@ export function commitFile(dir, path, text, subject = `change ${path}`) {
   return git(dir, "rev-parse", "HEAD");
 }
 
-export function siblingRepo() {
+export function siblingRepo({ slug = "o/r" } = {}) {
   const root = tempDir("tedy-sibling-");
   const upstream = join(root, "upstream");
   git(root, "init", "-q", "-b", "dev", upstream);
   commitFile(upstream, "src/a.ts", "a1\n");
   commitFile(upstream, "src/b.ts", "b1\n");
-  const origin = join(root, "origin.git");
+  const origin = join(root, `${slug}.git`);
+  mkdirSync(dirname(origin), { recursive: true });
   git(root, "clone", "-q", "--bare", upstream, origin);
   git(upstream, "remote", "add", "origin", origin);
   const clone = join(root, "backend");
@@ -36,14 +37,14 @@ export function siblingRepo() {
     git(root, "--git-dir", origin, "update-ref", `refs/pull/${number}/head`, sha);
     return sha;
   };
-  return { root, upstream, clone, push, pr };
+  return { root, upstream, origin, clone, push, pr };
 }
 
 export function pullRequestCheckout(dir, number = 701) {
   const sibling = siblingRepo();
   sibling.pr(number);
   git(dir, "init", "-q", "-b", "dev");
-  git(dir, "remote", "add", "origin", join(sibling.root, "origin.git"));
+  git(dir, "remote", "add", "origin", sibling.origin);
   git(dir, "fetch", "-q", "origin");
   git(dir, "remote", "set-head", "origin", "dev");
   const pushPr = (path, text, subject) => {

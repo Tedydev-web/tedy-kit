@@ -140,7 +140,9 @@ test("with no project map the comment rules follow the profile's chat language",
   const vi = run("vi");
   assert.equal(vi.status, 1);
   assert.match(vi.stdout, /openers/);
-  assert.equal(run("en").status, 0);
+  const en = run("en");
+  assert.doesNotMatch(en.stdout, /openers/);
+  assert.match(en.stdout, /^sources: no project map covers /m);
 });
 
 test("Doc and Figma comments speak business: build words, crowded threads and arrows are refused, product words and quoted copy pass", async () => {

@@ -1,11 +1,15 @@
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
+import { promisify } from "node:util";
 
 const GIT_TIMEOUT_MS = 60_000;
+const GIT_BUFFER = 64 * 1024 * 1024;
 export const RECHECK = "re-read the changed sources, fix the draft, lint it again and ask the user again";
 const NAME_BEFORE = "(?<![\\p{L}\\p{N}\\p{M}_.-])";
 const NAME_AFTER = "(?![\\p{L}\\p{N}\\p{M}_-]|\\.[\\p{L}\\p{N}])";
+const FOLDER = /(?<![\p{L}\p{N}\p{M}_.\/-])((?:[\p{L}\p{N}\p{M}_.-]+\/)+)(?=$|[\s`'"()<>,;:!?*_]|\.(?![\p{L}\p{N}]))/gu;
+const execFileAsync = promisify(execFile);
 
 const unique = (list) => [...new Set(list)];
 
@@ -24,16 +28,36 @@ const readings = (text) => {
   return unique([text, unescaped, plain].flatMap((candidate) => [candidate, decodeRuns(candidate)])).map((candidate) => candidate.normalize("NFC"));
 };
 
+const underFolder = (candidate, path) =>
+  [...candidate.matchAll(FOLDER)].some(([folder]) => {
+    const prefix = folder.replace(/^(?:\.\/)+/, "").toLowerCase();
+    return prefix.length > 0 && (path.startsWith(prefix) || path.includes(`/${prefix}`));
+  });
+
 export function namedIn(texts, path) {
   const base = path.split("/").pop();
-  const name = (base.includes(".") ? base : path).normalize("NFC");
-  const pattern = new RegExp(`${NAME_BEFORE}${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}${NAME_AFTER}`, "u");
-  return texts.some((text) => readings(text).some((candidate) => pattern.test(candidate)));
+  const name = (base.includes(".") || /\p{Lu}/u.test(base) ? base : path).normalize("NFC");
+  const pattern = new RegExp(`${NAME_BEFORE}${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}${NAME_AFTER}`, "iu");
+  const lower = path.normalize("NFC").toLowerCase();
+  return texts.some((text) => readings(text).some((candidate) => pattern.test(candidate) || underFolder(candidate, lower)));
 }
 
-export const branchTokens = (text) => unique([...text.matchAll(/@(\w[\w./-]*)/g)].map((match) => match[1].replace(/[./-]+$/, "")));
+export const branchTokens = (text) => unique([...text.matchAll(/:\d+(?:[-,]\d+)*@(\w[\w./-]*)/g)].map((match) => match[1].replace(/[./-]+$/, "")));
 
-export const runGit = (dir, args) => execFileSync("git", ["--literal-pathspecs", "-C", dir, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: GIT_TIMEOUT_MS, maxBuffer: 64 * 1024 * 1024 }).trim();
+export const runGit = (dir, args) => execFileSync("git", ["--literal-pathspecs", "-C", dir, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_BUFFER }).trim();
+
+export async function lsRemoteHeads(dir) {
+  const { stdout } = await execFileAsync("git", ["-C", dir, "ls-remote", "--heads", "origin"], { encoding: "utf8", timeout: GIT_TIMEOUT_MS, maxBuffer: GIT_BUFFER });
+  return new Map(
+    stdout
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => {
+        const [sha, ref] = line.split("\t");
+        return [ref.replace(/^refs\/heads\//, ""), sha];
+      }),
+  );
+}
 
 function originHead(dir, git) {
   try {
@@ -50,7 +74,7 @@ export const mapRepos = (map, git = runGit) =>
     return { name: repo.path, dir, branches: repo.branch ? [repo.branch] : head ? [head] : [] };
   });
 
-const gitReason = (error) => (error.code === "ETIMEDOUT" ? `timed out after ${GIT_TIMEOUT_MS / 1000} s` : (error.stderr?.toString().trim() || error.message).split("\n")[0]);
+const gitReason = (error) => (error.code === "ETIMEDOUT" || error.killed ? `timed out after ${GIT_TIMEOUT_MS / 1000} s` : (error.stderr?.toString().trim() || error.message).split("\n")[0]);
 
 const branchPin = (repo, branch, sha) => ({ kind: "git", repo: repo.name, ref: `origin/${branch}`, remote: `refs/heads/${branch}`, local: `refs/remotes/origin/${branch}`, sha });
 
@@ -82,32 +106,57 @@ function takeTip(git, dir, pin) {
   return pin;
 }
 
-export function pinRepos(repos, text, git = runGit) {
-  const tokens = branchTokens(text);
-  const pins = [];
+function askedBranches(repos, extra) {
+  const asked = new Map(repos.map((repo) => [repo.name, []]));
   const problems = [];
-  for (const repo of repos) {
-    if (!repo.branches.length) {
-      problems.push(`${repo.name} has no branch in the project map and origin/HEAD is unset; set its branch in the map or run git -C ${repo.dir} remote set-head origin --auto`);
+  for (const item of extra) {
+    const at = item.lastIndexOf(":");
+    if (at <= 0 || at === item.length - 1) {
+      problems.push(`--branch ${item} is not <repo>:<branch>, such as ${repos[0]?.name ?? "../backend"}:feature/x`);
       continue;
     }
-    let found = false;
-    let failed = false;
-    for (const branch of unique([...repo.branches, ...tokens])) {
-      try {
-        const sha = remoteTip(git, repo.dir, `refs/heads/${branch}`);
-        if (!sha) continue;
-        pins.push(takeTip(git, repo.dir, branchPin(repo, branch, sha)));
-        found ||= repo.branches.includes(branch);
-      } catch (error) {
-        problems.push(`cannot pin ${repo.name} origin/${branch}: ${gitReason(error)}`);
-        failed = true;
-        break;
-      }
+    const name = item.slice(0, at);
+    if (!asked.has(name)) {
+      problems.push(`--branch ${item} names ${name}, which is not a repo in the project map; use the repo path as the map writes it, such as ${repos.map((repo) => repo.name).join(", ") || "../backend"}`);
+      continue;
     }
-    if (!found && !failed) problems.push(`${repo.name} has no ${repo.branches.map((branch) => `origin/${branch}`).join(" or ")}; fix the branch in the project map or fetch the repo`);
+    asked.get(name).push(item.slice(at + 1));
+  }
+  return { asked, problems };
+}
+
+async function pinRepo(repo, asked, tokens, heads, git) {
+  if (!repo.branches.length) return { pins: [], problems: [`${repo.name} has no branch in the project map and origin/HEAD is unset; set its branch in the map or run git -C ${repo.dir} remote set-head origin --auto`] };
+  let tips;
+  try {
+    tips = await heads(repo.dir);
+  } catch (error) {
+    return { pins: [], problems: [`cannot pin ${repo.name}: its origin cannot be reached (${gitReason(error)}); check the network and git -C ${repo.dir} remote -v, or fix the repo path in the project map`] };
+  }
+  const problems = asked.filter((branch) => !tips.has(branch)).map((branch) => `--branch ${repo.name}:${branch}: origin of ${repo.name} has no branch ${branch}`);
+  if (!repo.branches.some((branch) => tips.has(branch))) problems.push(`${repo.name} has no ${repo.branches.map((branch) => `origin/${branch}`).join(" or ")}; fix the branch in the project map or fetch the repo`);
+  const pins = [];
+  for (const branch of unique([...repo.branches, ...asked, ...tokens]).filter((candidate) => tips.has(candidate))) {
+    try {
+      pins.push(takeTip(git, repo.dir, branchPin(repo, branch, tips.get(branch))));
+    } catch (error) {
+      problems.push(`cannot pin ${repo.name} origin/${branch}: ${gitReason(error)}`);
+      break;
+    }
   }
   return { pins, problems };
+}
+
+export async function pinRepos(repos, text, { extra = [], heads = lsRemoteHeads, git = runGit } = {}) {
+  const tokens = branchTokens(text);
+  const { asked, problems } = askedBranches(repos, extra);
+  const results = await Promise.all(repos.map((repo) => pinRepo(repo, asked.get(repo.name), tokens, heads, git)));
+  return { pins: results.flatMap((result) => result.pins), problems: [...problems, ...results.flatMap((result) => result.problems)] };
+}
+
+export function repoSlug(url) {
+  const match = url.trim().replace(/\/+$/, "").replace(/\.git$/, "").match(/([^/:]+)\/([^/:]+)$/);
+  return match ? `${match[1]}/${match[2]}` : null;
 }
 
 const realPath = (path) => {
@@ -118,15 +167,23 @@ const realPath = (path) => {
   }
 };
 
-export function pinPullHead(pr, repos, git = runGit) {
+export function pinPullHead(pr, repos, { repo } = {}, git = runGit) {
   let top;
   try {
     top = git(process.cwd(), ["rev-parse", "--show-toplevel"]);
   } catch {
     return { pins: [], problems: [`cannot pin the head of PR #${pr}: ${process.cwd()} is not inside the reviewed repository; run from its checkout`] };
   }
-  const name = repos.find((repo) => realPath(repo.dir) === realPath(top))?.name ?? top;
-  const pin = { kind: "git", repo: name, dir: top, pr: Number(pr), ref: `pull/${pr}/head`, remote: `refs/pull/${pr}/head`, local: `refs/pr/${pr}` };
+  const name = repos.find((candidate) => realPath(candidate.dir) === realPath(top))?.name ?? top;
+  let url;
+  try {
+    url = git(top, ["remote", "get-url", "origin"]);
+  } catch (error) {
+    return { pins: [], problems: [`cannot pin the head of PR #${pr}: ${top} has no origin (${gitReason(error)})`] };
+  }
+  const github = repoSlug(url);
+  if (repo !== undefined && github?.toLowerCase() !== repo.toLowerCase()) return { pins: [], problems: [`cannot pin the head of PR #${pr}: --repo ${repo} is not the repository checked out at ${top}, whose origin is ${url}; run from the checkout of ${repo}`] };
+  const pin = { kind: "git", repo: name, dir: top, github, pr: Number(pr), ref: `pull/${pr}/head`, remote: `refs/pull/${pr}/head`, local: `refs/pr/${pr}` };
   try {
     const sha = remoteTip(git, top, pin.remote);
     if (!sha) return { pins: [], problems: [`cannot pin the head of PR #${pr}: origin of ${name} has no ${pin.remote}`] };

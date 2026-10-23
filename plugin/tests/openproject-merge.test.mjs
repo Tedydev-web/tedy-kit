@@ -6,7 +6,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { promisify } from "node:util";
-import { tempDir } from "./temp-dir-for-tests.mjs";
+import { mappedProfile, tempDir } from "./temp-dir-for-tests.mjs";
 
 const run = promisify(execFile);
 const SCRIPT = new URL("../lib/openproject.mjs", import.meta.url).pathname;
@@ -47,7 +47,7 @@ function workspace(url, drafts) {
   writeFileSync(join(home, ".config", "op", "config.json"), JSON.stringify({ url, token: "test-" + "token-value" }));
   const file = join(home, "drafts.json");
   writeFileSync(file, JSON.stringify(drafts));
-  const env = { ...process.env, HOME: home, TEDY_STATE_DIR: join(home, "state"), OP_SYNC_DIR: join(home, ".config", "op", "sync") };
+  const env = { ...process.env, HOME: home, TEDY_PROFILE_DIR: mappedProfile(home, {}), TEDY_STATE_DIR: join(home, "state"), OP_SYNC_DIR: join(home, ".config", "op", "sync") };
   const op = (command) => run("node", [SCRIPT, command, file, "--project", "family"], { env, cwd: home }).then((result) => result.stdout, (error) => error.stdout);
   return { home, op };
 }
