@@ -2,7 +2,7 @@ import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { runWithFakeGh } from "./fake-gh-for-tests.mjs";
 import { git, siblingRepo } from "./git-sibling-for-tests.mjs";
@@ -342,6 +342,18 @@ test("a post refused for a moved PR head is redrafted on the same path: pin-sour
   const posted = runWithFakeGh(WRITE, ["post", draft, "--repo", "o/fe"], { ...options, fixture: { diff: CLEAN_DIFF, head: second, write: { id: 9, html_url: "u" }, reviewComments: [{ id: 1, path: "src/a.ts", line: 10, commit_id: second }] } });
   assert.equal(posted.status, 0, posted.out);
   assert.equal(posted.writes.length, 1);
+});
+
+test("a pin-sources that fails keeps the draft's frozen original", () => {
+  const p = project();
+  assert.equal(p.lint("pr-comment", p.at("d.md"), "--diff", p.at("pr.diff")).status, 0);
+  const frozen = join(p.stateDir, "drafts", p.at("d.md").replace(/\//g, "_"));
+  assert.ok(existsSync(frozen));
+  git(p.be.clone, "remote", "set-url", "origin", join(p.be.root, "gone.git"));
+  const failed = p.lint("pin-sources", p.at("d.md"), "--pr", "701");
+  assert.equal(failed.status, 1, failed.out);
+  assert.doesNotMatch(failed.out, /frozen original/);
+  assert.ok(existsSync(frozen));
 });
 
 test("a lint with read pins asks origin only once per ref it pins, and git never prompts for credentials", () => {

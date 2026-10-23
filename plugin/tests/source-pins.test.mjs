@@ -1,7 +1,7 @@
 import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { branchTokens, lsRemoteHeads, mapRepos, namedIn, pinRepos, recheckRepos, remoteTips, runGit, tipKey } from "../lib/source-pin-git.mjs";
 import { linkedDocs, nodeId } from "../lib/source-pin-links.mjs";
@@ -268,6 +268,26 @@ test("a cited folder refuses a change under it however the text spells the folde
   const { refusals, notices } = await recheckRepos(pins, repos, ["A label is wrong, M and D say so, see a ticket."]);
   assert.deepEqual(refusals, []);
   assert.equal(notices.length, 1);
+});
+
+test("a folder cited through the real path of a clone the map reaches through a symlink refuses a change under it", async () => {
+  const sibling = siblingRepo();
+  const link = join(tempDir("tedy-link-"), "be-link");
+  symlinkSync(sibling.clone, link);
+  const repos = [{ name: "../be-link", dir: link, branches: ["dev"] }];
+  const { pins } = await pinRepos(repos, "");
+  sibling.push("src/auth/guard.ts", "g2\n", "fix: the guard trusts the header");
+  const { refusals } = await recheckRepos(pins, repos, [`See ${realpathSync(sibling.clone)}/src/auth/ there.`]);
+  assert.match(refusals[0] ?? "", /files: src\/auth\/guard\.ts\n/);
+});
+
+test("a folder cited under a nested map path such as apps/backend refuses a change under it", async () => {
+  const sibling = siblingRepo();
+  const repos = [{ name: "apps/backend", dir: sibling.clone, branches: ["dev"] }];
+  const { pins } = await pinRepos(repos, "");
+  sibling.push("src/auth/guard.ts", "g2\n", "fix: the guard trusts the header");
+  const { refusals } = await recheckRepos(pins, repos, ["See apps/backend/src/auth/ there."]);
+  assert.match(refusals[0] ?? "", /files: src\/auth\/guard\.ts\n/);
 });
 
 test("a cite path is matched literally, so brackets, parentheses, @ and spaces name the file they spell and nothing else", async () => {
