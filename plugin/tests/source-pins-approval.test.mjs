@@ -335,6 +335,66 @@ test("read pins of the Doc and of Figma nodes taken before the read hold at the 
   assert.equal(sent(w).length, 0);
 });
 
+test("openproject preview, comment and comment-edit keep the read pins of --pinned-at, fail on a change since the read, and warn without them", async () => {
+  await withOpenProject(async (op) => {
+    const sibling = siblingRepo();
+    const w = world({ mode: "ask", opUrl: op.url, map: { name: "p", repos: [{ path: sibling.clone, role: "BE", branch: "dev" }], language: { pr_review: "en" } } });
+    const draft = task(FIGMA_NODE);
+    w.file("drafts.json", JSON.stringify([draft]));
+    const body = `The pop-up needs the Pro price, as ${FIGMA_NODE} shows.`;
+    w.file("c.md", `${body}\n`);
+    const runs = [
+      ["preview", ["preview", "drafts.json", "--project", "183"], "drafts.json"],
+      ["comment", ["comment", "21298", "--body-file", "c.md"], "c.md"],
+      ["comment-edit", ["comment-edit", "9", "--body-file", "c.md"], "c.md"],
+    ];
+    for (const [name, args] of runs) {
+      const bare = await w.run("openproject", args);
+      assert.equal(bare.code, 0, `${name}: ${bare.out}`);
+      assert.match(bare.out, /^warning: no read pins for /m, name);
+    }
+    w.file("ledger.md", "# ledger\n");
+    const read = await w.run("draft-lint", ["pin-sources", "ledger.md", "--file", "F1", "--node", "1-2"]);
+    assert.equal(read.code, 0, read.out);
+    const readLines = read.out.split("\n").filter((line) => line.startsWith("pinned: "));
+    for (const [name, args] of runs) {
+      const kept = await w.run("openproject", [...args, "--pinned-at", "ledger.md"]);
+      assert.equal(kept.code, 0, `${name}: ${kept.out}`);
+      assert.doesNotMatch(kept.out, /warning:|notice:/, name);
+      for (const line of readLines) assert.ok(kept.out.includes(`${line}\n`), `${name}: ${line}\n${kept.out}`);
+    }
+    moveFigma(w);
+    const noted = await w.run("openproject", ["comment", "21298", "--body-file", "c.md", "--pinned-at", "ledger.md"]);
+    assert.equal(noted.code, 0, noted.out);
+    assert.match(noted.out, /^notice: Figma F1 lastModified changed .* since it was pinned; node 1:2 is unchanged/m);
+    changeWeb(w, { figmaNodes: { "1:2": { document: { id: "1:2", name: "changed" } } } });
+    for (const [name, args, file] of runs) {
+      const stateFile = join(w.dir, "state", "drafts", `${join(w.dir, file).replace(/\//g, "_")}.sources.json`);
+      const before = readFileSync(stateFile, "utf8");
+      const failed = await w.run("openproject", [...args, "--pinned-at", "ledger.md"]);
+      assert.notEqual(failed.code, 0, name);
+      assert.match(failed.out, /^sources: refused: Figma F1 node 1:2 changed since it was pinned/m, `${name}: ${failed.out}`);
+      assert.match(failed.out, /^sources: a source changed while it was being read; run draft-lint\.mjs pin-sources ledger\.md again/m, name);
+      assert.doesNotMatch(failed.out, /^WRITE →.*run again with --apply|approval lines:/m, name);
+      assert.equal(readFileSync(stateFile, "utf8"), before, name);
+    }
+  });
+});
+
+test("a Doc writer rechecks the read git pins against the body it posts", async () => {
+  const sibling = siblingRepo();
+  const w = world({ mode: "ask", web: { drive: [thread], document: textDoc(TAB) }, map: { name: "p", repos: [{ path: sibling.clone, role: "BE", branch: "dev" }], language: { doc_figma: "en" } } });
+  w.file("ledger.md", "# ledger\n");
+  assert.equal((await w.run("draft-lint", ["pin-sources", "ledger.md", "--doc", "D"])).code, 0);
+  w.file("g.md", "Does the fees.md rule still hold?\n");
+  assert.equal((await w.run("draft-lint", ["doc-comment", "g.md", "--doc", "D", "--pinned-at", "ledger.md"])).code, 0);
+  sibling.push("docs/fees.md", "new\n", "docs: change the fee rule");
+  const result = await w.run("gdoc-comments", ["reply", "c1", "--body-file", "g.md", "--doc", "D"]);
+  assert.notEqual(result.code, 0);
+  assert.match(result.out, /refused: .* since it was pinned and changed a file the text being posted names/);
+  assert.deepEqual(w.writes(), []);
+});
+
 test("a figma-comment lint on a node the read pins lack pins it at lint and warns", async () => {
   const w = world({ mode: "ask", web: { figma: [] } });
   w.file("ledger.md", "# ledger\n");

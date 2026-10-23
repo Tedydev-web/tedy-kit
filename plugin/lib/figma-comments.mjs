@@ -83,9 +83,9 @@ export async function recheckFigma(figma, pin) {
 
 const covering = (file, node) => (pin) => pin.kind === "figma" && pin.file === file && (pin.whole || (node !== null && Object.hasOwn(pin.nodes ?? {}, node)));
 
-function recheckTarget(figma, flags, node) {
+function recheckTarget(figma, flags, node, body) {
   const file = flags["body-file"];
-  return requireFresh(file, `draft-lint.mjs figma-comment ${file} --file ${figma.file}${node ? ` --node ${node}` : ""}`, { covers: covering(figma.file, node), what: node ? `Figma ${figma.file} node ${node}` : `Figma ${figma.file} file` });
+  return requireFresh(file, `draft-lint.mjs figma-comment ${file} --file ${figma.file}${node ? ` --node ${node}` : ""}`, { texts: [body], covers: covering(figma.file, node), what: node ? `Figma ${figma.file} node ${node}` : `Figma ${figma.file} file` });
 }
 
 const readBody = (flags) => {
@@ -126,7 +126,7 @@ async function main([command, target, ...rest]) {
     if (!box) throw new Error(`node ${node} not found in ${figma.file}`);
     const twin = duplicateOnNode((await figma.request(`/files/${figma.file}/comments`)).comments, node, body);
     if (twin) throw new Error(`comment ${twin.id} on node ${node} already says this; nothing posted`);
-    const notices = await recheckTarget(figma, flags, node);
+    const notices = await recheckTarget(figma, flags, node, body);
     console.log(`WRITE → Figma ${figma.file} node ${node} : 1 comment`);
     consumeApproval(process.argv, [body]);
     sayNotices(notices);
@@ -141,7 +141,7 @@ async function main([command, target, ...rest]) {
     const root = rootOf(comments, target);
     const twin = duplicateReply(comments, root.id, body);
     if (twin) throw new Error(`reply ${twin.id} in thread ${root.id} already says this; nothing posted`);
-    const notices = await recheckTarget(figma, flags, root.client_meta?.node_id ?? null);
+    const notices = await recheckTarget(figma, flags, root.client_meta?.node_id ?? null, body);
     console.log(`WRITE → Figma ${figma.file} thread ${root.id} : 1 reply`);
     consumeApproval(process.argv, [body]);
     sayNotices(notices);

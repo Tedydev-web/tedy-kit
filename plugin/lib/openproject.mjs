@@ -12,7 +12,7 @@ import { approvalLines, renderRollbackItem, renderWorkPackageDraft } from "./pub
 import { snapshotOnce, snapshotPath } from "./draft-lint.mjs";
 import { appendEditLog, frozenOriginal, labelText } from "./edit-log.mjs";
 import { chatLanguage } from "./labels.mjs";
-import { describePin, linkPins, recheckPinned, sayNotices, writeSources } from "./source-pins.mjs";
+import { describePin, linkPins, recheckPinned, recordPins, sayNotices } from "./source-pins.mjs";
 import { countWords, lintDrafts, lintWorkPackage, readiness, readinessLine } from "./task-lint.mjs";
 
 function projectOf(flags) {
@@ -82,15 +82,16 @@ async function check(client, project, drafts) {
 
 const locksPath = (file) => `${snapshotPath(file)}.locks.json`;
 
-async function recheckLinks(file, relint) {
-  const { refusals, notices } = await recheckPinned(file, relint);
+async function recheckLinks(file, relint, texts) {
+  const { refusals, notices } = await recheckPinned(file, relint, { texts });
   for (const line of refusals) console.log(line);
   return refusals.length ? null : notices;
 }
 
-function pinBody(file, text, pins) {
-  writeSources(file, pins, text);
-  console.log(pins.length ? pins.map(describePin).join("\n") : "pinned: no Figma or Google Doc link in the comment");
+async function pinText(file, text, posted, pinnedAt) {
+  const pins = await recordPins(file, text, await linkPins(posted), { pinnedAt, texts: [posted] });
+  if (pins) console.log(pins.length ? pins.map(describePin).join("\n") : "pinned: no Figma or Google Doc link in the text");
+  return pins;
 }
 
 async function apply(client, project, drafts, file) {
@@ -109,7 +110,7 @@ async function apply(client, project, drafts, file) {
     for (const [slug] of moved) console.log(`refused: ${slug} changed in OpenProject since the preview; read its activity, then preview again`);
     return 1;
   }
-  const notices = await recheckLinks(file, `openproject.mjs preview ${file} --project ${project}`);
+  const notices = await recheckLinks(file, `openproject.mjs preview ${file} --project ${project}`, [readFileSync(file, "utf8")]);
   if (!notices) return 1;
   consumeApproval(process.argv, drafts.map((draft, index) => renderWorkPackageDraft(draft, plan[index])));
   sayNotices(notices);
@@ -229,11 +230,11 @@ async function comment(client, id, flags) {
   }
   console.log(`${describe(current)} | comment of ${body.length} characters`);
   if (flags.apply === undefined) {
-    pinBody(file, text, await linkPins(body));
+    if (!(await pinText(file, text, body, flags["pinned-at"]))) return 1;
     console.log(`WRITE → ${client.host} · #${id} : 1 comment; run again with --apply`);
     return 0;
   }
-  const notices = await recheckLinks(file, `openproject.mjs comment ${id} --body-file ${file}`);
+  const notices = await recheckLinks(file, `openproject.mjs comment ${id} --body-file ${file}`, [body]);
   if (!notices) return 1;
   consumeApproval(process.argv, [body]);
   sayNotices(notices);
@@ -273,11 +274,11 @@ async function commentEdit(client, id, flags) {
   }
   console.log(`${describe(current)} | activity ${id} | comment of ${old.length} → ${body.length} characters`);
   if (flags.apply === undefined) {
-    pinBody(file, text, await linkPins(body));
+    if (!(await pinText(file, text, body, flags["pinned-at"]))) return 1;
     console.log(`WRITE → ${client.host} · #${current.id} : 1 comment edit; run again with --apply`);
     return 0;
   }
-  const notices = await recheckLinks(file, `openproject.mjs comment-edit ${id} --body-file ${file}`);
+  const notices = await recheckLinks(file, `openproject.mjs comment-edit ${id} --body-file ${file}`, [body]);
   if (!notices) return 1;
   consumeApproval(process.argv, [body]);
   sayNotices(notices);
@@ -390,10 +391,10 @@ async function main([command, target, ...rest]) {
       const { failed, locks, plan } = await check(client, project, drafts);
       if (failed) return 1;
       const text = readFileSync(target, "utf8");
-      const pins = await linkPins(text);
+      const pins = await recordPins(target, text, await linkPins(text), { pinnedAt: flags["pinned-at"], texts: [text] });
+      if (!pins) return 1;
       if (snapshotOnce(target, text)) console.log("original drafts frozen for the edit log");
       writeFileSync(locksPath(target), JSON.stringify(locks));
-      writeSources(target, pins, text);
       for (const pin of pins) console.log(describePin(pin));
       console.log(approvalLines(drafts.map((draft, index) => renderWorkPackageDraft(draft, plan[index]))));
       return 0;

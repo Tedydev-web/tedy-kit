@@ -138,7 +138,7 @@ export async function recheckGdoc(google, pin, kept) {
   return versionCheck(`Google Doc ${pin.doc} text`, pin.text.slice(0, 12), now.startsWith(pin.text.slice(0, 12)) ? now : now.slice(0, 12), kept ? { kept } : {});
 }
 
-export const recheckDocTarget = (doc, file, relint, kept) => requireFresh(file, relint, { kept, covers: (pin) => pin.kind === "gdoc" && pin.doc === doc, what: `text of Google Doc ${doc}` });
+export const recheckDocTarget = (doc, file, relint, { kept, texts } = {}) => requireFresh(file, relint, { kept, texts, covers: (pin) => pin.kind === "gdoc" && pin.doc === doc, what: `text of Google Doc ${doc}` });
 
 const relintDoc = (file, doc) => `draft-lint.mjs doc-comment ${file} --doc ${doc}`;
 
@@ -225,7 +225,7 @@ async function main([command, target, ...rest]) {
     const body = readBody(flags);
     const google = await session(flags, command === "anchor");
     if (alreadyPosted(await listComments(google), command, target, body)) throw new Error(`the Doc already has this ${command === "reply" ? `reply in thread ${target}` : "comment"}; nothing posted`);
-    const notices = await recheckDocTarget(google.doc, flags["body-file"], relintDoc(flags["body-file"], google.doc));
+    const notices = await recheckDocTarget(google.doc, flags["body-file"], relintDoc(flags["body-file"], google.doc), { texts: [body] });
     const approve = () => {
       consumeApproval(process.argv, [body]);
       sayNotices(notices);
@@ -251,7 +251,7 @@ async function main([command, target, ...rest]) {
     const google = await session(flags);
     const item = editTarget(await listComments(google), target, flags.reply);
     if (squash(item.content) === squash(body)) throw new Error("the posted text already matches the body file; nothing edited");
-    const notices = await recheckDocTarget(google.doc, flags["body-file"], relintDoc(flags["body-file"], google.doc));
+    const notices = await recheckDocTarget(google.doc, flags["body-file"], relintDoc(flags["body-file"], google.doc), { texts: [body] });
     const path = `${DRIVE}/files/${google.doc}/comments/${target}${flags.reply ? `/replies/${flags.reply}` : ""}?fields=id,content`;
     console.log(`WRITE → Google Doc ${google.doc} thread ${target}${flags.reply ? ` reply ${flags.reply}` : ""} : edit 1 ${flags.reply ? "reply" : "comment"}`);
     consumeApproval(process.argv, [body]);
