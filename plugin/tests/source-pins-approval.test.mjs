@@ -489,6 +489,19 @@ test("every lint pins the links in its text and the map repos, and figma-comment
   assert.ok(reviewPins.some((line) => line.startsWith("pinned: . pull/701/head@")), reviewPins.join("\n"));
 });
 
+test("a Figma 429 refuses after one call, without retrying", async () => {
+  const w = world({ mode: "ask", web: { figma: [] } });
+  w.file("f.md", "@lam Màn này thiếu trạng thái rỗng.\n");
+  await lint(w, "draft-lint", ["figma-comment", "f.md", "--file", "F1", "--node", "1-2"]);
+  changeWeb(w, { figma429: true });
+  const before = w.reads().length;
+  const result = await w.run("figma-comments", ["post", "1-2", "--body-file", "f.md", "--file", "F1"]);
+  assert.notEqual(result.code, 0);
+  assert.match(result.out, /Figma answered HTTP 429 to \/files\/F1\/nodes \(Retry-After 30 s\)/);
+  assert.equal(w.reads().length - before, 1, w.reads().slice(before).join("\n"));
+  assert.deepEqual(w.writes(), []);
+});
+
 test("a Figma post on an instance node reads and posts the whole instance id", async () => {
   const w = world({ mode: "ask", web: { figma: [] } });
   w.file("f.md", "@lam Màn này thiếu trạng thái rỗng.\n");
