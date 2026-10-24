@@ -31,8 +31,7 @@ def differs(reference, flagger):
 
 
 def rubric_criteria(fields):
-    named = {"Relevance" if f == "problems" else f for f in fields if f != "eligibility"}
-    return [c for c in LABELLED if c in named] or (["decision"] if "eligibility" in fields else [])
+    return [c for c in (*LABELLED, "problems", "eligibility") if c in fields]
 
 
 def agy_switch(fetch, kind, name, state):
@@ -140,7 +139,7 @@ def write_flags(topic, work, batch):
     routed = not (work / FREEZE_FILE).is_file()
     rows = [{"id": r["id"], "stratum": r["stratum"], "order_rank": r["order_rank"], "criteria": trigger[r["id"]],
              **({"unflagged_by_refusal": unflagged[r["id"]]} if unflagged[r["id"]] else {})} for r in sample["rows"]]
-    rubric = [{"id": r["id"], "stratum": r["stratum"], "order_rank": r["order_rank"], "criteria": [c for c in (*LABELLED, "decision") if c in asked[r["id"]]]}
+    rubric = [{"id": r["id"], "stratum": r["stratum"], "order_rank": r["order_rank"], "criteria": rubric_criteria(asked[r["id"]])}
               for r in sample["rows"] if asked[r["id"]]]
     out = {"batch": batch, "set_sha256": hashlib.sha256(path.read_bytes()).hexdigest(), "reference": {k: reference[k] for k in ("model", "sessions")}, "fields": list(FIELDS),
            "routed": routed, **({} if routed else {"for_the_record": f"{FREEZE_FILE} exists and no rubric wording enters after it; these flags are reported, never routed"}),
