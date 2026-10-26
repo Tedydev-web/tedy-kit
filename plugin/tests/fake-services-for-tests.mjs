@@ -122,6 +122,7 @@ export function fakeOpenProject({ closedStatus = true } = {}) {
   const make = (id, subject) => ({ id, subject, lockVersion: 0, updatedAt: "2000-01-01T00:00:00Z", estimatedTime: null, description: { raw: DESCRIPTION }, _links: { status: { title: "New" }, project: { href: "/api/v3/projects/183" }, priority: { title: "Normal" } } });
   workPackages[21298] = make(21298, "[FE] Vault limit pop-up on Free");
   workPackages[21300] = make(21300, "[FE] Wire vault limit");
+  workPackages[61] = { ...make(61, "A task of an older project"), _links: { status: { title: "Closed" }, project: { href: "/api/v3/projects/12" }, priority: { title: "Normal" } } };
   relations.push({ id: 1000, type: "relates", reverseType: "relates", _links: { from: { href: "/api/v3/work_packages/21298" }, to: { href: "/api/v3/work_packages/21300" } } });
   activities.push({ id: 9, comment: { raw: "old text" }, _links: { user: { href: "/api/v3/users/1" }, workPackage: { href: "/api/v3/work_packages/21298" } } });
   const server = createServer((request, response) => {
@@ -138,6 +139,7 @@ export function fakeOpenProject({ closedStatus = true } = {}) {
       if (path.endsWith("/types")) return send({ _embedded: { elements: [{ name: "Task", _links: { self: { href: "/api/v3/types/1" } } }] } });
       if (path.endsWith("/available_assignees")) return send({ _embedded: { elements: [{ name: "Hoàng Lâm", _links: { self: { href: "/api/v3/users/7" } } }] } });
       if (path.endsWith("/form")) return send({ _embedded: { validationErrors: {} } });
+      if (path === "/api/v3/projects/183") return send({ id: 183, _links: { self: { href: "/api/v3/projects/183" } } });
       if (path === "/api/v3/projects/183/work_packages" && request.method === "GET") return send({ total: 0, _embedded: { elements: [] } });
       if (path === "/api/v3/projects/183/work_packages" && request.method === "POST") {
         const payload = JSON.parse(body);

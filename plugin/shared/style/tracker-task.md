@@ -16,6 +16,7 @@ Default samples for tracker work items. A profile copy at `<profile>/style/track
 - Every screen gets two tasks, UI on sample data and its wire task, even when one person does both; the UI task ends its Goal with "Wiring is the next task".
 - `## Open questions` lists each gap as a fact: what is missing and who was asked. A gap that stops the build opens with `Blocking:` and carries `Tried:` with where it was looked up.
 - Backend tasks are drafted only when the user asks for them.
+- OpenProject turns every bare `#N` into a link to work package N, even after a backslash. A number that is not one of this project's work packages (a PRD message, a pull request, a version) goes in backticks, `` `#61` ``; `openproject.mjs` refuses a description or comment that would link one.
 
 ## Samples
 

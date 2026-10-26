@@ -14,6 +14,7 @@ import { appendEditLog, frozenOriginal, labelText } from "./edit-log.mjs";
 import { chatLanguage } from "./labels.mjs";
 import { describePin, pinSourcesOf, recheckPinned, recordPins, sayNotices } from "./source-pins.mjs";
 import { countWords, lintDrafts, lintWorkPackage, readiness, readinessLine } from "./task-lint.mjs";
+import { bareWorkPackageRefs, foreignRefsAdvice, foreignWorkPackageRefs } from "./work-package-refs.mjs";
 
 function projectOf(flags) {
   const project = flags.project ?? resolveMap(process.cwd())?.map.tracker?.project;
@@ -34,9 +35,12 @@ async function check(client, project, drafts) {
   const existing = plan.some((step) => step.action === "create") ? await listWorkPackages(client, project, closed) : [];
   let failed = false;
   const locks = {};
+  const projectHref = drafts.some((draft) => bareWorkPackageRefs(draft.description ?? "").length) ? (await client.request(`/api/v3/projects/${project}`))._links.self.href : null;
   for (const [index, draft] of drafts.entries()) {
     const step = plan[index];
     const findings = lintWorkPackage(draft);
+    const foreign = projectHref ? await foreignWorkPackageRefs(client, projectHref, draft.description ?? "") : [];
+    if (foreign.length) findings.push({ severity: "BLOCK", rule: `foreign-ref ${foreignRefsAdvice(foreign)}` });
     const blocks = findings.filter((finding) => finding.severity === "BLOCK");
     const warns = findings.filter((finding) => finding.severity === "WARN").map((finding) => finding.rule);
     const similar = step.action === "create" ? closestWorkPackage(draft, existing) : null;
@@ -229,6 +233,11 @@ async function comment(client, id, flags) {
   const body = text.trim();
   if (!body) throw new Error("comment body is empty");
   const current = await client.request(`/api/v3/work_packages/${id}`);
+  const foreign = await foreignWorkPackageRefs(client, current._links.project?.href, body);
+  if (foreign.length) {
+    console.log(`refused: ${foreignRefsAdvice(foreign)}`);
+    return 1;
+  }
   const activities = (await client.request(`/api/v3/work_packages/${id}/activities`))._embedded.elements;
   const twin = sameComment(activities, body);
   if (twin) {
@@ -274,6 +283,11 @@ async function commentEdit(client, id, flags) {
   }
   const wpPath = activity._links.workPackage.href;
   const current = await client.request(wpPath);
+  const foreign = await foreignWorkPackageRefs(client, current._links.project?.href, body);
+  if (foreign.length) {
+    console.log(`refused: ${foreignRefsAdvice(foreign)}`);
+    return 1;
+  }
   const twin = sameComment((await client.request(`${wpPath}/activities`))._embedded.elements.filter((other) => other.id !== activity.id), body);
   if (twin) {
     console.log(`refused: #${current.id} already has this comment as activity ${twin.id}`);
