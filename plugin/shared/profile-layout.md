@@ -32,6 +32,8 @@ Runtime state (gate log, edit log, draft snapshots, last check times) lives in `
 | `gates.pushExempt` | string[] | `[]` | Repositories whose pushes to an integration branch need no prompt; `~/` expands to the home directory |
 | `language.chat` | string | `"en"` | Language of replies and question labels, and of the comment rules in a directory no project map covers |
 
+The defaults apply when no profile exists. `profile.mjs init [noComments] [draftPrOnly]` writes a `config.json` with `roleGate`, `ghWrites` and `publishQuote` on, plus each team convention named on the command line.
+
 Gates that protect every user stay on regardless of the config:
 - a prompt before a push to an integration branch, before a push that rewrites history, and before `gh pr merge`, `gh pr ready` or the equivalent `gh api` calls;
 - in a project whose map has a `tracker`, a refusal of `gh pr create` without `OP#<id>` in the body;

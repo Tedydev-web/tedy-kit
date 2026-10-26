@@ -75,11 +75,25 @@ test("init creates the config and rules from the template, and never overwrites 
   assert.deepEqual(initProfile(dir), { created: ["config.json", "rules.md", "projects/"], kept: [] });
   const written = JSON.parse(readFileSync(join(dir, "config.json"), "utf8"));
   assert.equal("publishApproval" in written.gates, false);
-  assert.deepEqual(loadConfig(dir), DEFAULT_CONFIG);
+  assert.deepEqual(loadConfig(dir).gates, { ...DEFAULT_CONFIG.gates, roleGate: true, ghWrites: true, publishQuote: true });
   assert.equal(readFileSync(join(dir, "rules.md"), "utf8"), readFileSync(join(SHARED, "rules-template.md"), "utf8"));
   writeFileSync(join(dir, "rules.md"), "edited\n");
   assert.deepEqual(initProfile(dir), { created: [], kept: ["config.json", "rules.md", "projects/"] });
   assert.equal(readFileSync(join(dir, "rules.md"), "utf8"), "edited\n");
+});
+
+test("init turns on the team conventions it is given, and the command refuses any other argument", () => {
+  const dir = join(tempDir("tedy-profile-conventions-"), "profile");
+  initProfile(dir, ["noComments", "draftPrOnly"]);
+  assert.deepEqual(loadConfig(dir).gates, { ...DEFAULT_CONFIG.gates, noComments: true, draftPrOnly: true, roleGate: true, ghWrites: true, publishQuote: true });
+  assert.throws(() => initProfile(join(tempDir("tedy-profile-bad-"), "profile"), ["ghWrites"]), /noComments.*draftPrOnly/);
+  const cli = join(tempDir("tedy-profile-cli-"), "profile");
+  const ok = spawnSync("node", [SCRIPT, "init", "draftPrOnly"], { encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: cli } });
+  assert.equal(ok.status, 0, ok.stderr);
+  assert.equal(loadConfig(cli).gates.draftPrOnly, true);
+  assert.equal(loadConfig(cli).gates.noComments, false);
+  const bad = spawnSync("node", [SCRIPT, "init", "roleGate"], { encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: join(tempDir("tedy-profile-cli-bad-"), "profile") } });
+  assert.equal(bad.status, 2);
 });
 
 test("doctor reports the profile, config, rules, overrides and maps, and exits 1 on an invalid config", () => {

@@ -16,9 +16,13 @@ Every run starts with `node <plugin>/scripts/profile.mjs doctor`. When its first
    - `profile.create`: create the profile in that directory.
    - `profile.elsewhere`: the user types a folder in "Other"; the option description says that `~/.claude/settings.json` is backed up and gets `TEDY_PROFILE_DIR` in its `env` block. On this answer, do that so hooks and commands find it in new sessions, and put `TEDY_PROFILE_DIR=<folder>` in front of every `node <plugin>/scripts/...` command for the rest of this run.
    - `profile.stop`: stop setup; nothing is written.
-2. `node <plugin>/scripts/profile.mjs init`, with `TEDY_PROFILE_DIR=<folder>` in front for another folder. It creates `config.json` (every personal gate off), `rules.md` from the template and `projects/`, and never overwrites a file.
-3. When no line of `~/.claude/CLAUDE.md` imports the profile's `rules.md` (any `@` path that resolves to it, `~` included), ask one `AskUserQuestion` before touching it; on approval back it up and append `@<profile>/rules.md`, so the rules load in every new session.
-4. Quote the `profile.mjs doctor` output and say which gates the user can turn on in `config.json`: `noComments`, `draftPrOnly`, `roleGate`, `ghWrites` and `publishQuote` (`<plugin>/shared/profile-layout.md`). Then continue with the bare run or the update.
+2. One multi-select `AskUserQuestion`, header `conventions.header`, asking which rules the user's team keeps, because each turns on a gate that blocks work that breaks it:
+   - `conventions.noComments`: source holds no comments; the description says JSDoc, license headers and `TODO` lines are then blocked and only tool directives pass.
+   - `conventions.draftPrOnly`: pull requests open as drafts.
+   - `conventions.none`: neither.
+3. `node <plugin>/scripts/profile.mjs init` followed by each chosen key (`noComments`, `draftPrOnly`), with `TEDY_PROFILE_DIR=<folder>` in front for another folder. It creates `config.json` with `roleGate`, `ghWrites` and `publishQuote` on plus the chosen keys, `rules.md` from the template and `projects/`, and never overwrites a file.
+4. When no line of `~/.claude/CLAUDE.md` imports the profile's `rules.md` (any `@` path that resolves to it, `~` included), ask one `AskUserQuestion` before touching it; on approval back it up and append `@<profile>/rules.md`, so the rules load in every new session.
+5. Quote the `profile.mjs doctor` output and say that any gate can be switched in `config.json` (`<plugin>/shared/profile-layout.md`). Then continue with the bare run or the update.
 
 Any other `fail` line in the `profile.mjs doctor` output (`release-worktree`, `rules-size`, `claude-md-imports`, `claude-version`, `config`): quote it, then one `AskUserQuestion` whether to fix it now or continue with it open.
 

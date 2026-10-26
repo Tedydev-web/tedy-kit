@@ -7,6 +7,8 @@ import { CLAUDE_SETTINGS, KIT_PUBLISH_ASK_RULES, leftoverKitRules, plannedPermis
 
 const SHARED = fileURLToPath(new URL("../shared/", import.meta.url));
 const PERSONAL_GATES = ["noComments", "draftPrOnly", "roleGate", "ghWrites", "publishQuote"];
+const INIT_GATES = ["roleGate", "ghWrites", "publishQuote"];
+const CONVENTION_GATES = ["noComments", "draftPrOnly"];
 export const PUBLISH_APPROVAL_MODES = Object.freeze(["ask", "answer"]);
 
 export const DEFAULT_CONFIG = Object.freeze({
@@ -78,13 +80,15 @@ function files(dir, root = dir) {
 
 export const overrides = (dir = profileDir()) => files(dir).filter((rel) => existsSync(join(SHARED, rel))).sort();
 
-export function initProfile(dir = profileDir()) {
+export function initProfile(dir = profileDir(), conventions = []) {
+  const unknown = conventions.filter((key) => !CONVENTION_GATES.includes(key));
+  if (unknown.length) throw new Error(`init takes only ${CONVENTION_GATES.join(" and ")}, not ${unknown.join(", ")}`);
   const result = { created: [], kept: [] };
   mkdirSync(dir, { recursive: true });
   const config = join(dir, "config.json");
   if (existsSync(config)) result.kept.push("config.json");
   else {
-    const gates = { ...DEFAULT_CONFIG.gates };
+    const gates = { ...DEFAULT_CONFIG.gates, ...Object.fromEntries([...INIT_GATES, ...conventions].map((key) => [key, true])) };
     delete gates.publishApproval;
     writeFileSync(config, `${JSON.stringify({ ...DEFAULT_CONFIG, gates }, null, 2)}\n`);
     result.created.push("config.json");
@@ -224,7 +228,7 @@ function publishApproval(dir, mode, settingsFile = CLAUDE_SETTINGS) {
   return 0;
 }
 
-const USAGE = "usage: profile.mjs <path <relative-path>|doctor|init|publish-approval [ask|answer]>";
+const USAGE = "usage: profile.mjs <path <relative-path>|doctor|init [noComments] [draftPrOnly]|publish-approval [ask|answer]>";
 
 function main([command, arg, ...rest]) {
   const dir = profileDir();
@@ -238,7 +242,12 @@ function main([command, arg, ...rest]) {
     }
   }
   if (command === "init") {
-    const { created, kept } = initProfile(dir);
+    const conventions = [arg, ...rest].filter((key) => key !== undefined);
+    if (!conventions.every((key) => CONVENTION_GATES.includes(key))) {
+      process.stderr.write(`${USAGE}\n`);
+      return 2;
+    }
+    const { created, kept } = initProfile(dir, conventions);
     process.stdout.write(`profile: ${dir}\ncreated: ${created.join(", ") || "nothing"}\nkept: ${kept.join(", ") || "nothing"}\n`);
     return 0;
   }
