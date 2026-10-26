@@ -4,5 +4,6 @@
   "description": "Pull request review, development and project management with drafts the user approves, a reconcile across PRD, design and code, and gates on publishing and pushing.",
   "author": {
     "name": "tedydev"
-  }
+  },
+  "license": "MIT"
 }
