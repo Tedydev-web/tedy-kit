@@ -14,7 +14,7 @@ from study_session import MAX_PROMPT, canonical_sha256, session_folder
 from study_session_prompt import REFERENCE_REPLY_FORMAT, REFERENCE_ROWS_NOTE, REFERENCE_TEMPLATE_SHA256, build_reference_prompt, reference_prompt_parts
 from study_session_reply import REFERENCE_CODES, REFERENCE_CRITERIA, parse_reference_reply
 from study_stage1 import LADDER
-from study_topic import TopicError, flaggers, load_topic, reference_option
+from study_topic import TopicError, flaggers, load_topic, reference_option, session_a
 from test_sessions import SessionBase, agy_reply, claude_reply, reply_row
 
 KIT = Path(__file__).resolve().parents[4]
@@ -257,7 +257,7 @@ class ReferenceTopicTest(ReferenceBase):
     def test_the_canon_topic_names_its_reference_and_both_flagger_roles(self):
         topic = load_topic(KIT, "canon")
         self.assertEqual(reference_option(topic, LADDER_MODELS), REFERENCE)
-        self.assertEqual(flaggers(topic), {"rubric_trigger": [{"cli": "agy", "model": "gemini-3.8-flash-high"}], "record_only": [{"cli": "agy", "model": "gpt-oss-120b-medium"}]})
+        self.assertEqual(flaggers(topic), {"rubric_trigger": [{"cli": "agy", "model": "gemini-3.8-flash-high"}], "record_only": [{"cli": "aperture", "model": "openai/gpt-5.6-luna"}]})
         self.assertEqual(json.loads((KIT / "docs/prior-art/topics/canon.json").read_text())["rubric_trigger_flaggers"], [{"cli": "agy", "model": "gemini-3.8-flash-high"}])
 
 
@@ -585,6 +585,64 @@ class NoteRerunTest(ReferenceBase):
         self.assertIn("--rerun-notes 0 must be a round number from 1", self.refused(FakeFetch(), "--rerun-notes", "0"))
         self.write_notes({**self.note, "cue": "objectivity:sponsor"})
         self.assertIn("no note of reference-notes-calibration.json selects a config row of calibration", self.refused(FakeFetch(), "--rerun-notes", "1"))
+
+
+LUNA = {"cli": "aperture", "model": "openai/gpt-5.6-luna"}
+ENDPOINT = "http://100.127.1.240"
+
+
+def completion(text, model=LUNA["model"]):
+    return json.dumps({"model": model, "choices": [{"message": {"role": "assistant", "content": text}}], "usage": {"prompt_tokens": 900, "completion_tokens": 40}})
+
+
+class ApertureFlaggerTest(ReferenceBase):
+    def setUp(self):
+        super().setUp()
+        self.write_topic(record_only_flaggers=[LUNA])
+
+    def flag(self, fetch, *args):
+        return self.judge(fetch, "--model", LUNA["model"], *args, judge="flagger")
+
+    def test_an_aperture_flagger_posts_one_chat_completion_per_row_to_the_endpoint(self):
+        models = json.dumps({"data": [{"id": LUNA["model"]}, {"id": "deepseek/deepseek-v4.1-flash"}]})
+        fetch = FakeFetch([("/v1/models", models), ("aperture-reference-calibration-config-flagger-openai--gpt-5.6-luna-1-1.json", completion(label(1, "o/one"))),
+                           ("aperture-reference-calibration-config-flagger-openai--gpt-5.6-luna-2-2.json", completion(label(2, "o/two")))])
+        self.flag(fetch, "--endpoint", ENDPOINT)
+        name = "reference-calibration-config-flagger-openai--gpt-5.6-luna"
+        self.assertEqual([r["order_rank"] for r in self.rows(name)], [1, 2])
+        posts = fetch.called("--data-binary")
+        self.assertEqual(len(posts), 2)
+        self.assertTrue(all(f"{ENDPOINT}/v1/chat/completions" in call for call in posts))
+        entry = self.sessions()[name]
+        self.assertEqual((entry["cli"], entry["model"], entry["effort"], entry["threats"]), ("aperture", LUNA["model"], "set by the model id", []))
+        self.assertIn(f"one chat completion to {ENDPOINT}/v1/chat/completions, no tools offered", entry["isolation"])
+        self.assertEqual({b["cli_version"] for b in entry["blocks"]}, {f"aperture: {LUNA['model']} listed at {ENDPOINT}/v1/models"})
+        self.assertEqual({line["usage"]["prompt_tokens"] for line in self.ledger() if line["key"] == name}, {900})
+
+    def test_an_aperture_flagger_needs_its_endpoint_a_listed_model_and_the_requested_model_served(self):
+        self.assertIn("--endpoint names the Aperture URL", self.refused(FakeFetch(), "--model", LUNA["model"], judge="flagger"))
+        self.assertIn("--endpoint names the Aperture URL", self.refused(FakeFetch(), "--endpoint", ENDPOINT))
+        unlisted = FakeFetch([("/v1/models", json.dumps({"data": [{"id": "deepseek/deepseek-v4.1-flash"}]}))])
+        self.assertIn(f"{LUNA['model']} is not listed at {ENDPOINT}/v1/models", self.refused(unlisted, "--model", LUNA["model"], "--endpoint", ENDPOINT, judge="flagger"))
+        other = FakeFetch([("/v1/models", json.dumps({"data": [{"id": LUNA["model"]}]})), ("--data-binary", completion(label(1, "o/one"), model="openai/gpt-6-luna"))])
+        self.flag(other, "--endpoint", ENDPOINT, "--rows", "1-1")
+        self.assertEqual(self.rows("reference-calibration-config-flagger-openai--gpt-5.6-luna"), [])
+        self.assertEqual(len(other.called("--data-binary")), 2)
+
+    def test_aperture_serves_flaggers_only(self):
+        self.assertEqual(flaggers(self.topic())["record_only"], [LUNA])
+        self.write_topic(reference=LUNA)
+        with self.assertRaisesRegex(TopicError, r"reference needs a cli \(claude or agy\)"):
+            reference_option(self.topic(), LADDER_MODELS)
+        self.write_topic(sessions={"A": LUNA, "B": {"cli": "claude", "model": "claude-sonnet-5-5", "effort": "high"}})
+        with self.assertRaisesRegex(TopicError, r"sessions.A needs a cli \(claude or agy\)"):
+            session_a(self.topic())
+        self.write_topic(record_only_flaggers=[{**LUNA, "effort": "high"}])
+        with self.assertRaisesRegex(TopicError, "aperture takes no effort"):
+            flaggers(self.topic())
+
+    def topic(self):
+        return load_topic(self.repo, "demo")
 
 
 class OtherKindsWriteNoLedgerTest(SessionBase):

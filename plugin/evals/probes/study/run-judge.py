@@ -206,6 +206,8 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
                            (["--rerun-notes"], {"type": int, "help": "--judge reference only: round N (from 1) re-runs every row a note of "
                                                                     "reference-notes-<batch>.json selects, with every note's criteria line under Rubric notes, as "
                                                                     "reference-<batch>-<stratum>-notes-N; the derive step reads the latest round holding a row"}),
+                           (["--endpoint"], {"help": "--judge flagger on aperture only: the Aperture URL, for example http://100.127.1.240; one chat completion "
+                                                     "per row, no tools offered"}),
                            (["--agy-window"], {"action": "store_true", "help": "--judge flagger on agy only, off by default: disable the context-mode MCP server "
                                                                                "and the ponytail plugin for the run and enable them again after it"}),
                            (["--today"], {"default": saigon_today(), "help": "run date, default today in Asia/Saigon"})).parse_args(argv)
@@ -235,7 +237,11 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
         option, freeze = job["option"], job["freeze"]
         if args.agy_window and (args.judge != "flagger" or option["cli"] != "agy"):
             raise TopicError("--agy-window belongs to --judge flagger on agy; it switches agy extensions only")
-        if not which(option["cli"]):
+        if (option["cli"] == "aperture") != bool(args.endpoint):
+            raise TopicError("--endpoint names the Aperture URL, and only an aperture flagger takes it")
+        if args.endpoint:
+            option = job["option"] = {**option, "endpoint": args.endpoint.rstrip("/")}
+        if not which("curl" if option["cli"] == "aperture" else option["cli"]):
             raise TopicError(f"{option['model']} runs on {option['cli']}, which is not on PATH")
         if not job["ranks"]:
             raise TopicError(f"no rows for {args.judge} on --set {args.set}")

@@ -20,7 +20,7 @@ RETEST_FAMILY = ("same family as the reference: a second independent pass of it 
 
 
 def flagger_key(batch, stratum, option):
-    return f"{session_key(batch, stratum)}-flagger-{option['model']}" + ("-pass2" if option.get("retest") else "")
+    return f"{session_key(batch, stratum)}-flagger-{option['model'].replace('/', '--')}" + ("-pass2" if option.get("retest") else "")
 
 
 def differs(reference, flagger):

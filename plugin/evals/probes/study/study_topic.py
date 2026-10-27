@@ -201,11 +201,11 @@ def pilot_rows(topic):
     return value
 
 
-def session_option(topic, where, option):
-    if not isinstance(option, dict) or option.get("cli") not in SESSION_CLIS or not isinstance(option.get("model"), str) or not option["model"]:
-        raise TopicError(f"{topic['path']}: {where} needs a cli ({' or '.join(SESSION_CLIS)}) and a model id")
-    if option["cli"] == "agy" and "effort" in option:
-        raise TopicError(f"{topic['path']}: {where}: agy takes no effort, it is part of the model id")
+def session_option(topic, where, option, clis=SESSION_CLIS):
+    if not isinstance(option, dict) or option.get("cli") not in clis or not isinstance(option.get("model"), str) or not option["model"]:
+        raise TopicError(f"{topic['path']}: {where} needs a cli ({' or '.join(clis)}) and a model id")
+    if option["cli"] != "claude" and "effort" in option:
+        raise TopicError(f"{topic['path']}: {where}: {option['cli']} takes no effort, it is part of the model id")
     if "effort" in option and (not isinstance(option["effort"], str) or not option["effort"]):
         raise TopicError(f"{topic['path']}: {where}.effort must be a non-empty string")
     return {k: option[k] for k in ("cli", "model", "effort") if k in option}
@@ -251,7 +251,7 @@ def reference_option(topic, ladder=()):
 
 
 def flagger_option(topic, where, option):
-    checked = session_option(topic, where, option)
+    checked = session_option(topic, where, option, (*SESSION_CLIS, "aperture"))
     if "retest" not in option:
         return checked
     if option["retest"] is not True:

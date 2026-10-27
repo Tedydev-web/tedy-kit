@@ -1,15 +1,13 @@
 import hashlib
 import json
 import re
-import shutil
-import tempfile
 from pathlib import Path
 
 from study_calibration_set import anchors, labels_file, set_file
 from study_citation_check import BATCH, STOP_AT, UNSUPPORTED, check_rows, sha256_file, statements, summary
 from study_reference_labels import cites_file, packet_rows, reference_option
 from study_screening_input import read_file
-from study_session import LEDGER, MAX_PROMPT, append_lines, call_isolated, isolation, session_command, spend_line
+from study_session import LEDGER, MAX_PROMPT, append_lines, aperture_call, aperture_reply, call_isolated, isolation, session_command, spend_line
 from study_session_reply import reply_text
 from study_topic import TopicError, saigon_today
 
@@ -100,33 +98,6 @@ def checker_option(spec, endpoint=None):
     if (parts[0] == "aperture") != bool(endpoint):
         raise TopicError("--endpoint names the Aperture URL, and only an aperture:<model> checker takes it")
     return {"cli": parts[0], "model": parts[1], **({"effort": parts[2]} if len(parts) == 3 else {}), **({"endpoint": endpoint.rstrip("/")} if endpoint else {})}
-
-
-def aperture_call(fetch, option, prompt, row_id, work, key):
-    folder = Path(tempfile.mkdtemp(prefix="citation-aperture-"))
-    try:
-        body = folder / f"aperture-{row_id}.json"
-        body.write_text(json.dumps({"model": option["model"], "messages": [{"role": "user", "content": prompt}]}, ensure_ascii=False))
-        return call_isolated(fetch, ["curl", "-sS", "-m", "900", "-H", "Content-Type: application/json", "--data-binary", f"@{body}",
-                                     f"{option['endpoint']}/v1/chat/completions"], work, key)
-    finally:
-        shutil.rmtree(folder, ignore_errors=True)
-
-
-def aperture_reply(option, out, status):
-    where = f"aperture {option['model']}"
-    if status != "ok":
-        raise TopicError(f"{where}: {status}")
-    try:
-        body = json.loads(out)
-        message = body["choices"][0]["message"]
-    except (ValueError, KeyError, IndexError, TypeError) as error:
-        raise TopicError(f"{where}: the reply is not a chat completion: {str(out)[:200]}") from error
-    if message.get("tool_calls"):
-        raise TopicError(f"{where}: the reply holds a tool call; a check session has no tools")
-    if body.get("model") != option["model"]:
-        raise TopicError(f"{where}: served {body.get('model')}, not the requested {option['model']}")
-    return message.get("content") or "", [body["model"]]
 
 
 def run_checker(topic, repo, work, option, freeze_sha, fetch):

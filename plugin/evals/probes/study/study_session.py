@@ -48,8 +48,10 @@ def claude_flags(bare):
     return ("--bare", *CLAUDE_ISOLATION) if bare else CLAUDE_ISOLATION
 
 
-def isolation(cli, bare, shared=False):
-    flags = (*claude_flags(bare), *((*CACHED_PREFIX, "<everything before the first row>") if shared else ())) if cli == "claude" else AGY_ISOLATION
+def isolation(cli, bare, shared=False, endpoint=None):
+    if cli == "aperture":
+        return f"one chat completion to {endpoint}/v1/chat/completions, no tools offered; stdin closed"
+    flags =(*claude_flags(bare), *((*CACHED_PREFIX, "<everything before the first row>") if shared else ())) if cli == "claude" else AGY_ISOLATION
     folder = "a fixed empty working folder per session key, emptied before each call" if shared else "empty temporary working folder"
     return " ".join(f or "''" for f in flags) + f"; {folder}; stdin closed"
 
@@ -64,9 +66,11 @@ def session_command(option, prompt, bare, system=None):
 
 def session_header(option, bare, shared=False):
     effort = option.get("effort") or ("default" if option["cli"] == "claude" else "set by the model id")
-    served = "modelUsage must name only the requested model" if option["cli"] == "claude" else "requested only: agy reports no served model"
-    threats = [] if option["cli"] == "claude" else [AGY_THREAT]
-    return {"cli": option["cli"], "model": option["model"], "effort": effort, "isolation": isolation(option["cli"], bare, shared), "served": served, "threats": threats}
+    served = {"claude": "modelUsage must name only the requested model", "aperture": "the completion's model must be the requested model"}.get(
+        option["cli"], "requested only: agy reports no served model")
+    threats = [AGY_THREAT] if option["cli"] == "agy" else []
+    return {"cli": option["cli"], "model": option["model"], "effort": effort, "isolation": isolation(option["cli"], bare, shared, option.get("endpoint")),
+            "served": served, "threats": threats}
 
 
 def session_folder(work, key):
@@ -175,6 +179,45 @@ def call_isolated(fetch, cmd, work=None, key=None):
     return out, status, left
 
 
+def aperture_call(fetch, option, prompt, call_id, work=None, key=None):
+    folder = Path(tempfile.mkdtemp(prefix="study-aperture-"))
+    try:
+        body = folder / f"aperture-{call_id}.json"
+        body.write_text(json.dumps({"model": option["model"], "messages": [{"role": "user", "content": prompt}]}, ensure_ascii=False))
+        return call_isolated(fetch, ["curl", "-sS", "-m", "900", "-H", "Content-Type: application/json", "--data-binary", f"@{body}",
+                                     f"{option['endpoint']}/v1/chat/completions"], work, key)
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def aperture_reply(option, out, status):
+    where = f"aperture {option['model']}"
+    if status != "ok":
+        raise TopicError(f"{where}: {status}")
+    try:
+        body = json.loads(out)
+        message = body["choices"][0]["message"]
+    except (ValueError, KeyError, IndexError, TypeError) as error:
+        raise TopicError(f"{where}: the reply is not a chat completion: {str(out)[:200]}") from error
+    if message.get("tool_calls"):
+        raise TopicError(f"{where}: the reply holds a tool call; a check session has no tools")
+    if body.get("model") != option["model"]:
+        raise TopicError(f"{where}: served {body.get('model')}, not the requested {option['model']}")
+    return message.get("content") or "", [body["model"]]
+
+
+def aperture_listed(fetch, option):
+    url = f"{option['endpoint']}/v1/models"
+    out, status, _ = fetch.run(["curl", "-sS", "-m", "60", url], timeout=90)
+    try:
+        listed = [m.get("id") for m in json.loads(out)["data"]] if status == "ok" else []
+    except (ValueError, KeyError, TypeError, AttributeError):
+        listed = []
+    if option["model"] not in listed:
+        raise TopicError(f"{option['model']} is not listed at {url}" + ("" if status == "ok" else f" ({status})"))
+    return f"aperture: {option['model']} listed at {url}"
+
+
 def expected_rows(job, work, stratum):
     inputs = {r["order_rank"]: r for r in read_jsonl(work, job.get("inputs") or inputs_file(work, stratum).name)}
     wanted = job.get("ranks")
@@ -272,10 +315,14 @@ def run_block(job, fetch):
     if frozen and any(frozen.get(k) != v for k, v in {**hashes, "template_sha256": template}.items() if k in frozen):
         changed = f"{packet.name}, the worked examples or the prompt template" if kind == "stage1" else f"the criteria, {packet.name} or the prompt template"
         raise TopicError(f"{stratum}: {changed} differ from the freeze; no session runs on a changed protocol")
-    version, status, _ = fetch.run([option["cli"], "--version"], timeout=60)
-    if status != "ok":
-        raise TopicError(f"{option['cli']} --version: {status}")
-    cli_version = version.strip().splitlines()[0] if version.strip() else "unknown"
+    aperture = option["cli"] == "aperture"
+    if aperture:
+        cli_version = aperture_listed(fetch, option)
+    else:
+        version, status, _ = fetch.run([option["cli"], "--version"], timeout=60)
+        if status != "ok":
+            raise TopicError(f"{option['cli']} --version: {status}")
+        cli_version = version.strip().splitlines()[0] if version.strip() else "unknown"
     reference = kind == "reference"
     header = session_header(option, job["bare"], reference)
     update_sessions(work, lambda sessions: check_header(sessions, job["key"], header, list(expected)))
@@ -295,7 +342,8 @@ def run_block(job, fetch):
     lists = reference and option["cli"] == "agy"
     before = agy_lists(fetch) if lists else None
     system, own = reference_prompt_parts(packet.read_text(), job.get("notes") or [], list(expected.values())) if reference and option["cli"] == "claude" else (None, prompt)
-    out, status, left = call_isolated(fetch, session_command(option, own, job["bare"], system), *((work, job["key"]) if reference else ()))
+    keyed = (work, job["key"]) if reference else ()
+    out, status, left = aperture_call(fetch, option, own, stem, *keyed) if aperture else call_isolated(fetch, session_command(option, own, job["bare"], system), *keyed)
 
     def spend(reason=None):
         if reference:
@@ -313,7 +361,7 @@ def run_block(job, fetch):
         raise refusal(str(error), TopicError) from error
 
     try:
-        text, served = reply_text(option, out, status)
+        text, served = aperture_reply(option, out, status) if aperture else reply_text(option, out, status)
     except TopicError as error:
         raise refusal(str(error)) from error
     if screening:
