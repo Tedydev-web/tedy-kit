@@ -231,6 +231,7 @@ def check_holds(topic, work, freeze_sha):
     k = sum(r["answer"] == UNSUPPORTED[r["kind"]] for r in rows)
     if k >= STOP_AT:
         raise TopicError(f"{CHECK_FILE} stopped the method: {k} of {len(rows)} rows unsupported; next step is the user's")
-    if check.get("checkers") is not None and (check.get("straddle") is not False or check.get("unsupported_any", STOP_AT) >= STOP_AT):
+    accepted = check.get("straddle") is True and isinstance(check.get("straddle_accepted"), str)
+    if check.get("checkers") is not None and not accepted and (check.get("straddle") is not False or check.get("unsupported_any", STOP_AT) >= STOP_AT):
         raise TopicError(f"{CHECK_FILE}: the checkers straddle the stop rule: {k} of {len(rows)} unsupported by majority, {check.get('unsupported_any')} by any checker; "
                          "next step is the user's")

@@ -66,7 +66,8 @@ def checker_prompt(topic, row, packet, mechanisms, anchor, problems, fetch):
         paths = [a["path"] for a in packet.get("assets") or []]
 
         def parts(block):
-            return [*head, f"The label is Relevance = 0. Criteria anchor: {anchor['0']}", "Problems:", *(f"- {p}: {s}" for p, s in problems.items()),
+            return [*head, f"The label is Relevance = 0. Criteria anchor: {anchor['0']}", f"What counts as a mechanism (the Relevance 1 anchor): {anchor['1']}",
+                    "Problems:", *(f"- {p}: {s}" for p, s in problems.items()),
                     *([block(p) for p in paths] or ["(the inputs hold no agent-asset file)"]), "Question: Does any of these files carry a mechanism for a listed problem?",
                     REPLY_FORMAT]
     prompt = with_files(parts, fetch, packet, paths)

@@ -92,6 +92,8 @@ class CitationCheckersTest(unittest.TestCase):
         self.assertIn("Relevance = 1", positive)
         self.assertIn('<file path="src/hook.ts">', negative)
         self.assertIn("Does any of these files carry a mechanism for a listed problem?", negative)
+        self.assertIn("What counts as a mechanism (the Relevance 1 anchor):", negative)
+        self.assertNotIn("What counts as a mechanism", positive)
         cut = checker_prompts(load_topic(repo, "demo"), repo, work, FakeFetch([("contents/", "x" * (FILE_BYTES + 5))]))[0][1]
         self.assertIn(f"(cut at {FILE_BYTES} bytes)", cut)
 
@@ -181,6 +183,30 @@ class CitationCheckersTest(unittest.TestCase):
         self.assertEqual((row["answer"], row["unsupported"], row["votes"]), ("no", True, {OPUS: "no", GEMINI: "no", GPT_OSS: "yes"}))
         with self.assertRaisesRegex(TopicError, "the checkers straddle the stop rule: 1 of 30 unsupported by majority, 2 by any checker; next step is the user's"):
             require_frozen(load_topic(repo, "demo"), work, ("calibration",))
+        out = self.run_script("import-citation-check", repo, work, "--votes", *map(str, paths), "--accept-straddle")
+        self.assertIn("the user accepted the straddle", out)
+        check = json.loads((work / "citation-check.json").read_text())
+        self.assertRegex(check["straddle_accepted"], r"^\d{4}-\d{2}-\d{2}$")
+        self.assertEqual(require_frozen(load_topic(repo, "demo"), work, ("calibration",)), {"calibration": sha(work / "reference-freeze-calibration.json")})
+        with self.assertRaises(SystemExit) as caught:
+            self.run_script("import-citation-check", repo, work, "--votes", *map(str, paths), "--accept-straddle")
+        self.assertIn("holds another check than these votes give", str(caught.exception))
+        (work / "citation-check.json").write_text(json.dumps({**check, "straddle": False}))
+        with self.assertRaisesRegex(TopicError, "straddle"):
+            require_frozen(load_topic(repo, "demo"), work, ("calibration",))
+
+    def test_accepting_a_straddle_is_refused_when_the_check_does_not_straddle(self):
+        repo, work = self.copies()
+        first, second = self.rows[0]["id"], self.rows[1]["id"]
+        with self.assertRaises(SystemExit) as caught:
+            self.run_script("import-citation-check", repo, work, "--votes", str(self.votes(work, OPUS, cli="claude")), str(self.votes(work, GEMINI)),
+                            str(self.votes(work, GPT_OSS)), "--accept-straddle")
+        self.assertIn("--accept-straddle takes a three-checker check that straddles", str(caught.exception))
+        with self.assertRaises(SystemExit) as caught:
+            self.run_script("import-citation-check", repo, work, "--votes", str(self.votes(work, OPUS, cli="claude", unsupported=[first, second])),
+                            str(self.votes(work, GEMINI, unsupported=[first, second])), str(self.votes(work, GPT_OSS)), "--accept-straddle")
+        self.assertIn("--accept-straddle takes a three-checker check that straddles", str(caught.exception))
+        self.assertFalse((work / "citation-check.json").is_file())
 
     def test_a_majority_check_below_the_stop_rule_lets_the_runners_read_the_batch(self):
         repo, work = self.copies()
