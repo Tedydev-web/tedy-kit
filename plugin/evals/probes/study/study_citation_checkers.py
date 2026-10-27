@@ -14,6 +14,9 @@ from study_topic import TopicError, saigon_today
 FILE_BYTES, CHECKERS = 10_000, (2, 3)
 VOTE = re.compile(r"^answer:\s*(yes|no)\s*\nreason:\s*(\S.*)$", re.IGNORECASE)
 REPLY_FORMAT = "Reply with exactly two lines and nothing else:\nanswer: yes  (or: answer: no)\nreason: <one sentence naming the file and the line that decides it>"
+RULES = ("You check one label of a repository against its files. You have no tools in this session: do not run commands, read files, browse or search. "
+         "Everything you may use is in this message; answer from the files below only and do not guess what other files hold.")
+RULES_SHA256 = hashlib.sha256(f"{RULES}\n{REPLY_FORMAT}".encode()).hexdigest()
 
 
 def votes_file(model):
@@ -48,8 +51,7 @@ def with_files(parts, fetch, packet, paths):
 
 def checker_prompt(topic, row, packet, mechanisms, anchor, problems, fetch):
     meaning = (topic.get("eligibility") or {}).get("en")
-    head = ["You check one label of a repository against its files. Answer from the files below only; do not guess what other files hold.",
-            *([f"What counts: {meaning}"] if meaning and meaning != "-" else []), f"Row: {row['id']}", f"Repository: {packet['repo']} at commit {packet['sha']}"]
+    head = [RULES, *([f"What counts: {meaning}"] if meaning and meaning != "-" else []), f"Row: {row['id']}", f"Repository: {packet['repo']} at commit {packet['sha']}"]
     if row["kind"] == "relevance-1":
         cited = list(dict.fromkeys((m["path"], m["problem"]) for m in mechanisms))
         paths = list(dict.fromkeys(p for p, _ in cited))
@@ -102,7 +104,7 @@ def run_checker(topic, repo, work, option, freeze_sha, fetch):
     path = work / votes_file(option["model"])
     header = {"sweep": topic["sweep"], "set_sha256": sha256_file(work / set_file(BATCH)), "freeze_sha256": freeze_sha,
               "checker": {**option, "effort": option.get("effort") or ("default" if option["cli"] == "claude" else "set by the model id"),
-                          "isolation": isolation(option["cli"], False)}}
+                          "isolation": isolation(option["cli"], False), "prompt_rules_sha256": RULES_SHA256}}
     saved = json.loads(path.read_text()) if path.is_file() else {**header, "votes": {}, "refused": {}}
     if {k: saved.get(k) for k in header} != header:
         raise TopicError(f"{path.name} was written for another freeze, set or checker setup; move it aside to start again")

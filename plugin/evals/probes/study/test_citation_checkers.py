@@ -86,6 +86,7 @@ class CitationCheckersTest(unittest.TestCase):
             self.assertIn("line 60", prompt)
             self.assertIn("statement of problem X1", prompt)
             self.assertIn("answer: yes", prompt)
+            self.assertIn("You have no tools in this session", prompt)
             for leaked in ("claude-fable-5-1", '"scores"', "decision", "excluded", SECRET, GEMINI, GPT_OSS, "Authority", "Methodology"):
                 self.assertNotIn(leaked, prompt)
         self.assertIn("Relevance = 1", positive)
@@ -131,6 +132,11 @@ class CitationCheckersTest(unittest.TestCase):
         mine = [line for line in ledger if line["key"] == f"citation-check-{OPUS}"]
         self.assertEqual((len(mine), sum("refused" in line for line in mine), {line["total_cost_usd"] for line in mine}), (32, 2, {0.42}))
         self.assertEqual(mine[-1]["ranks"], [bad])
+        stale = json.loads((work / votes_file(OPUS)).read_text())
+        (work / votes_file(OPUS)).write_text(json.dumps({**stale, "checker": {**stale["checker"], "prompt_rules_sha256": "0" * 64}}))
+        with self.assertRaises(SystemExit) as caught:
+            self.run_script("run-citation-checker", repo, work, "--checker", f"claude:{OPUS}:max", fetch=FakeFetch())
+        self.assertIn("was written for another freeze, set or checker setup", str(caught.exception))
         agy_fetch = FakeFetch([(f"--model {GEMINI}", agy("answer: no\nreason: none of the files checks anything"))])
         self.run_script("run-citation-checker", repo, work, "--checker", f"agy:{GEMINI}", fetch=agy_fetch)
         gemini = json.loads((work / votes_file(GEMINI)).read_text())
