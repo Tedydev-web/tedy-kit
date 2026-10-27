@@ -75,6 +75,28 @@ class InputsTest(unittest.TestCase):
         self.fetch_inputs(self.fetch(("repos/o/one/releases", json.dumps([{"tag_name": f"v{i}"} for i in range(100)])), ("repos/o/one/tags", json.dumps([{"name": "t"}] * 100))))
         self.assertEqual((self.rows()[1]["evidence"]["releases"]["count"], self.rows()[1]["evidence"]["tags"]["count"]), ("100+", "100+"))
 
+    def test_a_page_of_100_the_server_cannot_build_is_read_in_pages_of_25(self):
+        failed = ("", "exit 1: gh: We couldn't respond to your request in time. (HTTP 504)")
+        pages = [("releases?per_page=25&page=1", json.dumps([{"tag_name": f"v{i}", "published_at": "2026-10-01T00:00:00Z"} for i in range(25)])),
+                 ("releases?per_page=25&page=2", json.dumps([{"tag_name": "old"}] * 3))]
+        fetch = self.fetch(("repos/o/one/releases?per_page=100", failed), *pages)
+        self.fetch_inputs(fetch)
+        row = self.rows()[1]
+        self.assertEqual(row["evidence"]["releases"], {"count": 28, "latest": "v0", "published": "2026-10-01"})
+        self.assertNotIn("error", row)
+        self.assertEqual(fetch.called("releases?per_page=25&page=3"), [])
+
+    def test_owner_repositories_read_in_small_pages_keep_the_owner_filter(self):
+        failed = ("", "exit 1: HTTP 502 (HTTP 502)")
+        fetch = self.fetch(("users/o/repos?per_page=100", failed), ("users/o/repos?per_page=25&page=1&type=owner", json.dumps(OWNER_REPOS)))
+        self.fetch_inputs(fetch)
+        self.assertEqual([r["name"] for r in self.rows()[1]["evidence"]["owner_top_repos"]], ["tdd-kit", "small"])
+
+    def test_a_page_of_100_still_failing_in_small_pages_is_a_transient_error(self):
+        failed = ("", "exit 1: gh: We couldn't respond to your request in time. (HTTP 504)")
+        self.fetch_inputs(self.fetch(("repos/o/one/releases", failed)))
+        self.assertEqual((self.rows()[1]["error_kind"], "releases" in self.rows()[1]["error"]), ("transient", True))
+
     def test_test_paths_are_capped_by_count(self):
         write_json(self.work / "cache/trees/o__one.json", {"oid": SHA, "paths": ["README.md"] + [f"tests/t{i:02}.py" for i in range(40)]})
         self.fetch_inputs(self.fetch())

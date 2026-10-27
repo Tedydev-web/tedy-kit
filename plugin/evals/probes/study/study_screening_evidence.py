@@ -10,6 +10,8 @@ PYPROJECT_NAME = re.compile(r'^name\s*=\s*"([^"]+)"', re.M)
 REPO_GONE = re.compile(r"\b(404|410)\b|Could not resolve to a Repository", re.I)
 FILE_GONE = re.compile(r"\b(404|410)\b")
 CHANGELOG_CHARS, TEST_PATHS, PAGE, TOP_REPOS, DESCRIPTION_CHARS = 1500, 30, 100, 10, 160
+SMALL_PAGE = 25
+SERVER_ERROR = re.compile(r"\(HTTP 5\d\d\)")
 
 
 def tree_error_kind(status):
@@ -57,8 +59,22 @@ def top_repos(listing):
     return [{"name": r.get("name"), "stars": r.get("stargazers_count") or 0, "description": (r.get("description") or "")[:DESCRIPTION_CHARS]} for r in owned[:TOP_REPOS]]
 
 
+def small_pages(fetch, path):
+    items = []
+    for page in range(1, PAGE // SMALL_PAGE + 1):
+        part, status = api_json(fetch, path.replace(f"per_page={PAGE}", f"per_page={SMALL_PAGE}&page={page}"))
+        if not isinstance(part, list):
+            return None, status
+        items += part
+        if len(part) < SMALL_PAGE:
+            break
+    return items, "ok"
+
+
 def listed(fetch, path, field, shape, problems):
     body, status = api_json(fetch, path)
+    if shape is list and f"per_page={PAGE}" in path and not isinstance(body, list) and SERVER_ERROR.search(status):
+        body, status = small_pages(fetch, path)
     if not isinstance(body, shape):
         (problems["missing"] if file_gone(status) else problems["errors"]).append(f"{field}: {status if status != 'ok' else 'unexpected reply shape'}")
         return None
