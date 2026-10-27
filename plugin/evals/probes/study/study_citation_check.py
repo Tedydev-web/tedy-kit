@@ -162,6 +162,14 @@ def summary(freeze_sha, rows):
             "stopped": k >= STOP_AT}
 
 
+def write_check(work, out):
+    path = Path(work) / CHECK_FILE
+    if path.exists():
+        raise TopicError(f"{CHECK_FILE} already exists; the check is made once on its freeze")
+    path.write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n")
+    return out
+
+
 def import_check(topic, work, saved, freeze_sha):
     work = Path(work)
     if (work / CHECK_FILE).exists():
@@ -179,9 +187,8 @@ def import_check(topic, work, saved, freeze_sha):
     bad = [k for k, v in answers.items() if v not in ("yes", "no")]
     if bad:
         raise TopicError(f"{bad[0]}: answer {answers[bad[0]]!r}; every answer is yes or no")
-    out = summary(freeze_sha, [{"id": r["id"], "kind": r["kind"], "answer": answers[r["id"]], "unsupported": answers[r["id"]] == UNSUPPORTED[r["kind"]]} for r in rows])
-    (work / CHECK_FILE).write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n")
-    return out
+    return write_check(work, summary(freeze_sha, [{"id": r["id"], "kind": r["kind"], "answer": answers[r["id"]], "unsupported": answers[r["id"]] == UNSUPPORTED[r["kind"]]}
+                                                  for r in rows]))
 
 
 def check_holds(topic, work, freeze_sha):
@@ -199,3 +206,6 @@ def check_holds(topic, work, freeze_sha):
     k = sum(r["answer"] == UNSUPPORTED[r["kind"]] for r in rows)
     if k >= STOP_AT:
         raise TopicError(f"{CHECK_FILE} stopped the method: {k} of {len(rows)} rows unsupported; next step is the user's")
+    if check.get("checkers") is not None and (check.get("straddle") is not False or check.get("unsupported_any", STOP_AT) >= STOP_AT):
+        raise TopicError(f"{CHECK_FILE}: the checkers straddle the stop rule: {k} of {len(rows)} unsupported by majority, {check.get('unsupported_any')} by any checker; "
+                         "next step is the user's")
