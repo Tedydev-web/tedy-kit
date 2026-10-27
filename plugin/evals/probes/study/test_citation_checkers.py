@@ -143,7 +143,7 @@ class CitationCheckersTest(unittest.TestCase):
         self.refused(repo, work, paths, "2 with an unsupporting vote from claude-opus-5-5, gemini-3.8-flash-high, gpt-oss-120b-medium; the checkers straddle the stop rule")
         check = json.loads((work / "citation-check.json").read_text())
         self.assertEqual((check["n"], check["unsupported"], check["unsupported_any"], check["straddle"], check["stopped"]), (30, 1, 2, True, False))
-        self.assertEqual([c["model"] for c in check["checkers"]], [OPUS, GEMINI, GPT_OSS])
+        self.assertEqual(([c["model"] for c in check["checkers"]], check["rule"]), ([OPUS, GEMINI, GPT_OSS], "majority"))
         row = next(r for r in check["rows"] if r["id"] == first)
         self.assertEqual((row["answer"], row["unsupported"], row["votes"]), ("no", True, {OPUS: "no", GEMINI: "no", GPT_OSS: "yes"}))
         with self.assertRaisesRegex(TopicError, "the checkers straddle the stop rule: 1 of 30 unsupported by majority, 2 by any checker; next step is the user's"):
@@ -157,11 +157,24 @@ class CitationCheckersTest(unittest.TestCase):
         self.assertEqual((check["unsupported"], check["unsupported_any"], check["straddle"]), (0, 1, False))
         self.assertEqual(require_frozen(load_topic(repo, "demo"), work, ("calibration",)), {"calibration": sha(work / "reference-freeze-calibration.json")})
 
+    def test_two_checkers_count_a_row_unsupported_when_either_says_so(self):
+        repo, work = self.copies()
+        first = self.rows[0]["id"]
+        self.imported(repo, work, self.votes(work, OPUS, cli="claude"), self.votes(work, GEMINI, unsupported=[first]))
+        check = json.loads((work / "citation-check.json").read_text())
+        self.assertEqual((check["unsupported"], check["unsupported_any"], check["straddle"], check["rule"]), (1, 1, False, "either"))
+        row = next(r for r in check["rows"] if r["id"] == first)
+        self.assertEqual((row["answer"], row["unsupported"], row["votes"]), ("no", True, {OPUS: "yes", GEMINI: "no"}))
+        self.assertEqual(require_frozen(load_topic(repo, "demo"), work, ("calibration",)), {"calibration": sha(work / "reference-freeze-calibration.json")})
+        repo, work = self.copies()
+        second = self.rows[1]["id"]
+        self.refused(repo, work, [self.votes(work, OPUS, cli="claude", unsupported=[first]), self.votes(work, GEMINI, unsupported=[second])], "method stopped")
+
     def test_votes_from_the_reference_from_one_model_twice_from_another_freeze_or_with_a_row_missing_are_refused(self):
         repo, work = self.copies()
         opus, gemini = self.votes(work, OPUS, cli="claude"), self.votes(work, GEMINI)
-        self.refused(repo, work, [opus, gemini], "three checkers")
-        self.refused(repo, work, [opus, gemini, gemini], "three different models")
+        self.refused(repo, work, [opus], "two or three checkers")
+        self.refused(repo, work, [opus, gemini, gemini], "different models")
         fable_votes = self.votes(work, "claude-fable-5-1", cli="claude")
         self.refused(repo, work, [opus, gemini, fable_votes], "claude-fable-5-1 is the reference")
         self.refused(repo, work, [opus, gemini, self.votes(work, GPT_OSS, freeze_sha256="f" * 64)], "votes were saved for another freeze")

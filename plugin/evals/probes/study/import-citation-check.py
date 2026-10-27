@@ -17,16 +17,17 @@ def read_saved(path, what):
 
 
 def main(argv=None):
-    args = topic_arguments("Keep the citation-check answers, the user's from the page or three checker models' votes by majority: check them against the current "
-                           "calibration freeze, its set and a redraw of the 30 rows, count the unsupported rows, state the one-sided 95% Clopper-Pearson upper bound "
-                           "and the two-sided interval, and write citation-check.json. 2 or more unsupported rows stop the method; three checkers whose majority "
-                           "passes while 2 or more rows have an unsupporting vote straddle it, and that goes to the user too.",
+    args = topic_arguments("Keep the citation-check answers, the user's from the page or checker models' votes (three by majority, or two where a row is unsupported "
+                           "when either says so): check them against the current calibration freeze, its set and a redraw of the 30 rows, count the unsupported rows, "
+                           "state the one-sided 95% Clopper-Pearson upper bound and the two-sided interval, and write citation-check.json. 2 or more unsupported rows "
+                           "stop the method; three checkers whose majority passes while 2 or more rows have an unsupporting vote straddle it, and that goes to the "
+                           "user too.",
                            (["--work"], {"required": True, "help": "the topic's working folder"}),
                            (["--answers"], {"help": "the JSON file the citation-check page downloaded"}),
-                           (["--votes"], {"nargs": "+", "help": "the three citation-check-votes-<model>.json files run-citation-checker.py wrote"})).parse_args(argv)
+                           (["--votes"], {"nargs": "+", "help": "the two or three citation-check-votes-<model>.json files run-citation-checker.py wrote"})).parse_args(argv)
     try:
         if (args.answers is None) == (args.votes is None):
-            raise TopicError("pass --answers (the user's page) or --votes (three checker models), not both or neither")
+            raise TopicError("pass --answers (the user's page) or --votes (two or three checker models), not both or neither")
         topic = load_topic(args.repo, args.topic)
         whole_topic(topic, "the citation check")
         freeze = frozen_sha(args.work, BATCH)

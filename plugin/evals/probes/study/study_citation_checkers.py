@@ -11,7 +11,7 @@ from study_session import LEDGER, MAX_PROMPT, append_lines, call_isolated, isola
 from study_session_reply import reply_text
 from study_topic import TopicError, saigon_today
 
-FILE_BYTES, CHECKERS = 10_000, 3
+FILE_BYTES, CHECKERS = 10_000, (2, 3)
 VOTE = re.compile(r"^answer:\s*(yes|no)\s*\nreason:\s*(\S.*)$", re.IGNORECASE)
 REPLY_FORMAT = "Reply with exactly two lines and nothing else:\nanswer: yes  (or: answer: no)\nreason: <one sentence naming the file and the line that decides it>"
 
@@ -130,11 +130,11 @@ def run_checker(topic, repo, work, option, freeze_sha, fetch):
 
 def import_votes(topic, work, saved_list, freeze_sha):
     work = Path(work)
-    if len(saved_list) != CHECKERS:
-        raise TopicError(f"a model check takes three checkers' votes, not {len(saved_list)}")
+    if len(saved_list) not in CHECKERS:
+        raise TopicError(f"a model check takes two or three checkers' votes, not {len(saved_list)}")
     models = [(s.get("checker") or {}).get("model") if isinstance(s, dict) else None for s in saved_list]
-    if len(set(models)) != CHECKERS or None in models:
-        raise TopicError(f"the votes come from {models}; a model check takes three different models")
+    if len(set(models)) != len(models) or None in models:
+        raise TopicError(f"the votes come from {models}; a model check takes different models")
     reference = reference_option(topic)["model"]
     if reference in models:
         raise TopicError(f"{reference} is the reference; it never checks its own labels")
@@ -147,12 +147,13 @@ def import_votes(topic, work, saved_list, freeze_sha):
             vote = (saved.get("votes") or {}).get(row["id"])
             if not isinstance(vote, dict) or vote.get("answer") not in ("yes", "no"):
                 raise TopicError(f"{model} has no vote on {row['id']}; run its checker again before the import")
-    out_rows = []
+    out_rows, rule = [], "majority" if len(models) == 3 else "either"
     for row in rows:
         votes = {m: s["votes"][row["id"]]["answer"] for m, s in zip(models, saved_list)}
-        answer = max(("yes", "no"), key=list(votes.values()).count)
+        bad = UNSUPPORTED[row["kind"]]
+        answer = max(("yes", "no"), key=list(votes.values()).count) if rule == "majority" else (bad if bad in votes.values() else next(iter(votes.values())))
         out_rows.append({"id": row["id"], "kind": row["kind"], "answer": answer, "unsupported": answer == UNSUPPORTED[row["kind"]], "votes": votes,
                          "any_unsupported": UNSUPPORTED[row["kind"]] in votes.values()})
     out = summary(freeze_sha, out_rows)
     any_count = sum(r["any_unsupported"] for r in out_rows)
-    return {**out, "checkers": [s["checker"] for s in saved_list], "unsupported_any": any_count, "straddle": any_count >= STOP_AT and not out["stopped"]}
+    return {**out, "checkers": [s["checker"] for s in saved_list], "rule": rule, "unsupported_any": any_count, "straddle": any_count >= STOP_AT and not out["stopped"]}
