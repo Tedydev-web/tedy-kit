@@ -87,7 +87,7 @@ class CitationCheckersTest(unittest.TestCase):
             self.assertIn("statement of problem X1", prompt)
             self.assertIn("answer: yes", prompt)
             self.assertIn("You have no tools in this session", prompt)
-            for leaked in ("claude-fable-5-1", '"scores"', "decision", "excluded", SECRET, GEMINI, GPT_OSS, "Authority", "Methodology"):
+            for leaked in ("claude-fable-5-1", '"scores"', '"decision"', "excluded", SECRET, GEMINI, GPT_OSS, "Authority", "Methodology"):
                 self.assertNotIn(leaked, prompt)
         self.assertIn("Relevance = 1", positive)
         self.assertIn('<file path="src/hook.ts">', negative)

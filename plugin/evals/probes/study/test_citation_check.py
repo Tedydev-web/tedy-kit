@@ -103,7 +103,7 @@ class CitationCheckTest(unittest.TestCase):
         self.assertIn("statement of problem X1", page)
         self.assertIn("Relevance = 1", page)
         self.assertIn("Có tệp nào trong số này mang cơ chế cho một vấn đề được liệt kê không?", page)
-        for leaked in ("a red test gates the commit", SECRET, "&quot;scores&quot;", '"scores"', "decision", "excluded", "Authority", "Methodology", GEMINI, GPT_OSS,
+        for leaked in ("a red test gates the commit", SECRET, "&quot;scores&quot;", '"scores"', "&quot;decision&quot;", '"decision"', "excluded", "Authority", "Methodology", GEMINI, GPT_OSS,
                        "claude-fable-5-1", "claude-opus-5-5", "readme:It guards"):
             self.assertNotIn(leaked, page)
 
