@@ -142,6 +142,33 @@ class CitationCheckersTest(unittest.TestCase):
         gemini = json.loads((work / votes_file(GEMINI)).read_text())
         self.assertEqual(({v["answer"] for v in gemini["votes"].values()}, gemini["refused"]), ({"no"}, {}))
 
+    def test_an_aperture_checker_posts_the_prompt_as_a_chat_completion_and_refuses_a_tool_call_or_another_model(self):
+        repo, work = self.copies()
+        luna = "openai/gpt-5.6-luna"
+
+        def completion(text, model=luna, tools=False):
+            message = {"role": "assistant", "content": text, **({"tool_calls": [{"id": "t"}]} if tools else {})}
+            return json.dumps({"model": model, "choices": [{"message": message}], "usage": {"prompt_tokens": 900, "completion_tokens": 40}})
+
+        bad, other = self.rows[0]["id"], self.rows[1]["id"]
+        fetch = FakeFetch([("--data-binary", completion("answer: yes\nreason: skills/tdd/SKILL.md line 2"))])
+        fetch.rules.insert(0, (f"aperture-{bad}", completion("answer: yes\nreason: x", tools=True)))
+        fetch.rules.insert(0, (f"aperture-{other}", completion("answer: yes\nreason: x", model="openai/gpt-6-luna")))
+        self.run_script("run-citation-checker", repo, work, "--checker", f"aperture:{luna}", "--endpoint", "http://100.127.1.240", fetch=fetch)
+        saved = json.loads((work / votes_file(luna)).read_text())
+        self.assertEqual((len(saved["votes"]), sorted(saved["refused"])), (28, sorted([bad, other])))
+        self.assertIn("tool call", saved["refused"][bad])
+        self.assertIn("served openai/gpt-6-luna", saved["refused"][other])
+        self.assertEqual(saved["checker"]["endpoint"], "http://100.127.1.240")
+        call = fetch.called("curl")[0]
+        self.assertIn("http://100.127.1.240/v1/chat/completions", call)
+        self.assertTrue((work / "citation-check-votes-openai--gpt-5.6-luna.json").is_file())
+        ledger = [json.loads(line) for line in (work / "claude-spend-ledger.jsonl").read_text().splitlines()]
+        self.assertEqual({line["usage"]["prompt_tokens"] for line in ledger if line["key"] == "citation-check-openai--gpt-5.6-luna"}, {900})
+        with self.assertRaises(SystemExit) as caught:
+            self.run_script("run-citation-checker", repo, work, "--checker", f"aperture:{luna}", fetch=FakeFetch())
+        self.assertIn("--endpoint", str(caught.exception))
+
     def test_three_checkers_decide_each_row_by_majority_and_the_record_names_them(self):
         repo, work = self.copies()
         first, second = self.rows[0]["id"], self.rows[1]["id"]

@@ -1,6 +1,8 @@
 import hashlib
 import json
 import re
+import shutil
+import tempfile
 from pathlib import Path
 
 from study_calibration_set import anchors, labels_file, set_file
@@ -20,7 +22,7 @@ RULES_SHA256 = hashlib.sha256(f"{RULES}\n{REPLY_FORMAT}".encode()).hexdigest()
 
 
 def votes_file(model):
-    return f"citation-check-votes-{model}.json"
+    return f"citation-check-votes-{model.replace('/', '--')}.json"
 
 
 def file_body(fetch, packet, path):
@@ -90,11 +92,40 @@ def parse_vote(text):
     return {"answer": match.group(1).lower(), "reason": match.group(2).strip()}
 
 
-def checker_option(spec):
+def checker_option(spec, endpoint=None):
     parts = spec.split(":")
-    if len(parts) not in (2, 3) or parts[0] not in ("claude", "agy") or not parts[1] or (parts[0] == "agy" and len(parts) == 3):
-        raise TopicError(f"--checker {spec!r} reads claude:<model>[:<effort>] or agy:<model>")
-    return {"cli": parts[0], "model": parts[1], **({"effort": parts[2]} if len(parts) == 3 else {})}
+    if len(parts) not in (2, 3) or parts[0] not in ("claude", "agy", "aperture") or not parts[1] or (parts[0] != "claude" and len(parts) == 3):
+        raise TopicError(f"--checker {spec!r} reads claude:<model>[:<effort>], agy:<model> or aperture:<model>")
+    if (parts[0] == "aperture") != bool(endpoint):
+        raise TopicError("--endpoint names the Aperture URL, and only an aperture:<model> checker takes it")
+    return {"cli": parts[0], "model": parts[1], **({"effort": parts[2]} if len(parts) == 3 else {}), **({"endpoint": endpoint.rstrip("/")} if endpoint else {})}
+
+
+def aperture_call(fetch, option, prompt, row_id, work, key):
+    folder = Path(tempfile.mkdtemp(prefix="citation-aperture-"))
+    try:
+        body = folder / f"aperture-{row_id}.json"
+        body.write_text(json.dumps({"model": option["model"], "messages": [{"role": "user", "content": prompt}]}, ensure_ascii=False))
+        return call_isolated(fetch, ["curl", "-sS", "-m", "900", "-H", "Content-Type: application/json", "--data-binary", f"@{body}",
+                                     f"{option['endpoint']}/v1/chat/completions"], work, key)
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
+def aperture_reply(option, out, status):
+    where = f"aperture {option['model']}"
+    if status != "ok":
+        raise TopicError(f"{where}: {status}")
+    try:
+        body = json.loads(out)
+        message = body["choices"][0]["message"]
+    except (ValueError, KeyError, IndexError, TypeError) as error:
+        raise TopicError(f"{where}: the reply is not a chat completion: {str(out)[:200]}") from error
+    if message.get("tool_calls"):
+        raise TopicError(f"{where}: the reply holds a tool call; a check session has no tools")
+    if body.get("model") != option["model"]:
+        raise TopicError(f"{where}: served {body.get('model')}, not the requested {option['model']}")
+    return message.get("content") or "", [body["model"]]
 
 
 def run_checker(topic, repo, work, option, freeze_sha, fetch):
@@ -102,22 +133,24 @@ def run_checker(topic, repo, work, option, freeze_sha, fetch):
     if option["model"] == reference_option(topic)["model"]:
         raise TopicError(f"{option['model']} is the reference; a checker is another model")
     path = work / votes_file(option["model"])
+    aperture = option["cli"] == "aperture"
+    where = "one chat completion over HTTP, no tools offered; stdin closed" if aperture else isolation(option["cli"], False)
     header = {"sweep": topic["sweep"], "set_sha256": sha256_file(work / set_file(BATCH)), "freeze_sha256": freeze_sha,
               "checker": {**option, "effort": option.get("effort") or ("default" if option["cli"] == "claude" else "set by the model id"),
-                          "isolation": isolation(option["cli"], False), "prompt_rules_sha256": RULES_SHA256}}
+                          "isolation": where, "prompt_rules_sha256": RULES_SHA256}}
     saved = json.loads(path.read_text()) if path.is_file() else {**header, "votes": {}, "refused": {}}
     if {k: saved.get(k) for k in header} != header:
         raise TopicError(f"{path.name} was written for another freeze, set or checker setup; move it aside to start again")
-    key, today = f"citation-check-{option['model']}", saigon_today()
+    key, today = f"citation-check-{option['model'].replace('/', '--')}", saigon_today()
     for row, prompt in checker_prompts(topic, repo, work, fetch):
         if row["id"] in saved["votes"]:
             continue
         for attempt in (1, 2):
-            out, status, left = call_isolated(fetch, session_command(option, prompt, False), work, key)
+            out, status, left = aperture_call(fetch, option, prompt, row["id"], work, key) if aperture else call_isolated(fetch, session_command(option, prompt, False), work, key)
             try:
                 if left:
                     raise TopicError(f"the session left files behind: {left[:5]}")
-                text, served = reply_text(option, out, status)
+                text, served = aperture_reply(option, out, status) if aperture else reply_text(option, out, status)
                 saved["votes"][row["id"]] = {**parse_vote(text), "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(), "served": served}
                 saved["refused"].pop(row["id"], None)
                 append_lines({work / LEDGER: spend_line({"today": today, "key": key, "ranks": [row["id"]], "option": option}, out, prompt)})

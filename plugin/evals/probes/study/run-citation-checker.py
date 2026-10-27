@@ -16,13 +16,14 @@ def main(argv=None, fetch=None):
                            "a reason. A reply that is not two lines is retried once, then recorded as refused; a second run fills the refused rows. Writes "
                            "citation-check-votes-<model>.json for import-citation-check.py --votes.",
                            (["--work"], {"required": True, "help": "the topic's working folder"}),
-                           (["--checker"], {"required": True, "help": "claude:<model>[:<effort>] or agy:<model>; never the reference model"}),
+                           (["--checker"], {"required": True, "help": "claude:<model>[:<effort>], agy:<model> or aperture:<model>; never the reference model"}),
+                           (["--endpoint"], {"help": "aperture only: the Aperture URL, for example http://100.127.1.240; the checker posts one chat completion per row"}),
                            (["--agy-window"], {"action": "store_true", "help": "agy only: disable the context-mode MCP server and the ponytail plugin during the run, "
                                                                               "as the flagger runs did, and enable them again after"})).parse_args(argv)
     try:
         topic = load_topic(args.repo, args.topic)
         whole_topic(topic, "the citation check")
-        option = checker_option(args.checker)
+        option = checker_option(args.checker, args.endpoint)
         if args.agy_window and option["cli"] != "agy":
             raise TopicError("--agy-window belongs to an agy checker; it switches agy extensions only")
         fetch = fetch or Fetch()
