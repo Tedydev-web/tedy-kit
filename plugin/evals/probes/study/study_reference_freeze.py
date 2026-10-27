@@ -175,8 +175,6 @@ def rubric_part(work, batch, sample, ran, protocol):
         outcome = row["outcome"] if row else "contested"
         if row and row["notes"] and where not in reran:
             raise TopicError(f"rubric row {key} names notes {row['notes']} but no reference-{batch}-{where[0]}-notes-<n>.jsonl re-ran it")
-        if outcome == "contested" and (where in reran or (row and row["notes"])):
-            raise TopicError(f"rubric row {key} is contested yet was re-run; a contested row keeps its first-run label")
         counts[outcome] += 1
         rerun += bool(row and row["notes"])
         if outcome == "contested":

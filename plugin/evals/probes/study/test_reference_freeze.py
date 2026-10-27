@@ -284,8 +284,6 @@ class RubricOutcomeTest(ReferenceFreezeBase):
         self.flags(work, [row["id"], other])
         self.outcomes(work, (row["id"], "asked", "Q1", [1]), (other, "rule", None, [1]))
         self.refused(repo, work, f"rubric row {other} names notes [1] but no reference-calibration-product-notes-<n>.jsonl re-ran it")
-        self.outcomes(work, (row["id"], "contested", None, []), (other, "rule", None, []))
-        self.refused(repo, work, f"rubric row {row['id']} is contested yet was re-run")
         self.outcomes(work, (row["id"], "asked", "Q1", [1]), (other, "contested", None, []))
         self.freeze(repo, work)
         freeze = self.frozen(work)
@@ -294,6 +292,15 @@ class RubricOutcomeTest(ReferenceFreezeBase):
         self.assertEqual(freeze["notes_sha256"], sha(work / "reference-notes-calibration.json"))
         self.assertIn("reference-calibration-config-notes-1", freeze["reference"]["sessions"])
         self.assertEqual({k: freeze["rubric"][k] for k in ("asked", "contested", "rerun", "contested_rows")}, {"asked": 1, "contested": 1, "rerun": 1, "contested_rows": [other]})
+
+    def test_a_contested_row_a_note_re_ran_freezes_with_its_re_run_label_and_stays_contested(self):
+        repo, work, row = self.rerun_work()
+        other = next(r["id"] for r in self.sample["rows"] if r["stratum"] == "product")
+        self.flags(work, [row["id"], other])
+        self.outcomes(work, (row["id"], "contested", None, [1]), (other, "rule", None, []))
+        self.freeze(repo, work)
+        freeze = self.frozen(work)
+        self.assertEqual({k: freeze["rubric"][k] for k in ("rule", "contested", "rerun", "contested_rows")}, {"rule": 1, "contested": 1, "rerun": 1, "contested_rows": [row["id"]]})
 
     def test_notes_changed_after_the_derive_are_refused(self):
         repo, work, _ = self.rerun_work()
