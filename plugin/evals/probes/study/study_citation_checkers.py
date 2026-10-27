@@ -4,7 +4,7 @@ import re
 from pathlib import Path
 
 from study_calibration_set import anchors, labels_file, set_file
-from study_citation_check import BATCH, STOP_AT, UNSUPPORTED, drawn, sha256_file, statements, summary
+from study_citation_check import BATCH, STOP_AT, UNSUPPORTED, check_rows, sha256_file, statements, summary
 from study_reference_labels import cites_file, packet_rows, reference_option
 from study_screening_input import read_file
 from study_session import LEDGER, MAX_PROMPT, append_lines, call_isolated, isolation, session_command, spend_line
@@ -76,7 +76,7 @@ def checker_prompt(topic, row, packet, mechanisms, anchor, problems, fetch):
 def checker_prompts(topic, repo, work, fetch):
     work = Path(work)
     sample = json.loads((work / set_file(BATCH)).read_text())
-    rows = drawn(topic["sweep"], json.loads((work / labels_file(BATCH)).read_text())["rows"])
+    rows = check_rows(topic, work)
     cited = {r["id"]: r.get("mechanisms") or [] for r in json.loads((work / cites_file(BATCH)).read_text())["rows"]}
     packets = {s: packet_rows(work, s) for s in sample["rows_per_stratum"]}
     anchor, problems = anchors((Path(repo) / sample["criteria"]).read_text())["Relevance"], statements(repo, topic)
@@ -141,7 +141,7 @@ def import_votes(topic, work, saved_list, freeze_sha):
     if reference in models:
         raise TopicError(f"{reference} is the reference; it never checks its own labels")
     set_sha = sha256_file(work / set_file(BATCH))
-    rows = drawn(topic["sweep"], json.loads((work / labels_file(BATCH)).read_text())["rows"])
+    rows = check_rows(topic, work)
     for model, saved in zip(models, saved_list):
         if (saved.get("sweep"), saved.get("set_sha256"), saved.get("freeze_sha256")) != (topic["sweep"], set_sha, freeze_sha):
             raise TopicError(f"{model}'s votes were saved for another freeze (freeze sha256 {str(saved.get('freeze_sha256'))[:16]}); this freeze is {freeze_sha[:16]}")

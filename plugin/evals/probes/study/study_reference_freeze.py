@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 from study_calibration_set import BATCHES, labelled, labels_file, set_file
-from study_citation_check import check_holds
+from study_citation_check import CORRECTION_DIR, check_holds
 from study_protocol import FREEZE_FILE as PROTOCOL_FILE
 from study_reference_flags import flagger_key
 from study_reference_labels import cites_file, flags_file, notes_file, outcomes_file, reference_option, rerun_keys, session_key
@@ -211,7 +211,7 @@ def freeze_batch(topic, repo, work, batch, today, without=None):
     rubric = rubric_part(work, batch, sample, any(isinstance(v, dict) for v in flagged.values()), protocol is not None)
     out = {"batch": batch, "set_sha256": sha256_file(work / set_file(batch)), "labels_sha256": labels_sha, "cites_sha256": sha256_file(cites),
            "notes_sha256": optional_sha256(work / notes_file(batch)), "anchors_sha256": anchors, "criteria_sha256_at_freeze": criteria_sha, "reference": reference,
-           "flaggers": flagged, "rubric": rubric, "frozen": today}
+           "flaggers": flagged, "rubric": rubric, "frozen": today, **({"correction": 1} if batch == "calibration" and (work / CORRECTION_DIR).is_dir() else {})}
     path.write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n")
     return out
 

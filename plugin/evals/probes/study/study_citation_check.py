@@ -10,7 +10,7 @@ from study_reference_packet import problem_lines
 from study_screening_input import read_file
 from study_topic import TopicError
 
-BATCH, CHECK_FILE, PAGE_FILE = "calibration", "citation-check.json", "citation-check.html"
+BATCH, CHECK_FILE, PAGE_FILE, CORRECTION_DIR = "calibration", "citation-check.json", "citation-check.html", "calibration-correction-1"
 GROUPS = (("relevance-1", 1, 10), ("relevance-0", 0, 5))
 UNSUPPORTED = {"relevance-1": "no", "relevance-0": "yes"}
 STOP_AT, HEAD_LINES, HEAD_BYTES = 2, 40, 6000
@@ -21,15 +21,40 @@ def sha256_file(path):
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
-def drawn(sweep, rows):
+def drawn(sweep, rows, salt="verify"):
     def key(row):
-        return hashlib.sha256(f"{sweep}:verify:{row['id']}".encode()).hexdigest()
+        return hashlib.sha256(f"{sweep}:{salt}:{row['id']}".encode()).hexdigest()
     picked = []
     for stratum in sorted({r["stratum"] for r in rows}):
         for kind, value, count in GROUPS:
             pool = sorted((r for r in rows if r["stratum"] == stratum and (r.get("user") or {}).get("Relevance") == value), key=key)
             picked += [{"id": r["id"], "stratum": stratum, "order_rank": r["order_rank"], "kind": kind} for r in pool[:count]]
     return picked
+
+
+def check_rows(topic, work):
+    work = Path(work)
+    freeze = json.loads((work / f"reference-freeze-{BATCH}.json").read_text())
+    salt = "verify-2" if freeze.get("correction") == 1 else "verify"
+    return drawn(topic["sweep"], json.loads((work / labels_file(BATCH)).read_text())["rows"], salt)
+
+
+def open_correction(work):
+    work = Path(work)
+    path, archive = work / CHECK_FILE, work / CORRECTION_DIR
+    if archive.exists():
+        raise TopicError(f"{CORRECTION_DIR} exists; a batch gets one correction round, and a second stop ends the method")
+    if not path.is_file():
+        raise TopicError(f"no {CHECK_FILE} in {work}; a correction round follows a citation check that stopped the method")
+    check = json.loads(path.read_text())
+    rows = check.get("rows") if isinstance(check.get("rows"), list) else []
+    if check.get("stopped") is not True or sum(bool(r.get("unsupported")) for r in rows) < STOP_AT:
+        raise TopicError(f"{CHECK_FILE} did not stop the method; a correction round follows a stopped check only")
+    moved = [work / f"reference-freeze-{BATCH}.json", path, *sorted(work.glob("citation-check-votes-*.json"))]
+    archive.mkdir()
+    for source in moved:
+        source.rename(archive / source.name)
+    return [p.name for p in moved]
 
 
 def head(text):
@@ -134,7 +159,7 @@ def page(topic, repo, work, freeze_sha, fetch):
     if sha256_file(work / cites_file(BATCH)) != freeze.get("cites_sha256"):
         raise TopicError(f"{cites_file(BATCH)} differs from the one reference-freeze-{BATCH}.json froze; the check reads the frozen citations")
     sample = json.loads((work / set_file(BATCH)).read_text())
-    rows = drawn(topic["sweep"], json.loads((work / labels_file(BATCH)).read_text())["rows"])
+    rows = check_rows(topic, work)
     cited = {r["id"]: r.get("mechanisms") or [] for r in json.loads((work / cites_file(BATCH)).read_text())["rows"]}
     packets = {s: packet_rows(work, s) for s in sample["rows_per_stratum"]}
     lacking = [r["id"] for r in rows if r["order_rank"] not in packets[r["stratum"]]]
@@ -179,7 +204,7 @@ def import_check(topic, work, saved, freeze_sha):
         raise TopicError(f"the answers file was saved for another freeze (freeze sha256 {str((saved or {}).get('freeze_sha256'))[:16]}, set "
                          f"{str((saved or {}).get('set_sha256'))[:16]}); this freeze is {freeze_sha[:16]}, its set {set_sha[:16]}")
     answers = saved.get("answers")
-    rows = drawn(topic["sweep"], json.loads((work / labels_file(BATCH)).read_text())["rows"])
+    rows = check_rows(topic, work)
     if not isinstance(answers, dict) or set(answers) != {r["id"] for r in rows}:
         given = set(answers) if isinstance(answers, dict) else set()
         raise TopicError(f"the answers file answers rows other than the {len(rows)} the seed draws: missing {sorted({r['id'] for r in rows} - given)[:5]}, "
@@ -200,7 +225,7 @@ def check_holds(topic, work, freeze_sha):
     if not isinstance(check, dict) or check.get("freeze_sha256") != freeze_sha:
         raise TopicError(f"{CHECK_FILE} was made on another freeze than reference-freeze-{BATCH}.json")
     rows = check.get("rows") if isinstance(check.get("rows"), list) else []
-    expected = [(r["id"], r["kind"]) for r in drawn(topic["sweep"], json.loads((work / labels_file(BATCH)).read_text())["rows"])]
+    expected = [(r["id"], r["kind"]) for r in check_rows(topic, work)]
     if any(not isinstance(r, dict) or r.get("answer") not in ("yes", "no") for r in rows) or [(r.get("id"), r.get("kind")) for r in rows] != expected:
         raise TopicError(f"{CHECK_FILE} does not answer exactly the rows the seed draws from the frozen labels")
     k = sum(r["answer"] == UNSUPPORTED[r["kind"]] for r in rows)

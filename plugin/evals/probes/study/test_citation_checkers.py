@@ -176,6 +176,39 @@ class CitationCheckersTest(unittest.TestCase):
         second = self.rows[1]["id"]
         self.refused(repo, work, [self.votes(work, OPUS, cli="claude", unsupported=[first]), self.votes(work, GEMINI, unsupported=[second])], "method stopped")
 
+    def test_a_stopped_check_opens_one_correction_round_whose_new_freeze_draws_a_fresh_sample(self):
+        repo, work = self.copies()
+        with self.assertRaises(SystemExit) as caught:
+            self.run_script("open-correction-round", repo, work)
+        self.assertIn("no citation-check.json", str(caught.exception))
+        self.imported(repo, work, self.votes(work, OPUS, cli="claude"), self.votes(work, GEMINI))
+        with self.assertRaises(SystemExit) as caught:
+            self.run_script("open-correction-round", repo, work)
+        self.assertIn("did not stop the method", str(caught.exception))
+        repo, work = self.copies()
+        first, second = self.rows[0]["id"], self.rows[1]["id"]
+        self.refused(repo, work, [self.votes(work, OPUS, cli="claude", unsupported=[first]), self.votes(work, GEMINI, unsupported=[second])], "method stopped")
+        old_freeze = sha(work / "reference-freeze-calibration.json")
+        self.run_script("open-correction-round", repo, work)
+        archive = work / "calibration-correction-1"
+        self.assertEqual(sorted(p.name for p in archive.iterdir()), sorted(["reference-freeze-calibration.json", "citation-check.json", votes_file(OPUS), votes_file(GEMINI)]))
+        self.assertEqual(sha(archive / "reference-freeze-calibration.json"), old_freeze)
+        self.assertFalse((work / "reference-freeze-calibration.json").exists())
+        quiet(repo, "freeze-reference", "--work", str(work), "--batch", "calibration", "--without-flaggers", "agy quota", "--today", TODAY)
+        self.assertEqual(json.loads((work / "reference-freeze-calibration.json").read_text())["correction"], 1)
+        labels = json.loads((work / "calibration-labels.json").read_text())["rows"]
+        fresh = drawn(SWEEP, labels, "verify-2")
+        self.assertNotEqual([r["id"] for r in fresh], [r["id"] for r in self.rows])
+        self.assertEqual([r["id"] for r, _ in checker_prompts(load_topic(repo, "demo"), repo, work, FakeFetch())], [r["id"] for r in fresh])
+        self.rows = fresh
+        self.imported(repo, work, self.votes(work, OPUS, cli="claude"), self.votes(work, GEMINI))
+        self.assertEqual(require_frozen(load_topic(repo, "demo"), work, ("calibration",)), {"calibration": sha(work / "reference-freeze-calibration.json")})
+        self.refused(repo, work, [self.votes(work, OPUS, cli="claude"), self.votes(work, GEMINI)], "already exists")
+        (work / "citation-check.json").write_text(json.dumps({**json.loads((work / "citation-check.json").read_text()), "stopped": True}))
+        with self.assertRaises(SystemExit) as caught:
+            self.run_script("open-correction-round", repo, work)
+        self.assertIn("calibration-correction-1 exists; a batch gets one correction round", str(caught.exception))
+
     def test_votes_from_the_reference_from_one_model_twice_from_another_freeze_or_with_a_row_missing_are_refused(self):
         repo, work = self.copies()
         opus, gemini = self.votes(work, OPUS, cli="claude"), self.votes(work, GEMINI)
