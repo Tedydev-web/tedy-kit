@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 
 from study_fixtures import HERE, FakeFetch, script, topic_repo, write_json, write_jsonl
+from study_judges import run_name
 from study_session_prompt import TEMPLATE_SHA256
 from study_topic import TopicError, load_topic
 
@@ -124,6 +125,31 @@ class BlockRecordTest(SessionBase):
         with self.assertRaises(SystemExit) as raised:
             self.pilot(FakeFetch(), "B")
         self.assertIn("agy takes no effort", str(raised.exception))
+
+
+class ApertureSessionTest(SessionBase):
+    DEEPSEEK = {"cli": "aperture", "model": "deepseek/deepseek-v4.1-flash"}
+
+    def completion(self, text):
+        return json.dumps({"model": self.DEEPSEEK["model"], "choices": [{"message": {"role": "assistant", "content": text}}], "usage": {"prompt_tokens": 9, "completion_tokens": 3}})
+
+    def test_session_a_on_aperture_posts_one_chat_completion_to_the_endpoint_given_on_the_command_line(self):
+        self.write_topic({**SESSIONS, "A": self.DEEPSEEK})
+        models = json.dumps({"data": [{"id": self.DEEPSEEK["model"]}]})
+        fetch = FakeFetch([("/v1/models", models), ("--data-binary", self.completion(reply_row(1, "o/one")))])
+        self.pilot(fetch, "A", "1-1", "--endpoint", "http://100.127.1.240", which=lambda cli: cli == "curl")
+        self.assertTrue((self.work / "config-pilot-A.jsonl").is_file())
+        self.assertIn("http://100.127.1.240/v1/chat/completions", fetch.called("--data-binary")[0])
+        self.assertEqual((self.meta()["config-pilot-A"]["cli"], self.meta()["config-pilot-A"]["model"]), ("aperture", self.DEEPSEEK["model"]))
+        with self.assertRaises(SystemExit) as raised:
+            self.pilot(FakeFetch(), "A")
+        self.assertIn("--endpoint names the Aperture URL", str(raised.exception))
+        with self.assertRaises(SystemExit) as raised:
+            self.pilot(FakeFetch(), "B", "1-1", "--endpoint", "http://100.127.1.240")
+        self.assertIn("--endpoint names the Aperture URL", str(raised.exception))
+
+    def test_a_model_id_with_a_slash_names_one_file(self):
+        self.assertEqual(run_name("config", "qgs-A", self.DEEPSEEK, 1), "judge-config-qgs-A-deepseek--deepseek-v4.1-flash-run1")
 
 
 class PilotAndFreezeRunTest(SessionBase):

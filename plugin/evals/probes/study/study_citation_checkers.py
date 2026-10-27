@@ -9,7 +9,7 @@ from study_reference_labels import cites_file, packet_rows, reference_option
 from study_screening_input import read_file
 from study_session import LEDGER, MAX_PROMPT, append_lines, aperture_call, aperture_reply, call_isolated, isolation, session_command, spend_line
 from study_session_reply import reply_text
-from study_topic import TopicError, saigon_today
+from study_topic import TopicError, model_slug, saigon_today
 
 FILE_BYTES, CHECKERS = 10_000, (2, 3)
 VOTE = re.compile(r"^answer:\s*(yes|no)\s*\nreason:\s*(\S.*)$", re.IGNORECASE)
@@ -20,7 +20,7 @@ RULES_SHA256 = hashlib.sha256(f"{RULES}\n{REPLY_FORMAT}".encode()).hexdigest()
 
 
 def votes_file(model):
-    return f"citation-check-votes-{model.replace('/', '--')}.json"
+    return f"citation-check-votes-{model_slug(model)}.json"
 
 
 def file_body(fetch, packet, path):
@@ -113,7 +113,7 @@ def run_checker(topic, repo, work, option, freeze_sha, fetch):
     saved = json.loads(path.read_text()) if path.is_file() else {**header, "votes": {}, "refused": {}}
     if {k: saved.get(k) for k in header} != header:
         raise TopicError(f"{path.name} was written for another freeze, set or checker setup; move it aside to start again")
-    key, today = f"citation-check-{option['model'].replace('/', '--')}", saigon_today()
+    key, today = f"citation-check-{model_slug(option['model'])}", saigon_today()
     for row, prompt in checker_prompts(topic, repo, work, fetch):
         if row["id"] in saved["votes"]:
             continue

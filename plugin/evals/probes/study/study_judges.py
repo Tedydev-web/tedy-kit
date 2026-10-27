@@ -8,7 +8,7 @@ from study_qgs import cross_family
 from study_screening_core import MechanismTable, derive, read_jsonl
 from study_session import model_family
 from study_session_prompt import criteria_version
-from study_topic import TopicError, session_option
+from study_topic import ROSTER_CLIS, TopicError, model_slug, session_option
 
 SENSITIVITY_FLOOR, KAPPA_FLOOR, RUNS = 0.90, 0.60, (1, 2)
 SCREENING_JUDGES, QGS_JUDGES = ("screening-A", "screening-B"), ("qgs-A", "qgs-B", "reader")
@@ -21,8 +21,8 @@ def roster(topic, freeze=None):
     qgs, reader = topic.get("qgs_judges"), topic.get("reader")
     if not isinstance(qgs, dict) or not {"A", "B"} <= set(qgs) or reader is None:
         raise TopicError(f"{topic['path']}: quality criteria v4 needs qgs_judges A and B and a reader in the topic config")
-    out = {f"qgs-{side}": {**session_option(topic, f"qgs_judges.{side}", qgs[side]), "kind": "qgs"} for side in "AB"}
-    out["reader"] = {**session_option(topic, "reader", reader), "kind": "qgs"}
+    out = {f"qgs-{side}": {**session_option(topic, f"qgs_judges.{side}", qgs[side], ROSTER_CLIS), "kind": "qgs"} for side in "AB"}
+    out["reader"] = {**session_option(topic, "reader", reader, ROSTER_CLIS), "kind": "qgs"}
     if freeze:
         out["screening-A"] = {**freeze["session_a"], "kind": "screening"}
         out["screening-B"] = {**freeze["session_b"]["chosen"], "kind": "screening"}
@@ -30,7 +30,7 @@ def roster(topic, freeze=None):
 
 
 def run_name(stratum, judge, option, run):
-    return f"judge-{stratum}-{judge}-{option['model']}-run{run}"
+    return f"judge-{stratum}-{judge}-{model_slug(option['model'])}-run{run}"
 
 
 def judged_batches(folder):

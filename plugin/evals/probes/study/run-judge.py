@@ -22,7 +22,7 @@ from study_session_prompt import required_sweep_date
 from study_session_reply import REFERENCE_CRITERIA
 from study_stage1 import LADDER
 from study_stage1_audit import read_audit, screener_name
-from study_topic import KEBAB, TopicError, flaggers, load_topic, reference_option, require_screened, saigon_today, topic_arguments
+from study_topic import KEBAB, TopicError, flaggers, load_topic, model_slug, reference_option, require_screened, saigon_today, session_binary, topic_arguments
 
 REFERENCE_JUDGES = ("reference", "flagger")
 JUDGES = (*SCREENING_JUDGES, *QGS_JUDGES, "audit", *REFERENCE_JUDGES)
@@ -70,7 +70,7 @@ def stratum_job(topic, work, stratum, judge, which_set, run):
         sample = Path(work) / AUDIT_FILE
         if not sample.is_file():
             raise TopicError(f"no {AUDIT_FILE} in {work}; draw it with draw-audit-sample.py once stage 2 ends")
-        return {"kind": "screening", "freeze": freeze, "option": option, "ranks": json.loads(sample.read_text())[stratum], "name": f"{stratum}-audit-{option['model']}"}
+        return {"kind": "screening", "freeze": freeze, "option": option, "ranks": json.loads(sample.read_text())[stratum], "name": f"{stratum}-audit-{model_slug(option['model'])}"}
     if which_set == "stage1-audit":
         if judge != "screening-A":
             raise TopicError("the stage-1 audit rows are read by the stage-2 screener: pass --judge screening-A --set stage1-audit")
@@ -206,7 +206,7 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
                            (["--rerun-notes"], {"type": int, "help": "--judge reference only: round N (from 1) re-runs every row a note of "
                                                                     "reference-notes-<batch>.json selects, with every note's criteria line under Rubric notes, as "
                                                                     "reference-<batch>-<stratum>-notes-N; the derive step reads the latest round holding a row"}),
-                           (["--endpoint"], {"help": "--judge flagger on aperture only: the Aperture URL, for example http://100.127.1.240; one chat completion "
+                           (["--endpoint"], {"help": "a judge or flagger on aperture only: the Aperture URL, for example http://100.127.1.240; one chat completion "
                                                      "per row, no tools offered"}),
                            (["--agy-window"], {"action": "store_true", "help": "--judge flagger on agy only, off by default: disable the context-mode MCP server "
                                                                                "and the ponytail plugin for the run and enable them again after it"}),
@@ -238,10 +238,10 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
         if args.agy_window and (args.judge != "flagger" or option["cli"] != "agy"):
             raise TopicError("--agy-window belongs to --judge flagger on agy; it switches agy extensions only")
         if (option["cli"] == "aperture") != bool(args.endpoint):
-            raise TopicError("--endpoint names the Aperture URL, and only an aperture flagger takes it")
+            raise TopicError("--endpoint names the Aperture URL, and only a judge or flagger on aperture takes it")
         if args.endpoint:
             option = job["option"] = {**option, "endpoint": args.endpoint.rstrip("/")}
-        if not which("curl" if option["cli"] == "aperture" else option["cli"]):
+        if not which(session_binary(option)):
             raise TopicError(f"{option['model']} runs on {option['cli']}, which is not on PATH")
         if not job["ranks"]:
             raise TopicError(f"no rows for {args.judge} on --set {args.set}")

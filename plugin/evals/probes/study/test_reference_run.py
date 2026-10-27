@@ -8,6 +8,7 @@ import unittest
 from pathlib import Path
 
 from study_calibration_set import EXCLUDE_CODES, LABELLED
+from study_judges import roster
 from study_fixtures import FakeFetch, script, topic_repo, write_json, write_jsonl
 from study_reference_labels import cite_holds
 from study_session import MAX_PROMPT, canonical_sha256, session_folder
@@ -629,14 +630,17 @@ class ApertureFlaggerTest(ReferenceBase):
         self.assertEqual(self.rows("reference-calibration-config-flagger-openai--gpt-5.6-luna"), [])
         self.assertEqual(len(other.called("--data-binary")), 2)
 
-    def test_aperture_serves_flaggers_only(self):
+    def test_aperture_serves_the_roster_and_the_flaggers_never_the_reference(self):
         self.assertEqual(flaggers(self.topic())["record_only"], [LUNA])
+        deepseek = {"cli": "aperture", "model": "deepseek/deepseek-v4.1-flash"}
+        self.write_topic(sessions={"A": deepseek, "B": {"cli": "claude", "model": "claude-sonnet-5-5", "effort": "high"}}, reader=deepseek,
+                         qgs_judges={"A": deepseek, "B": {"cli": "claude", "model": "claude-sonnet-5-5", "effort": "high"}})
+        self.assertEqual(session_a(self.topic()), deepseek)
+        self.assertEqual({k: v["cli"] for k, v in roster(self.topic()).items()},
+                         {"qgs-A": "aperture", "qgs-B": "claude", "reader": "aperture"})
         self.write_topic(reference=LUNA)
         with self.assertRaisesRegex(TopicError, r"reference needs a cli \(claude or agy\)"):
             reference_option(self.topic(), LADDER_MODELS)
-        self.write_topic(sessions={"A": LUNA, "B": {"cli": "claude", "model": "claude-sonnet-5-5", "effort": "high"}})
-        with self.assertRaisesRegex(TopicError, r"sessions.A needs a cli \(claude or agy\)"):
-            session_a(self.topic())
         self.write_topic(record_only_flaggers=[{**LUNA, "effort": "high"}])
         with self.assertRaisesRegex(TopicError, "aperture takes no effort"):
             flaggers(self.topic())

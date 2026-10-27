@@ -10,7 +10,7 @@ from study_reference_labels import checked_reply, flags_file, packet_rows, read_
 from study_session import agy_lists, model_family
 from study_session_prompt import required_sweep_date
 from study_stage1 import LADDER
-from study_topic import TopicError, flaggers
+from study_topic import TopicError, flaggers, model_slug
 
 FIELDS = ("eligibility", "problems", *LABELLED)
 STEP = {"Relevance": 0.5}
@@ -20,7 +20,7 @@ RETEST_FAMILY = ("same family as the reference: a second independent pass of it 
 
 
 def flagger_key(batch, stratum, option):
-    return f"{session_key(batch, stratum)}-flagger-{option['model'].replace('/', '--')}" + ("-pass2" if option.get("retest") else "")
+    return f"{session_key(batch, stratum)}-flagger-{model_slug(option['model'])}" + ("-pass2" if option.get("retest") else "")
 
 
 def differs(reference, flagger):

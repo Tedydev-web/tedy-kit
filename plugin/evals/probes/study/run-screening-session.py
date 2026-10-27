@@ -10,7 +10,7 @@ from study_protocol import FREEZE_FILE
 from study_session import model_family, run_block
 from study_session_prompt import required_sweep_date
 from study_stage2 import plan_file
-from study_topic import TopicError, load_topic, require_screened, saigon_today, session_a, session_b, topic_arguments
+from study_topic import TopicError, load_topic, model_slug, require_screened, saigon_today, session_a, session_b, session_binary, topic_arguments
 
 
 def pilot_job(topic, stratum, side, model, which):
@@ -26,15 +26,15 @@ def pilot_job(topic, stratum, side, model, which):
         if option is None:
             raise TopicError(f"{model} is not session B, its fallback or a pilot_also option in the topic config")
     else:
-        option = primary if which(primary["cli"]) else fallback
+        option = primary if which(session_binary(primary)) else fallback
         if option is None:
             raise TopicError(f"session B runs on {primary['cli']}, which is not on PATH, and the topic config names no fallback")
-    if option is fallback and which(primary["cli"]):
+    if option is fallback and which(session_binary(primary)):
         raise TopicError(f"{primary['cli']} is on PATH, so session B is {primary['model']}; the fallback runs only without it")
-    if not which(option["cli"]):
+    if not which(session_binary(option)):
         raise TopicError(f"{option['model']} runs on {option['cli']}, which is not on PATH")
     reason = f"{primary['cli']} was not on PATH when this pilot ran" if option is fallback else None
-    return option, f"{stratum}-pilot-B-{option['model']}", reason
+    return option, f"{stratum}-pilot-B-{model_slug(option['model'])}", reason
 
 
 def screen_job(topic, work, stratum, side, which):
@@ -48,10 +48,10 @@ def screen_job(topic, work, stratum, side, which):
     primary = freeze["session_b"].get("primary", option)
     reason = None
     if side == "B" and option != primary:
-        if which(primary["cli"]):
+        if which(session_binary(primary)):
             raise TopicError(f"the freeze ran session B on the fallback {option['model']}, but {primary['cli']} is now on PATH; the frozen session B stays the fallback, so run its blocks with {primary['cli']} off PATH")
         reason = f"{primary['cli']} was not on PATH when this block ran"
-    if not which(option["cli"]):
+    if not which(session_binary(option)):
         raise TopicError(f"session {side} runs on {option['cli']}, which is not on PATH")
     ranks = None
     if criteria_version(freeze["criteria"]) >= 4:
@@ -72,6 +72,8 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
                            (["--pilot"], {"action": "store_true", "help": "screen the pilot block before the freeze"}),
                            (["--model"], {"help": "pilot only: which configured option runs, one per invocation; default session B, else its fallback"}),
                            (["--criteria"], {"help": "criteria file for the pilot; after the freeze it comes from the freeze"}),
+                           (["--endpoint"], {"help": "a session on aperture only: the Aperture URL, for example http://100.127.1.240; one chat completion per block, "
+                                                     "no tools offered"}),
                            (["--today"], {"default": saigon_today(), "help": "session date, default today in Asia/Saigon"})).parse_args(argv)
     try:
         topic = load_topic(args.repo, args.topic)
@@ -89,6 +91,10 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
                 raise TopicError("--model is for the pilot; after the freeze the freeze names both sessions")
             criteria, frozen, option, name, reason, planned = screen_job(topic, args.work, args.stratum, args.side, which)
             key = f"{args.stratum}-{args.side}"
+        if (option["cli"] == "aperture") != bool(args.endpoint):
+            raise TopicError("--endpoint names the Aperture URL, and only a session on aperture takes it")
+        if args.endpoint:
+            option = {**option, "endpoint": args.endpoint.rstrip("/")}
         ranks = None if planned is None else [r for r in planned if int(first) <= r <= int(last)]
         if ranks == []:
             raise TopicError(f"no stage-2 row of {args.stratum} lies between ranks {first} and {last}")

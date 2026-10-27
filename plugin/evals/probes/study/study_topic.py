@@ -10,6 +10,7 @@ SWEEPS = Path("docs") / "prior-art" / "sweeps"
 SNOWBALL_RANK_BASE = 1000
 DEFAULT_PILOT_ROWS = 20
 SESSION_CLIS = ("claude", "agy")
+ROSTER_CLIS = (*SESSION_CLIS, "aperture")
 SAIGON = timezone(timedelta(hours=7))
 KEBAB = r"[a-z0-9]+(?:-[a-z0-9]+)*"
 FLAGGERS = {"rubric_trigger": [{"cli": "agy", "model": "gemini-3.8-flash-high"}], "record_only": [{"cli": "agy", "model": "gpt-oss-120b-medium"}]}
@@ -211,18 +212,26 @@ def session_option(topic, where, option, clis=SESSION_CLIS):
     return {k: option[k] for k in ("cli", "model", "effort") if k in option}
 
 
+def model_slug(model):
+    return model.replace("/", "--")
+
+
+def session_binary(option):
+    return "curl" if option["cli"] == "aperture" else option["cli"]
+
+
 def session_a(topic):
-    return session_option(topic, "sessions.A", topic.get("sessions", {}).get("A"))
+    return session_option(topic, "sessions.A", topic.get("sessions", {}).get("A"), ROSTER_CLIS)
 
 
 def session_b(topic):
     b = topic.get("sessions", {}).get("B")
-    primary = session_option(topic, "sessions.B", b)
-    fallback = session_option(topic, "sessions.B.fallback", b["fallback"]) if "fallback" in b else None
+    primary = session_option(topic, "sessions.B", b, ROSTER_CLIS)
+    fallback = session_option(topic, "sessions.B.fallback", b["fallback"], ROSTER_CLIS) if "fallback" in b else None
     also = b.get("pilot_also", [])
     if not isinstance(also, list):
         raise TopicError(f"{topic['path']}: sessions.B.pilot_also must be a list")
-    return primary, fallback, [session_option(topic, f"sessions.B.pilot_also[{i}]", o) for i, o in enumerate(also)]
+    return primary, fallback, [session_option(topic, f"sessions.B.pilot_also[{i}]", o, ROSTER_CLIS) for i, o in enumerate(also)]
 
 
 def session_b_options(topic):
@@ -251,7 +260,7 @@ def reference_option(topic, ladder=()):
 
 
 def flagger_option(topic, where, option):
-    checked = session_option(topic, where, option, (*SESSION_CLIS, "aperture"))
+    checked = session_option(topic, where, option, ROSTER_CLIS)
     if "retest" not in option:
         return checked
     if option["retest"] is not True:
