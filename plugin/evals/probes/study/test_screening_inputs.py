@@ -131,6 +131,15 @@ class InputsTest(unittest.TestCase):
         self.fetch_inputs(self.fetch())
         self.assertEqual(self.rows()[3]["repo"], "o/forced")
 
+    def test_the_pilot_set_is_the_first_pilot_rows_unforced_rows_only(self):
+        ranked = {"rows": POOL, "aggregators": [{"repo": "o/forced", "description": "awesome list"}]}
+        rows, _ = script("export-screening-order").screening_order(self.topic, "config", ranked, 200)
+        write_jsonl(self.work / "config-screening-order.jsonl", rows)
+        ranks = script("fetch-screening-inputs").set_ranks({**self.topic, "pilot_rows": 1}, self.work, "config", "pilot")
+        self.assertEqual(ranks, {1})
+        self.fetch_inputs(self.fetch(), ranks=ranks)
+        self.assertEqual(sorted(self.rows()), [1])
+
     def test_an_unparsable_or_empty_tree_is_a_transient_error(self):
         for body, message in (("not json", "tree: unparsable"), (json.dumps({"tree": []}), "tree: empty")):
             (self.work / "config-screening-inputs.jsonl").unlink(missing_ok=True)

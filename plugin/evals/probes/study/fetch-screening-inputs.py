@@ -4,13 +4,17 @@ from pathlib import Path
 
 from study_agreement import HARD_CAP
 from study_fetch import Fetch
+from study_protocol import pilot_ranks
+from study_screening_core import read_jsonl
 from study_screening_input import fetch_inputs
 from study_stage1_audit import read_audit
 from study_stage2 import plan_file
-from study_topic import TopicError, load_topic, require_screened, topic_arguments
+from study_topic import TopicError, load_topic, pilot_rows, require_screened, topic_arguments
 
 
-def set_ranks(work, stratum, which):
+def set_ranks(topic, work, stratum, which):
+    if which == "pilot":
+        return set(pilot_ranks(read_jsonl(Path(work), f"{stratum}-screening-order.jsonl"), pilot_rows(topic)))
     if which == "stage2":
         path = Path(work) / plan_file(stratum)
         if not path.is_file():
@@ -29,9 +33,10 @@ def main(argv=None, fetch=None):
                            (["--through"], {"type": int, "default": HARD_CAP, "help": f"screening set: fetch rows up to this rank, plus forced and snowballed rows; default {HARD_CAP}"}),
                            (["--mark-permanent"], {"type": int, "action": "append", "default": [], "metavar": "RANK",
                                                    "help": "mark a rank's commit: or tree: error permanent when a check by hand finds the repository or commit gone, so a block holding it can run"}),
-                           (["--set"], {"choices": ["screening", "qgs", "stage2", "stage1-audit"], "default": "screening",
+                           (["--set"], {"choices": ["screening", "qgs", "stage2", "stage1-audit", "pilot"], "default": "screening",
                                         "help": "qgs: every QGS candidate of the topic into qgs-inputs.jsonl, numbered by candidate id; stage2: the stage-2 plan's rows; "
-                                                "stage1-audit: the near and far excludes the stage-1 audit drew"})).parse_args(argv)
+                                                "stage1-audit: the near and far excludes the stage-1 audit drew; pilot: the first pilot_rows unforced rows the pilot "
+                                                "block screens"})).parse_args(argv)
     try:
         topic = load_topic(args.repo, args.topic)
         candidates = args.set == "qgs"
@@ -39,7 +44,7 @@ def main(argv=None, fetch=None):
             raise TopicError("--set qgs fetches the topic's candidates and takes no --stratum; every other set needs --stratum")
         if args.stratum:
             require_screened(topic, args.stratum)
-        ranks = None if candidates else set_ranks(args.work, args.stratum, args.set)
+        ranks = None if candidates else set_ranks(topic, args.work, args.stratum, args.set)
         added, kept, failed = fetch_inputs(topic, args.work, args.stratum, args.through, fetch or Fetch(), args.mark_permanent, ranks=ranks, candidates=candidates)
     except TopicError as error:
         sys.exit(f"fetch-screening-inputs: {error}")
