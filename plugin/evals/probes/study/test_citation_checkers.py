@@ -127,6 +127,10 @@ class CitationCheckersTest(unittest.TestCase):
         self.run_script("run-citation-checker", repo, work, "--checker", f"claude:{OPUS}:max", fetch=again)
         saved = json.loads((work / votes_file(OPUS)).read_text())
         self.assertEqual((len(saved["votes"]), saved["refused"], len(again.called("claude -p"))), (30, {}, 1))
+        ledger = [json.loads(line) for line in (work / "claude-spend-ledger.jsonl").read_text().splitlines()]
+        mine = [line for line in ledger if line["key"] == f"citation-check-{OPUS}"]
+        self.assertEqual((len(mine), sum("refused" in line for line in mine), {line["total_cost_usd"] for line in mine}), (32, 2, {0.42}))
+        self.assertEqual(mine[-1]["ranks"], [bad])
         agy_fetch = FakeFetch([(f"--model {GEMINI}", agy("answer: no\nreason: none of the files checks anything"))])
         self.run_script("run-citation-checker", repo, work, "--checker", f"agy:{GEMINI}", fetch=agy_fetch)
         gemini = json.loads((work / votes_file(GEMINI)).read_text())

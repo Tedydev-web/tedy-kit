@@ -7,9 +7,9 @@ from study_calibration_set import anchors, labels_file, set_file
 from study_citation_check import BATCH, STOP_AT, UNSUPPORTED, drawn, sha256_file, statements, summary
 from study_reference_labels import cites_file, packet_rows, reference_option
 from study_screening_input import read_file
-from study_session import MAX_PROMPT, call_isolated, isolation, session_command
+from study_session import LEDGER, MAX_PROMPT, append_lines, call_isolated, isolation, session_command, spend_line
 from study_session_reply import reply_text
-from study_topic import TopicError
+from study_topic import TopicError, saigon_today
 
 FILE_BYTES, CHECKERS = 10_000, 3
 VOTE = re.compile(r"^answer:\s*(yes|no)\s*\nreason:\s*(\S.*)$", re.IGNORECASE)
@@ -106,19 +106,22 @@ def run_checker(topic, repo, work, option, freeze_sha, fetch):
     saved = json.loads(path.read_text()) if path.is_file() else {**header, "votes": {}, "refused": {}}
     if {k: saved.get(k) for k in header} != header:
         raise TopicError(f"{path.name} was written for another freeze, set or checker setup; move it aside to start again")
+    key, today = f"citation-check-{option['model']}", saigon_today()
     for row, prompt in checker_prompts(topic, repo, work, fetch):
         if row["id"] in saved["votes"]:
             continue
         for attempt in (1, 2):
+            out, status, left = call_isolated(fetch, session_command(option, prompt, False), work, key)
             try:
-                out, status, left = call_isolated(fetch, session_command(option, prompt, False), work, f"citation-check-{option['model']}")
                 if left:
                     raise TopicError(f"the session left files behind: {left[:5]}")
                 text, served = reply_text(option, out, status)
                 saved["votes"][row["id"]] = {**parse_vote(text), "prompt_sha256": hashlib.sha256(prompt.encode()).hexdigest(), "served": served}
                 saved["refused"].pop(row["id"], None)
+                append_lines({work / LEDGER: spend_line({"today": today, "key": key, "ranks": [row["id"]], "option": option}, out, prompt)})
                 break
             except TopicError as error:
+                append_lines({work / LEDGER: spend_line({"today": today, "key": key, "ranks": [row["id"]], "option": option}, out, prompt, str(error)[:300])})
                 if attempt == 2:
                     saved["refused"][row["id"]] = str(error)[:300]
         path.write_text(json.dumps(saved, indent=1, ensure_ascii=False) + "\n")
