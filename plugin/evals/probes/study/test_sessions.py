@@ -265,7 +265,7 @@ class PilotAndFreezeRunTest(SessionBase):
                          (20, "deepseek/deepseek-v4.1-flash", "claude-sonnet-5-5", None, []))
         self.assertEqual({j: (o["cli"], o["model"]) for j, o in roster(canon).items()},
                          {"qgs-A": ("aperture", "deepseek/deepseek-v4.1-flash"), "qgs-B": ("claude", "claude-sonnet-5-5"), "reader": ("aperture", "deepseek/deepseek-v4.1-flash")})
-        self.assertEqual(reference_substitute(canon), {"cli": "claude", "model": "claude-opus-5-5", "effort": "max"})
+        self.assertEqual(reference_substitute(canon), {"cli": "claude", "model": "claude-opus-5-5", "effort": "xhigh"})
         self.assertEqual((cross_family(canon)["model"], reader_shares_family(canon)), ("gemini-3.8-flash-high", False))
         self.assertEqual({s: r["stop_row"] for s, r in canon["strata"].items()}, {"config": None, "product": None, "local": None})
         from datetime import date
