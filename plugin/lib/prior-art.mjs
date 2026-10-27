@@ -12,6 +12,9 @@ export const GRANDFATHERED = new Set([
   "0007-considered-and-rejected.md",
   "0008-derived-waiting-list.md",
 ]);
+export const TRAILER_CORRECTIONS = new Map([
+  ["5f471ed633c0709e48e974e13660a2c9fb9ffa90", "https://platform.openai.com/docs/api-reference/chat"],
+]);
 export const SOCIAL = new Set(["x", "reddit", "youtube", "facebook"]);
 const CHANNELS = new Set(["github", "web", "local", ...SOCIAL]);
 const ADR_NAME = /^\d{4}-[a-z0-9]+(?:-[a-z0-9]+)*\.md$/;
@@ -149,7 +152,7 @@ function adrExists(repo, number) {
   return existsSync(dir) && readdirSync(dir).some((file) => file.startsWith(`${number}-`));
 }
 
-export function checkCommits(repo) {
+export function checkCommits(repo, corrections = TRAILER_CORRECTIONS) {
   const git = (...args) => execFileSync("git", ["-C", repo, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   let tag;
   try {
@@ -157,15 +160,15 @@ export function checkCommits(repo) {
   } catch {
     return [{ commit: "HEAD", error: "no tag reachable from HEAD; the trailer check needs the latest release tag" }];
   }
-  const format = "%h%x1f%s%x1f%(trailers:key=ADR,valueonly,separator=%x1d)%x1f%(trailers:key=Prior-art,valueonly,separator=%x1d)%x1e";
+  const format = "%H%x1f%h%x1f%s%x1f%(trailers:key=ADR,valueonly,separator=%x1d)%x1f%(trailers:key=Prior-art,valueonly,separator=%x1d)%x1e";
   const records = git("log", `--format=${format}`, `${tag}..HEAD`).split("\x1e").map((record) => record.trim()).filter(Boolean);
   return records.flatMap((record) => {
-    const [commit, subject, adrs, sources] = record.split("\x1f");
+    const [sha, commit, subject, adrs, sources] = record.split("\x1f");
     const type = subject.match(FEAT_OR_FIX)?.[1];
     if (!type) return [];
     const split = (text) => text.split("\x1d").map((value) => value.trim()).filter(Boolean);
     const adrValues = split(adrs);
-    const sourceValues = split(sources);
+    const sourceValues = corrections.has(sha) ? [corrections.get(sha)] : split(sources);
     if (!adrValues.length && !sourceValues.length) return [{ commit, error: `${subject}: no ADR: or Prior-art: trailer` }];
     const errors = [
       ...adrValues.flatMap((value) => (/^\d{4}$/.test(value) && adrExists(repo, value) ? [] : [`ADR ${value} not found in docs/adr`])),

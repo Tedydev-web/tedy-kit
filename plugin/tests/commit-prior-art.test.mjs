@@ -5,7 +5,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { checkCommits } from "../lib/prior-art.mjs";
+import { checkCommits, TRAILER_CORRECTIONS } from "../lib/prior-art.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
@@ -75,6 +75,16 @@ test("a trailer naming a missing ADR or card, or none with one channel, fails", 
   assert.match(errorsFor("feat: x\n\nADR: 0099").join("\n"), /ADR 0099 not found/);
   assert.match(errorsFor("feat: x\n\nPrior-art: nowhere").join("\n"), /card "nowhere" not found/);
   assert.match(errorsFor('feat: x\n\nPrior-art: none (github: "a")').join("\n"), /at least two channels/);
+});
+
+test("a named pushed commit is checked against its corrected trailer instead of its own", () => {
+  const repo = repoWithTag();
+  commit(repo, "feat: y\n\nPrior-art: n/a (internal)");
+  const sha = git(repo, "rev-parse", "HEAD").trim();
+  assert.match(checkCommits(repo).map((problem) => problem.error).join("\n"), /n\/a is for fix commits only/);
+  assert.deepEqual(checkCommits(repo, new Map([[sha, "https://github.com/o/r/issues/3"]])), []);
+  assert.match(checkCommits(repo, new Map([[sha, "n/a (still internal)"]])).map((problem) => problem.error).join("\n"), /n\/a is for fix commits only/);
+  assert.deepEqual([...TRAILER_CORRECTIONS.keys()], ["5f471ed633c0709e48e974e13660a2c9fb9ffa90"]);
 });
 
 test("the kit's own commits since its latest tag carry their trailers", () => {
