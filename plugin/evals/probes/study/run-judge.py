@@ -22,7 +22,8 @@ from study_session_prompt import required_sweep_date
 from study_session_reply import REFERENCE_CRITERIA
 from study_stage1 import LADDER
 from study_stage1_audit import read_audit, screener_name
-from study_topic import KEBAB, TopicError, flaggers, load_topic, model_slug, reference_option, require_screened, saigon_today, session_binary, topic_arguments
+from study_topic import (KEBAB, TopicError, flaggers, load_topic, model_slug, reference_option, reference_substitute, require_screened, saigon_today, session_binary,
+                         topic_arguments)
 
 REFERENCE_JUDGES = ("reference", "flagger")
 JUDGES = (*SCREENING_JUDGES, *QGS_JUDGES, "audit", *REFERENCE_JUDGES)
@@ -128,7 +129,7 @@ def note_job(work, batch, stratum, ranks):
     return notes, hashlib.sha256(data).hexdigest(), selected
 
 
-def reference_job(topic, work, stratum, judge, batch, model, note):
+def reference_job(topic, work, stratum, judge, batch, model, note, substitute=False):
     require_screened(topic, stratum)
     ladder = [m for rung in LADDER for m in rung["models"]]
     reference = reference_option(topic, ladder)
@@ -143,6 +144,12 @@ def reference_job(topic, work, stratum, judge, batch, model, note):
         raise TopicError(f"no {path.name} in {work}; --set reference labels a drawn calibration, top-up or held-out batch")
     ranks = [r["order_rank"] for r in json.loads(path.read_text())["rows"] if r["stratum"] == stratum]
     name, notes, notes_sha256 = f"reference-{batch}-{stratum}", None, None
+    if substitute:
+        if judge == "flagger":
+            raise TopicError("--substitute runs the reference substitute in place of the reference; a flagger runs as the topic config names it")
+        reference = reference_substitute(topic)
+        if reference is None:
+            raise TopicError(f"{topic['path']} names no reference_substitute; --substitute runs that model in place of the reference")
     if judge == "flagger":
         if note is not None:
             raise TopicError("--rerun-notes re-runs the reference; flaggers label each row once")
@@ -206,6 +213,8 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
                            (["--rerun-notes"], {"type": int, "help": "--judge reference only: round N (from 1) re-runs every row a note of "
                                                                     "reference-notes-<batch>.json selects, with every note's criteria line under Rubric notes, as "
                                                                     "reference-<batch>-<stratum>-notes-N; the derive step reads the latest round holding a row"}),
+                           (["--substitute"], {"action": "store_true", "help": "--judge reference only: run the topic config's reference_substitute in place of "
+                                                                               "the reference, under the same session keys; the labels name every session it ran"}),
                            (["--endpoint"], {"help": "a judge or flagger on aperture only: the Aperture URL, for example http://100.127.1.240; one chat completion "
                                                      "per row, no tools offered"}),
                            (["--agy-window"], {"action": "store_true", "help": "--judge flagger on agy only, off by default: disable the context-mode MCP server "
@@ -220,10 +229,10 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
             raise TopicError("--set reference runs --judge reference or flagger")
         if args.set != "reference" and args.judge in REFERENCE_JUDGES:
             raise TopicError(f"--judge {args.judge} runs on --set reference")
-        if args.set != "reference" and (args.batch or args.model or args.rerun_notes is not None):
+        if args.set != "reference" and (args.batch or args.model or args.rerun_notes is not None or args.substitute):
             raise TopicError("--batch and --model belong to --set reference, --rerun-notes to --judge reference")
         if args.set == "reference":
-            job = reference_job(topic, args.work, args.stratum, args.judge, args.batch, args.model, args.rerun_notes)
+            job = reference_job(topic, args.work, args.stratum, args.judge, args.batch, args.model, args.rerun_notes, args.substitute)
         else:
             job = qgs_job(topic, args.work, args.judge) if args.set == "qgs" else stratum_job(topic, args.work, args.stratum, args.judge, args.set, args.run)
         if args.rows:

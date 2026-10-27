@@ -331,6 +331,37 @@ class ReferenceLabelsTest(unittest.TestCase):
         self.assertEqual(labeller["sessions"], ["reference-calibration-config", "reference-calibration-config-notes-1", "reference-calibration-product",
                                                 "reference-calibration-product-notes-1"])
 
+    def test_a_rerun_by_the_reference_substitute_is_derived_and_named_in_the_labeller(self):
+        repo, work = self.copies()
+        substitute = {"cli": "claude", "model": "claude-haiku-5-5", "effort": "max"}
+        topic = repo / "docs/prior-art/topics/demo.json"
+        write_json(topic, {**json.loads(topic.read_text()), "reference_substitute": substitute})
+        self.referenced(work, readme=self.pricing)
+        write_json(work / "reference-notes-calibration.json", [self.objectivity_line(repo)])
+        rows = self.sample["rows"]
+        packets = {json.loads(line)["order_rank"]: json.loads(line) for line in (work / "reference-inputs-config.jsonl").read_text().splitlines()}
+        self.session(work, "reference-calibration-config-notes-1", [reply(rows[n]["order_rank"], rows[n]["repo"], values=(0, 0, 0.5, 0, 1)) for n in (0, 1)], packets,
+                     option=substitute)
+        products = {json.loads(line)["order_rank"]: json.loads(line) for line in (work / "reference-inputs-product.jsonl").read_text().splitlines()}
+        self.session(work, "reference-calibration-product-notes-1", [reply(rows[61]["order_rank"], rows[61]["repo"], values=(1, 1, 0, 1, 1))], products)
+        self.derive(repo, work, "--batch", "calibration")
+        labels = {r["id"]: r["user"] for r in json.loads((work / "calibration-labels.json").read_text())["rows"]}
+        self.assertEqual([labels[rows[n]["id"]]["Objectivity"] for n in (0, 1, 61)], [0.5, 0.5, 0])
+        labeller = json.loads((work / "calibration-labels.json").read_text())["labeller"]
+        self.assertEqual((labeller["model"], labeller["substitute"]), (REFERENCE["model"], {**substitute, "sessions": ["reference-calibration-config-notes-1"]}))
+        self.session(work, "reference-calibration-config-notes-1", [], packets, option={**substitute, "model": "claude-opus-5-5"})
+        self.refused(repo, work, "ran claude claude-opus-5-5", "--batch", "calibration")
+
+    def test_a_reference_substitute_that_is_the_reference_or_a_judge_is_refused(self):
+        repo, work = self.copies()
+        self.referenced(work)
+        topic = repo / "docs/prior-art/topics/demo.json"
+        base = json.loads(topic.read_text())
+        write_json(topic, {**base, "reference_substitute": REFERENCE})
+        self.refused(repo, work, "reference_substitute claude-fable-5-1 is the reference", "--batch", "calibration")
+        write_json(topic, {**base, "reference_substitute": {**REFERENCE, "model": "claude-opus-5-5"}})
+        self.refused(repo, work, "reference_substitute claude-opus-5-5 is also sessions.A", "--batch", "calibration")
+
     def test_a_row_a_note_selects_without_a_rerun_is_refused(self):
         repo, work = self.copies()
         self.referenced(work, readme=self.pricing)

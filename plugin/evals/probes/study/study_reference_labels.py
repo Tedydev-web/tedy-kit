@@ -10,7 +10,7 @@ from study_screening_core import COPYLIKE, MechanismTable, derive, read_jsonl
 from study_session import canonical_sha256, session_header
 from study_session_prompt import date_cell, required_sweep_date
 from study_stage1 import HELD_OUT, LADDER
-from study_topic import TopicError, reference_option as topic_reference_option, screened_strata
+from study_topic import TopicError, reference_option as topic_reference_option, reference_substitute, screened_strata
 
 REPLY_KEYS = ("order_rank", "repo", "scores", "mechanisms", "decision", "decision_cite")
 MECHANISM_KEYS = ("problem", "path", "why")
@@ -156,13 +156,14 @@ def selects(note, packet):
     return cue_selects(note["cue"], packet)
 
 
-def read_session(work, key, option, packets):
+def read_session(work, key, option, packets, substitute=None):
     meta = Path(work) / "meta.json"
     session = (json.loads(meta.read_text()).get("sessions") or {}).get(key) if meta.is_file() else None
     if session is None:
         raise TopicError(f"meta.json records no session {key}; reference rows come only from run-judge.py --judge reference")
     header = session_header(option, False)
-    if any(session.get(f) != header[f] for f in ("cli", "model", "effort")):
+    allowed = [session_header(o, False) for o in (option, substitute) if o]
+    if all(any(session.get(f) != h[f] for f in ("cli", "model", "effort")) for h in allowed):
         raise TopicError(f"meta.json sessions.{key} ran {session.get('cli')} {session.get('model')} (effort {session.get('effort')}); the topic's reference is "
                          f"{header['cli']} {header['model']} (effort {header['effort']})")
     read = {r: (block.get("row_sha256") or {}).get(str(r)) for block in session.get("blocks") or [] for r in block.get("ranks") or []}
@@ -181,8 +182,16 @@ def rerun_keys(work, batch, stratum):
     return [session_key(batch, stratum, n) for n in sorted(int(n) for n in rounds if RERUN.fullmatch(n))]
 
 
-def labeller(option, keys, notes_sha):
-    return {"kind": "reference", **option, "sessions": sorted(keys), "notes_sha256": notes_sha}
+def substitute_sessions(work, keys, substitute):
+    if substitute is None:
+        return None
+    sessions = json.loads((Path(work) / "meta.json").read_text()).get("sessions") or {}
+    used = sorted(k for k in keys if (sessions.get(k) or {}).get("model") == substitute["model"])
+    return {**substitute, "sessions": used} if used else None
+
+
+def labeller(option, keys, notes_sha, substitute=None):
+    return {"kind": "reference", **option, "sessions": sorted(keys), "notes_sha256": notes_sha, **({"substitute": substitute} if substitute else {})}
 
 
 def packet_rows(work, stratum):
@@ -200,11 +209,11 @@ def derive_batch(topic, repo, work, batch, criteria):
     notes_path = work / notes_file(batch)
     notes = json.loads(notes_path.read_text()) if notes_path.is_file() else []
     checked_notes(notes, (Path(repo) / criteria).read_text().splitlines(), [p for s in packets.values() for p in s.values()])
-    first, reruns, keys = {}, {}, []
+    first, reruns, keys, substitute = {}, {}, [], reference_substitute(topic)
     for stratum in sample["rows_per_stratum"]:
         keys.append(session_key(batch, stratum))
-        first[stratum] = read_session(work, keys[-1], option, packets[stratum])
-        reruns[stratum] = [(k, read_session(work, k, option, packets[stratum])) for k in rerun_keys(work, batch, stratum)]
+        first[stratum] = read_session(work, keys[-1], option, packets[stratum], substitute)
+        reruns[stratum] = [(k, read_session(work, k, option, packets[stratum], substitute)) for k in rerun_keys(work, batch, stratum)]
         keys += [k for k, _ in reruns[stratum]]
     labels, records, used = {}, [], set()
     for row in sample["rows"]:
@@ -231,7 +240,8 @@ def derive_batch(topic, repo, work, batch, criteria):
     if extra:
         raise TopicError(f"re-run rows {extra[:10]} are rows no note selects; a re-run value replaces a criterion only for the rows a note's cue selects")
     notes_sha = hashlib.sha256(notes_path.read_bytes()).hexdigest() if notes_path.is_file() else None
-    import_labels(topic, work, {"sweep": sample["sweep"], "set_sha256": hashlib.sha256(sample_bytes).hexdigest(), "labels": labels}, batch, labeller(option, keys, notes_sha))
+    import_labels(topic, work, {"sweep": sample["sweep"], "set_sha256": hashlib.sha256(sample_bytes).hexdigest(), "labels": labels}, batch,
+                  labeller(option, keys, notes_sha, substitute_sessions(work, keys, substitute)))
     labels_sha = hashlib.sha256((work / labels_file(batch)).read_bytes()).hexdigest()
     (work / cites_file(batch)).write_text(json.dumps({"batch": batch, "set_sha256": hashlib.sha256(sample_bytes).hexdigest(), "labels_sha256": labels_sha, "rows": records},
                                                      indent=1, ensure_ascii=False) + "\n")
@@ -245,16 +255,17 @@ def derive_purpose(topic, work, purpose):
     strata = [s for s in screened_strata(topic) if (work / f"{session_key(purpose, s)}.jsonl").is_file()]
     if not strata:
         raise TopicError(f"no {session_key(purpose, '<stratum>')}.jsonl in {work}; run run-judge.py --judge reference --batch {purpose} first")
-    when, rows = required_sweep_date(topic), []
+    when, rows, substitute = required_sweep_date(topic), [], reference_substitute(topic)
     for stratum in strata:
         packets = packet_rows(work, stratum)
-        for rank, reply in sorted(read_session(work, session_key(purpose, stratum), option, packets).items()):
+        for rank, reply in sorted(read_session(work, session_key(purpose, stratum), option, packets, substitute).items()):
             where, packet = f"{purpose}-{stratum}-{rank}", packets[rank]
             checked_reply(where, reply, packet.get("repo"), problems)
             date = date_cell((packet.get("facts") or {}).get("pushed"), when)["v"]
             label, record = row_label(where, reply, {}, packet, date)
             rows.append({"stratum": stratum, "order_rank": rank, "repo": packet["repo"], "label": checked_label(where, label, problems, date), **record})
-    out = {"purpose": purpose, "labeller": labeller(option, [session_key(purpose, s) for s in strata], None), "rows": rows}
+    keys = [session_key(purpose, s) for s in strata]
+    out = {"purpose": purpose, "labeller": labeller(option, keys, None, substitute_sessions(work, keys, substitute)), "rows": rows}
     (work / purpose_file(purpose)).write_text(json.dumps(out, indent=1, ensure_ascii=False) + "\n")
     return rows, purpose_file(purpose)
 

@@ -67,7 +67,8 @@ def reference_part(topic, work, batch, sample, labels, sessions):
     if read != {after}:
         raise TopicError(f"a rubric edit is pending: {BUNDLE_FILE} (sha256 {str(after)[:16]}) is not the bundle the latest reference round of {batch} read; re-run the "
                          "rows it selects with run-judge.py --rerun-notes and derive the labels again")
-    return {"cli": option["cli"], "model": option["model"], "effort": option.get("effort"), "sessions": {k: session_hashes(work, sessions, k) for k in keys}}, \
+    return {"cli": option["cli"], "model": option["model"], "effort": option.get("effort"), "sessions": {k: session_hashes(work, sessions, k) for k in keys},
+            **({"substitute": found["substitute"]} if found.get("substitute") else {})}, \
         {"before": before.pop(), "after": after}
 
 

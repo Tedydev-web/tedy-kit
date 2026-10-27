@@ -259,6 +259,18 @@ def reference_option(topic, ladder=()):
     return option
 
 
+def reference_substitute(topic):
+    if topic.get("reference_substitute") is None:
+        return None
+    option = session_option(topic, "reference_substitute", topic["reference_substitute"])
+    if option["model"] == (topic.get("reference") or {}).get("model"):
+        raise TopicError(f"{topic['path']}: reference_substitute {option['model']} is the reference; a substitute is another model")
+    roles = [where for where, model in named_models(topic).items() if model == option["model"]]
+    if roles:
+        raise TopicError(f"{topic['path']}: reference_substitute {option['model']} is also {', '.join(roles)}; the substitute is never a judge")
+    return option
+
+
 def flagger_option(topic, where, option):
     checked = session_option(topic, where, option, ROSTER_CLIS)
     if "retest" not in option:

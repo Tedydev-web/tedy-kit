@@ -255,15 +255,18 @@ class PilotAndFreezeRunTest(SessionBase):
         family = script("run-screening-session").model_family
         self.assertEqual([family(m) for m in ("claude-opus-5-5", "gemini-3.8-flash-high", "gpt-oss-120b-medium", "o3")], ["claude", "gemini", "gpt", "o3"])
 
-    def test_the_canon_topic_names_the_claude_roster_and_the_cross_family_model(self):
+    def test_the_canon_topic_names_its_roster_the_reference_substitute_and_the_cross_family_model(self):
         from study_judges import reader_shares_family, roster
         from study_qgs import cross_family
-        from study_topic import pilot_rows, session_a, session_b
+        from study_topic import pilot_rows, reference_substitute, session_a, session_b
         canon = load_topic(HERE.parents[3], "canon")
         primary, fallback, also = session_b(canon)
-        self.assertEqual((pilot_rows(canon), session_a(canon)["model"], primary["model"], fallback, also), (20, "claude-opus-5-5", "claude-sonnet-5-5", None, []))
-        self.assertEqual({j: o["model"] for j, o in roster(canon).items()}, {"qgs-A": "claude-opus-5-5", "qgs-B": "claude-sonnet-5-5", "reader": "claude-opus-5-5"})
-        self.assertEqual((cross_family(canon)["model"], reader_shares_family(canon)), ("gemini-3.8-flash-high", True))
+        self.assertEqual((pilot_rows(canon), session_a(canon)["model"], primary["model"], fallback, also),
+                         (20, "deepseek/deepseek-v4.1-flash", "claude-sonnet-5-5", None, []))
+        self.assertEqual({j: (o["cli"], o["model"]) for j, o in roster(canon).items()},
+                         {"qgs-A": ("aperture", "deepseek/deepseek-v4.1-flash"), "qgs-B": ("claude", "claude-sonnet-5-5"), "reader": ("aperture", "deepseek/deepseek-v4.1-flash")})
+        self.assertEqual(reference_substitute(canon), {"cli": "claude", "model": "claude-opus-5-5", "effort": "max"})
+        self.assertEqual((cross_family(canon)["model"], reader_shares_family(canon)), ("gemini-3.8-flash-high", False))
         self.assertEqual({s: r["stop_row"] for s, r in canon["strata"].items()}, {"config": None, "product": None, "local": None})
         from datetime import date
         from study_session_prompt import sweep_date

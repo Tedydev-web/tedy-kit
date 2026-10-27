@@ -393,6 +393,18 @@ class ReferenceRunTest(ReferenceBase):
         self.assertEqual((self.work / "prompts/reference-calibration-config-1-1.response.txt").read_text(), bad)
         self.only_spend_written("rank 1 needs a decision")
 
+    def test_the_substitute_flag_runs_the_topic_reference_substitute_under_its_own_session(self):
+        substitute = {"cli": "claude", "model": "claude-haiku-5-5", "effort": "max"}
+        self.assertIn("names no reference_substitute", self.refused(FakeFetch(), "--substitute"))
+        self.write_topic(reference_substitute=substitute)
+        fetch = FakeFetch([(needle(1), fable(label(1, "o/one"), models=(substitute["model"],))), (needle(2), fable(label(2, "o/two"), models=(substitute["model"],)))])
+        self.judge(fetch, "--substitute")
+        self.assertTrue(all(c.startswith("claude -p --model claude-haiku-5-5 --effort max ") for c in fetch.called("claude -p")))
+        entry = self.sessions()["reference-calibration-config"]
+        self.assertEqual((entry["model"], entry["effort"]), (substitute["model"], "max"))
+        self.assertEqual({line["model"] for line in self.ledger()}, {substitute["model"]})
+        self.assertIn("--substitute runs the reference substitute", self.refused(FakeFetch(), "--substitute", "--model", "gemini-3.8-flash-high", judge="flagger"))
+
     def test_the_cli_refuses_what_the_reference_set_cannot_run(self):
         cases = [("--set reference needs --batch", ["--judge", "reference", "--set", "reference", "--stratum", "config"]),
                  ("no top-up-set.json in", ["--judge", "reference", "--set", "reference", "--batch", "top-up", "--stratum", "config"]),

@@ -10,7 +10,7 @@ from study_reference_labels import checked_reply, flags_file, packet_rows, read_
 from study_session import agy_lists, model_family
 from study_session_prompt import required_sweep_date
 from study_stage1 import LADDER
-from study_topic import TopicError, flaggers, model_slug
+from study_topic import TopicError, flaggers, model_slug, reference_substitute
 
 FIELDS = ("eligibility", "problems", *LABELLED)
 STEP = {"Relevance": 0.5}
@@ -66,11 +66,11 @@ def agy_window(fetch):
             raise TopicError("agy mcp list or agy plugin list differs from before the flagger run; check them by hand")
 
 
-def first_labels(work, sample, key, option, packets, problems, dates, need_all):
+def first_labels(work, sample, key, option, packets, problems, dates, need_all, substitute=None):
     meta = Path(work) / "meta.json"
     sessions = (json.loads(meta.read_text()).get("sessions") or {}) if meta.is_file() else {}
     strata = sample["rows_per_stratum"]
-    replies = {s: read_session(work, key(s), option, packets[s]) if need_all or key(s) in sessions else {} for s in strata}
+    replies = {s: read_session(work, key(s), option, packets[s], substitute) if need_all or key(s) in sessions else {} for s in strata}
     refused = {(s, r["rank"]) for s in strata for r in (sessions.get(key(s)) or {}).get("refused") or []}
     labels = {}
     for row in sample["rows"]:
@@ -112,7 +112,7 @@ def write_flags(topic, work, batch):
     held, when = pinned_inputs(work, sample), required_sweep_date(topic)
     dates = {r["id"]: row_date(held[r["id"]], when)["v"] for r in sample["rows"]}
     packets = {s: packet_rows(work, s) for s in sample["rows_per_stratum"]}
-    labels = first_labels(work, sample, lambda s: session_key(batch, s), option, packets, problems, dates, True)[0]
+    labels = first_labels(work, sample, lambda s: session_key(batch, s), option, packets, problems, dates, True, reference_substitute(topic))[0]
     missing = [r["id"] for r in sample["rows"] if r["id"] not in labels]
     if missing:
         raise TopicError(f"no reference reply for {missing[:10]}; flags compare against the reference's first run, so run run-judge.py --judge reference first")

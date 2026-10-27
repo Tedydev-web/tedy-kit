@@ -9,7 +9,7 @@ from study_reference_flags import flagger_key
 from study_reference_packet import bundle_text
 from study_screening_core import COPYLIKE, read_jsonl
 from study_stage1 import HELD_OUT
-from study_topic import TopicError, flaggers
+from study_topic import TopicError, flaggers, reference_substitute
 
 QUESTIONS_MAX = 5
 FLAGGED = (*LABELLED, "problems", "eligibility", "decision")
@@ -174,7 +174,7 @@ def write_worksheet(topic, repo, work, batch, criteria):
     sample, option, problems = json.loads((work / set_file(batch)).read_text()), reference_option(topic), topic.get("problems") or []
     strata = list(sample["rows_per_stratum"])
     packets = {s: packet_rows(work, s) for s in strata}
-    firsts = {s: read_session(work, session_key(batch, s), option, packets[s]) for s in strata}
+    firsts = {s: read_session(work, session_key(batch, s), option, packets[s], reference_substitute(topic)) for s in strata}
     triggers = flaggers(topic)["rubric_trigger"]
     models = [o["model"] for o in triggers]
     blind = {(s, o["model"]): {r.get("order_rank"): r for r in read_jsonl(work, f"{flagger_key(batch, s, o)}.jsonl")} for s in strata for o in triggers}
