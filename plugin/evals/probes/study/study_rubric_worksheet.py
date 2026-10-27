@@ -20,7 +20,8 @@ DECISION_LINES = {"aggregator": ("**Aggregators.**", None), "copy": ("| Novelty 
 OUTCOMES = ("rule", "asked", "contested")
 NO_CODE = "none"
 UNANCHORED = {"problems": "the problem ids differ under the same Relevance; no criteria line anchors them",
-              "eligibility": "the eligibility differs with no criterion or decision code apart; no criteria line anchors it"}
+              "eligibility": "the eligibility differs with no criterion or decision code apart; no criteria line anchors it",
+              "citation": "the reference and the flagger give the same value; only a failed citation sets the labels apart, and no anchor wording settles that"}
 
 
 def questions_file(batch):
@@ -76,9 +77,7 @@ def parts(row, first, replies):
     found = []
     for name in row["criteria"]:
         if name in LABELLED:
-            hits = differing(name)
-            if not hits:
-                raise TopicError(f"{row['id']}: no rubric-trigger flagger differs from the reference on {name}; build the flags again")
+            hits = differing(name) or [(name, None, None, None)]
         elif name == "problems":
             hits = differing("Relevance") or [(name, None, None, None)]
         else:
@@ -210,7 +209,7 @@ def write_worksheet(topic, repo, work, batch, criteria):
         for criterion, ours, theirs, model in parts(row, first, replies):
             if ours is None:
                 row_parts[row["id"]].append((criterion, "contested", None))
-                contested.append({"id": row["id"], "part": criterion, "reason": UNANCHORED[criterion]})
+                contested.append({"id": row["id"], "part": criterion, "reason": UNANCHORED["citation" if criterion in LABELLED else criterion]})
             elif criterion == RULE[0] and 1 in (ours, theirs) and selects({"cue": RULE[1]}, packet_of(row)):
                 row_parts[row["id"]].append((criterion, "rule", None))
                 ruled += [row["id"]] if row["id"] not in ruled else []

@@ -156,6 +156,17 @@ class WorksheetTest(unittest.TestCase):
         self.flagged(work, {0: self.differing(0, {"Objectivity": (0, FORKED)})}, [(0, ["Objectivity"])])
         self.assertEqual(self.worksheet(repo, work)["questions"][0]["recommended"], "B")
 
+    def test_a_criterion_flagged_only_because_a_citation_failed_is_contested_not_asked(self):
+        repo, work = self.copies()
+        self.referenced(work)
+        reference_value = self.row_reply(0, self.rows[0])["scores"]["Objectivity"]["v"]
+        self.flagged(work, {0: self.differing(0, {"Objectivity": (reference_value, GHOST)})}, [(0, ["Objectivity"])])
+        sheet = self.worksheet(repo, work)
+        self.assertEqual(sheet["questions"], [])
+        self.assertEqual(sheet["contested"], [{"id": self.rows[0]["id"], "part": "Objectivity",
+                                               "reason": "the reference and the flagger give the same value; only a failed citation sets the labels apart, and no anchor "
+                                                         "wording settles that"}])
+
     def test_only_rubric_trigger_flaggers_are_read(self):
         repo, work = self.copies()
         self.referenced(work)
