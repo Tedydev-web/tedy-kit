@@ -20,15 +20,30 @@ def votes_file(model):
     return f"citation-check-votes-{model}.json"
 
 
-def file_block(fetch, packet, path):
+def file_body(fetch, packet, path):
     entry = read_file(fetch, packet["repo"], packet["sha"], path, FILE_BYTES)
     if entry.get("error"):
-        body = f"(not readable at the pinned commit: {entry['error']})"
-    elif entry.get("binary"):
-        body = "(binary file, not shown)"
-    else:
-        body = entry["text"] + (f"\n(cut at {FILE_BYTES} bytes)" if entry["truncated"] else "")
-    return f'<file path="{path}">\n{body}\n</file>'
+        return f"(not readable at the pinned commit: {entry['error']})", False
+    if entry.get("binary"):
+        return "(binary file, not shown)", False
+    return entry["text"], entry["truncated"]
+
+
+def file_block(path, body, cap):
+    text, cut = body
+    data = text.encode()
+    if len(data) > cap:
+        text, cut = data[:cap].decode(errors="ignore"), True
+    return f'<file path="{path}">\n{text}' + (f"\n(cut at {cap} bytes)" if cut else "") + "\n</file>"
+
+
+def with_files(parts, fetch, packet, paths):
+    bodies = {p: file_body(fetch, packet, p) for p in paths}
+    fixed = len("\n\n".join(parts(lambda _: "")).encode()) + sum(len(file_block(p, ("", False), FILE_BYTES).encode()) + 40 for p in paths)
+    cap = min(FILE_BYTES, (MAX_PROMPT - fixed) // max(len(paths), 1))
+    if cap <= 0:
+        raise TopicError(f"the check prompt leaves no room for the {len(paths)} files it shows")
+    return "\n\n".join(parts(lambda p: file_block(p, bodies[p], cap)))
 
 
 def checker_prompt(topic, row, packet, mechanisms, anchor, problems, fetch):
@@ -37,15 +52,20 @@ def checker_prompt(topic, row, packet, mechanisms, anchor, problems, fetch):
             *([f"What counts: {meaning}"] if meaning and meaning != "-" else []), f"Row: {row['id']}", f"Repository: {packet['repo']} at commit {packet['sha']}"]
     if row["kind"] == "relevance-1":
         cited = list(dict.fromkeys((m["path"], m["problem"]) for m in mechanisms))
-        body = [f"The label is Relevance = 1. Criteria anchor: {anchor['1']}", "Each cited file is listed with the problem the label says it carries a mechanism for:",
-                *(f"- {path}: {problem}: {problems.get(problem, '')}" for path, problem in cited), *(file_block(fetch, packet, p) for p in dict.fromkeys(p for p, _ in cited)),
-                "Question: Does at least one cited file carry a mechanism for the problem listed beside it?"]
+        paths = list(dict.fromkeys(p for p, _ in cited))
+
+        def parts(block):
+            return [*head, f"The label is Relevance = 1. Criteria anchor: {anchor['1']}", "Each cited file is listed with the problem the label says it carries a mechanism for:",
+                    *(f"- {path}: {problem}: {problems.get(problem, '')}" for path, problem in cited), *(block(p) for p in paths),
+                    "Question: Does at least one cited file carry a mechanism for the problem listed beside it?", REPLY_FORMAT]
     else:
-        assets = [a["path"] for a in packet.get("assets") or []]
-        body = [f"The label is Relevance = 0. Criteria anchor: {anchor['0']}", "Problems:", *(f"- {p}: {s}" for p, s in problems.items()),
-                *([file_block(fetch, packet, p) for p in assets] or ["(the inputs hold no agent-asset file)"]),
-                "Question: Does any of these files carry a mechanism for a listed problem?"]
-    prompt = "\n\n".join([*head, *body, REPLY_FORMAT])
+        paths = [a["path"] for a in packet.get("assets") or []]
+
+        def parts(block):
+            return [*head, f"The label is Relevance = 0. Criteria anchor: {anchor['0']}", "Problems:", *(f"- {p}: {s}" for p, s in problems.items()),
+                    *([block(p) for p in paths] or ["(the inputs hold no agent-asset file)"]), "Question: Does any of these files carry a mechanism for a listed problem?",
+                    REPLY_FORMAT]
+    prompt = with_files(parts, fetch, packet, paths)
     if len(prompt.encode()) > MAX_PROMPT:
         raise TopicError(f"the check prompt for {row['id']} is {len(prompt.encode())} bytes, over {MAX_PROMPT}")
     return prompt

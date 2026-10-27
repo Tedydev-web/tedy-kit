@@ -2,6 +2,7 @@ import contextlib
 import hashlib
 import io
 import json
+import re
 import shutil
 import tempfile
 import unittest
@@ -11,6 +12,7 @@ from study_citation_check import drawn
 from study_citation_checkers import FILE_BYTES, checker_prompts, parse_vote, votes_file
 from study_fixtures import FakeFetch, script
 from study_reference_freeze import require_frozen
+from study_session import MAX_PROMPT
 from study_topic import TopicError, load_topic
 from study_v4_fixture import SECRET, SWEEP, TODAY, quiet
 from test_citation_check import REGISTRY
@@ -91,6 +93,18 @@ class CitationCheckersTest(unittest.TestCase):
         self.assertIn("Does any of these files carry a mechanism for a listed problem?", negative)
         cut = checker_prompts(load_topic(repo, "demo"), repo, work, FakeFetch([("contents/", "x" * (FILE_BYTES + 5))]))[0][1]
         self.assertIn(f"(cut at {FILE_BYTES} bytes)", cut)
+
+    def test_a_row_citing_many_files_shares_the_prompt_limit_between_them(self):
+        repo, work = self.copies()
+        cites = json.loads((work / "calibration-reference-cites.json").read_text())
+        row = next(r for r in self.rows if r["kind"] == "relevance-1")
+        target = next(r for r in cites["rows"] if r["id"] == row["id"])
+        target["mechanisms"] = [{"problem": "X1", "path": f"hooks/gate-{i}.sh", "why": "w"} for i in range(30)]
+        (work / "calibration-reference-cites.json").write_text(json.dumps(cites))
+        prompt = dict((r["id"], p) for r, p in checker_prompts(load_topic(repo, "demo"), repo, work, FakeFetch([("contents/", "é" * FILE_BYTES)])))[row["id"]]
+        self.assertLessEqual(len(prompt.encode()), MAX_PROMPT)
+        self.assertEqual(prompt.count('<file path="hooks/gate-'), 30)
+        self.assertEqual(len(set(re.findall(r"\(cut at (\d+) bytes\)", prompt))), 1)
 
     def test_a_reply_is_two_lines_answer_and_reason(self):
         self.assertEqual(parse_vote("answer: Yes\nreason: hooks/gate.sh line 3 blocks the commit"), {"answer": "yes", "reason": "hooks/gate.sh line 3 blocks the commit"})
