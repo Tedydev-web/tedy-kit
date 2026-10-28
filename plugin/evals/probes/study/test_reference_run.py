@@ -16,7 +16,7 @@ from study_session_prompt import REFERENCE_REPLY_FORMAT, REFERENCE_ROWS_NOTE, RE
 from study_session_reply import REFERENCE_CODES, REFERENCE_CRITERIA, parse_reference_reply
 from study_stage1 import LADDER
 from study_topic import TopicError, flaggers, load_topic, reference_option, session_a
-from test_sessions import SessionBase, agy_reply, claude_reply, reply_row
+from test_sessions import SESSIONS, SessionBase, agy_reply, claude_reply, reply_row
 
 KIT = Path(__file__).resolve().parents[4]
 SHA = "c" * 40
@@ -661,9 +661,16 @@ class ApertureFlaggerTest(ReferenceBase):
         return load_topic(self.repo, "demo")
 
 
-class OtherKindsWriteNoLedgerTest(SessionBase):
-    def test_a_screening_block_appends_no_ledger_line(self):
-        self.pilot(FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one")))]))
+class OtherKindsLedgerTest(SessionBase):
+    def test_a_claude_screening_block_appends_its_ledger_line(self):
+        reply = json.loads(claude_reply(reply_row(1, "o/one")))
+        self.pilot(FakeFetch([("claude -p", json.dumps({**reply, "total_cost_usd": 0.07}))]))
+        lines = [json.loads(line) for line in (self.work / "claude-spend-ledger.jsonl").read_text().splitlines()]
+        self.assertEqual([(l["key"], l["ranks"], l["model"], l["total_cost_usd"]) for l in lines], [("config-pilot-A", [1], "claude-opus-5-5", 0.07)])
+
+    def test_an_agy_screening_block_appends_no_ledger_line(self):
+        self.write_topic({**SESSIONS, "A": {"cli": "agy", "model": "gemini-3.8-flash-high"}})
+        self.pilot(FakeFetch([("agy", agy_reply(reply_row(1, "o/one")))]))
         self.assertFalse((self.work / "claude-spend-ledger.jsonl").exists())
 
 

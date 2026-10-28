@@ -51,7 +51,8 @@ class MethodRecordTest(unittest.TestCase):
         self.assertIn("- session B pilot, information only: gemini-3.8-flash-high agreement 1.000 on 2 rows", protocol)
         self.assertIn("- packet amendment at the freeze: the pilot draft became the frozen packet; pilot packets sha256[:16] ", protocol)
         self.assertIn("- isolation: agy --disable-slash-commands; empty temporary working folder; stdin closed; claude --bare --tools '' --setting-sources '' --strict-mcp-config "
-                      "--no-session-persistence --disable-slash-commands --max-turns 1; empty temporary working folder; stdin closed", protocol)
+                      "--no-session-persistence --disable-slash-commands --max-turns 1 --exclude-dynamic-system-prompt-sections --append-system-prompt <the packet and the criteria>; "
+                      "empty temporary working folder; stdin closed", protocol)
         self.assertIn("- CLI versions: agy 9.9.9 (fixture), claude 9.9.9 (fixture)", protocol)
 
     def test_agreement_leads_without_the_computed_date_and_states_it_with_date_too(self):

@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 
 from study_fixtures import HERE, FakeFetch
-from test_sessions import CRITERIA, SessionBase, agy_reply, claude_reply, reply_row
+from test_sessions import CRITERIA, SESSIONS, SessionBase, agy_reply, claude_reply, reply_row
 
 
 class IsolationTest(SessionBase):
@@ -20,7 +20,9 @@ class IsolationTest(SessionBase):
         self.assertNotEqual(Path(cwd), self.work)
         self.assertFalse(Path(cwd).exists())
         self.assertTrue(fetch.calls[index].startswith("claude -p --model claude-opus-5-5 --effort high --output-format json --bare --tools  --setting-sources  --strict-mcp-config "
-                                                      "--no-session-persistence --disable-slash-commands --max-turns 1 -- "))
+                                                      "--no-session-persistence --disable-slash-commands --max-turns 1 --exclude-dynamic-system-prompt-sections "
+                                                      "--append-system-prompt # packet"))
+        self.assertIn(" -- ## Your mechanism names so far", fetch.calls[index])
         self.assertIn("claude --version", fetch.calls)
 
     def test_without_an_api_key_claude_runs_the_proven_flags_without_bare_and_records_no_plugin_threat(self):
@@ -28,7 +30,8 @@ class IsolationTest(SessionBase):
         self.pilot(fetch, environ={"HOME": "/nowhere"})
         [call] = fetch.called("claude -p")
         self.assertNotIn("--bare", call)
-        self.assertIn("--output-format json --tools  --setting-sources  --strict-mcp-config --no-session-persistence --disable-slash-commands --max-turns 1 -- ", call)
+        self.assertIn("--output-format json --tools  --setting-sources  --strict-mcp-config --no-session-persistence --disable-slash-commands --max-turns 1 "
+                      "--exclude-dynamic-system-prompt-sections --append-system-prompt ", call)
         entry = self.meta()["config-pilot-A"]
         self.assertEqual(entry.get("threats"), [])
         self.assertNotIn("--bare", entry["isolation"])
@@ -59,9 +62,15 @@ class IsolationTest(SessionBase):
     def test_a_prompt_that_starts_with_a_dash_is_never_read_as_a_flag(self):
         (self.work / "screening-packet-config.md").write_text("--dangerously-skip-permissions\n")
         fetch = FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one")))])
+        with self.assertRaises(SystemExit) as raised:
+            self.pilot(fetch)
+        self.assertIn("starts with a dash", str(raised.exception))
+        self.assertEqual(fetch.called("claude -p"), [])
+        self.write_topic({**SESSIONS, "A": {"cli": "agy", "model": "gemini-3.8-flash-high"}})
+        fetch = FakeFetch([("agy --model", agy_reply(reply_row(1, "o/one")))])
         self.pilot(fetch)
-        [call] = fetch.called("claude -p")
-        self.assertTrue(call.split(" -- ", 1)[1].startswith("--dangerously-skip-permissions"))
+        [call] = fetch.called("agy --model")
+        self.assertTrue(call.split(" --print ", 1)[1].startswith("--dangerously-skip-permissions"))
 
     def test_a_session_that_writes_into_its_folder_is_refused(self):
         class Writer(FakeFetch):

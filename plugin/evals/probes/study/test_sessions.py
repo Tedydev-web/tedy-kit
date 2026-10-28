@@ -35,6 +35,16 @@ def agy_reply(text):
     return "".join(json.dumps(e) + "\n" for e in events)
 
 
+class ArgvFetch(FakeFetch):
+    def __init__(self, rules=()):
+        super().__init__(rules)
+        self.argvs = []
+
+    def run(self, cmd, timeout=180, cwd=None):
+        self.argvs.append(list(cmd))
+        return super().run(cmd, timeout, cwd)
+
+
 class SessionBase(unittest.TestCase):
     def setUp(self):
         self.repo = topic_repo(strata={"config": {"stop_row": None, "forced_repos": [], "channels": {}}, "local": {"stop_row": None, "forced_repos": []}})
@@ -240,6 +250,32 @@ class PilotAndFreezeRunTest(SessionBase):
         (self.work / "screening-packet-config.md").write_text("p" * 130000)
         with self.assertRaises(SystemExit) as raised:
             self.pilot(FakeFetch())
+        self.assertIn("smaller block", str(raised.exception))
+
+    def test_a_claude_block_sends_the_packet_and_criteria_as_the_cached_system_prompt(self):
+        fetch = ArgvFetch([("claude -p", claude_reply(reply_row(1, "o/one")))])
+        self.pilot(fetch, "A", "1-1")
+        argv = [a for a in fetch.argvs if a[:2] == ["claude", "-p"]][0]
+        head, own = argv[:argv.index("--")], argv[-1]
+        system = head[-1]
+        self.assertEqual(head[-3:-1], ["--exclude-dynamic-system-prompt-sections", "--append-system-prompt"])
+        self.assertTrue(system.startswith("# packet") and f"## Criteria ({CRITERIA})" in system and "## Rows" not in system)
+        self.assertTrue(own.startswith("## Your mechanism names so far") and '"o/one"' in own)
+        self.assertEqual((self.work / "prompts/config-pilot-A-1-1.md").read_text(), system + "\n\n" + own)
+        self.assertIn("--append-system-prompt <the packet and the criteria>; empty temporary working folder; stdin closed", self.meta()["config-pilot-A"]["isolation"])
+
+    def test_a_block_whose_parts_each_fit_one_argument_runs_though_the_whole_prompt_does_not(self):
+        (self.work / "screening-packet-config.md").write_text("p" * 70000)
+        write_jsonl(self.work / "config-screening-inputs.jsonl", [{"order_rank": 1, "repo": "o/one", "sha": SHA, "facts": {}, "listing": [], "readme": "r" * 70000, "files": []}])
+        self.pilot(FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one")))]), "A", "1-1")
+        self.assertEqual(len((self.work / "config-pilot-A.jsonl").read_text().splitlines()), 1)
+        self.assertGreater(len((self.work / "prompts/config-pilot-A-1-1.md").read_bytes()), 120000)
+
+    def test_an_agy_block_still_sends_one_prompt_under_the_argument_limit(self):
+        (self.work / "screening-packet-config.md").write_text("p" * 70000)
+        write_jsonl(self.work / "config-screening-inputs.jsonl", [{"order_rank": 1, "repo": "o/one", "sha": SHA, "facts": {}, "listing": [], "readme": "r" * 70000, "files": []}])
+        with self.assertRaises(SystemExit) as raised:
+            self.pilot(FakeFetch(), "B", "1-1", "--model", "gemini-3.8-flash-high")
         self.assertIn("smaller block", str(raised.exception))
 
     def test_a_tag_only_stratum_gets_no_inputs_and_no_sessions(self):

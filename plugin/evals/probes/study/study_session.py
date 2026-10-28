@@ -11,8 +11,8 @@ from pathlib import Path
 
 from study_screening_core import read_jsonl
 from study_screening_input import inputs_file, repo_level
-from study_session_prompt import (QGS_TEMPLATE_SHA256, REFERENCE_TEMPLATE_SHA256, STAGE1_TEMPLATE_SHA256, build_prompt, build_qgs_prompt, build_reference_prompt,
-                                  build_stage1_prompt, criteria_version, reference_prompt_parts, template_sha256, with_computed_date)
+from study_session_prompt import (QGS_TEMPLATE_SHA256, REFERENCE_TEMPLATE_SHA256, STAGE1_TEMPLATE_SHA256, build_qgs_prompt, build_stage1_prompt, criteria_version,
+                                  reference_prompt_parts, screening_prompt_parts, template_sha256, with_computed_date)
 from study_session_reply import parse_qgs_reply, parse_reference_reply, parse_reply, reply_body, reply_text
 from study_topic import TopicError
 
@@ -48,10 +48,11 @@ def claude_flags(bare):
     return ("--bare", *CLAUDE_ISOLATION) if bare else CLAUDE_ISOLATION
 
 
-def isolation(cli, bare, shared=False, endpoint=None):
+def isolation(cli, bare, shared=False, endpoint=None, split=False):
     if cli == "aperture":
         return f"one chat completion to {endpoint}/v1/chat/completions, no tools offered; stdin closed"
-    flags =(*claude_flags(bare), *((*CACHED_PREFIX, "<everything before the first row>") if shared else ())) if cli == "claude" else AGY_ISOLATION
+    system = "<everything before the first row>" if shared else "<the packet and the criteria>" if split else None
+    flags = (*claude_flags(bare), *((*CACHED_PREFIX, system) if system else ())) if cli == "claude" else AGY_ISOLATION
     folder = "a fixed empty working folder per session key, emptied before each call" if shared else "empty temporary working folder"
     return " ".join(f or "''" for f in flags) + f"; {folder}; stdin closed"
 
@@ -64,13 +65,21 @@ def session_command(option, prompt, bare, system=None):
     return ["agy", "--model", option["model"], "--output-format", "stream-json", "--print-timeout", AGY_TIMEOUT, *AGY_ISOLATION, "--print", prompt]
 
 
-def session_header(option, bare, shared=False):
+def session_header(option, bare, shared=False, split=False):
     effort = option.get("effort") or ("default" if option["cli"] == "claude" else "set by the model id")
     served = {"claude": "modelUsage must name only the requested model", "aperture": "the completion's model must be the requested model"}.get(
         option["cli"], "requested only: agy reports no served model")
     threats = [AGY_THREAT] if option["cli"] == "agy" else []
-    return {"cli": option["cli"], "model": option["model"], "effort": effort, "isolation": isolation(option["cli"], bare, shared, option.get("endpoint")),
+    return {"cli": option["cli"], "model": option["model"], "effort": effort, "isolation": isolation(option["cli"], bare, shared, option.get("endpoint"), split),
             "served": served, "threats": threats}
+
+
+def split_prompt(job):
+    return job.get("kind", "screening") == "screening" and job["option"]["cli"] in ("claude", "aperture")
+
+
+def job_header(job):
+    return session_header(job["option"], job["bare"], job.get("kind") == "reference", split_prompt(job) and job["option"]["cli"] == "claude")
 
 
 def session_folder(work, key):
@@ -138,7 +147,7 @@ def add_block(sessions, key, header, block):
 
 
 def record_refusal(job, rank, reason):
-    header = session_header(job["option"], job["bare"], job.get("kind") == "reference")
+    header = job_header(job)
 
     def change(sessions):
         check_header(sessions, job["key"], header, [])
@@ -240,18 +249,29 @@ def shaped(kind, row):
     return qgs_shape(row) if kind == "qgs" else row
 
 
-def block_prompt(job, rows):
+def block_parts(job, rows):
     work, stratum, kind = Path(job["work"]), job["stratum"], job.get("kind", "screening")
     packet = (work / (job.get("packet") or f"screening-packet-{stratum}.md")).read_text()
     if kind == "screening":
         mech_file = work / f"{job['name']}-mechanisms.md"
         known = mech_file.read_text() if mech_file.is_file() else ""
-        return build_prompt(packet, job["criteria"], (Path(job["repo"]) / job["criteria"]).read_text(), known, rows, job["sweep_date"])
+        return screening_prompt_parts(packet, job["criteria"], (Path(job["repo"]) / job["criteria"]).read_text(), known, rows, job["sweep_date"])
     if kind == "stage1":
-        return build_stage1_prompt(packet, job["examples"], rows)
+        return None, build_stage1_prompt(packet, job["examples"], rows)
     if kind == "reference":
-        return build_reference_prompt(packet, job.get("notes") or [], rows)
-    return build_qgs_prompt(packet, rows)
+        return reference_prompt_parts(packet, job.get("notes") or [], rows)
+    return None, build_qgs_prompt(packet, rows)
+
+
+def block_prompt(job, rows):
+    system, own = block_parts(job, rows)
+    return own if system is None else system + "\n\n" + own
+
+
+def prompt_size(job, rows):
+    if split_prompt(job):
+        return max(len(part.encode()) for part in block_parts(job, rows))
+    return len(block_prompt(job, rows).encode())
 
 
 def agy_lists(fetch):
@@ -281,7 +301,7 @@ def run_blocks(job, ranks, fetch, most=STAGE1_BATCH_MAX):
     rows = {r: shaped(kind, row) for r, row in expected_rows({**job, "ranks": ranks}, work, stratum).items()}
     left, written, blocks = list(rows), 0, 0
     while left:
-        fits = bisect.bisect_right(range(1, min(most, len(left)) + 1), MAX_PROMPT, key=lambda n: len(block_prompt(job, [rows[r] for r in left[:n]]).encode()))
+        fits = bisect.bisect_right(range(1, min(most, len(left)) + 1), MAX_PROMPT, key=lambda n: prompt_size(job, [rows[r] for r in left[:n]]))
         size = max(fits, 1)
         written += run_block({**job, "ranks": left[:size]}, fetch)
         left, blocks = left[size:], blocks + 1
@@ -324,7 +344,7 @@ def run_block(job, fetch):
             raise TopicError(f"{option['cli']} --version: {status}")
         cli_version = version.strip().splitlines()[0] if version.strip() else "unknown"
     reference = kind == "reference"
-    header = session_header(option, job["bare"], reference)
+    header = job_header(job)
     update_sessions(work, lambda sessions: check_header(sessions, job["key"], header, list(expected)))
     if job.get("pilot"):
         snapshot = work / f"screening-packet-{stratum}-pilot-{hashes['packet_sha256'][:12]}.md"
@@ -332,21 +352,25 @@ def run_block(job, fetch):
             shutil.copyfile(packet, snapshot)
     mech_file = work / f"{name}-mechanisms.md"
     known = mech_file.read_text() if mech_file.is_file() else ""
-    prompt = block_prompt(job, list(expected.values()))
-    if len(prompt.encode()) > MAX_PROMPT:
-        raise TopicError(f"the prompt for ranks {first}-{last} is {len(prompt.encode())} bytes, over {MAX_PROMPT}; run a smaller block")
+    parts = block_parts(job, list(expected.values()))
+    prompt = parts[1] if parts[0] is None else parts[0] + "\n\n" + parts[1]
+    size = prompt_size(job, list(expected.values()))
+    if size > MAX_PROMPT:
+        raise TopicError(f"the prompt for ranks {first}-{last} needs an argument of {size} bytes, over {MAX_PROMPT}; run a smaller block")
     prompts = work / "prompts"
     prompts.mkdir(exist_ok=True)
     stem = f"{name}-{first}-{last}"
     (prompts / f"{stem}.md").write_text(prompt)
     lists = reference and option["cli"] == "agy"
     before = agy_lists(fetch) if lists else None
-    system, own = reference_prompt_parts(packet.read_text(), job.get("notes") or [], list(expected.values())) if reference and option["cli"] == "claude" else (None, prompt)
+    system, own = parts if option["cli"] == "claude" and parts[0] is not None else (None, prompt)
+    if system is not None and system.startswith("-"):
+        raise TopicError(f"the system prompt for ranks {first}-{last} starts with a dash, which claude could read as a flag; start the packet with a heading")
     keyed = (work, job["key"]) if reference else ()
     out, status, left = aperture_call(fetch, option, own, stem, *keyed) if aperture else call_isolated(fetch, session_command(option, own, job["bare"], system), *keyed)
 
     def spend(reason=None):
-        if reference:
+        if reference or option["cli"] == "claude":
             append_lines({work / LEDGER: spend_line({**job, "ranks": list(expected)}, out, prompt, reason)})
 
     def refusal(reason, kind_of=ReplyRefused):

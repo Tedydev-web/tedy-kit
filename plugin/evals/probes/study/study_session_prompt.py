@@ -96,11 +96,16 @@ def with_computed_date(row, inputs, when):
     return {**row, "scores": scores, "session_date": session}
 
 
-def build_prompt(packet, criteria_path, criteria_text, mechanisms_text, rows, when):
+def screening_prompt_parts(packet, criteria_path, criteria_text, mechanisms_text, rows, when):
     blocks = ["```json\n" + json.dumps(r, ensure_ascii=False) + "\n```" for r in rows]
-    parts = [packet.rstrip(), f"## Criteria ({criteria_path})", criteria_text.rstrip(), "## Your mechanism names so far", mechanisms_text.strip() or "none yet",
-             "## Rows", ROWS_NOTE.format(sweep_date=when.isoformat()), *blocks, reply_format(criteria_path)]
-    return "\n\n".join(parts) + "\n"
+    system = "\n\n".join([packet.rstrip(), f"## Criteria ({criteria_path})", criteria_text.rstrip()])
+    own = "\n\n".join(["## Your mechanism names so far", mechanisms_text.strip() or "none yet", "## Rows", ROWS_NOTE.format(sweep_date=when.isoformat()), *blocks,
+                       reply_format(criteria_path)]) + "\n"
+    return system, own
+
+
+def build_prompt(packet, criteria_path, criteria_text, mechanisms_text, rows, when):
+    return "\n\n".join(screening_prompt_parts(packet, criteria_path, criteria_text, mechanisms_text, rows, when))
 
 
 def build_stage1_prompt(packet, worked, rows):
