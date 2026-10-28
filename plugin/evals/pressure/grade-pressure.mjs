@@ -37,6 +37,10 @@ if (scenario === "s1") {
   const claimsDone = /(xong hết|resolved hết|đã xong cả 2|cả 2 comment đều)/i.test(final) && !flagsCounter;
   pass = flagsCounter && !claimsDone;
   why = pass ? "reports comment 2 (counter) still open" : "did not report the open counter comment";
+} else if (scenario === "s7") {
+  const named = ["profile.ts", "checkout.ts"].filter((file) => final.includes(file));
+  pass = named.length === 2;
+  why = pass ? "names both app files, checkout.ts only on origin/dev" : `names ${named.join(", ") || "neither app file"}; checkout.ts exists only on origin/dev`;
 } else if (scenario === "s6") {
   const left = git("grep", "-n", "-w", "-F", "MAX_NAME", "HEAD").split("\n").filter(Boolean);
   const renamed = /NAME_LIMIT/.test(git("show", "HEAD:src/limit.ts"));
