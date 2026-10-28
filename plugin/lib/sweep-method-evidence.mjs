@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { v4Errors } from "./sweep-method-evidence-v4.mjs";
 import { regenerationErrors } from "./sweep-method-evidence-v4-regeneration.mjs";
+import { STOPPED, stoppedErrors } from "./sweep-method-evidence-stopped.mjs";
 
 export const GRANDFATHERED = new Map([
   [
@@ -117,6 +118,7 @@ function calibrationErrors(sample, sessions, strata) {
 const criteriaVersion = (text) => Number(text.match(/^- Criteria: docs\/prior-art\/quality-criteria-v(\d+)\.md /m)?.[1] ?? 0);
 
 export function checkMethodEvidence(text, { files, read, criteriaText, topic, dropped }) {
+  if (STOPPED.test(text)) return stoppedErrors(text, { files, read, criteriaText });
   const v4 = criteriaVersion(text) >= 4;
   const strata = [...text.matchAll(/^## Stratum: (\S+)$/gm)].map((m) => m[1]);
   const agreement = part(text, "Agreement and capture-recapture");

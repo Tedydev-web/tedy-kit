@@ -5,6 +5,7 @@ from study_method_record import is_method_sweep, method_parts, method_stops
 from study_screening_core import JUDGED, SHORT, MechanismTable, derive, normal, read_json, read_jsonl
 from study_topic import SNOWBALL_RANK_BASE, screened_strata, stratum_rule, sweep_folder
 from study_stage2 import plan_file
+from study_stopped_record import render_stopped
 from study_v4_record import is_v4, row_facets
 
 
@@ -82,6 +83,8 @@ def screen(repo, topic, faceted=None):
 
 def render(repo, topic):
     repo = Path(repo)
+    if (sweep_folder(repo, topic) / "stop.json").is_file():
+        return render_stopped(repo, topic)
     method_sweep = is_method_sweep(sweep_folder(repo, topic))
     screened = {**topic, "strata": {k: topic["strata"][k] for k in screened_strata(topic)}} if method_sweep else topic
     stops, captures, faceted = method_stops(screened, sweep_folder(repo, topic)) if method_sweep else (None, None, None)
