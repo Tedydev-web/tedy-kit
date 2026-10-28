@@ -1,5 +1,4 @@
 import "./test-isolation.mjs";
-import { performance } from "node:perf_hooks";
 import { evaluate as gitGate, hiddenPublish, splitSegments } from "../gates/git-gate.mjs";
 import { evaluate as trackerToken } from "../gates/tracker-token-gate.mjs";
 import { classifyAction } from "../gates/role-gate.mjs";
@@ -10,6 +9,10 @@ import { lintChatComment, lintComment, parseDraft } from "../lib/draft-lint.mjs"
 const LIMIT_MS = 250;
 const RUNS = 3;
 const SIZE = 200_000;
+const cpuMs = (start) => {
+  const { user, system } = process.cpuUsage(start);
+  return (user + system) / 1000;
+};
 
 const SHAPES = {
   "repeated character": "a".repeat(SIZE),
@@ -53,13 +56,13 @@ for (const [target, run] of Object.entries(TARGETS)) {
     let fastest = Infinity;
     let thrown = null;
     for (let attempt = 0; attempt < RUNS; attempt += 1) {
-      const start = performance.now();
+      const start = process.cpuUsage();
       try {
         run(text);
       } catch (error) {
         if (error instanceof RangeError) thrown = error;
       }
-      fastest = Math.min(fastest, performance.now() - start);
+      fastest = Math.min(fastest, cpuMs(start));
     }
     if (thrown) slow.push(`${target} / ${shape}: threw ${thrown.message}`);
     if (fastest > LIMIT_MS) slow.push(`${target} / ${shape}: ${fastest.toFixed(0)} ms`);
