@@ -302,6 +302,16 @@ class PilotAndFreezeRunTest(SessionBase):
         self.assertEqual((self.work / "prompts/config-pilot-A-1-1.md").read_text(), system + "\n\n" + own)
         self.assertIn("--append-system-prompt <the packet and the criteria>; empty temporary working folder; stdin closed", self.meta()["config-pilot-A"]["isolation"])
 
+    def test_the_prompt_lists_only_the_most_recent_mechanism_names_within_the_cap(self):
+        (self.work / "config-pilot-A-mechanisms.md").write_text("".join(f"name-{i}: a long definition of mechanism {i}\n" for i in range(4000)))
+        fetch = ArgvFetch([("claude -p", claude_reply(reply_row(1, "o/one", mechanisms=("name-3999",))))])
+        self.pilot(fetch, "A", "1-1")
+        own = [a for a in fetch.argvs if a[:2] == ["claude", "-p"]][0][-1]
+        names = own.split("## Rows")[0]
+        self.assertTrue("name-3999\n" in names and "\nname-0\n" not in names and "definition" not in names, names[:200])
+        self.assertIn("earlier names not shown", names)
+        self.assertLessEqual(len(names.encode()), 30_200)
+
     def test_a_block_whose_parts_each_fit_one_argument_runs_though_the_whole_prompt_does_not(self):
         (self.work / "screening-packet-config.md").write_text("p" * 70000)
         write_jsonl(self.work / "config-screening-inputs.jsonl", [{"order_rank": 1, "repo": "o/one", "sha": SHA, "facts": {}, "listing": [], "readme": "r" * 70000, "files": []}])

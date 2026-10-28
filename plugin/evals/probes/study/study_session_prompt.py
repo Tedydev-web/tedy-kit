@@ -7,6 +7,7 @@ from study_topic import TopicError
 
 SWEEP_DATE = re.compile(r"^(\d{2})(\d{2})(\d{2})-")
 DATE_ANCHORS = ((90, 1), (365, 0.5))
+MECHANISM_NAMES_MAX = 30_000
 ROWS_NOTE = ("Each row below is one JSON object: the pinned commit, the repository facts from discovery, the top-level listing, the README excerpt, up to two asset files "
              "read at that commit, and the evidence the anchors score on (releases, tags, published packages, the owner's public repository count and top repositories, "
              "workflows, test paths, the CHANGELOG head). Score only from these inputs; you have no tools. Score from what is present: a file listed under missing could "
@@ -96,10 +97,22 @@ def with_computed_date(row, inputs, when):
     return {**row, "scores": scores, "session_date": session}
 
 
+def mechanism_names(mechanisms_text, cap=MECHANISM_NAMES_MAX):
+    names = [line.split(":", 1)[0].strip() for line in mechanisms_text.splitlines() if line.strip()]
+    kept, size = [], 0
+    for name in reversed(names):
+        size += len(name.encode()) + 1
+        if size > cap:
+            break
+        kept.append(name)
+    left = len(names) - len(kept)
+    return "\n".join([*([f"({left} earlier names not shown)"] if left else []), *reversed(kept)])
+
+
 def screening_prompt_parts(packet, criteria_path, criteria_text, mechanisms_text, rows, when):
     blocks = ["```json\n" + json.dumps(r, ensure_ascii=False) + "\n```" for r in rows]
     system = "\n\n".join([packet.rstrip(), f"## Criteria ({criteria_path})", criteria_text.rstrip()])
-    own = "\n\n".join(["## Your mechanism names so far", mechanisms_text.strip() or "none yet", "## Rows", ROWS_NOTE.format(sweep_date=when.isoformat()), *blocks,
+    own = "\n\n".join(["## Your mechanism names so far", mechanism_names(mechanisms_text) or "none yet", "## Rows", ROWS_NOTE.format(sweep_date=when.isoformat()), *blocks,
                        reply_format(criteria_path)]) + "\n"
     return system, own
 
