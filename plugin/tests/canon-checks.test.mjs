@@ -26,8 +26,8 @@ test("a dead relative link, a missing repository path or a line past the end of 
 });
 
 test("a published file that still names a retired file fails", () => {
-  const errors = retiredReferenceErrors({ retired: ["publish-answer-gate.mjs"], scanned: [{ file: "plugin/hooks/hooks.json", text: '"command": "publish-answer-gate.mjs"' }, { file: "README.md", text: "clean" }] });
-  assert.deepEqual(errors, ["plugin/hooks/hooks.json names the retired publish-answer-gate.mjs"]);
+  const errors = retiredReferenceErrors({ retired: ["old-gate.mjs"], scanned: [{ file: "plugin/hooks/hooks.json", text: '"command": "old-gate.mjs"' }, { file: "README.md", text: "clean" }] });
+  assert.deepEqual(errors, ["plugin/hooks/hooks.json names the retired old-gate.mjs"]);
 });
 
 test("the kit's release tags match their manifests and its manifest is not behind the latest tag", () => {
