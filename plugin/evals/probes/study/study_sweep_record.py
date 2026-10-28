@@ -3,7 +3,7 @@ from pathlib import Path
 
 from study_method_record import is_method_sweep, method_parts, method_stops
 from study_screening_core import JUDGED, SHORT, MechanismTable, derive, normal, read_json, read_jsonl
-from study_topic import SNOWBALL_RANK_BASE, screened_strata, stratum_rule, sweep_folder
+from study_topic import SNOWBALL_RANK_BASE, record_label, screened_strata, stratum_rule, sweep_folder
 from study_stage2 import plan_file
 from study_stopped_record import render_stopped
 from study_v4_record import is_v4, row_facets
@@ -96,7 +96,7 @@ def render(repo, topic):
     surfaced = list(surface["considered"].values()) + list(surface["outside the inventory"].values())
     missing_surface = sorted(m for m in coded if table.kind(m) != "evidence" and not any(m in v for v in surfaced))
     criteria_hash = hashlib.sha256((repo / meta["criteria"]).read_bytes()).hexdigest()[:16]
-    lines = [f"# {meta['title']}", "", f"- Role: {meta['role']}", f"- Date: {meta['date']}",
+    lines = [f"# {meta['title']}", "", f"- {record_label(repo, topic)}: {meta['role']}", f"- Date: {meta['date']}",
              f"- Criteria: {meta['criteria']} sha256[:16] `{criteria_hash}`",
              f"- Inventory: llms.txt sha256[:16] `{meta['inventory_digest']}` (docs/prior-art/claude-code-surfaces.md)",
              f"- Problems: {', '.join(meta['problems'])}; terms matched: {', '.join(meta['terms_matched'])}",

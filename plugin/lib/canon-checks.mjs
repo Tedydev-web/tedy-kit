@@ -133,6 +133,10 @@ export function kitArtifacts(repo) {
     || (/^docs\/prior-art\/[^/]+\.md$/.test(file) && CARD.test(readFileSync(join(repo, file), "utf8"))));
 }
 
+export function topicLineErrors(records) {
+  return records.filter(({ text }) => !/^- Topic: \S+$/m.test(text)).map(({ file }) => `${file}: no "- Topic: <topic>" line`);
+}
+
 export function sourceCommentErrors({ scripts, python, cwd }) {
   const errors = scripts.flatMap(({ file, text }) => findComments(text).map((comment) => `${file}:${comment.line}: ${comment.text}`));
   if (!python.length) return errors;

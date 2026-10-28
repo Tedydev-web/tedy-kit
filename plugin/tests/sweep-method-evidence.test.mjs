@@ -38,7 +38,7 @@ test("a facet sweep is checked against its facet's own stop rows and role", () =
 test("a record's role must be the topic or facet that names its sweep", () => {
   const sweep = methodSweep();
   assert.deepEqual(sweep.errors(), []);
-  assert.match(sweep.errors(sweep.text.replace(/^- Role: demo$/m, "- Role: demo:beta")).join("\n"), /the record's role is demo:beta, but its sweep belongs to demo/);
+  assert.match(sweep.errors(sweep.text.replace(/^- Topic: demo$/m, "- Topic: demo:beta")).join("\n"), /the record's role is demo:beta, but its sweep belongs to demo/);
 });
 
 test("the sweep-record gate checks the method evidence of every sweep after the dev sweep", () => {

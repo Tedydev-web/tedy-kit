@@ -84,9 +84,9 @@ function baseThreats(topic, strata, sessions, freeze, papers) {
   return threats;
 }
 
-function headerLines(meta, freeze, strata, topic) {
+function headerLines(meta, freeze, strata, topic, label) {
   const name = topic?.sweep;
-  return [`# ${meta.title}`, "", `- Role: ${meta.role}`, `- Date: ${meta.date}`,
+  return [`# ${meta.title}`, "", `- ${label}: ${meta.role}`, `- Date: ${meta.date}`,
     `- Criteria: ${meta.criteria} sha256[:16] \`${String(freeze.strata?.[strata[0]]?.criteria_sha256).slice(0, 16)}\``,
     `- Inventory: llms.txt sha256[:16] \`${meta.inventory_digest}\` (docs/prior-art/claude-code-surfaces.md)`,
     `- Problems: ${(meta.problems ?? []).join(", ")}; terms matched: ${(meta.terms_matched ?? []).join(", ")}`,
@@ -98,7 +98,7 @@ function headerLines(meta, freeze, strata, topic) {
 export function proseErrors(io, topic, strata, sessions, meta = {}) {
   const errors = [];
   const freeze = io.json("protocol-freeze.json") ?? {};
-  const header = headerLines(meta, freeze, strata, topic);
+  const header = headerLines(meta, freeze, strata, topic, /^- Topic: /m.test(io.text) ? "Topic" : "Role");
   const head = io.text.split("\n").slice(0, header.length);
   const differs = header.findIndex((line, i) => head[i] !== line);
   if (differs >= 0) errors.push(`the record's header is not the one meta.json, the freeze and the topic give (line ${differs + 1}: "${header[differs]}")`);

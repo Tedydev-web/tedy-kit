@@ -190,7 +190,7 @@ export function sweepMethodErrors(repo, file, text) {
   const read = (name) => (files.includes(name) || (/^(?:dropped\/[\w.-]+|facets\/[\w-]+\/[\w-]+-ranked\.json)$/.test(name) && existsSync(join(folder, name))) ? readFileSync(join(folder, name), "utf8") : undefined);
   const criteriaText = (path) => (existsSync(join(repo, path)) ? readFileSync(join(repo, path), "utf8") : "");
   const topic = topicForSweep(repo, sweep);
-  const role = text.match(/^- Role: (\S+)$/m)?.[1];
+  const role = text.match(/^- (?:Role|Topic): (\S+)$/m)?.[1];
   const roleErrors = topic && role !== topic.name ? [`the record's role is ${role}, but its sweep belongs to ${topic.name}; set meta.json role to ${topic.name}`] : [];
   const pinned = Number(String(JSON.parse(read("meta.json") ?? "{}").criteria ?? "").match(/quality-criteria-v(\d+)\.md$/)?.[1] ?? 0);
   const v4 = Math.max(criteriaVersion(text), pinned) >= 4;

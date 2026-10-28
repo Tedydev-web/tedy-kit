@@ -1,10 +1,10 @@
 import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { docReferenceErrors, kitDocFiles, kitRetiredNames, kitSkills, kitSourceFiles, kitTagVersions, retiredReferenceErrors, skillDescriptionErrors, skillSectionErrors, sourceCommentErrors, tagVersionErrors } from "../lib/canon-checks.mjs";
+import { docReferenceErrors, kitArtifacts, kitDocFiles, topicLineErrors, kitRetiredNames, kitSkills, kitSourceFiles, kitTagVersions, retiredReferenceErrors, skillDescriptionErrors, skillSectionErrors, sourceCommentErrors, tagVersionErrors } from "../lib/canon-checks.mjs";
 import { applies, kitConformance } from "../lib/canon-standard.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
@@ -86,6 +86,11 @@ test("a JavaScript or Python comment fails, a shebang, coding line, tool directi
   assert.match(sourceCommentErrors({ scripts: [], python: ["absent.py"], cwd: dir }).join("\n"), /python3 could not scan the Python files/);
 });
 
+test("a sweep record without a Topic line fails", () => {
+  assert.deepEqual(topicLineErrors([{ file: "new.md", text: "# x\n\n- Topic: demo\n" }]), []);
+  assert.deepEqual(topicLineErrors([{ file: "old.md", text: "# x\n\n- Role: demo\n" }, { file: "bare.md", text: "# x\n" }]), ['old.md: no "- Topic: <topic>" line', 'bare.md: no "- Topic: <topic>" line']);
+});
+
 test("the kit's release tags match their manifests and its manifest is not behind the latest tag", () => {
   assert.deepEqual(tagVersionErrors(kitTagVersions(REPO)), []);
 });
@@ -111,6 +116,12 @@ test("every kit skill opens with a persona paragraph, then iron laws, then a not
 
 test("every kit skill description is under 1,024 characters and reads the same in plain YAML", () => {
   assert.deepEqual(skillDescriptionErrors(skillsUnder("description-yaml")), []);
+});
+
+test("every kit sweep record registered at a standard version with the topic line names its topic", () => {
+  const register = kitConformance(REPO);
+  const records = kitArtifacts(REPO).filter((file) => file.startsWith("docs/prior-art/sweeps/") && applies(register, "sweep-topic-line", file));
+  assert.deepEqual(topicLineErrors(records.map((file) => ({ file, text: readFileSync(join(REPO, file), "utf8") }))), []);
 });
 
 test("the kit's tracked JavaScript and Python hold no comment other than a tool directive", () => {

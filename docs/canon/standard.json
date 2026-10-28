@@ -1,6 +1,7 @@
 {
-  "version": 1,
+  "version": 2,
   "history": [
+    { "version": 2, "date": "2026-10-28", "trigger": "The canon plan left open whether sweep records name a role or a topic; the user chose topic, since a sweep studies a topic and roles reuse topics.", "change": "Sweep records say '- Topic: <topic>' instead of '- Role: <role>'; the renderers write it for every record not registered at version 1.", "redid": [] },
     { "version": 1, "date": "2026-10-28", "trigger": "ADR 0011 option A: the canon study found rules held by prose or by one check each.", "change": "The first ledger: 29 rules from the README authoring rules, the gates and the tests, each naming its enforcing test or why it is reviewed; three authoring rules gained checks; every skill, ADR, card and sweep record is registered at version 1 in conformance.json.", "redid": [] }
   ],
   "rules": [
@@ -351,6 +352,18 @@
       "problems": ["S31"],
       "enforced": { "kind": "test", "file": "plugin/tests/eval-baseline.test.mjs", "title": "the ablation plan keeps a model-gap rule that still helps, proposes removing one that does not, and never measures across models" },
       "notCovered": "Whether the ablation scenario exercises the rule as real sessions do; three runs per arm is a small sample.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "sweep-topic-line",
+      "text": "A sweep record names what it studies with '- Topic: <topic>'.",
+      "since": 2,
+      "scope": "sweep",
+      "reason": "A sweep studies a topic; roles reuse topics, so naming the role misstates what the record covers.",
+      "class": "user-policy",
+      "problems": ["S12"],
+      "enforced": { "kind": "test", "file": "plugin/tests/canon-checks.test.mjs", "title": "every kit sweep record registered at a standard version with the topic line names its topic" },
+      "notCovered": "The two records registered at version 1 keep '- Role:', and no version 2 record exists yet, so the kit check reads none today.",
       "approved": "2026-10-28"
     }
   ]

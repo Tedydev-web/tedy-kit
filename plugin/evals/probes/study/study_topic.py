@@ -7,6 +7,7 @@ from pathlib import Path
 
 TOPICS = Path("docs") / "prior-art" / "topics"
 SWEEPS = Path("docs") / "prior-art" / "sweeps"
+REGISTER = Path("docs") / "canon" / "conformance.json"
 SNOWBALL_RANK_BASE = 1000
 DEFAULT_PILOT_ROWS = 20
 SESSION_CLIS = ("claude", "agy")
@@ -130,6 +131,12 @@ def topic_for_sweep(repo, sweep):
 
 def sweep_folder(repo, topic):
     return Path(repo) / SWEEPS / topic["sweep"]
+
+
+def record_label(repo, topic):
+    register = Path(repo) / REGISTER
+    artifacts = json.loads(register.read_text())["artifacts"] if register.is_file() else {}
+    return "Role" if artifacts.get(f"{SWEEPS.as_posix()}/{topic['sweep']}.md") == 1 else "Topic"
 
 
 def term_regex(terms):

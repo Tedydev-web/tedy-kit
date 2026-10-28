@@ -5,7 +5,7 @@ import { sweepMethodErrors } from "./sweep-method-evidence.mjs";
 
 const CRITERIA = /^- Criteria: (\S+) sha256\[:16\] `([0-9a-f]{16})`$/m;
 const INVENTORY = /^- Inventory: .*?`([0-9a-f]{16})`/m;
-const ROLE = /^- Role: (\S+)$/m;
+const ROLE = /^- (?:Role|Topic): (\S+)$/m;
 const DECISION = /^(?:study|study \(below-threshold: [\d.]+\)|eligible|excluded: [a-z-]+)$/;
 const SURFACE_LINE = /^- (considered|not relevant|outside the inventory): (.+?): (.+)$/;
 const DIGEST_LINE = /sha256\[:16\] of the sorted unique list: `([0-9a-f]{16})`/;

@@ -3,7 +3,7 @@ import json
 from collections import Counter
 from pathlib import Path
 
-from study_topic import TopicError, sweep_folder
+from study_topic import TopicError, record_label, sweep_folder
 
 STOP_MARK = "stop at the scale checkpoint"
 QUALITY = ("Authority", "Methodology", "Objectivity", "Position")
@@ -99,7 +99,7 @@ def render_stopped(repo, topic):
     for extra in study["supplement"]:
         held.update(extra["problems"])
     problems = meta["problems"]
-    lines = [f"# {meta['title']}", "", f"- Role: {meta['role']}", f"- Date: {stop['date']}",
+    lines = [f"# {meta['title']}", "", f"- {record_label(repo, topic)}: {meta['role']}", f"- Date: {stop['date']}",
              f"- Criteria: {meta['criteria']} sha256[:16] `{hashlib.sha256(criteria).hexdigest()[:16]}`",
              f"- Inventory: llms.txt sha256[:16] `{meta['inventory_digest']}` (docs/prior-art/claude-code-surfaces.md)",
              f"- Problems: {', '.join(problems)}",
