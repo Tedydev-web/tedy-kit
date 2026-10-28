@@ -1,0 +1,78 @@
+{
+ "considered": {
+  "PreToolUse": [
+   "compass: shell commands normalised before the policy matches them (S26)",
+   "DashClaw: the PreToolUse enforcement hook its installers write (S26)"
+  ],
+  "Stop": [
+   "planrun: a Stop hook caps the agent's loops (S29)",
+   "ouroboros and agent-ready-template: completion is refused until their checks pass (S8)"
+  ],
+  "plugin": [
+   "pluxx, app-it, atmosphere and story-skills: the manifest version is checked against the release tag before a release (S15)",
+   "claude-agent-sdk-python: a pinned bundled CLI version is validated before any download (S5)"
+  ],
+  "skill": [
+   "skillport and planrun: skill validators and verify scripts fail on size, retired surfaces, forbidden tokens and broken links (S12, S18, S22)",
+   "claude-plugins-official: skill-creator and the automation recommender (S12, S27)"
+  ],
+  "subagent": [
+   "claude-plugins-official: session-report prices token and cache spend per skill and subagent (S32)"
+  ],
+  "MCP server": [
+   "cost-xray: prices unused MCP servers by their token cost (S32)",
+   "skillport: serves skills over MCP from one validated source (S4)"
+  ],
+  "hooks": [
+   "DashClaw: a liveness probe proves the installed hooks still fire, with their version (S16)"
+  ],
+  "model / effort pin": [
+   "eval-harness: a rebaseline that turns a pass into a fail is refused without --accept-model-change (S30)",
+   "ratchet: a replay is refused when the model tier differs from the golden run (S30)"
+  ]
+ },
+ "not relevant": {
+  "SessionStart": "no studied mechanism acts on this event",
+  "Setup": "no studied mechanism acts on this event",
+  "InstructionsLoaded": "no studied mechanism acts on this event",
+  "UserPromptSubmit": "no studied mechanism acts on this event",
+  "UserPromptExpansion": "no studied mechanism acts on this event",
+  "MessageDisplay": "no studied mechanism acts on this event",
+  "PermissionRequest": "no studied mechanism acts on this event",
+  "PostToolUse": "no studied mechanism acts on this event",
+  "PostToolUseFailure": "no studied mechanism acts on this event",
+  "PostToolBatch": "no studied mechanism acts on this event",
+  "PermissionDenied": "no studied mechanism acts on this event",
+  "Notification": "no studied mechanism acts on this event",
+  "SubagentStart": "no studied mechanism acts on this event",
+  "SubagentStop": "no studied mechanism acts on this event",
+  "TaskCreated": "no studied mechanism acts on this event",
+  "TaskCompleted": "no studied mechanism acts on this event",
+  "StopFailure": "no studied mechanism acts on this event",
+  "TeammateIdle": "no studied mechanism acts on this event",
+  "ConfigChange": "no studied mechanism acts on this event",
+  "CwdChanged": "no studied mechanism acts on this event",
+  "DirectoryAdded": "no studied mechanism acts on this event",
+  "FileChanged": "no studied mechanism acts on this event",
+  "WorktreeCreate": "no studied mechanism acts on this event",
+  "WorktreeRemove": "no studied mechanism acts on this event",
+  "PreCompact": "no studied mechanism acts on this event",
+  "PostCompact": "no studied mechanism acts on this event",
+  "PreModelSwitch": "no studied mechanism acts on this event",
+  "PostModelSwitch": "no studied mechanism acts on this event",
+  "SessionEnd": "no studied mechanism acts on this event",
+  "Elicitation": "no studied mechanism acts on this event",
+  "ElicitationResult": "no studied mechanism acts on this event",
+  "slash command": "no studied mechanism ships as this component",
+  "output style": "no studied mechanism ships as this component",
+  "statusline": "no studied mechanism ships as this component",
+  "plugin eval": "no studied mechanism ships as this component",
+  "LSP server": "no studied mechanism ships as this component",
+  "monitor": "no studied mechanism ships as this component",
+  "theme": "no studied mechanism ships as this component",
+  "workflow": "no studied mechanism ships as this component",
+  "executable": "no studied mechanism ships as this component",
+  "channel": "no studied mechanism ships as this component",
+  "mod": "no studied mechanism ships as this component"
+ }
+}

@@ -1,0 +1,1250 @@
+{
+ "rows": [
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 4893,
+   "repo": "LaravelDaily/Cursor-Rules-Generator",
+   "commit": "https://github.com/LaravelDaily/Cursor-Rules-Generator/commit/d967449b932964faacc851b399d93a743ab61696",
+   "stars": 23
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 3004,
+   "repo": "ripplo/claude-plugin",
+   "commit": "https://github.com/ripplo/claude-plugin/commit/43eb06a68eb32094d3e7ce5d2f4c09f155a9e4f5",
+   "stars": 7
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 6438,
+   "repo": "pipepie/pipepie",
+   "commit": "https://github.com/pipepie/pipepie/commit/9a53cb33fba16b42eb5b88f933f39932819f8e37",
+   "stars": 8
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 3141,
+   "repo": "winfunc/opcode",
+   "commit": "https://github.com/winfunc/opcode/commit/d1ca30a3c0c39fff01fde2f86c2d5af6a1db658b",
+   "stars": 22417
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 5773,
+   "repo": "supermemoryai/supermemory-mcp",
+   "commit": "https://github.com/supermemoryai/supermemory-mcp/commit/84f5dc9f1cf077ba753decbf56805205b5c0443a",
+   "stars": 1721
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 2800,
+   "repo": "savvasioakeim/OctoShell",
+   "commit": "https://github.com/savvasioakeim/OctoShell/commit/a038825e64c8cb8b4f596df2e0605183e9650288",
+   "stars": 5
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 4106,
+   "repo": "SivaJyothiPamarthy/prompt-enhancer-pack",
+   "commit": "https://github.com/SivaJyothiPamarthy/prompt-enhancer-pack/commit/b4bebad62b16f487ced6c80d7a612563c79b2e10",
+   "stars": 1
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 625,
+   "repo": "phantom/phantom-agent-kit",
+   "commit": "https://github.com/phantom/phantom-agent-kit/commit/4162aa88131f0a6b6f0c050b176736f0773d038c",
+   "stars": 19
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 7007,
+   "repo": "openyak/openyak",
+   "commit": "https://github.com/openyak/openyak/commit/ab052e4cd4a94d2432a20b5fc433e80ce8bdc698",
+   "stars": 693
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 6234,
+   "repo": "miurahr/pykakasi",
+   "commit": "https://github.com/miurahr/pykakasi/commit/717c52850d240f33b5b87f3a6fa021e07c9c82b5",
+   "stars": 464
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 2151,
+   "repo": "deepshal99/notch-so-good",
+   "commit": "https://github.com/deepshal99/notch-so-good/commit/266d224aaef116a862125760d6df24f4939b7ac4",
+   "stars": 8
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 6330,
+   "repo": "XeroAPI/xero-mcp-server",
+   "commit": "https://github.com/XeroAPI/xero-mcp-server/commit/f24583c867df7c1f4806f7532eb0691e85892865",
+   "stars": 383
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 6974,
+   "repo": "Sequenzy/skills",
+   "commit": "https://github.com/Sequenzy/skills/commit/158f0b2e5df689a996e88ce587006c4a60c26643",
+   "stars": 2
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 1408,
+   "repo": "ngmeyer/librarian-mcp",
+   "commit": "https://github.com/ngmeyer/librarian-mcp/commit/5a008aa32d88c8850ec3b4569f9157c27ffd75f2",
+   "stars": 34
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 6593,
+   "repo": "FarhanAliRaza/claude-context-local",
+   "commit": "https://github.com/FarhanAliRaza/claude-context-local/commit/711d5ea26d78e060728fcf1259e103abcbefecc2",
+   "stars": 237
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 816,
+   "repo": "adobe/skills",
+   "commit": "https://github.com/adobe/skills/commit/7e98bc712b635204e93e8a931d4e5e60c8110258",
+   "stars": 263
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 6267,
+   "repo": "Zaki-1052/GPTPortal",
+   "commit": "https://github.com/Zaki-1052/GPTPortal/commit/eb320cd2763afc7dcf0c290029fc499b43444666",
+   "stars": 397
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 5789,
+   "repo": "twelvedata/mcp",
+   "commit": "https://github.com/twelvedata/mcp/commit/d139a77ea0f7d40995e6979cd09c22dd142fbfe8",
+   "stars": 84
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 4991,
+   "repo": "TencentCloudBase/CloudBase-AI-Toolkit",
+   "commit": "https://github.com/TencentCloudBase/CloudBase-AI-Toolkit/commit/2ce2eed4c42358d6c3087e01fb224d6064d9fed3",
+   "stars": 1141
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 5471,
+   "repo": "jtalk22/slack-mcp-server",
+   "commit": "https://github.com/jtalk22/slack-mcp-server/commit/fa2bedac114d4cc6583534cbf3b2894e458bf669",
+   "stars": 32
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 3677,
+   "repo": "ATreep/one-workflow",
+   "commit": "https://github.com/ATreep/one-workflow/commit/59b16a0490f79f6028f7217e684845defe1076de",
+   "stars": 0
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 6587,
+   "repo": "hyperbrowserai/mcp",
+   "commit": "https://github.com/hyperbrowserai/mcp/commit/7492e83cf1825b3cf9725bfa25c5086df702599a",
+   "stars": 789
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 3364,
+   "repo": "ahmedkhaledmohamed/PM-AI-Partner-Framework",
+   "commit": "https://github.com/ahmedkhaledmohamed/PM-AI-Partner-Framework/commit/c791632c439f8489d90f07a2432336162ac19918",
+   "stars": 5
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 3077,
+   "repo": "deployhq/deployhq-cli",
+   "commit": "https://github.com/deployhq/deployhq-cli/commit/66bb6202711496d69026eaec54e25ca346564a74",
+   "stars": 0
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 2492,
+   "repo": "plasma-ai/wiki",
+   "commit": "https://github.com/plasma-ai/wiki/commit/04d475405674229d10c9447804b3f1c633603053",
+   "stars": 105
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 5212,
+   "repo": "wcatz/ghost",
+   "commit": "https://github.com/wcatz/ghost/commit/c5b0dbabfaf9112bdc04de424bad59e89e3b4a8a",
+   "stars": 3
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 5231,
+   "repo": "arcmira/mcp",
+   "commit": "https://github.com/arcmira/mcp/commit/1e2ab75c80bdc4ceb2df481e6d4bca9a7e20202a",
+   "stars": 84
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 1531,
+   "repo": "google-labs-code/stitch-skills",
+   "commit": "https://github.com/google-labs-code/stitch-skills/commit/0337446dadde6f8c94210444e2aa9d546126480f",
+   "stars": 8548
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 1599,
+   "repo": "Vibecoder79/KI-Masterclass-Koerting-",
+   "commit": "https://github.com/Vibecoder79/KI-Masterclass-Koerting-/commit/c81d623364d39684a96201d7a102e6c16d684110",
+   "stars": 8
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 4395,
+   "repo": "mazetezr/full-claude-code-guide",
+   "commit": "https://github.com/mazetezr/full-claude-code-guide/commit/5c01a3fae6f8a5e691c7ab3099e7139f76b53f8e",
+   "stars": 4
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 3092,
+   "repo": "op7418/Humanizer-zh",
+   "commit": "https://github.com/op7418/Humanizer-zh/commit/f4518a8eab97b8bfebc66a89d34320a89bef6930",
+   "stars": 20181
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 3966,
+   "repo": "decrystal/mineru-claude-plugin",
+   "commit": "https://github.com/decrystal/mineru-claude-plugin/commit/54352b71209b25b59705c2d2d824c957fed0625e",
+   "stars": 0
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 3971,
+   "repo": "xmu-csnoob/PraxisKit",
+   "commit": "https://github.com/xmu-csnoob/PraxisKit/commit/d820c7785b5e98ae3de603a4b5342e6fed76659d",
+   "stars": 5
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 4911,
+   "repo": "ladliulivecn/cursor-rules",
+   "commit": "https://github.com/ladliulivecn/cursor-rules/commit/d36ef010f3f6bfbee35d17fac6b9eb620ce94441",
+   "stars": 13
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 5501,
+   "repo": "bahayonghang/academic-writing-skills",
+   "commit": "https://github.com/bahayonghang/academic-writing-skills/commit/8183f08718ecfbd2200d112f72855ee20d2e4d1c",
+   "stars": 511
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 6489,
+   "repo": "cloudinary/mcp-servers",
+   "commit": "https://github.com/cloudinary/mcp-servers/commit/dca5790c0af2bcde291d732af05c47ad7f75d341",
+   "stars": 10
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 2655,
+   "repo": "larashero3-dotcom/lieflat-charts",
+   "commit": "https://github.com/larashero3-dotcom/lieflat-charts/commit/ed436ba56b3cbeee20b9b9966b38a9a9689e239c",
+   "stars": 6295
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 4622,
+   "repo": "zcag/readdown-plugin",
+   "commit": "https://github.com/zcag/readdown-plugin/commit/e9a5eab57a0d105d2dc0fe66dfb42ed45321131c",
+   "stars": 0
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 4792,
+   "repo": "gruckion/nested-subagent",
+   "commit": "https://github.com/gruckion/nested-subagent/commit/36e9820486ea5b134737d78e09931fc759982e23",
+   "stars": 24
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 3006,
+   "repo": "SerhiiKorniienko/bullshit-detector",
+   "commit": "https://github.com/SerhiiKorniienko/bullshit-detector/commit/d5f6156a8a5c72977bf2d4edae834dd22f7fa736",
+   "stars": 158
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 4970,
+   "repo": "microsoft/skills-for-fabric",
+   "commit": "https://github.com/microsoft/skills-for-fabric/commit/bc42aaf734771bf752c1d7082dd91e5a6ca72b9f",
+   "stars": 1264
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 1784,
+   "repo": "asynkor/asynkor",
+   "commit": "https://github.com/asynkor/asynkor/commit/5fbf51cca6b3cfd6e849e70998fea7a5c95cfe51",
+   "stars": 50
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 2694,
+   "repo": "danjdewhurst/story-skills",
+   "commit": "https://github.com/danjdewhurst/story-skills/commit/4b8019d7fa08e1e1866be360fadab2a2f7cbcf11",
+   "stars": 332
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 1728,
+   "repo": "Void3110/rego-skill",
+   "commit": "https://github.com/Void3110/rego-skill/commit/6fbcf7fc5b913fa68bf097223b7753fd0dce67af",
+   "stars": 18
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 5281,
+   "repo": "line/line-bot-mcp-server",
+   "commit": "https://github.com/line/line-bot-mcp-server/commit/874ca7e1a7c11136110bc8644ace3cdfc9e2a713",
+   "stars": 789
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 2263,
+   "repo": "shengyanlin/claude-overlay",
+   "commit": "https://github.com/shengyanlin/claude-overlay/commit/16a4e7e6dbdab8cb62d9c6b3667326cc7f47f80d",
+   "stars": 95
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 3073,
+   "repo": "WatsonTsai/pdf-text-router",
+   "commit": "https://github.com/WatsonTsai/pdf-text-router/commit/082e21cf46467906cae928cabb823b15ad83d44f",
+   "stars": 7
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 2767,
+   "repo": "titanwings/distilly",
+   "commit": "https://github.com/titanwings/distilly/commit/0afc45c29c360ba7bc8260f1bb0bf34e9155f4fa",
+   "stars": 25825
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 6609,
+   "repo": "longevity-genie/opengenes-mcp",
+   "commit": "https://github.com/longevity-genie/opengenes-mcp/commit/02accbdc443200ba1cd755cbb165f57ef5ff5b6d",
+   "stars": 21
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 6843,
+   "repo": "Omega-JS-Stack/omega",
+   "commit": "https://github.com/Omega-JS-Stack/omega/commit/490bcd8a1dbf8f1de98ee752ef3b545c34cacda9",
+   "stars": 2
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 3756,
+   "repo": "KarolusD/fellowship",
+   "commit": "https://github.com/KarolusD/fellowship/commit/0aa0ab174ab8a0c1ea85c530c99a473189dea301",
+   "stars": 1
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 6303,
+   "repo": "jackjin1997/ClawForge",
+   "commit": "https://github.com/jackjin1997/ClawForge/commit/896286f3d171429c9e8553fae87ddae90c8265c8",
+   "stars": 13
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 607,
+   "repo": "dotsecenv/dotsecenv",
+   "commit": "https://github.com/dotsecenv/dotsecenv/commit/5c0391ea7473093c0178873e8ba04c53b49c2905",
+   "stars": 5
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 865,
+   "repo": "PenguinAlleyApps/paco-framework",
+   "commit": "https://github.com/PenguinAlleyApps/paco-framework/commit/722ba7028e9651c471e8f52a89344b7553941b25",
+   "stars": 4
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 6402,
+   "repo": "openai/simple-evals",
+   "commit": "https://github.com/openai/simple-evals/commit/652c89d0ca9df547706735883097e9537d40dc47",
+   "stars": 4669
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 6145,
+   "repo": "cometkim/cc-monitor-worker",
+   "commit": "https://github.com/cometkim/cc-monitor-worker/commit/731ff2925938e57a809a706829210849358b1901",
+   "stars": 22
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 2062,
+   "repo": "onorbumbum/aslan-browser",
+   "commit": "https://github.com/onorbumbum/aslan-browser/commit/c4c7c32b6d9c4eb1e667ee3090acd8d7ee9bed9d",
+   "stars": 15
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 1219,
+   "repo": "evidentloop/sopify",
+   "commit": "https://github.com/evidentloop/sopify/commit/9d9b319cb06713f3f9d695bf98f629e50291bba3",
+   "stars": 368
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 536,
+   "repo": "anthropics/claude-agent-sdk-python",
+   "commit": "https://github.com/anthropics/claude-agent-sdk-python/commit/c01a99416a02805b0a050d058da51bde53f6df64",
+   "stars": 8305
+  },
+  {
+   "batch": "calibration",
+   "stratum": "config",
+   "rank": 5798,
+   "repo": "sam1siam/astrofabric-mcp",
+   "commit": "https://github.com/sam1siam/astrofabric-mcp/commit/b131f78c9171e68766006faaac55c2f52cf094e9",
+   "stars": 1
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 4369,
+   "repo": "trippletrouble/event-platform-infrastructure",
+   "commit": "https://github.com/trippletrouble/event-platform-infrastructure/commit/cdc628cbede548f7fc7df4262cbfcad4c6b4d43b",
+   "stars": 0
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 5540,
+   "repo": "Janlaywss/cloud-code",
+   "commit": "https://github.com/Janlaywss/cloud-code/commit/b9c6043709e5c0450d08a8bc892c10f5149b77c7",
+   "stars": 545
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 229,
+   "repo": "Bevel-Software/Hexis",
+   "commit": "https://github.com/Bevel-Software/Hexis/commit/01240b1ac88d52b22c82913a53caa97f08b3af29",
+   "stars": 116
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 18096,
+   "repo": "n-ima/todo-app",
+   "commit": "https://github.com/n-ima/todo-app/commit/122c456835df80c99adbe9c2e0376413c7255c66",
+   "stars": 0
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 10887,
+   "repo": "simstudioai/sim",
+   "commit": "https://github.com/simstudioai/sim/commit/15e816bd4e57685b57b157b7ad1609c75da76fa1",
+   "stars": 29849
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 26555,
+   "repo": "centralmind/gateway",
+   "commit": "https://github.com/centralmind/gateway/commit/82eaeff6f61493731907d96795d18c4751f2d996",
+   "stars": 548
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 15380,
+   "repo": "quickwit-oss/quickwit-datasource",
+   "commit": "https://github.com/quickwit-oss/quickwit-datasource/commit/8e894b7d6113c6408bcc7d4003aba7c041bb89cc",
+   "stars": 76
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 6601,
+   "repo": "ucsandman/DashClaw",
+   "commit": "https://github.com/ucsandman/DashClaw/commit/704824de5f5f2fa052d4c36ec269a1ab0dbfcc8a",
+   "stars": 313
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 11958,
+   "repo": "JoelA510/agent-ready-template",
+   "commit": "https://github.com/JoelA510/agent-ready-template/commit/5b75c70984ec9bebf37d0391ebcd1d5968bd8589",
+   "stars": 0
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 1446,
+   "repo": "BoringInfraCo/Root",
+   "commit": "https://github.com/BoringInfraCo/Root/commit/fa06544eb057e49495d80d8fa5cf4365ae47acbd",
+   "stars": 5
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 16281,
+   "repo": "makeev/alphai-claude-skills",
+   "commit": "https://github.com/makeev/alphai-claude-skills/commit/d5012a98ef4dc23a2e8dfe728deabb037992e1f0",
+   "stars": 1
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 26653,
+   "repo": "bricks-cloud/BricksLLM",
+   "commit": "https://github.com/bricks-cloud/BricksLLM/commit/c7d80a62c2de95733c1e6c95a4eaedc50afaad75",
+   "stars": 1230
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 7642,
+   "repo": "ryanthedev/oberskills",
+   "commit": "https://github.com/ryanthedev/oberskills/commit/75ee4389b5c3bb2092063600eec7bdeba787075f",
+   "stars": 64
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 24954,
+   "repo": "luotwo/BSC-SIF-Amazon-keyword-database",
+   "commit": "https://github.com/luotwo/BSC-SIF-Amazon-keyword-database/commit/0d29c4fafce21fe687ea73c2807c69e6d53a7b0b",
+   "stars": 9
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 12920,
+   "repo": "Codevetter/codevetter",
+   "commit": "https://github.com/Codevetter/codevetter/commit/1b9e5a96e311b1fb363a1a1e5536abf2f2477b0e",
+   "stars": 1
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 19306,
+   "repo": "JustinDFuller/ban-code-comments",
+   "commit": "https://github.com/JustinDFuller/ban-code-comments/commit/0ecb4e8c51778949c0cb6af35a9ad35936abe7f6",
+   "stars": 0
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 28514,
+   "repo": "smlfg/sidecar-v5",
+   "commit": "https://github.com/smlfg/sidecar-v5/commit/5868535313255654f6d46dcd5efa6c45c774a3d5",
+   "stars": 1
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 20097,
+   "repo": "Junaid-PK/laravel-development-workflow",
+   "commit": "https://github.com/Junaid-PK/laravel-development-workflow/commit/e8747afc1a427ae16e70ec01ad994788e71936a4",
+   "stars": 1
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 27395,
+   "repo": "TheColliery/CoalLedger",
+   "commit": "https://github.com/TheColliery/CoalLedger/commit/85a4d1a51fd6bc8b61acc42484fe2e630db118c0",
+   "stars": 1
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 26445,
+   "repo": "pluveto/daan",
+   "commit": "https://github.com/pluveto/daan/commit/7f6d120fb25dd27ebccf8f2ffcddfb5b31c90613",
+   "stars": 283
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 16056,
+   "repo": "jszsource/team-front-skill",
+   "commit": "https://github.com/jszsource/team-front-skill/commit/9a9a2801ff3ac8487309883d260ef3ec499b9a75",
+   "stars": 0
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 26298,
+   "repo": "elkuku/iitc-theme-template",
+   "commit": "https://github.com/elkuku/iitc-theme-template/commit/d35671b6162ea48ceffa426fcfde9b83e8f0f883",
+   "stars": 0
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 17677,
+   "repo": "human-plus-machine/monkeyskills",
+   "commit": "https://github.com/human-plus-machine/monkeyskills/commit/935f77cd98a2b0ac98ec553acf82e4f613e3b9c0",
+   "stars": 0
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 13161,
+   "repo": "masondelan/selvedge",
+   "commit": "https://github.com/masondelan/selvedge/commit/66c51d3b4d2a3aa21e8bb668767552ec4ca465e0",
+   "stars": 25
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 11162,
+   "repo": "VictoriaMetrics/victoriametrics-datasource",
+   "commit": "https://github.com/VictoriaMetrics/victoriametrics-datasource/commit/c460a4f3ee0651ac0faabbe6fb2eef9b3098bf49",
+   "stars": 162
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 8982,
+   "repo": "ahujasid/mcp-for-blender",
+   "commit": "https://github.com/ahujasid/mcp-for-blender/commit/98b991c8daf91ab9d5451ee6b923d89367f733a5",
+   "stars": 31758
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 24754,
+   "repo": "box-community/mcp-server-box",
+   "commit": "https://github.com/box-community/mcp-server-box/commit/9452db09218fdaba46e5ed6ca2ebf0a72419c076",
+   "stars": 101
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 15006,
+   "repo": "Naxasware/Naxasware-Plugins",
+   "commit": "https://github.com/Naxasware/Naxasware-Plugins/commit/7b5877eacc920781aec8140ffc4e4597dd1252b0",
+   "stars": 1
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 25110,
+   "repo": "lazymac2x/lazymac-mcp",
+   "commit": "https://github.com/lazymac2x/lazymac-mcp/commit/093b69cc149dc0adc33b3544313df46b843c18e2",
+   "stars": 3
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 1122,
+   "repo": "tjboudreaux/cc-thinking-skills",
+   "commit": "https://github.com/tjboudreaux/cc-thinking-skills/commit/7b8fece345dfaa11773be7152ccd194589cb5437",
+   "stars": 1658
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 11988,
+   "repo": "k4yt3x/meka",
+   "commit": "https://github.com/k4yt3x/meka/commit/73004204ab968863ee5feb2e52b734a80ddc96af",
+   "stars": 68
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 17617,
+   "repo": "yowainwright/eslint-plugin-legibility",
+   "commit": "https://github.com/yowainwright/eslint-plugin-legibility/commit/087b64c46e8d18e8930f8f7f4e324a4b5e8836ca",
+   "stars": 4
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 28833,
+   "repo": "ZmoleCristian/lawkeeper",
+   "commit": "https://github.com/ZmoleCristian/lawkeeper/commit/3cbb4598c4dbfd99c292064eeaa6a6ceb561cfce",
+   "stars": 2
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 19182,
+   "repo": "vercel/next-devtools-mcp",
+   "commit": "https://github.com/vercel/next-devtools-mcp/commit/1e8dcfa4789777901144b5d9710137f0eff72036",
+   "stars": 831
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 923,
+   "repo": "fkiene/llmtrim",
+   "commit": "https://github.com/fkiene/llmtrim/commit/9586780b3ed9bae2592203b2d4f93ba7228f1a2a",
+   "stars": 251
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 260,
+   "repo": "dshakes/compass",
+   "commit": "https://github.com/dshakes/compass/commit/fb41822123b4b556079b9a1c945c2521404ec978",
+   "stars": 20
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 21924,
+   "repo": "niyatna/openintent",
+   "commit": "https://github.com/niyatna/openintent/commit/80c13b234f9a94a5a45121986a6d53c688549403",
+   "stars": 1
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 4262,
+   "repo": "nim-video/skills",
+   "commit": "https://github.com/nim-video/skills/commit/a7f8fabf86d3508199fe0740b7c34edf0deff3da",
+   "stars": 5
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 1148,
+   "repo": "gotalab/skillport",
+   "commit": "https://github.com/gotalab/skillport/commit/51334ae94919fc1c261673ffefdce9176c9094ef",
+   "stars": 415
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 2807,
+   "repo": "ChromeDevTools/chrome-devtools-mcp",
+   "commit": "https://github.com/ChromeDevTools/chrome-devtools-mcp/commit/9a6b03acf768993dc0b3ff83ed59a5f9e1f65735",
+   "stars": 53900
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 28388,
+   "repo": "orchidautomation/pluxx",
+   "commit": "https://github.com/orchidautomation/pluxx/commit/80f67d2486e437e82839b06f2b7b9f9589b82b91",
+   "stars": 5
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 19535,
+   "repo": "tfohlmeister/convex-evalbench",
+   "commit": "https://github.com/tfohlmeister/convex-evalbench/commit/105c07ddd1d927e0bbb3ba321c1df939489e1852",
+   "stars": 3
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 11210,
+   "repo": "waybarrios/vllm-mlx",
+   "commit": "https://github.com/waybarrios/vllm-mlx/commit/1a6fe3fa5986d137209460ea86c3e3c9c7f307e4",
+   "stars": 1628
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 2277,
+   "repo": "zzttzzmyswy/multica-android",
+   "commit": "https://github.com/zzttzzmyswy/multica-android/commit/d74e326111f7b988f893c9b074cf52a9736ed852",
+   "stars": 1
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 42,
+   "repo": "Q00/ouroboros",
+   "commit": "https://github.com/Q00/ouroboros/commit/842b1020d063a4a9968be90de99d5f093c6b196d",
+   "stars": 6252
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 8322,
+   "repo": "SUMITDROY/LH-backend",
+   "commit": "https://github.com/SUMITDROY/LH-backend/commit/4c15bdc4459a576cf2a2daba35e43378ee0de271",
+   "stars": 0
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 28458,
+   "repo": "baabakk/llm-ports",
+   "commit": "https://github.com/baabakk/llm-ports/commit/2fbf497365da81458dee1faecd233d3fd4391774",
+   "stars": 2
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 505,
+   "repo": "microsoft/azure-skills",
+   "commit": "https://github.com/microsoft/azure-skills/commit/cf79ce8778ad063eeac19dbe8bf982d71b466ce0",
+   "stars": 1582
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 14848,
+   "repo": "conorholds/cedros-login",
+   "commit": "https://github.com/conorholds/cedros-login/commit/bf9d3a1fd8cecdd423034a5dfa9fb544a31ce06b",
+   "stars": 1
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 14759,
+   "repo": "wangqiqi/planrun",
+   "commit": "https://github.com/wangqiqi/planrun/commit/80d200fc0cd50661ae7f7449965ed7f34d9b160d",
+   "stars": 1
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 80,
+   "repo": "JasonColapietro/suede-creator-skills",
+   "commit": "https://github.com/JasonColapietro/suede-creator-skills/commit/4287faf9790de7a25b46c0e9b31dce3ec602b715",
+   "stars": 128
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 9230,
+   "repo": "Bryant-Tang/turbo-plugins-claude",
+   "commit": "https://github.com/Bryant-Tang/turbo-plugins-claude/commit/217ead693709e7d68753d17f0e403e7a091b4069",
+   "stars": 0
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 17653,
+   "repo": "Christian-Katzmann/app-it",
+   "commit": "https://github.com/Christian-Katzmann/app-it/commit/9ad064e62c2f2cdde7125e9f6577a0c487906e94",
+   "stars": 215
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 20886,
+   "repo": "llm-jp/simple-evals-mm",
+   "commit": "https://github.com/llm-jp/simple-evals-mm/commit/979e030f867c0dea8da093078965b3057fdd2416",
+   "stars": 5
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 12208,
+   "repo": "netresearch/typo3-conformance-skill",
+   "commit": "https://github.com/netresearch/typo3-conformance-skill/commit/a7ae9fd248f828498d2f4385d04643da38682601",
+   "stars": 6
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 8470,
+   "repo": "rcbroo/claw-code-supachat-fork",
+   "commit": "https://github.com/rcbroo/claw-code-supachat-fork/commit/723a4fbf65852c854420f1a93e08ad9e309e2e43",
+   "stars": 0
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 24430,
+   "repo": "demo112/yunqu-ai-skills",
+   "commit": "https://github.com/demo112/yunqu-ai-skills/commit/6676d21fc4e06b54cf1f072d828d2f41ce25eee2",
+   "stars": 4
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 9676,
+   "repo": "future-agi/future-agi",
+   "commit": "https://github.com/future-agi/future-agi/commit/d3e2db1c725172f3a3a294d8628139508f3af003",
+   "stars": 2182
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 13321,
+   "repo": "serpro69/capy",
+   "commit": "https://github.com/serpro69/capy/commit/595018f1c54ad5dc4ad3b0a7b57a8d9791b65e0b",
+   "stars": 12
+  },
+  {
+   "batch": "calibration",
+   "stratum": "product",
+   "rank": 15913,
+   "repo": "patakuti/cc-semaphore",
+   "commit": "https://github.com/patakuti/cc-semaphore/commit/aaaf8d4818828c4dec7c3f90fc7feea9b4135e83",
+   "stars": 2
+  },
+  {
+   "batch": "top-up",
+   "stratum": "config",
+   "rank": 4952,
+   "repo": "Teradata/teradata-mcp-server",
+   "commit": "https://github.com/Teradata/teradata-mcp-server/commit/3d08f8aa0744e113316f24e8821171ca8def4a5c",
+   "stars": 58
+  },
+  {
+   "batch": "top-up",
+   "stratum": "config",
+   "rank": 1559,
+   "repo": "Taiizor/agents-md-cookbook",
+   "commit": "https://github.com/Taiizor/agents-md-cookbook/commit/272e0d5eec2f49b5a397e3dbdfd6e4b058357f21",
+   "stars": 22
+  },
+  {
+   "batch": "top-up",
+   "stratum": "config",
+   "rank": 7017,
+   "repo": "connerkward/macos-screen-recorder-system-audio",
+   "commit": "https://github.com/connerkward/macos-screen-recorder-system-audio/commit/95cc6006ed64fc11b813d00d459df858e7cfe392",
+   "stars": 3
+  },
+  {
+   "batch": "top-up",
+   "stratum": "config",
+   "rank": 6998,
+   "repo": "manzaltu/claude-code-ide.el",
+   "commit": "https://github.com/manzaltu/claude-code-ide.el/commit/50a3d55262805d7207889ed429ff30da96fbf68b",
+   "stars": 1678
+  },
+  {
+   "batch": "top-up",
+   "stratum": "config",
+   "rank": 7077,
+   "repo": "wangbooth/Claude-Code-Guardrails",
+   "commit": "https://github.com/wangbooth/Claude-Code-Guardrails/commit/e67c3014e16f3314771470626b17c60760038420",
+   "stars": 54
+  },
+  {
+   "batch": "top-up",
+   "stratum": "config",
+   "rank": 492,
+   "repo": "vostride/agent-qa",
+   "commit": "https://github.com/vostride/agent-qa/commit/22636e183bb4ee4528bf90db676837369a498e8f",
+   "stars": 912
+  },
+  {
+   "batch": "top-up",
+   "stratum": "config",
+   "rank": 124,
+   "repo": "serpro69/capy",
+   "commit": "https://github.com/serpro69/capy/commit/595018f1c54ad5dc4ad3b0a7b57a8d9791b65e0b",
+   "stars": 12
+  },
+  {
+   "batch": "top-up",
+   "stratum": "config",
+   "rank": 4457,
+   "repo": "NathanMaine/memoriant-patent-skills",
+   "commit": "https://github.com/NathanMaine/memoriant-patent-skills/commit/08b54720e5a5c2c3a5291b41abf08fb8ae70a147",
+   "stars": 3
+  },
+  {
+   "batch": "top-up",
+   "stratum": "config",
+   "rank": 5054,
+   "repo": "mastra-ai/mastra",
+   "commit": "https://github.com/mastra-ai/mastra/commit/b60e258d41ad3b5e99a2653a38236d440bd5de71",
+   "stars": 28945
+  },
+  {
+   "batch": "top-up",
+   "stratum": "config",
+   "rank": 1966,
+   "repo": "pranciskus/newsmcp",
+   "commit": "https://github.com/pranciskus/newsmcp/commit/e3656bac8453f63abd55fb1cdf0e911cf2256dae",
+   "stars": 35
+  },
+  {
+   "batch": "top-up",
+   "stratum": "config",
+   "rank": 5220,
+   "repo": "zenml-io/mcp-zenml",
+   "commit": "https://github.com/zenml-io/mcp-zenml/commit/693ac197b4013a2b70971464f78bdf3211ef22c0",
+   "stars": 49
+  },
+  {
+   "batch": "top-up",
+   "stratum": "config",
+   "rank": 2203,
+   "repo": "m1ckc3s/claude-status-bar",
+   "commit": "https://github.com/m1ckc3s/claude-status-bar/commit/dafb0c8c68143dd1940dd860ea26ba7ef0ae3c3e",
+   "stars": 721
+  },
+  {
+   "batch": "top-up",
+   "stratum": "config",
+   "rank": 1483,
+   "repo": "surendranb/writing-skills",
+   "commit": "https://github.com/surendranb/writing-skills/commit/2e692b8d78a4fb41f7e99724d1410d01adf071d0",
+   "stars": 49
+  },
+  {
+   "batch": "top-up",
+   "stratum": "config",
+   "rank": 6673,
+   "repo": "centralmind/gateway",
+   "commit": "https://github.com/centralmind/gateway/commit/82eaeff6f61493731907d96795d18c4751f2d996",
+   "stars": 548
+  },
+  {
+   "batch": "top-up",
+   "stratum": "config",
+   "rank": 5204,
+   "repo": "totec448-spec/chat-on-steroids",
+   "commit": "https://github.com/totec448-spec/chat-on-steroids/commit/9f6d2f9d6e3e195d3daeb90cebd8b8f8a913b95d",
+   "stars": 5052
+  },
+  {
+   "batch": "top-up",
+   "stratum": "product",
+   "rank": 21384,
+   "repo": "grooverLab/fable",
+   "commit": "https://github.com/grooverLab/fable/commit/c6d8c86f5c8b0aff020068cb5fd8a4268941886b",
+   "stars": 17
+  },
+  {
+   "batch": "top-up",
+   "stratum": "product",
+   "rank": 17584,
+   "repo": "ref-tools/ref-tools-mcp",
+   "commit": "https://github.com/ref-tools/ref-tools-mcp/commit/f5feb829cc7bdd18fb9b276c27e3f391b2c4132c",
+   "stars": 1183
+  },
+  {
+   "batch": "top-up",
+   "stratum": "product",
+   "rank": 5101,
+   "repo": "yorkisestevez/agent-eval-harness",
+   "commit": "https://github.com/yorkisestevez/agent-eval-harness/commit/9a253404dfe98dafac15bd91ab28e9bcc6ffd11c",
+   "stars": 0
+  },
+  {
+   "batch": "top-up",
+   "stratum": "product",
+   "rank": 9436,
+   "repo": "decimal-labs/decimalai-python",
+   "commit": "https://github.com/decimal-labs/decimalai-python/commit/878452b62d00097ed8428f8fc965c592d5bd9533",
+   "stars": 1
+  },
+  {
+   "batch": "top-up",
+   "stratum": "product",
+   "rank": 823,
+   "repo": "honua-io/honua-sdk-js",
+   "commit": "https://github.com/honua-io/honua-sdk-js/commit/a9ed6e2d588f0412b09426620532228d2317b6e1",
+   "stars": 4
+  },
+  {
+   "batch": "top-up",
+   "stratum": "product",
+   "rank": 10672,
+   "repo": "qdrant/skills",
+   "commit": "https://github.com/qdrant/skills/commit/d2127f6e1b9c6611fff10fe939c6fb17761aaec2",
+   "stars": 260
+  },
+  {
+   "batch": "top-up",
+   "stratum": "product",
+   "rank": 17714,
+   "repo": "nano-step/eval-harness",
+   "commit": "https://github.com/nano-step/eval-harness/commit/002aafee3ed60ab6cde5acda8cdb49f70e2ca2c5",
+   "stars": 13
+  },
+  {
+   "batch": "top-up",
+   "stratum": "product",
+   "rank": 7024,
+   "repo": "danjdewhurst/story-skills",
+   "commit": "https://github.com/danjdewhurst/story-skills/commit/4b8019d7fa08e1e1866be360fadab2a2f7cbcf11",
+   "stars": 332
+  },
+  {
+   "batch": "top-up",
+   "stratum": "product",
+   "rank": 12,
+   "repo": "777genius/lintai",
+   "commit": "https://github.com/777genius/lintai/commit/7e1ecea95882c78b0f873480ebd0d7ee521ee4b6",
+   "stars": 9
+  },
+  {
+   "batch": "top-up",
+   "stratum": "product",
+   "rank": 1177,
+   "repo": "tmonk/mcp-stata",
+   "commit": "https://github.com/tmonk/mcp-stata/commit/a2f9c4abc2c7662e73684f8cf954895c6806ea27",
+   "stars": 87
+  },
+  {
+   "batch": "top-up",
+   "stratum": "product",
+   "rank": 9112,
+   "repo": "Atmosphere/atmosphere",
+   "commit": "https://github.com/Atmosphere/atmosphere/commit/992532da1d04e6896204eea4649e83f64c9de350",
+   "stars": 3821
+  },
+  {
+   "batch": "top-up",
+   "stratum": "product",
+   "rank": 10920,
+   "repo": "SonarSource/sonarqube-mcp-server",
+   "commit": "https://github.com/SonarSource/sonarqube-mcp-server/commit/76ffee60229245309229a1f423e656ae36987047",
+   "stars": 665
+  },
+  {
+   "batch": "top-up",
+   "stratum": "product",
+   "rank": 912,
+   "repo": "trailofbits/skills",
+   "commit": "https://github.com/trailofbits/skills/commit/5c99c03fb8a9ea568432ecbcba5d86e9f4ac2bf0",
+   "stars": 7659
+  },
+  {
+   "batch": "top-up",
+   "stratum": "product",
+   "rank": 22932,
+   "repo": "Zaki-1052/GPTPortal",
+   "commit": "https://github.com/Zaki-1052/GPTPortal/commit/eb320cd2763afc7dcf0c290029fc499b43444666",
+   "stars": 397
+  },
+  {
+   "batch": "top-up",
+   "stratum": "product",
+   "rank": 7,
+   "repo": "zernie/vigiles",
+   "commit": "https://github.com/zernie/vigiles/commit/3aa01f165c63f468df5f359d1862578354b3b937",
+   "stars": 15
+  }
+ ],
+ "supplement": [
+  {
+   "repo": "lloydjf/ratchet",
+   "stratum": "product",
+   "commit": "https://github.com/lloydjf/ratchet/commit/350a343f4d3e02df53d53f55697db788d87679cb",
+   "problems": [
+    "S1",
+    "S2",
+    "S3",
+    "S10",
+    "S16",
+    "S20",
+    "S24",
+    "S30",
+    "S31"
+   ],
+   "reason": "Partial S30 and S31: ratchet/proxy/policy.py refuses a replay whose model tier differs from the golden's (tier, not model id, so a model swap behind a tier goes unnoticed), and docs/adr/0020-ultra-confirms-cascade-blocks.md records a measurable reversal trigger for a rule, though nothing re-runs it."
+  },
+  {
+   "repo": "tigerless-labs/cost-xray",
+   "stratum": "product",
+   "commit": "https://github.com/tigerless-labs/cost-xray/commit/906ce15d931b8e145b5ed59c63f65eebe1d9f0a6",
+   "problems": [
+    "S8",
+    "S22",
+    "S24",
+    "S32"
+   ],
+   "reason": "Partial S32: cost_xray/analyze.py reports the token cost of each MCP server that is loaded but never used, and cost_xray/detectors.py prices each skill advertisement and load, but it only reports and never fails an artifact."
+  },
+  {
+   "repo": "anthropics/claude-plugins-official",
+   "stratum": "config",
+   "commit": "https://github.com/anthropics/claude-plugins-official/commit/f8c5e7a1dcb71b10cb74586224b5401f3de5db28",
+   "problems": [
+    "S5",
+    "S8",
+    "S15",
+    "S25",
+    "S27",
+    "S31",
+    "S32"
+   ],
+   "reason": "Partial S27: plugins/claude-code-setup/skills/claude-automation-recommender/SKILL.md maps codebase signals to 5 surface types from a static catalog that is never re-checked (issue 6341); partial S32 because plugins/session-report/skills/session-report/analyze-sessions.mjs attributes spend per skill and flags cache breaks without failing anything."
+  }
+ ]
+}

@@ -1,0 +1,183 @@
+{
+ "batch": "calibration",
+ "set_sha256": "014a2dc7deba5fb3d67421d9a98ea4b52711d8a35378d32b94bd2f0019e56acc",
+ "labels_sha256": "de5c230ef13cee75d895be0c590b8de3f67a8b7539ee556653b3be2fd4f7a9cb",
+ "cites_sha256": "650b6859427fb17d0118049aac07a8d90c46ec360bff75983d6a118f4dcd4e98",
+ "notes_sha256": "f269721fe44470e7d1f79a8ef394522f0d5d0bd38a12ca54343d5bc597ed2f97",
+ "anchors_sha256": {
+  "before": "fd760f4cfc70057b80fa24632419a641e1aa2806ae665f1040353ec1fb84dace",
+  "after": "7d0209aa1f97e69e6934cbc3e236745b535a8b5c368bba81681232fd81f3574e"
+ },
+ "criteria_sha256_at_freeze": "e4f713d568b3c13cb424aa82c9241c324be19f1a7e873dfe74ec73ff722af21f",
+ "reference": {
+  "cli": "claude",
+  "model": "claude-fable-5-1",
+  "effort": "max",
+  "sessions": {
+   "reference-calibration-config": {
+    "session_sha256": "7ea29911639911ea654b07c356fa1207271f6a27e4de8c5dcfd17cb2ad9961c9",
+    "rows_sha256": "22961f2ad8efeb4120630caa9c89eceb6c19466a70119d18a5e5567ee13de78c"
+   },
+   "reference-calibration-config-notes-1": {
+    "session_sha256": "c59e5f29c42b5e4643d6b093b1864bd3bd8beda7b8ed57c42fe4f8052f41081f",
+    "rows_sha256": "c0c7a35202369ce0c004c4d0b6c90a687a6cda3b22a2d05346ddeb005f8bf93a"
+   },
+   "reference-calibration-config-notes-2": {
+    "session_sha256": "52a5fb407b1a09a8986c6865af781f926569c609cd6a7aba4fc430a1db00347e",
+    "rows_sha256": "c753abeb077aadc831c7f426e3a5eecba92c9da34bb28c4ccb44ae56290689ed"
+   },
+   "reference-calibration-product": {
+    "session_sha256": "d73e5542e42cd623fecf6dc53f3868eb24f25ae48d320ddaeeb9d1fd1bc9c6a6",
+    "rows_sha256": "7b6b36c3620e0c2dd99088dbd0bca619fbdee19f49cbcb2dc2031a4f9698cd88"
+   },
+   "reference-calibration-product-notes-1": {
+    "session_sha256": "94c0d0c61ff8bcbd3ac44f836830fe35c92067a34d2c4bc0abff73190c3799a1",
+    "rows_sha256": "40cd8ee0960337a3c62c2fa590bb2f83ad233266e6df5fea0a0af636a63720a2"
+   },
+   "reference-calibration-product-notes-2": {
+    "session_sha256": "c77f14954f71e9c3cfb7e5fee3b627c9a989694e9a4d40eeb3a55d2cceaadb99",
+    "rows_sha256": "44abc2d20e6d6e15d03fef8cb048494d5e02d185f532eb154f4be476fa5dcd09"
+   }
+  }
+ },
+ "flaggers": {
+  "gemini-3.8-flash-high": {
+   "role": "rubric_trigger",
+   "sessions": {
+    "reference-calibration-config-flagger-gemini-3.8-flash-high": {
+     "session_sha256": "1d535579c6b8dc6197acbf5352f91787f01eea38ce96f31895c25d0e842b7d33",
+     "rows_sha256": "d56de53e109018b0eec6434daa5e0797cc42f92bb932a87246a43f6c2494384e"
+    },
+    "reference-calibration-product-flagger-gemini-3.8-flash-high": {
+     "session_sha256": "7a549c25b239f93f5fa80ff6782924aeb51bc149b1604915039e78effab7da3c",
+     "rows_sha256": "8d9dda331b9977d14ff65fedb103d4ede8570cc4fe7fbe7d572a6f62b6e9f6cf"
+    }
+   },
+   "answered": 120,
+   "unflagged_by_refusal": [],
+   "agy_lists": {
+    "before": {
+     "mcp_sha256": "95a66b59029654b031e72c7b46a3a19a6342615363f7778a51b6af287924cf46",
+     "plugins_sha256": "c6d2596deedd9542e5cd7992bdbfedb5124f94c2506e14dc6a5c72fa634edd33",
+     "context_mode_enabled": false,
+     "ponytail_enabled": false
+    },
+    "after": {
+     "mcp_sha256": "95a66b59029654b031e72c7b46a3a19a6342615363f7778a51b6af287924cf46",
+     "plugins_sha256": "c6d2596deedd9542e5cd7992bdbfedb5124f94c2506e14dc6a5c72fa634edd33",
+     "context_mode_enabled": false,
+     "ponytail_enabled": false
+    }
+   }
+  },
+  "gpt-oss-120b-medium": {
+   "role": "record_only",
+   "sessions": {
+    "reference-calibration-config-flagger-gpt-oss-120b-medium": {
+     "session_sha256": "996e52d0430a7a1c46b1ad0fb133d5591ea60076095aa084a6a6943be51c879c",
+     "rows_sha256": "d7992b04052e33341023eb05681669b2548f45d67a18f264e3c772dd5b5938b2"
+    },
+    "reference-calibration-product-flagger-gpt-oss-120b-medium": {
+     "session_sha256": "a39eced84323ec82dfc233f58592430b737aafa10a650923d22b97caad064c45",
+     "rows_sha256": "b9724da4c9d749c547311badc77cf7aece0b1ec767f57f5d3edcb9751ceb344c"
+    }
+   },
+   "answered": 101,
+   "unflagged_by_refusal": [
+    "calibration-config-34",
+    "calibration-config-37",
+    "calibration-config-48",
+    "calibration-config-49",
+    "calibration-config-56",
+    "calibration-config-58",
+    "calibration-config-60",
+    "calibration-product-1",
+    "calibration-product-8",
+    "calibration-product-9",
+    "calibration-product-13",
+    "calibration-product-20",
+    "calibration-product-23",
+    "calibration-product-28",
+    "calibration-product-35",
+    "calibration-product-43",
+    "calibration-product-53",
+    "calibration-product-58",
+    "calibration-product-59"
+   ],
+   "agy_lists": {
+    "before": {
+     "mcp_sha256": "95a66b59029654b031e72c7b46a3a19a6342615363f7778a51b6af287924cf46",
+     "plugins_sha256": "c6d2596deedd9542e5cd7992bdbfedb5124f94c2506e14dc6a5c72fa634edd33",
+     "context_mode_enabled": false,
+     "ponytail_enabled": false
+    },
+    "after": {
+     "mcp_sha256": "95a66b59029654b031e72c7b46a3a19a6342615363f7778a51b6af287924cf46",
+     "plugins_sha256": "c6d2596deedd9542e5cd7992bdbfedb5124f94c2506e14dc6a5c72fa634edd33",
+     "context_mode_enabled": false,
+     "ponytail_enabled": false
+    }
+   }
+  }
+ },
+ "rubric": {
+  "flags_sha256": "98570b18bf4cb6735b8908f370742baf7966375a623d0d5e1c770be62b9aebd7",
+  "outcomes_sha256": "2f324876a27e38c03c2913c056721f18f9c6d08c0eeb63ebd1671fffca1dd360",
+  "flagged": 88,
+  "rule": 0,
+  "asked": 41,
+  "contested": 47,
+  "rerun": 50,
+  "contested_rows": [
+   "calibration-config-7",
+   "calibration-config-16",
+   "calibration-config-19",
+   "calibration-config-20",
+   "calibration-config-25",
+   "calibration-config-26",
+   "calibration-config-27",
+   "calibration-config-29",
+   "calibration-config-33",
+   "calibration-config-37",
+   "calibration-config-40",
+   "calibration-config-41",
+   "calibration-config-43",
+   "calibration-config-50",
+   "calibration-config-51",
+   "calibration-config-53",
+   "calibration-config-58",
+   "calibration-config-59",
+   "calibration-product-3",
+   "calibration-product-4",
+   "calibration-product-5",
+   "calibration-product-7",
+   "calibration-product-8",
+   "calibration-product-9",
+   "calibration-product-10",
+   "calibration-product-13",
+   "calibration-product-15",
+   "calibration-product-16",
+   "calibration-product-19",
+   "calibration-product-21",
+   "calibration-product-24",
+   "calibration-product-25",
+   "calibration-product-30",
+   "calibration-product-31",
+   "calibration-product-32",
+   "calibration-product-33",
+   "calibration-product-36",
+   "calibration-product-38",
+   "calibration-product-39",
+   "calibration-product-41",
+   "calibration-product-45",
+   "calibration-product-50",
+   "calibration-product-51",
+   "calibration-product-52",
+   "calibration-product-53",
+   "calibration-product-55",
+   "calibration-product-58"
+  ]
+ },
+ "frozen": "2026-10-27",
+ "correction": 1
+}

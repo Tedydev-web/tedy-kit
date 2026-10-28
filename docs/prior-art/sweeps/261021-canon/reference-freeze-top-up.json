@@ -1,0 +1,130 @@
+{
+ "batch": "top-up",
+ "set_sha256": "8654c80079bfd3d64af66c72e79aebd01e46a8c096d232a873c140218a98c42b",
+ "labels_sha256": "ccb7bf1630dca381fe2bce5d817b497884419009b8110268556d6f1652aacda4",
+ "cites_sha256": "e8d2cb21c2d1f858bf2dc376056246e8e7a410ef061780a47c297a4c3a7ca2a4",
+ "notes_sha256": "1f70caa01cbef64494ba395314685bc3af96e8429f89314a99ef5b6ecd1eb157",
+ "anchors_sha256": {
+  "before": "7d0209aa1f97e69e6934cbc3e236745b535a8b5c368bba81681232fd81f3574e",
+  "after": "accdd3201b42f60cd16061c7fe4c862a08e9d2c2a4109108384a405766e0fd42"
+ },
+ "criteria_sha256_at_freeze": "0841406e8dec0763006fc0520686415b8d2b92662716add0d49440dafddf8fa7",
+ "reference": {
+  "cli": "claude",
+  "model": "claude-fable-5-1",
+  "effort": "max",
+  "sessions": {
+   "reference-top-up-config": {
+    "session_sha256": "fb21c6411dd3906c85343f0490236075917a58e541953b211ee1992d92653e83",
+    "rows_sha256": "14c55ca9f4cdd15969367c003c4c5137a3fa9a1e8d9817a542186bb554d580a1"
+   },
+   "reference-top-up-config-notes-1": {
+    "session_sha256": "89524de47d14e6dfaf6fb793aea6beddbce8056a6d609d4f4e8f6de9ad91bba1",
+    "rows_sha256": "de7df21a00b6c4f80d8e932c698663aec266aeecc2862a3b96ed0e0f7a290409"
+   },
+   "reference-top-up-config-notes-3": {
+    "session_sha256": "3248590688d124198072215e38b2597d67778b65b9edf1703e68f670aed54d2c",
+    "rows_sha256": "287b41d0944d52fd9de0930cf685a27bea41a1869f83a5a39781c9f53f62dea6"
+   },
+   "reference-top-up-product": {
+    "session_sha256": "aa99398aeadfd5bbf38a36ee3b996fe535d117a8d720fb7569cbcc862c4d3a56",
+    "rows_sha256": "9e35defa1cfb21409ac8b74991ee92e6c73f5217f319f1b5f24e8a6809e3a020"
+   },
+   "reference-top-up-product-notes-1": {
+    "session_sha256": "e62e100f85e14872c2cdecda1ee21aab0ddea816c11d917bf5db5c8c63e9a063",
+    "rows_sha256": "f6387198ebee9296f85bb28d72a8b5e43d67bbeef47c5de351a75713181c9a34"
+   },
+   "reference-top-up-product-notes-3": {
+    "session_sha256": "3783ead164ed440be7f83252014ddfe5554201c8a53583aacd958b6cc11c6646",
+    "rows_sha256": "54af7540ba31caf5dced2c4fabca9e209111083d962278259528400cba645a25"
+   }
+  },
+  "substitute": {
+   "cli": "claude",
+   "model": "claude-opus-5-5",
+   "effort": "xhigh",
+   "sessions": [
+    "reference-top-up-config-notes-3",
+    "reference-top-up-product-notes-3"
+   ]
+  }
+ },
+ "flaggers": {
+  "gemini-3.8-flash-high": {
+   "role": "rubric_trigger",
+   "sessions": {
+    "reference-top-up-config-flagger-gemini-3.8-flash-high": {
+     "session_sha256": "e29c13beb10d7f6ade90b00f2b0df7b68614333a46868b29199f9087fed9b20e",
+     "rows_sha256": "a39fb772ea5b87e2156ee18d1467c3c630e3ec984a0ddec533580cf6a58d5d54"
+    },
+    "reference-top-up-product-flagger-gemini-3.8-flash-high": {
+     "session_sha256": "38896d09d5a8520274ae5eebd9db868baa6e1fd4776846d84af98a39eb8d7cf9",
+     "rows_sha256": "30bc65995d3830b79499aed895d936460f08f17960f119d093a69ce3970ee21d"
+    }
+   },
+   "answered": 29,
+   "unflagged_by_refusal": [
+    "top-up-product-2"
+   ],
+   "agy_lists": {
+    "before": {
+     "mcp_sha256": "95a66b59029654b031e72c7b46a3a19a6342615363f7778a51b6af287924cf46",
+     "plugins_sha256": "c6d2596deedd9542e5cd7992bdbfedb5124f94c2506e14dc6a5c72fa634edd33",
+     "context_mode_enabled": false,
+     "ponytail_enabled": false
+    },
+    "after": {
+     "mcp_sha256": "95a66b59029654b031e72c7b46a3a19a6342615363f7778a51b6af287924cf46",
+     "plugins_sha256": "c6d2596deedd9542e5cd7992bdbfedb5124f94c2506e14dc6a5c72fa634edd33",
+     "context_mode_enabled": false,
+     "ponytail_enabled": false
+    }
+   }
+  },
+  "openai/gpt-5.6-luna": {
+   "role": "record_only",
+   "sessions": {
+    "reference-top-up-config-flagger-openai--gpt-5.6-luna": {
+     "session_sha256": "4d61942aa74c1e5dbac3cc02df8fde6a476b9ecd0f98bfef620bdeaab0b7098c",
+     "rows_sha256": "137c14fecafa53493dcc7cef7b843b241df6fad9d4054122c9826bcee1ea6ad9"
+    },
+    "reference-top-up-product-flagger-openai--gpt-5.6-luna": {
+     "session_sha256": "30b366daf8f42a02b8babe2c0e6f9c5d48c2bcbfc2a8167701149992da0b1c23",
+     "rows_sha256": "3f2e8343c8875f11d6486c92b9415e521839d4adacbd1bd6e30f11498cd1fd5b"
+    }
+   },
+   "answered": 29,
+   "unflagged_by_refusal": [
+    "top-up-product-11"
+   ],
+   "agy_lists": null
+  }
+ },
+ "rubric": {
+  "flags_sha256": "0102f42874f6ba715ebcfef52e6a06b52724dcb72462622923c3b92f0d8bf126",
+  "outcomes_sha256": "0b7fad2011b784975d7a61430a9c6b9207f833e6d8e191f477aa57f039ef4b7c",
+  "flagged": 24,
+  "rule": 0,
+  "asked": 9,
+  "contested": 15,
+  "rerun": 12,
+  "contested_rows": [
+   "top-up-config-2",
+   "top-up-config-6",
+   "top-up-config-9",
+   "top-up-config-13",
+   "top-up-config-15",
+   "top-up-product-3",
+   "top-up-product-4",
+   "top-up-product-5",
+   "top-up-product-6",
+   "top-up-product-7",
+   "top-up-product-8",
+   "top-up-product-9",
+   "top-up-product-11",
+   "top-up-product-13",
+   "top-up-product-15"
+  ]
+ },
+ "frozen": "2026-10-28"
+}

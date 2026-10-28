@@ -1,0 +1,2595 @@
+{
+ "batch": "calibration",
+ "set_sha256": "014a2dc7deba5fb3d67421d9a98ea4b52711d8a35378d32b94bd2f0019e56acc",
+ "stage1_freeze_sha256": "32fb0a2429e076d268cf6aaad58ddaf7afff45282ae3c9b2ff1bf25f19855597",
+ "labeller": {
+  "kind": "reference",
+  "cli": "claude",
+  "model": "claude-fable-5-1",
+  "effort": "max",
+  "sessions": [
+   "reference-calibration-config",
+   "reference-calibration-config-notes-1",
+   "reference-calibration-config-notes-2",
+   "reference-calibration-product",
+   "reference-calibration-product-notes-1",
+   "reference-calibration-product-notes-2"
+  ],
+  "notes_sha256": "f269721fe44470e7d1f79a8ef394522f0d5d0bd38a12ca54343d5bc597ed2f97"
+ },
+ "complete": 120,
+ "rows": [
+  {
+   "id": "calibration-config-1",
+   "stratum": "config",
+   "order_rank": 4893,
+   "repo": "LaravelDaily/Cursor-Rules-Generator",
+   "inputs_sha256": "f1c0a990b0742cc194b7a2f4baeb7ae6620e22f9b5f26745e01d7e2859f038f0",
+   "qgs_sha256": "e743c92c8d858b2613b09362eabaa07af2dd021804fc2ddd020e193574a3a8a0",
+   "user": {
+    "Authority": 0.5,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-config-2",
+   "stratum": "config",
+   "order_rank": 3004,
+   "repo": "ripplo/claude-plugin",
+   "inputs_sha256": "466f96eb98c71c1a1601eb31442a9b8428c02c789b1174a4deb33873a1e2b36c",
+   "qgs_sha256": "87d981f84a963fdc81ed58ace93e0576d016833c75cb8a64c4d631a552a808bd",
+   "user": {
+    "Authority": 0,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 0.5,
+    "problems": [],
+    "decision": "excluded: copy"
+   }
+  },
+  {
+   "id": "calibration-config-3",
+   "stratum": "config",
+   "order_rank": 6438,
+   "repo": "pipepie/pipepie",
+   "inputs_sha256": "527d8b61732a6d86bf7615823f4d31e945f93cdcee50f4f088e70941070de621",
+   "qgs_sha256": "34cdd0e8c523b80096c08f9c17a55308717b105627e1729be8859aee9998c566",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S15"
+    ],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "calibration-config-4",
+   "stratum": "config",
+   "order_rank": 3141,
+   "repo": "winfunc/opcode",
+   "inputs_sha256": "332c546d81d05103ccacce8b875969972672fe6b886af2e6e8a7cc83ad119e70",
+   "qgs_sha256": "99f4b9295ad77ed2dbfa3216c9f7e28e23c41e2ed92ee6d270cd1fdba2276e0a",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-config-5",
+   "stratum": "config",
+   "order_rank": 5773,
+   "repo": "supermemoryai/supermemory-mcp",
+   "inputs_sha256": "00b35f8341fb312d3c00722e38b9436d2abe4f96a6ad9bf80800860b5ebaffdc",
+   "qgs_sha256": "a2d66ac0fa6fe770d9d809f2078defc919b64702b61f5e08483b1772ea370030",
+   "user": {
+    "Authority": 0.5,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-config-6",
+   "stratum": "config",
+   "order_rank": 2800,
+   "repo": "savvasioakeim/OctoShell",
+   "inputs_sha256": "76dbee21bf9d1b6d65152aeb803bb59216ed19afa5b8d93c21f1a013f622d4f8",
+   "qgs_sha256": "ff50374a615f407862f8537347ca849e658aa58def9928fe624f4d979e22002b",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S15"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-7",
+   "stratum": "config",
+   "order_rank": 4106,
+   "repo": "SivaJyothiPamarthy/prompt-enhancer-pack",
+   "inputs_sha256": "5d36b4d2e0eb47f95a473d0d26ef755040828f3b8a1d4ea02e7fff010ef1df6e",
+   "qgs_sha256": "5873795af6a3a7924ccd3b8fca45854f465868ec5d33aaf9eda344df51b92e19",
+   "user": {
+    "Authority": 0,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 0.5,
+    "problems": [],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "calibration-config-8",
+   "stratum": "config",
+   "order_rank": 625,
+   "repo": "phantom/phantom-agent-kit",
+   "inputs_sha256": "21735584696af6931cfbacd74e72736db4c247c83caaa7f38ccec6996f448b09",
+   "qgs_sha256": "af79513b9e5a1d827b525777ef3d9b47d86ee222530e38a260c2bb042bd04797",
+   "user": {
+    "Authority": 0.5,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-config-9",
+   "stratum": "config",
+   "order_rank": 7007,
+   "repo": "openyak/openyak",
+   "inputs_sha256": "22cf8bed2a9be324f303535ba0001b1083b4a0f67e24a31e4ca760e1ed3397db",
+   "qgs_sha256": "9cc5c4861cf5ce638f2577a4fbe14ab3f30840c5abfd8234acaa24bcbf764af7",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S16",
+     "S8",
+     "S9"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-10",
+   "stratum": "config",
+   "order_rank": 6234,
+   "repo": "miurahr/pykakasi",
+   "inputs_sha256": "65c5232cf44e670c7bd2074bdbb9a31083abd29cca31674d84471f7adf6b6558",
+   "qgs_sha256": "e9c873e4766e685085bdb8602c06fe8a4f6265bd3d81cda656ba157befbc80b5",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 0.5,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-config-11",
+   "stratum": "config",
+   "order_rank": 2151,
+   "repo": "deepshal99/notch-so-good",
+   "inputs_sha256": "d5070448898b4f4d8cfc7248f41dd313cd6c49180828d4fd7eb124fa28fec555",
+   "qgs_sha256": "eeecb4834af6e45390b558d99a363d27d57b0c6829f2f1c339a5fc5a758affcf",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 0.5,
+    "Relevance": 1,
+    "problems": [
+     "S26",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-12",
+   "stratum": "config",
+   "order_rank": 6330,
+   "repo": "XeroAPI/xero-mcp-server",
+   "inputs_sha256": "ab1d346dc035bc6a2ff52cb0b39cdbbdc17d5d6721388080b7495c9466b3c71e",
+   "qgs_sha256": "b249579f4fb97e2783aa9467ba61f610db1fc0e8e2da4da62dc4408c9e97095c",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-config-13",
+   "stratum": "config",
+   "order_rank": 6974,
+   "repo": "Sequenzy/skills",
+   "inputs_sha256": "15ec139f4e9a132266bd58093dc182de7ed8ba4a35fb0001711d6a3f5badb3c8",
+   "qgs_sha256": "50025065062601ef22a28eb3e2628430e6de1f2048c665cddd2667e2083319ea",
+   "user": {
+    "Authority": 0.5,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-config-14",
+   "stratum": "config",
+   "order_rank": 1408,
+   "repo": "ngmeyer/librarian-mcp",
+   "inputs_sha256": "1f498ce3950d8de11518f79dfd32ffbd37b54ab8c01e83a14ff79765f41b673d",
+   "qgs_sha256": "6a7364e286a7407de008b921c7ac0e9acce4ed18f79d03ec53026ad8a37105e2",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S15"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-15",
+   "stratum": "config",
+   "order_rank": 6593,
+   "repo": "FarhanAliRaza/claude-context-local",
+   "inputs_sha256": "0d6b61628bba511474cfcec9f6f5a146b4cc854109a86f06d49fd04c2e4ae8ce",
+   "qgs_sha256": "257b1eea0bc5fc341b86138cd5cbe1a2a502ee2b665ec7c3a5d77062f0d69cd9",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-config-16",
+   "stratum": "config",
+   "order_rank": 816,
+   "repo": "adobe/skills",
+   "inputs_sha256": "7f58e37d50426aa1e8990feb698d6e3bcaabbc0eb379577d5dda685713dd5f7a",
+   "qgs_sha256": "0b1cb761e278b25a009f63435294cf402ef2603b8c56815a947356eee62d9cae",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S15",
+     "S6",
+     "S7"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-17",
+   "stratum": "config",
+   "order_rank": 6267,
+   "repo": "Zaki-1052/GPTPortal",
+   "inputs_sha256": "fc27e483de62629c74fa601e33fafff6ce116c3755368e54d8a4a2e40cd41434",
+   "qgs_sha256": "ab7a639c10eb0a6d3ea8605b39d5eacaa92d55f6a526579746e57b47525db720",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-config-18",
+   "stratum": "config",
+   "order_rank": 5789,
+   "repo": "twelvedata/mcp",
+   "inputs_sha256": "a4b299b7d307b319865e5b1377563547ebd60f9ca7c1888d5cdc36f4143a7343",
+   "qgs_sha256": "a6adda7f16ae09ba25f22b4eb9ac8fdea8409ac2e1ae509d92faafda7b2ea6b2",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0.5,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-config-19",
+   "stratum": "config",
+   "order_rank": 4991,
+   "repo": "TencentCloudBase/CloudBase-AI-Toolkit",
+   "inputs_sha256": "2c5749b3838194bc004b82f8b1963faf3d5c694d68963b2344db5834faa02fa9",
+   "qgs_sha256": "96628b45d67e1e58c10c945397abb8fc940857159a11dd9f3c6810b81a69cde0",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S1",
+     "S12",
+     "S14",
+     "S15",
+     "S5",
+     "S6",
+     "S7"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-20",
+   "stratum": "config",
+   "order_rank": 5471,
+   "repo": "jtalk22/slack-mcp-server",
+   "inputs_sha256": "192d24ffe7f2f0c56766a6fd7681e274f7873ab9db06b4b9c843629044ea2c57",
+   "qgs_sha256": "c4eac8a00d59ac0971fcf86f11fd29d127e2b93de6c86c31e8263b6715a895e4",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S13",
+     "S14",
+     "S15",
+     "S17",
+     "S22",
+     "S6",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-21",
+   "stratum": "config",
+   "order_rank": 3677,
+   "repo": "ATreep/one-workflow",
+   "inputs_sha256": "627f1cab288f482e512d551a3d075035dcf0f1f9d53df8c1b02bea27d74e1c5b",
+   "qgs_sha256": "448ea48eaba8cb3232429a6e11ddacce5ecbd55fa2dbf651af05f60e9e556a43",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S21",
+     "S28"
+    ],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "calibration-config-22",
+   "stratum": "config",
+   "order_rank": 6587,
+   "repo": "hyperbrowserai/mcp",
+   "inputs_sha256": "3e3df1597aef36e4d1d4230414d8ebe6be5e6736b8604a95e260696569f9a1cf",
+   "qgs_sha256": "cb7e1be4b31a63134101500103d829c8c7ad19353701804561815eceab36fe3f",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-config-23",
+   "stratum": "config",
+   "order_rank": 3364,
+   "repo": "ahmedkhaledmohamed/PM-AI-Partner-Framework",
+   "inputs_sha256": "39af40ecde4af0965a506ee205bf869e9f0a24f93581f22b2df1bc0afe0b0365",
+   "qgs_sha256": "21e3e1b3f26d46b95cf8be9eb1259ea4f670f345a26bed36176627ac9ffc29ae",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 0.5,
+    "problems": [],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "calibration-config-24",
+   "stratum": "config",
+   "order_rank": 3077,
+   "repo": "deployhq/deployhq-cli",
+   "inputs_sha256": "0715f4be13531e1a9d501e7663c4c5eec4501c6164b84675d134b0b27f720b11",
+   "qgs_sha256": "e0f6336914f884976bab0625fcef65827d94a320de4fa55d1382f347f7d941cf",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S15",
+     "S5",
+     "S7"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-25",
+   "stratum": "config",
+   "order_rank": 2492,
+   "repo": "plasma-ai/wiki",
+   "inputs_sha256": "83b71a4d0f73a24fc24b89ead51fae323dcdf542820596057f50734d30ee6565",
+   "qgs_sha256": "222d0f65a8ffb3d25ae63d165255ec0314f04676d45b8b42468fe79a77a0fe76",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S1",
+     "S2",
+     "S7"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-26",
+   "stratum": "config",
+   "order_rank": 5212,
+   "repo": "wcatz/ghost",
+   "inputs_sha256": "174c929b79e569f045a136b919e5acece45cec0606c4daf92db4621d3d803c5f",
+   "qgs_sha256": "9277006dd390178c407c160cf10e3d1032cd4a7d4aceb971a2c53a1dabdc54ac",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S15",
+     "S23",
+     "S30",
+     "S6",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-27",
+   "stratum": "config",
+   "order_rank": 5231,
+   "repo": "arcmira/mcp",
+   "inputs_sha256": "5867a643f0d977e2dac54094c66043f1ef465af25669b2f9997a7c7e1b4e82a0",
+   "qgs_sha256": "eaecd12182232f1c39db7eda8c54041a9b2535d843766165b242daf16025bea7",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S14",
+     "S15",
+     "S17",
+     "S22",
+     "S4",
+     "S6"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-28",
+   "stratum": "config",
+   "order_rank": 1531,
+   "repo": "google-labs-code/stitch-skills",
+   "inputs_sha256": "3f43fc985766a51e72c403f14d4d111769d24e495341c4608c402d0ae6249189",
+   "qgs_sha256": "76c73a6c08e0621f388d58c4fbe004990e308d540740df134418f91421cae44f",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S12"
+    ],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "calibration-config-29",
+   "stratum": "config",
+   "order_rank": 1599,
+   "repo": "Vibecoder79/KI-Masterclass-Koerting-",
+   "inputs_sha256": "569e9c8b13a0b6847f3827e32341b6b115ac460edbd65b18fbfb51a2ef8375dd",
+   "qgs_sha256": "0af72f3ab1ce6df1ac4b99a0bb847803bcc8339c341e47d2cb0f55aca47431a7",
+   "user": {
+    "Authority": 0.5,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S11",
+     "S12",
+     "S14",
+     "S2",
+     "S20",
+     "S21",
+     "S23",
+     "S25",
+     "S27",
+     "S28",
+     "S29",
+     "S4"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-30",
+   "stratum": "config",
+   "order_rank": 4395,
+   "repo": "mazetezr/full-claude-code-guide",
+   "inputs_sha256": "95d26f6eb2e2c3c56b6c83b739a49ed03c5e22a28b0f04e2776f551f84c13028",
+   "qgs_sha256": "227c45869bea02c54f10e72d84af21ae3f1e55f2ebb37a810df5bd53d191f1ec",
+   "user": {
+    "Authority": 0,
+    "Methodology": 0,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-config-31",
+   "stratum": "config",
+   "order_rank": 3092,
+   "repo": "op7418/Humanizer-zh",
+   "inputs_sha256": "f0e2c7589f2137d327727073426b163afec05a5d25f211a23452d08fed40643d",
+   "qgs_sha256": "71728877c99c6d99e6ed05e362d1494bd0c5eabb021061bf9da9de440c6a032f",
+   "user": {
+    "Authority": 0.5,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S1"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-32",
+   "stratum": "config",
+   "order_rank": 3966,
+   "repo": "decrystal/mineru-claude-plugin",
+   "inputs_sha256": "618377b533d16da3ab57b0e1c45aa1e8c07182ded6c8a2f3f878dce422ec5740",
+   "qgs_sha256": "e08ed921b761e54d26796e7cf90e4d26f84fd62749cd31fdafdafbf35bb5ac04",
+   "user": {
+    "Authority": 0.5,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0.5,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: copy"
+   }
+  },
+  {
+   "id": "calibration-config-33",
+   "stratum": "config",
+   "order_rank": 3971,
+   "repo": "xmu-csnoob/PraxisKit",
+   "inputs_sha256": "df413147ff1ece74c04a28c27166f404ab078ce6e89f8f02ea28365500e97832",
+   "qgs_sha256": "780c815664e6c8a85e6b54cf7d161d8eb886d3c45a10a73ec671745fcec1b91a",
+   "user": {
+    "Authority": 0.5,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S19",
+     "S21",
+     "S29"
+    ],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "calibration-config-34",
+   "stratum": "config",
+   "order_rank": 4911,
+   "repo": "ladliulivecn/cursor-rules",
+   "inputs_sha256": "c13750d05f12559ab0ba34f7b7113ce04f3985a04467fb03d0ea558838d2558e",
+   "qgs_sha256": "87efa6d38918d760e93a7427901a5e17a93cf9f1b0be2bc9c70eb11b75ae9ae3",
+   "user": {
+    "Authority": 0,
+    "Methodology": 0,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-config-35",
+   "stratum": "config",
+   "order_rank": 5501,
+   "repo": "bahayonghang/academic-writing-skills",
+   "inputs_sha256": "7b59617d3822ae775536dea39165c0ef6fd458f276af3b0eda7bdea530fb1dbd",
+   "qgs_sha256": "43c3b76fcd68dfb144ea720ea840ccb2f8393c072b809f75792be9287ab093e8",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 1,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S1",
+     "S12",
+     "S15",
+     "S17",
+     "S19",
+     "S21",
+     "S4",
+     "S6"
+    ],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "calibration-config-36",
+   "stratum": "config",
+   "order_rank": 6489,
+   "repo": "cloudinary/mcp-servers",
+   "inputs_sha256": "628defa4c1d4eeaa92c83cc947f48028e7ce373108f560082488e4506ccbf7c6",
+   "qgs_sha256": "c07d89a189e33e34d8eb92bc5e83c84d4c2cdcb5b64ed6090b8799867787151a",
+   "user": {
+    "Authority": 0.5,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-config-37",
+   "stratum": "config",
+   "order_rank": 2655,
+   "repo": "larashero3-dotcom/lieflat-charts",
+   "inputs_sha256": "ca03c090d65ef0545c8c5f27a92737a498fb0a58a7f1e5d7483eb3242af185bd",
+   "qgs_sha256": "c37781a8b364066da3feacb623fb60f84acaa97bb7170d0a895a1ec5a66f559f",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 0.5,
+    "problems": [],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "calibration-config-38",
+   "stratum": "config",
+   "order_rank": 4622,
+   "repo": "zcag/readdown-plugin",
+   "inputs_sha256": "b6be94bac96b050af58523e350e3a2cd5016211d5a7ea35751aaf178f26114a9",
+   "qgs_sha256": "41d5d76fdcb4aa2c4ee89a09251b6737ed7849986049295bf05c75791fc6a38c",
+   "user": {
+    "Authority": 0.5,
+    "Methodology": 0,
+    "Objectivity": 0,
+    "Position": 1,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-config-39",
+   "stratum": "config",
+   "order_rank": 4792,
+   "repo": "gruckion/nested-subagent",
+   "inputs_sha256": "48a5635363d5d623ebedc6670abcaba9e408c8a06e5ddd3c4fe6989d44599ade",
+   "qgs_sha256": "1d7ce5e90f9c61b305db46cea8f00d013d46b105104c2479831cdbf7db47d557",
+   "user": {
+    "Authority": 0.5,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S10",
+     "S4",
+     "S7"
+    ],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "calibration-config-40",
+   "stratum": "config",
+   "order_rank": 3006,
+   "repo": "SerhiiKorniienko/bullshit-detector",
+   "inputs_sha256": "10a3a3506b0cdafe6eb1f4106d863fa0ef0b36aff5c2ec91817ff033b40c6cf3",
+   "qgs_sha256": "59ed3c8357bc1a6684dc2a9a64d5e2866b057e34214ccb1242fe2c109f92a5d6",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S1",
+     "S10",
+     "S12",
+     "S15",
+     "S2",
+     "S24",
+     "S7",
+     "S9"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-41",
+   "stratum": "config",
+   "order_rank": 4970,
+   "repo": "microsoft/skills-for-fabric",
+   "inputs_sha256": "e7efd1b84d6fa9e6229562698cfc9d181a25e5d7207c02a702171f8761cfdc86",
+   "qgs_sha256": "adfc74463e00840ae5d153418591686a93c52e1a2ca15ce25a8c1b7d48f37142",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0.5,
+    "Relevance": 1,
+    "problems": [
+     "S14",
+     "S18",
+     "S19"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-42",
+   "stratum": "config",
+   "order_rank": 1784,
+   "repo": "asynkor/asynkor",
+   "inputs_sha256": "f3cd72459f1bff67bcb50989f4ac7f9dc788e79cb3079b3f645d6ec2f0ccc267",
+   "qgs_sha256": "0c36299fcc49ada5e317bb935ccbc37a116e5d1ac4f22323b3ac46692f504bd1",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-config-43",
+   "stratum": "config",
+   "order_rank": 2694,
+   "repo": "danjdewhurst/story-skills",
+   "inputs_sha256": "77de3c12aa3a85e5f5975d6e21639e7c68b973e04f9ea51744599232dcbb2485",
+   "qgs_sha256": "24e0620a7d0c5d6ba6eb252dc673675eedd23fe00362b08eecdd4a53f47c94d4",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S10",
+     "S15",
+     "S3",
+     "S6"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-44",
+   "stratum": "config",
+   "order_rank": 1728,
+   "repo": "Void3110/rego-skill",
+   "inputs_sha256": "b459f037fedae40b9734213f77d4b7e5ab71106bc77043f616456fde37155f0b",
+   "qgs_sha256": "5d1a0f81292044c5949e555f3d45ac5995c02360b901d413778b8f2200f73a66",
+   "user": {
+    "Authority": 0,
+    "Methodology": 0.5,
+    "Objectivity": 1,
+    "Position": 0,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-config-45",
+   "stratum": "config",
+   "order_rank": 5281,
+   "repo": "line/line-bot-mcp-server",
+   "inputs_sha256": "d5d0c6335c19c0d2836258222f0719997231582e91e5abe0a8d52561274b8ff4",
+   "qgs_sha256": "52ba1dbb44147e2c8aed7d97b3848076f8955548455a7378fd021621b09b70a8",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S15",
+     "S6"
+    ],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "calibration-config-46",
+   "stratum": "config",
+   "order_rank": 2263,
+   "repo": "shengyanlin/claude-overlay",
+   "inputs_sha256": "610f5719bef6dd5996de3f3ae414dd72b3f5cfe2bd1d078c62b1e8136e00f53e",
+   "qgs_sha256": "b32ae08b3ddb68f9e187941710caa556d5030b434b3f88c76f554388ab2fe63a",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S7"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-47",
+   "stratum": "config",
+   "order_rank": 3073,
+   "repo": "WatsonTsai/pdf-text-router",
+   "inputs_sha256": "d01fb7272ec4eb27c42d5eeecb4b5aed0ea7616c5826c6f1810c78df7d732731",
+   "qgs_sha256": "44a96e77c50fd8b04c3d72042bd4a10db2e71ad2a3d67aa18c04c4cc726c393a",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S10",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-48",
+   "stratum": "config",
+   "order_rank": 2767,
+   "repo": "titanwings/distilly",
+   "inputs_sha256": "8f176d96bab2237352abb5e9aaa7091f8a3c87bc859ee1550504263b7cbc402b",
+   "qgs_sha256": "915676975a74b542234766d20711c3292246652c1e4748e78d20d58bf7bb450b",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 1,
+    "Position": 0.5,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S19",
+     "S4",
+     "S6",
+     "S7",
+     "S9"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-49",
+   "stratum": "config",
+   "order_rank": 6609,
+   "repo": "longevity-genie/opengenes-mcp",
+   "inputs_sha256": "07bbf37bb26a1fd04a90329f1fa3cc4dc85b36697587507000ce7d979cc0a120",
+   "qgs_sha256": "6e84241ea072287a0627804b0b93ab54329c34bacadf936fe5154872c6f218ef",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 1,
+    "Position": 0,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-config-50",
+   "stratum": "config",
+   "order_rank": 6843,
+   "repo": "Omega-JS-Stack/omega",
+   "inputs_sha256": "4910508cdf648592f43308ab49fd037c65c51be54b99e7b2e89b51eaddd66c6b",
+   "qgs_sha256": "ae6f281dcb3540c0045d6ecfd825e1c3a4b5957f578baed8303f126c75125a74",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 0.5,
+    "Position": 0.5,
+    "Relevance": 1,
+    "problems": [
+     "S14",
+     "S19",
+     "S2"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-51",
+   "stratum": "config",
+   "order_rank": 3756,
+   "repo": "KarolusD/fellowship",
+   "inputs_sha256": "f5949e0cbaac628f7642ecf151ef843e32a4aff69da91383ccec2106aed19050",
+   "qgs_sha256": "0b9f825db4edd9b3ff202089b38f74aa95461dcf1738ced5bfc34d776e454567",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S10",
+     "S11",
+     "S12",
+     "S18",
+     "S20",
+     "S21",
+     "S22",
+     "S28",
+     "S4",
+     "S5",
+     "S7",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-52",
+   "stratum": "config",
+   "order_rank": 6303,
+   "repo": "jackjin1997/ClawForge",
+   "inputs_sha256": "49a318b3d8eaa08ab93ed9ff06b97b158670aa1b780e96b0c2e6d75fa4300649",
+   "qgs_sha256": "90b86ad53a59205e67019b2b513e8de6269bd4752e5c2dd32a40c2c43454ecda",
+   "user": {
+    "Authority": 0.5,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0.5,
+    "Relevance": 1,
+    "problems": [
+     "S28"
+    ],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "calibration-config-53",
+   "stratum": "config",
+   "order_rank": 607,
+   "repo": "dotsecenv/dotsecenv",
+   "inputs_sha256": "07418d0f9008f271fad29871581e224da4dc61533de63a89a67e7bf320a4a6af",
+   "qgs_sha256": "31b81a2f2786ad4c55401fd3f554ee75b67d3df7015ac7009cbb2635fede3924",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S14",
+     "S15",
+     "S18",
+     "S3",
+     "S5",
+     "S6"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-54",
+   "stratum": "config",
+   "order_rank": 865,
+   "repo": "PenguinAlleyApps/paco-framework",
+   "inputs_sha256": "3f5d9d10fa3dbb0099369ce2cd448a5a68fb3c0d188800ff82a68fe71a1028db",
+   "qgs_sha256": "68d3a7837dfb08014b3afc059ce271087bf9b71d8cf0f42726a32eae79975d74",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S12"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-55",
+   "stratum": "config",
+   "order_rank": 6402,
+   "repo": "openai/simple-evals",
+   "inputs_sha256": "5c0138855cbca52c9ca9a03a13cd52f44f148a683318bb1587053ef1ce2288f8",
+   "qgs_sha256": "27155490131d0854baf216e7382b3fc8cd497fa531d07418d77a01a964a91531",
+   "user": {
+    "Authority": 0.5,
+    "Methodology": 0,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S8"
+    ],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "calibration-config-56",
+   "stratum": "config",
+   "order_rank": 6145,
+   "repo": "cometkim/cc-monitor-worker",
+   "inputs_sha256": "d6c3aeca89f1c932c36a81a575e045263d00d264ff50509ae1dd9d6f226132ff",
+   "qgs_sha256": "b2e12551929a452faeafd5dcb1307023a83125d9a573f178c4a5b8bf3443d384",
+   "user": {
+    "Authority": 0,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-config-57",
+   "stratum": "config",
+   "order_rank": 2062,
+   "repo": "onorbumbum/aslan-browser",
+   "inputs_sha256": "301ff5c0cf25aa0f234bc0ca606ea3ae183e901f7e0f5d00199516744d013f64",
+   "qgs_sha256": "48a4a58cba3125ad35d8a39e778e12ebee083e87e2c97c3c5ce354dfc0ef58d4",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-config-58",
+   "stratum": "config",
+   "order_rank": 1219,
+   "repo": "evidentloop/sopify",
+   "inputs_sha256": "5219de148533d61ec469279f4416500dc5a4ea3d745feb5aa4ffd7ba59507257",
+   "qgs_sha256": "620e50a983b0f64bc74a26bcb48b6e321592b502cdbd9e2e712b7d96f2849c44",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S1",
+     "S12",
+     "S14",
+     "S15",
+     "S18",
+     "S20",
+     "S21",
+     "S22",
+     "S28",
+     "S3",
+     "S4",
+     "S6",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-59",
+   "stratum": "config",
+   "order_rank": 536,
+   "repo": "anthropics/claude-agent-sdk-python",
+   "inputs_sha256": "cfcc9b067d727535e9b5f096917177e7c02944edb569ba61f137ca45cf684c3a",
+   "qgs_sha256": "35e6157b11056cedb2a0c85f37807b91698e575438980363f3bbd4037db918c9",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S14",
+     "S15",
+     "S16",
+     "S23",
+     "S26",
+     "S4",
+     "S5",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-config-60",
+   "stratum": "config",
+   "order_rank": 5798,
+   "repo": "sam1siam/astrofabric-mcp",
+   "inputs_sha256": "bd142f2ea3a301699059627893af2f335de6d98a6867ae7bd6d4ce13b4e4aa55",
+   "qgs_sha256": "411a733d0308615c635d99a89e2ddcccc4e5aa92d934953149d4f3bf25ec0688",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0,
+    "Position": 0,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-product-1",
+   "stratum": "product",
+   "order_rank": 4369,
+   "repo": "trippletrouble/event-platform-infrastructure",
+   "inputs_sha256": "5d810c662bae83a6c3a91203d5732c3cabec97ce30e5d463e60656f391a97b79",
+   "qgs_sha256": "43780dab6614f5981050d8515bc66135de3d0f06b9d99a30c2f4c910a6d86d54",
+   "user": {
+    "Authority": 0,
+    "Methodology": 0.5,
+    "Objectivity": 1,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S14",
+     "S25",
+     "S7",
+     "S8"
+    ],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "calibration-product-2",
+   "stratum": "product",
+   "order_rank": 5540,
+   "repo": "Janlaywss/cloud-code",
+   "inputs_sha256": "3939c4f9ce997deba3ccd35ffed831816fdb9ba4b534a52e43f39b7cf419336d",
+   "qgs_sha256": "2ca7d4c9192b5a1e39b55f22ffc03b302a5ccae7c2d3ad900fcb10b599fee02e",
+   "user": {
+    "Authority": 0,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0.5,
+    "Relevance": 1,
+    "problems": [
+     "S12"
+    ],
+    "decision": "excluded: copy"
+   }
+  },
+  {
+   "id": "calibration-product-3",
+   "stratum": "product",
+   "order_rank": 229,
+   "repo": "Bevel-Software/Hexis",
+   "inputs_sha256": "b6258884187c6c4bbaa03b00c5889ed8e7545b0a36ba15200ea1489440396309",
+   "qgs_sha256": "57ebb4e606a0eb498f8e73cb83bdc9b65ec476d9218caa021b6f392a527ccb02",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S11",
+     "S15",
+     "S2",
+     "S20",
+     "S21",
+     "S22",
+     "S29",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-4",
+   "stratum": "product",
+   "order_rank": 18096,
+   "repo": "n-ima/todo-app",
+   "inputs_sha256": "aff6d904472f778786fc77765bb623172e5720b3a82d89d2eedf8be0bf8481f6",
+   "qgs_sha256": "1bd805570ecee9c3813fe1f50dafc31002c9f25c48a4dded9899b3564afa33d1",
+   "user": {
+    "Authority": 0,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S1",
+     "S10",
+     "S11",
+     "S12",
+     "S13",
+     "S14",
+     "S15",
+     "S16",
+     "S18",
+     "S19",
+     "S2",
+     "S20",
+     "S21",
+     "S24",
+     "S25",
+     "S26",
+     "S3",
+     "S4",
+     "S5",
+     "S6",
+     "S7",
+     "S8",
+     "S9"
+    ],
+    "decision": "excluded: copy"
+   }
+  },
+  {
+   "id": "calibration-product-5",
+   "stratum": "product",
+   "order_rank": 10887,
+   "repo": "simstudioai/sim",
+   "inputs_sha256": "3a9d9647375444f5509a10a7592960735fad4c8b65f090f4e7faad39214f19f4",
+   "qgs_sha256": "4e682a8697cc59b97881e5066fe3432aff8a374db4536b664d65b9aefea6000b",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S18",
+     "S8"
+    ],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "calibration-product-6",
+   "stratum": "product",
+   "order_rank": 26555,
+   "repo": "centralmind/gateway",
+   "inputs_sha256": "55effa7e381b9501d61aaf374fdf14312193254286d9d1592d8689b97a6a9080",
+   "qgs_sha256": "940b208b5fbc312604f97b545ed61951895c3b31ab8804a10c69dedbd14a41fa",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 1,
+    "Position": 0,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-product-7",
+   "stratum": "product",
+   "order_rank": 15380,
+   "repo": "quickwit-oss/quickwit-datasource",
+   "inputs_sha256": "b6db7647231142b40a0f12d415793a2e2d850fad2df76d643ffa2b68ce826a46",
+   "qgs_sha256": "9d07b478a9184e4b25f4942a013b85253b7bf8b86acd8bb5b6fff518d3f674b6",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S15",
+     "S16"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-8",
+   "stratum": "product",
+   "order_rank": 6601,
+   "repo": "ucsandman/DashClaw",
+   "inputs_sha256": "25bb88492589afec93a31be81e87e815ea19392ab4cdec50fb34851be0833f8a",
+   "qgs_sha256": "5341c5dd363d6c6b7f676d8ef60646ec054c7ca2d968a415f9d75f798cd78ae3",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S15",
+     "S16",
+     "S23",
+     "S26",
+     "S29",
+     "S6",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-9",
+   "stratum": "product",
+   "order_rank": 11958,
+   "repo": "JoelA510/agent-ready-template",
+   "inputs_sha256": "ab898a7c48781e1a0418b4783355c853c52f538ba8b45f4f5ab22085a975fd65",
+   "qgs_sha256": "c94383a179951f1a604d7360fa06bba7e1adcec628c8f74eb8e59ffc0c0fd484",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 0.5,
+    "Relevance": 1,
+    "problems": [
+     "S1",
+     "S11",
+     "S12",
+     "S13",
+     "S14",
+     "S15",
+     "S17",
+     "S18",
+     "S19",
+     "S2",
+     "S20",
+     "S21",
+     "S22",
+     "S28",
+     "S29",
+     "S3",
+     "S4",
+     "S5",
+     "S6",
+     "S7",
+     "S8",
+     "S9"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-10",
+   "stratum": "product",
+   "order_rank": 1446,
+   "repo": "BoringInfraCo/Root",
+   "inputs_sha256": "7fc090661fa103630dc2dbabb94e071fe8cdde882408a481672a14d666bd7f84",
+   "qgs_sha256": "42821e7eb88e4f28be8b9c0208be77f79b50b384767a7767d3841895e35d41ec",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S10",
+     "S15",
+     "S16",
+     "S21",
+     "S24",
+     "S8",
+     "S9"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-11",
+   "stratum": "product",
+   "order_rank": 16281,
+   "repo": "makeev/alphai-claude-skills",
+   "inputs_sha256": "f042239456d73c18684e0591a249b6a4d068d206ec35458c63a8a57f5b586aef",
+   "qgs_sha256": "c2234e40aaaa34a0e1b581a7e502bf95f95ce3b7aff7b8772fd12c5c02dee479",
+   "user": {
+    "Authority": 0.5,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-product-12",
+   "stratum": "product",
+   "order_rank": 26653,
+   "repo": "bricks-cloud/BricksLLM",
+   "inputs_sha256": "6d74435e3ea3ad6564d0f409edca8abfd50e6871f010c44ca7083f09f15fdcf7",
+   "qgs_sha256": "a332a5834287abce4019eddcc54cc7f6320aa2fd3128b8e8d98575f6ec682b83",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-product-13",
+   "stratum": "product",
+   "order_rank": 7642,
+   "repo": "ryanthedev/oberskills",
+   "inputs_sha256": "f23b9228ea56144afa3b08f8c24c127b0b1dfec3e461a9ed217c4f6b0f763276",
+   "qgs_sha256": "eeb91246523da979da10e22377e6acbb2558945d1650e6a03bd956ee7e0b6d93",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 1,
+    "Position": 0.5,
+    "Relevance": 1,
+    "problems": [
+     "S10",
+     "S11",
+     "S12",
+     "S14",
+     "S21",
+     "S22",
+     "S27",
+     "S4",
+     "S7",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-14",
+   "stratum": "product",
+   "order_rank": 24954,
+   "repo": "luotwo/BSC-SIF-Amazon-keyword-database",
+   "inputs_sha256": "fef952aa6a7e1cdd4ab5110dc2abe4d2b9ac667dfc39eabc45b91b9e022e0c5d",
+   "qgs_sha256": "d52b351f08f90350f9f97a110354c9357debbb527ff9568b0cdf871a82c1cbcb",
+   "user": {
+    "Authority": 0.5,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0.5,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-product-15",
+   "stratum": "product",
+   "order_rank": 12920,
+   "repo": "Codevetter/codevetter",
+   "inputs_sha256": "d8f8bbb8b0d75dc71e5a74d495a3b84119518812b360daa0cfec499d2ce83b98",
+   "qgs_sha256": "8406e19a69545d1c017eb1e85899dd23a074b719798d37b68070403617be8509",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S10",
+     "S15",
+     "S24",
+     "S6",
+     "S8",
+     "S9"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-16",
+   "stratum": "product",
+   "order_rank": 19306,
+   "repo": "JustinDFuller/ban-code-comments",
+   "inputs_sha256": "75be4bf7bf5afcdd8b1c5d5373f7dca66bdc30e2c545ad19dc82372753ab8892",
+   "qgs_sha256": "1f27a8efe5d11092ab7e8760b01f405a7a8fa886675e2ff4da520aeb04971c15",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 1,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S15",
+     "S21",
+     "S23",
+     "S26",
+     "S3",
+     "S4",
+     "S8"
+    ],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "calibration-product-17",
+   "stratum": "product",
+   "order_rank": 28514,
+   "repo": "smlfg/sidecar-v5",
+   "inputs_sha256": "499b97b17041bfbd6bcbcda52303079212a2caf66c9f90186357296b9d5c79c7",
+   "qgs_sha256": "66c1d365220bc395fc74925cf3508db7b00faff1754be02ac01c5029bb9c7c51",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 0.5,
+    "Position": 0.5,
+    "Relevance": 1,
+    "problems": [
+     "S10",
+     "S31",
+     "S8"
+    ],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "calibration-product-18",
+   "stratum": "product",
+   "order_rank": 20097,
+   "repo": "Junaid-PK/laravel-development-workflow",
+   "inputs_sha256": "cf76bb8683f86fef565cbe8c2609ed2ec4befe2e06b65948551868992707bbea",
+   "qgs_sha256": "16c46b302006f1132b768c9716c9d003b20c98c6902598384da6a5ac99124000",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-product-19",
+   "stratum": "product",
+   "order_rank": 27395,
+   "repo": "TheColliery/CoalLedger",
+   "inputs_sha256": "e80ec2dc29fb4d0c627351020fbe4ac0bfdba0f212829415965c6abd36a7b684",
+   "qgs_sha256": "fceb2c4e8722481972de10970674e03a0319022158e8ac09878d10e2b962bc7d",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S14",
+     "S15",
+     "S17",
+     "S22",
+     "S5",
+     "S6",
+     "S8",
+     "S9"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-20",
+   "stratum": "product",
+   "order_rank": 26445,
+   "repo": "pluveto/daan",
+   "inputs_sha256": "f502182e454d2f53740c2f43806c49f05b4b0d13f6f8c9e150091b6c371df4fe",
+   "qgs_sha256": "23a02bedbbe448b23cfbb5f94fe4bd86e39a8c83c18dd6fed99825e61720890c",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 1,
+    "Position": 0,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-product-21",
+   "stratum": "product",
+   "order_rank": 16056,
+   "repo": "jszsource/team-front-skill",
+   "inputs_sha256": "c135cf43d215acfb55f0cada5f242fd86e623ea487dd286eb1bd1dd9d055199e",
+   "qgs_sha256": "0b822fcf42c62c3bf688ed5e7035f724ce9aff464cc148721a77150573b06b8d",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S1",
+     "S10",
+     "S12",
+     "S14",
+     "S2",
+     "S22",
+     "S24",
+     "S3",
+     "S5",
+     "S6",
+     "S7",
+     "S8",
+     "S9"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-22",
+   "stratum": "product",
+   "order_rank": 26298,
+   "repo": "elkuku/iitc-theme-template",
+   "inputs_sha256": "88aa8aaa7e7e39f4c42ae080355a2f2f10d8f95509aa36c534fc456cb9e72a77",
+   "qgs_sha256": "97b4457a9a0659fc98c4a9cf1501fadef520a37abc3603b985b0e48496f5cb18",
+   "user": {
+    "Authority": 0,
+    "Methodology": 0,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-product-23",
+   "stratum": "product",
+   "order_rank": 17677,
+   "repo": "human-plus-machine/monkeyskills",
+   "inputs_sha256": "2275151fed474250ff3b4462e975a757e609ba070b9678c628666e8e0b3b7266",
+   "qgs_sha256": "d7a33abdfa5ac49725001c36aa513b85edc3cee363929905fe2de3bd3647de1b",
+   "user": {
+    "Authority": 0.5,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0.5,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S16",
+     "S20",
+     "S21"
+    ],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "calibration-product-24",
+   "stratum": "product",
+   "order_rank": 13161,
+   "repo": "masondelan/selvedge",
+   "inputs_sha256": "f67ae57e4c48d33d635013a9eb6e66f76e30c219e4d92f83aa73a1555bc84857",
+   "qgs_sha256": "c0b095530d75c30394f7505d0fdc2b41ed69e0ec837a696c9d14b4e857597c35",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S10",
+     "S14",
+     "S18",
+     "S20",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-25",
+   "stratum": "product",
+   "order_rank": 11162,
+   "repo": "VictoriaMetrics/victoriametrics-datasource",
+   "inputs_sha256": "6811389b2e23242f095448346062a7b903176068f4a6eb8902ab42d964ef78fc",
+   "qgs_sha256": "9356c5b4e5e5286b0144920acddf6c012657fc77d8e1efcbdcf39e88394e37bc",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 0.5,
+    "problems": [],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "calibration-product-26",
+   "stratum": "product",
+   "order_rank": 8982,
+   "repo": "ahujasid/mcp-for-blender",
+   "inputs_sha256": "a89cb75e7322ef6661931ddd231c37f823476e72147f643bfa0570244a619298",
+   "qgs_sha256": "80c9ee42318d6bf5237b21a597bf4b19e0a37f6932a5c559b02f14c5bf53279c",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S1",
+     "S12",
+     "S2",
+     "S22",
+     "S5"
+    ],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "calibration-product-27",
+   "stratum": "product",
+   "order_rank": 24754,
+   "repo": "box-community/mcp-server-box",
+   "inputs_sha256": "7f558ee053ad9387af5bdcb25f2f58b4b7907b41e9b36d7bfb145966f80e6dd5",
+   "qgs_sha256": "ccdc960fd7c688e43cf776000b554dbad18454a5fbecf8d6156c1e04024745d4",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0.5,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-product-28",
+   "stratum": "product",
+   "order_rank": 15006,
+   "repo": "Naxasware/Naxasware-Plugins",
+   "inputs_sha256": "211512ec6749c23fec5d2728683e1a38249599062e4bf68cb32ea1dee8c231ed",
+   "qgs_sha256": "084439c51dc6f2fdb719d5d57e85469efb6c27a155680f45bea10781d5824f18",
+   "user": {
+    "Authority": 0.5,
+    "Methodology": 0.5,
+    "Objectivity": 1,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S4",
+     "S6"
+    ],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "calibration-product-29",
+   "stratum": "product",
+   "order_rank": 25110,
+   "repo": "lazymac2x/lazymac-mcp",
+   "inputs_sha256": "3c4dc51763ee5923c4ecb5ed32f3df19fab6c9aedf871c3d36351d329bc6ea5b",
+   "qgs_sha256": "4580239d4c3405e0350bd5c856e7a4318f16709e4dfcd2979b447ac55e112cfe",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0,
+    "Position": 0.5,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-product-30",
+   "stratum": "product",
+   "order_rank": 1122,
+   "repo": "tjboudreaux/cc-thinking-skills",
+   "inputs_sha256": "d440b83597f4cae96dbf7dc260d57462685bb9251b1810b3fec490bf8a7732e5",
+   "qgs_sha256": "009436e99c57d775b737ec487fdc2ecc776caf8b66ca5f47ab7c2191d9e164d9",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 1,
+    "Position": 0.5,
+    "Relevance": 1,
+    "problems": [
+     "S10",
+     "S12",
+     "S13",
+     "S18",
+     "S21",
+     "S22",
+     "S4",
+     "S7",
+     "S8",
+     "S9"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-31",
+   "stratum": "product",
+   "order_rank": 11988,
+   "repo": "k4yt3x/meka",
+   "inputs_sha256": "245c4f1846819ebbd6529cab526143099d07f530eb0b50bf03dfe325f7fa8fa7",
+   "qgs_sha256": "29fbf28319e146849f1eb1c2974a3162f76d927057d886a5c8f4bd711c173775",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S2"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-32",
+   "stratum": "product",
+   "order_rank": 17617,
+   "repo": "yowainwright/eslint-plugin-legibility",
+   "inputs_sha256": "5cfdd620bf725b86d3540be32642aaca391cef1afd1361d7aa854d73c3dd5119",
+   "qgs_sha256": "a80fe7b247d79c0fc91ad8e75c804c0ecc19bad0ff575896ab835e3d28f5211b",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S14",
+     "S4",
+     "S6",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-33",
+   "stratum": "product",
+   "order_rank": 28833,
+   "repo": "ZmoleCristian/lawkeeper",
+   "inputs_sha256": "38b6f867d8a17dca8b00fee4ab079ccf92445463dcb949cfa8fa7623b67b8fee",
+   "qgs_sha256": "e71eae6106787d183fe25c8e31be1548fd763e706e563944af2a8ed693340338",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S23"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-34",
+   "stratum": "product",
+   "order_rank": 19182,
+   "repo": "vercel/next-devtools-mcp",
+   "inputs_sha256": "b61ec1ffa7b8344fd0d2268ce1c9514c07b03cff3bd80fa06466036ff6b047be",
+   "qgs_sha256": "d5d3d2d02bc809c2e5e268975f5b989691a88d4a497aa9504f2b7f47440586ed",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S15"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-35",
+   "stratum": "product",
+   "order_rank": 923,
+   "repo": "fkiene/llmtrim",
+   "inputs_sha256": "aae95e8f7c56595e2a9d7b7429991356face4b75ffd377ad83142930468d9620",
+   "qgs_sha256": "a4556586b9acb10eb343e530166551ecc75964c747ad5437a198d9bb316d2a24",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S10",
+     "S15",
+     "S24"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-36",
+   "stratum": "product",
+   "order_rank": 260,
+   "repo": "dshakes/compass",
+   "inputs_sha256": "68867daaa06b3e193253411679c511fe6b6b81e8face100594b2e3b9cf59e1ed",
+   "qgs_sha256": "4df77bf34a555ed5e1c9bff11d0a7a22a5e2bb88d32fec20647e13319bb519b3",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S11",
+     "S12",
+     "S14",
+     "S15",
+     "S20",
+     "S21",
+     "S24",
+     "S26",
+     "S28",
+     "S29",
+     "S31",
+     "S4",
+     "S5",
+     "S6",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-37",
+   "stratum": "product",
+   "order_rank": 21924,
+   "repo": "niyatna/openintent",
+   "inputs_sha256": "8c1b2504091b20146b693930cc0abc893dc2b6bc393e572f3df0c645cc0153de",
+   "qgs_sha256": "0f68a3b64412773a91b4e127ace34909252dd3b1910200505812d2fd78d5f80f",
+   "user": {
+    "Authority": 0.5,
+    "Methodology": 0.5,
+    "Objectivity": 1,
+    "Position": 0.5,
+    "Relevance": 1,
+    "problems": [
+     "S17",
+     "S20",
+     "S5"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-38",
+   "stratum": "product",
+   "order_rank": 4262,
+   "repo": "nim-video/skills",
+   "inputs_sha256": "c4926c3c6a98aae336e75a496d31a3fc393dde3f4737c424c5a658f628e73c7d",
+   "qgs_sha256": "4b90a426c6e983946bba1a1ec1d26a290e4e1fd59db0f675cfca21eab3a4bf11",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0.5,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S15",
+     "S23"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-39",
+   "stratum": "product",
+   "order_rank": 1148,
+   "repo": "gotalab/skillport",
+   "inputs_sha256": "9f0e5a9771922391131530a4d7a8add02348275ae8ab0edf8a8ccb5bd1fe6b31",
+   "qgs_sha256": "2537a6cda8c44b4d376370c7891cdf1d22dd4461df14aeb232e391466781e096",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S13",
+     "S15",
+     "S22",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-40",
+   "stratum": "product",
+   "order_rank": 2807,
+   "repo": "ChromeDevTools/chrome-devtools-mcp",
+   "inputs_sha256": "6e67c5c99402582048fdadb2becdc81cfd9311f00dd9892b59145f1232cb4bfa",
+   "qgs_sha256": "2faea01b2d45ee3e9934484bb9b958a9b475f73ef3bd787fd844e0a89d69d590",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S14",
+     "S15",
+     "S22",
+     "S4",
+     "S5",
+     "S6",
+     "S7"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-41",
+   "stratum": "product",
+   "order_rank": 28388,
+   "repo": "orchidautomation/pluxx",
+   "inputs_sha256": "dedec0779d6742e80e0932e807916c9e0ad75594e3ec0876ef02077e95206877",
+   "qgs_sha256": "c0b735aa1d68d344d817d537327be304850da843e8d4cf263dbcde586b12c616",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S1",
+     "S10",
+     "S11",
+     "S12",
+     "S13",
+     "S14",
+     "S15",
+     "S16",
+     "S17",
+     "S19",
+     "S2",
+     "S20",
+     "S21",
+     "S22",
+     "S27",
+     "S3",
+     "S4",
+     "S5",
+     "S6",
+     "S7",
+     "S8",
+     "S9"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-42",
+   "stratum": "product",
+   "order_rank": 19535,
+   "repo": "tfohlmeister/convex-evalbench",
+   "inputs_sha256": "2e6f9961585f11d4543c03956f2ebe250689e483dcce5407bc0ad9253d7b3723",
+   "qgs_sha256": "a708161b9df12c4fd35d54956afdeda9240dac374d74b93f03737b9a59b875d9",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S10"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-43",
+   "stratum": "product",
+   "order_rank": 11210,
+   "repo": "waybarrios/vllm-mlx",
+   "inputs_sha256": "4fe8ed39ac80454a3ef188c4fe64cfc980c43571260e84f3e418f7e0dbab18a1",
+   "qgs_sha256": "70242e0e0dc05ef2e3202471f593a6962c52ece42502b4859383f56c6c01a175",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-product-44",
+   "stratum": "product",
+   "order_rank": 2277,
+   "repo": "zzttzzmyswy/multica-android",
+   "inputs_sha256": "4be452804c2c37d85675d91a48d87c2704a6197b646eaf313ccc5142c992ac29",
+   "qgs_sha256": "ff58942d725ceac16f92dd5d0bdf3b1139dc550c6a988f19367185d23f5590ed",
+   "user": {
+    "Authority": 0,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: copy"
+   }
+  },
+  {
+   "id": "calibration-product-45",
+   "stratum": "product",
+   "order_rank": 42,
+   "repo": "Q00/ouroboros",
+   "inputs_sha256": "6a9e64a6e1448958e03fffa59253c0c091c37b370bfd16ac8e8a08102ba87318",
+   "qgs_sha256": "ef88abb1d74973dfc9a8c0622efbaaa1275066263dd0bbdb38f49a10e31f63cd",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S1",
+     "S10",
+     "S12",
+     "S15",
+     "S2",
+     "S21",
+     "S23",
+     "S26",
+     "S29",
+     "S4",
+     "S7",
+     "S9"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-46",
+   "stratum": "product",
+   "order_rank": 8322,
+   "repo": "SUMITDROY/LH-backend",
+   "inputs_sha256": "305f14b236f8b4accd2ca79dfec18e5a58092cec68363d4cb8b9f99dd108a168",
+   "qgs_sha256": "ad6641b37b8c5725999554bfc9f04ddd9e856350433eb7733777d7511ccbf9de",
+   "user": {
+    "Authority": 0,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S4",
+     "S6"
+    ],
+    "decision": "excluded: copy"
+   }
+  },
+  {
+   "id": "calibration-product-47",
+   "stratum": "product",
+   "order_rank": 28458,
+   "repo": "baabakk/llm-ports",
+   "inputs_sha256": "18ca819f2f9a9616e6bb959339e8d23c62afd3762bcb52b06e879816fb437b51",
+   "qgs_sha256": "9418add64089f573920c5b79ce51a97f638408e4c013a122834d702fcbdb6fde",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S15",
+     "S16",
+     "S17",
+     "S2",
+     "S3",
+     "S4"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-48",
+   "stratum": "product",
+   "order_rank": 505,
+   "repo": "microsoft/azure-skills",
+   "inputs_sha256": "f5dd12f0446b696ac43cc05cab6f6ac8d4b8efc26fc661378a1851082062aab9",
+   "qgs_sha256": "ed9076920f69d854862a0b49a6ec3b5ce378b73c951e3e1cb26b4d328c716a4c",
+   "user": {
+    "Authority": 0,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S13",
+     "S24",
+     "S26",
+     "S9"
+    ],
+    "decision": "excluded: copy"
+   }
+  },
+  {
+   "id": "calibration-product-49",
+   "stratum": "product",
+   "order_rank": 14848,
+   "repo": "conorholds/cedros-login",
+   "inputs_sha256": "cd094d7f4a262ad148cdfd8580f74f8ecaab789a10ed0e2daa442bde1d55e0ed",
+   "qgs_sha256": "fc928800327ce74edb02baa6a78a13c7e397ca29d5e4323e7f9e3e2772e9ec7d",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S13",
+     "S6"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-50",
+   "stratum": "product",
+   "order_rank": 14759,
+   "repo": "wangqiqi/planrun",
+   "inputs_sha256": "d65dcdd78de87a707f9a06ce47c84a25e17e6a9be4b4b3198644f815c7eb9820",
+   "qgs_sha256": "dc71a1eb3a255ee4d31d936c2dcf88db2854a5c38fecccdd191d625423c606d9",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S1",
+     "S12",
+     "S13",
+     "S14",
+     "S15",
+     "S16",
+     "S18",
+     "S2",
+     "S25",
+     "S29",
+     "S3",
+     "S5",
+     "S6"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-51",
+   "stratum": "product",
+   "order_rank": 80,
+   "repo": "JasonColapietro/suede-creator-skills",
+   "inputs_sha256": "148b3bb73b5bbca5cf71ee63dbe1514881b5d08a6255f39dcba037474a851cbd",
+   "qgs_sha256": "b54f8790d54192b16eb10030358f47e3de4bc1a5fe53c7ec0d8d7177fe4f2c77",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 0.5,
+    "Position": 0.5,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S24",
+     "S4",
+     "S6",
+     "S7",
+     "S8"
+    ],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "calibration-product-52",
+   "stratum": "product",
+   "order_rank": 9230,
+   "repo": "Bryant-Tang/turbo-plugins-claude",
+   "inputs_sha256": "da9092bc2133e9dea735913b2183644d93a888b7cb82a0a6957492b398f75b68",
+   "qgs_sha256": "a632f0466cf4ad2726bcb15f3a6e3209d187e1d99b59ee6b01564332bd265811",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S14",
+     "S15",
+     "S20",
+     "S21",
+     "S7",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-53",
+   "stratum": "product",
+   "order_rank": 17653,
+   "repo": "Christian-Katzmann/app-it",
+   "inputs_sha256": "e80981ebe77e5e08e5e945345bbf6e04d01e405d9206753402ce762cea79ae89",
+   "qgs_sha256": "498723d5b818682f198c8e071fa4fa78f3ccfbb957b6fafe883554f9d18bc840",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S1",
+     "S12",
+     "S14",
+     "S15",
+     "S17",
+     "S2",
+     "S4"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-54",
+   "stratum": "product",
+   "order_rank": 20886,
+   "repo": "llm-jp/simple-evals-mm",
+   "inputs_sha256": "efdb1b2c8a761aac7aac07e2db05a40832b4c879a44ca3805f631f50d453e978",
+   "qgs_sha256": "a45b8348446e98edeb4779fd216035f609ac72c0c3a040c0df1b2caf110fd153",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 1,
+    "Position": 0.5,
+    "Relevance": 1,
+    "problems": [
+     "S24",
+     "S9"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-55",
+   "stratum": "product",
+   "order_rank": 12208,
+   "repo": "netresearch/typo3-conformance-skill",
+   "inputs_sha256": "443f8f17da644f8f55932aa3174a4a0a1bafd9f927994a3e62683986dda2a63b",
+   "qgs_sha256": "1081dc31b3280b72b41838a1b234d65443e1faba7d8f194278d680f6bf1b1cdd",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S1",
+     "S12",
+     "S13",
+     "S15",
+     "S2",
+     "S7"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-56",
+   "stratum": "product",
+   "order_rank": 8470,
+   "repo": "rcbroo/claw-code-supachat-fork",
+   "inputs_sha256": "122a8dc3a7fa6a35c5bd254f7051f04423f408fc2a17bfc62674757121b30ccf",
+   "qgs_sha256": "a5528e91a37ca64c035ea99082e670f74a1a449448c60b543bae09f774218124",
+   "user": {
+    "Authority": 0,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0.5,
+    "Relevance": 1,
+    "problems": [
+     "S18",
+     "S9"
+    ],
+    "decision": "excluded: copy"
+   }
+  },
+  {
+   "id": "calibration-product-57",
+   "stratum": "product",
+   "order_rank": 24430,
+   "repo": "demo112/yunqu-ai-skills",
+   "inputs_sha256": "21fa33ea5b81085eacd6e8e4c49ead9da7b5f3a4e2f37b07334c1ad88ca38671",
+   "qgs_sha256": "fec726d65eb685264e341234e0d65a22067260e26b34cd9bf3a73ce3ac66385b",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0,
+    "Position": 0,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "calibration-product-58",
+   "stratum": "product",
+   "order_rank": 9676,
+   "repo": "future-agi/future-agi",
+   "inputs_sha256": "51b0d5170d4a08508c021772a52031f9d222922e1a505e02461296cbbe66fddf",
+   "qgs_sha256": "0c33e92ef7ea2cd86d95a4813147721b33d9ab682b439eee6f820fb580acc9c1",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S1",
+     "S12",
+     "S21",
+     "S23",
+     "S4",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-59",
+   "stratum": "product",
+   "order_rank": 13321,
+   "repo": "serpro69/capy",
+   "inputs_sha256": "519e169c0bc8e7a3d13ad0a3c1ada79ee195167be55ef2e557cc7e52058432b2",
+   "qgs_sha256": "75602f8f7ef791c378787c6e3fc473924445b59fff9dfa50f9099cf499c9a0c4",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S19",
+     "S20",
+     "S26"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "calibration-product-60",
+   "stratum": "product",
+   "order_rank": 15913,
+   "repo": "patakuti/cc-semaphore",
+   "inputs_sha256": "b6b208d1dbcd04d52602c04852373ed37bcedb3661153bf765251ed3919b25e6",
+   "qgs_sha256": "3a20f9b088efdb4a002e7f7c4475db700b3cd38b90ce11da184f400597849201",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  }
+ ]
+}

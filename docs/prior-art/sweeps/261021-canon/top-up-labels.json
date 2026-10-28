@@ -1,0 +1,658 @@
+{
+ "batch": "top-up",
+ "set_sha256": "8654c80079bfd3d64af66c72e79aebd01e46a8c096d232a873c140218a98c42b",
+ "stage1_freeze_sha256": "32fb0a2429e076d268cf6aaad58ddaf7afff45282ae3c9b2ff1bf25f19855597",
+ "labeller": {
+  "kind": "reference",
+  "cli": "claude",
+  "model": "claude-fable-5-1",
+  "effort": "max",
+  "sessions": [
+   "reference-top-up-config",
+   "reference-top-up-config-notes-1",
+   "reference-top-up-config-notes-3",
+   "reference-top-up-product",
+   "reference-top-up-product-notes-1",
+   "reference-top-up-product-notes-3"
+  ],
+  "notes_sha256": "1f70caa01cbef64494ba395314685bc3af96e8429f89314a99ef5b6ecd1eb157",
+  "substitute": {
+   "cli": "claude",
+   "model": "claude-opus-5-5",
+   "effort": "xhigh",
+   "sessions": [
+    "reference-top-up-config-notes-3",
+    "reference-top-up-product-notes-3"
+   ]
+  }
+ },
+ "complete": 30,
+ "rows": [
+  {
+   "id": "top-up-config-1",
+   "stratum": "config",
+   "order_rank": 4952,
+   "repo": "Teradata/teradata-mcp-server",
+   "inputs_sha256": "25ffa59d9842f9206cf737657f418bab9400707450a39cd5b154a4474128e263",
+   "qgs_sha256": "c13c531411f706acfbdfc43a24403680e49f97c7956ca0d18b32f83bafd16f4d",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S10",
+     "S24"
+    ],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "top-up-config-2",
+   "stratum": "config",
+   "order_rank": 1559,
+   "repo": "Taiizor/agents-md-cookbook",
+   "inputs_sha256": "0fad8952578e6dbdcdfbc5bdcb2ff2c9e98ab6e04c74eeb7804a014c7c893032",
+   "qgs_sha256": "ae4c9fb7080a46b125224ed93e1d5baf71449da55c9195b83f555d6993a0f13c",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S14",
+     "S2",
+     "S22",
+     "S6",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "top-up-config-3",
+   "stratum": "config",
+   "order_rank": 7017,
+   "repo": "connerkward/macos-screen-recorder-system-audio",
+   "inputs_sha256": "608e78f7793f9fe11467b8b7ff311ad12884a2ab6a38391a3d678dfe0641cf4d",
+   "qgs_sha256": "faa218c30413ac7dcf39ee97c9365e470aa2547baccd27deb1fa6e7fafb222b5",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "top-up-config-4",
+   "stratum": "config",
+   "order_rank": 6998,
+   "repo": "manzaltu/claude-code-ide.el",
+   "inputs_sha256": "0a451cc06f35e04d6dbce404e591da975fcb41d76f7002c52cca8985756fd65f",
+   "qgs_sha256": "9577d9a7a40f0ad84c83a57e55a5d1e2de4a0ffbca86659bcfe30bd182e08848",
+   "user": {
+    "Authority": 0.5,
+    "Methodology": 0,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S12"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "top-up-config-5",
+   "stratum": "config",
+   "order_rank": 7077,
+   "repo": "wangbooth/Claude-Code-Guardrails",
+   "inputs_sha256": "9752751000e727e460e516771daca19df60eadcc96b00eae682d531292c32b0a",
+   "qgs_sha256": "89e0e73b5681e365f2d61ebf96e80706e52be5e2d74d6c9a91fad726e692fded",
+   "user": {
+    "Authority": 0.5,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "top-up-config-6",
+   "stratum": "config",
+   "order_rank": 492,
+   "repo": "vostride/agent-qa",
+   "inputs_sha256": "e23c81763a0e66bed3e4c5fe61ca33511df78098d1da88ec3798799061cbc67e",
+   "qgs_sha256": "acd836aa5cd35a195377b6ecb2bed6d952da39ddd0548a7380a17960f95f63ee",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 1,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S14",
+     "S15",
+     "S19",
+     "S2"
+    ],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "top-up-config-7",
+   "stratum": "config",
+   "order_rank": 124,
+   "repo": "serpro69/capy",
+   "inputs_sha256": "79721e280386fae7af4d43d801ed7b1d76c6ebace7269387367625d0efd3d3f2",
+   "qgs_sha256": "8100c6b1c70ca1a21bced956aa1b3463f32d14cb4910857dde12350247071d26",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S19",
+     "S20",
+     "S26"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "top-up-config-8",
+   "stratum": "config",
+   "order_rank": 4457,
+   "repo": "NathanMaine/memoriant-patent-skills",
+   "inputs_sha256": "f610277195e78ee12c2571e03634dafded04d4d9c48b3ef4933741239e2fffcf",
+   "qgs_sha256": "100ec50c5da96560050549ee0e3d679e82cfc18306f417258a569c3062b33ffe",
+   "user": {
+    "Authority": 0.5,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 0.5,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "top-up-config-9",
+   "stratum": "config",
+   "order_rank": 5054,
+   "repo": "mastra-ai/mastra",
+   "inputs_sha256": "97f788b4ad1f40e67fdf2bda17a6c2a2904d9d7bb2605cb576d32087204e8546",
+   "qgs_sha256": "99f39a469b4082564233146dd910f9c88c1817549d45bcefb94a8c9a823b4f6d",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S17",
+     "S18",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "top-up-config-10",
+   "stratum": "config",
+   "order_rank": 1966,
+   "repo": "pranciskus/newsmcp",
+   "inputs_sha256": "78b9a52b648455bc5521260059b917fb9eef486fea14f572b537538a079dcc75",
+   "qgs_sha256": "91994a772299ec2aa702ee81046683f87a26fd6ec1149049cb1e7df3cdbb1cb5",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S15"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "top-up-config-11",
+   "stratum": "config",
+   "order_rank": 5220,
+   "repo": "zenml-io/mcp-zenml",
+   "inputs_sha256": "054d3c858828cbeae62713af4bd736d43d0efdd28829c86161cde969043385c2",
+   "qgs_sha256": "bdb5ef633112401cf67dcced3e24e0cb01eb1fb670670c565926736b1c24ecbc",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 0.5,
+    "Position": 0.5,
+    "Relevance": 1,
+    "problems": [
+     "S16",
+     "S5",
+     "S6",
+     "S9"
+    ],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "top-up-config-12",
+   "stratum": "config",
+   "order_rank": 2203,
+   "repo": "m1ckc3s/claude-status-bar",
+   "inputs_sha256": "39ff6b3c96cb805ade208de08348756de951a59e6f808b5af4db7e69e909a4eb",
+   "qgs_sha256": "d996d0ea5a5c5576c652258b3115e9b55c33acd11e898120e5d2124ae96076e6",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 0,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "top-up-config-13",
+   "stratum": "config",
+   "order_rank": 1483,
+   "repo": "surendranb/writing-skills",
+   "inputs_sha256": "bc7f99f362f5666e0553e5031830d8be14f7bbb0f064680083cd0921dd796254",
+   "qgs_sha256": "88e86f34b42775d3d2577ddd824d84677a3efb134cb38fae2f96ed75ee42fbc5",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 1,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S15",
+     "S22",
+     "S6"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "top-up-config-14",
+   "stratum": "config",
+   "order_rank": 6673,
+   "repo": "centralmind/gateway",
+   "inputs_sha256": "2d92e8428532d49591283895b9859e2308c6dd474aeb99c0d95927789a6ee078",
+   "qgs_sha256": "f1dbea66217a758a1006af456fa44337bd3fe7d8b6afeaa944d3beefb4dc8c4e",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 1,
+    "Position": 0,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "top-up-config-15",
+   "stratum": "config",
+   "order_rank": 5204,
+   "repo": "totec448-spec/chat-on-steroids",
+   "inputs_sha256": "cfd346cb9bb166bfe9746eb45718a1047bcb2c1b6136b646290b763dfb42780a",
+   "qgs_sha256": "f221c7e0246f2083a8d5f144cf698181387bbe735ebe1a18350fed56f77eaf9f",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S14",
+     "S21",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "top-up-product-1",
+   "stratum": "product",
+   "order_rank": 21384,
+   "repo": "grooverLab/fable",
+   "inputs_sha256": "ab2d98f67636b27a128b0ef8532d26f568ab5da4217a34fb27c583fa8c1e040d",
+   "qgs_sha256": "b2abbe38718f62aa625ab376c2f426b06e90b6b413c916481022ce9d442e841f",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "top-up-product-2",
+   "stratum": "product",
+   "order_rank": 17584,
+   "repo": "ref-tools/ref-tools-mcp",
+   "inputs_sha256": "3a7f348984cdea7137fd13d48340711f7b94e0499f74101f801bf43ad4a4607d",
+   "qgs_sha256": "7545923b6cbf827490d568f37b8dfe401fdd1611cb4733758330472b71c72b62",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "top-up-product-3",
+   "stratum": "product",
+   "order_rank": 5101,
+   "repo": "yorkisestevez/agent-eval-harness",
+   "inputs_sha256": "63a86010047df58f2084f14276382d24061cbf732ba56d9401c01c0a12ea00ed",
+   "qgs_sha256": "cd6cae3bc83778fc9474be662674f04321ebdaad7eba1f3178c45eef540016f8",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S4",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "top-up-product-4",
+   "stratum": "product",
+   "order_rank": 9436,
+   "repo": "decimal-labs/decimalai-python",
+   "inputs_sha256": "24f557cc1c2a09b044fee5b9734257e0a529677b8ef338ded106565ab20699ac",
+   "qgs_sha256": "d73c6f549a628e7ca02aad1856848981ef05146593c6d8437c45d34e023167f5",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S1",
+     "S10",
+     "S12",
+     "S14",
+     "S2",
+     "S4",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "top-up-product-5",
+   "stratum": "product",
+   "order_rank": 823,
+   "repo": "honua-io/honua-sdk-js",
+   "inputs_sha256": "3fce68625ec8aa5b26dd28a8894c486c490ca1fdc900beeb117b49c58896610d",
+   "qgs_sha256": "9b994bfd2f7b8980719a8337ea9aceb75c27f9a4ad21e46a9ee49982457caf00",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S1",
+     "S11",
+     "S15",
+     "S20",
+     "S21",
+     "S6",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "top-up-product-6",
+   "stratum": "product",
+   "order_rank": 10672,
+   "repo": "qdrant/skills",
+   "inputs_sha256": "ad3881052e4918e2981991f9dc3ec4e6c0417bcd15695c93fe8ce6f8cf3f708c",
+   "qgs_sha256": "d54bcf00405ea58e39306288c307539581bf1937a04468fc9ee692f51b0b822b",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 0.5,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S10",
+     "S12",
+     "S6"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "top-up-product-7",
+   "stratum": "product",
+   "order_rank": 17714,
+   "repo": "nano-step/eval-harness",
+   "inputs_sha256": "1e804d68aef6fa3c2cf91a64903e872a79049bc44fd1a22f287a7255b1a75a9d",
+   "qgs_sha256": "252869f54fa9799c49600af8d7b1b45897fe0629d784674dda3cda043ace4e57",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S10",
+     "S11",
+     "S20",
+     "S24",
+     "S26",
+     "S30",
+     "S8",
+     "S9"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "top-up-product-8",
+   "stratum": "product",
+   "order_rank": 7024,
+   "repo": "danjdewhurst/story-skills",
+   "inputs_sha256": "fa9d5802f5a290dda4a2acb37631fe2cc54a95edd8b45fdd98a9869ee174816d",
+   "qgs_sha256": "e13d20711e6b2795fff7ce3922b0dfe39fb3bd1c18f8a1e3381f03e4ae92eb93",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S10",
+     "S3",
+     "S6"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "top-up-product-9",
+   "stratum": "product",
+   "order_rank": 12,
+   "repo": "777genius/lintai",
+   "inputs_sha256": "38c856a3f1d1d8f7a9b5ccbd83dc0fc4cff6021735edde423fc5359bb870744e",
+   "qgs_sha256": "9d49b742e839ec6f96fc29952905d73822393e5841f4be5f11153bfee498b289",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S26",
+     "S6"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "top-up-product-10",
+   "stratum": "product",
+   "order_rank": 1177,
+   "repo": "tmonk/mcp-stata",
+   "inputs_sha256": "d1f4571fc2041281f7384b445767f12ea17e90ec30154a53b1536c206b0536c0",
+   "qgs_sha256": "b2c0bcc43f60b5272e60e5fb83cc177266cdbcea58b89c1b75f5ead0ad569f44",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 0.5,
+    "Relevance": 1,
+    "problems": [
+     "S15",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "top-up-product-11",
+   "stratum": "product",
+   "order_rank": 9112,
+   "repo": "Atmosphere/atmosphere",
+   "inputs_sha256": "6d280ef91f6316a339bee4fe20c69ff1a0b467345eab165385513781dd0f1f72",
+   "qgs_sha256": "bc4030fdda45ece5038c741c27e23fe189aef3909af619a2e495264d32899a19",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S15",
+     "S25",
+     "S5",
+     "S6",
+     "S8"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "top-up-product-12",
+   "stratum": "product",
+   "order_rank": 10920,
+   "repo": "SonarSource/sonarqube-mcp-server",
+   "inputs_sha256": "6ddfd37326ada605a9c8f1175c269eecc500570a281b36bb9e608b2b6d70ed9d",
+   "qgs_sha256": "f70fdda1d00649b72e1145910e716981819c790b24c44fd60a26de8574e665ed",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 0.5,
+    "Position": 0,
+    "Relevance": 1,
+    "problems": [
+     "S12"
+    ],
+    "decision": "eligible"
+   }
+  },
+  {
+   "id": "top-up-product-13",
+   "stratum": "product",
+   "order_rank": 912,
+   "repo": "trailofbits/skills",
+   "inputs_sha256": "b93039ff07ce4be2c1eed5595025cd47456202d25bba7468eeead4243fa1371c",
+   "qgs_sha256": "ca5103a2b904579b224275b6f625a913712adeffda107f8bcc9cd0432c7f121c",
+   "user": {
+    "Authority": 0.5,
+    "Methodology": 0,
+    "Objectivity": 1,
+    "Position": 0.5,
+    "Relevance": 1,
+    "problems": [
+     "S12",
+     "S18",
+     "S23",
+     "S9"
+    ],
+    "decision": "excluded: below-threshold"
+   }
+  },
+  {
+   "id": "top-up-product-14",
+   "stratum": "product",
+   "order_rank": 22932,
+   "repo": "Zaki-1052/GPTPortal",
+   "inputs_sha256": "a65f414acdafe01e66c366a98e3a5c0bf53916dcd719cfc4f0446ab42087b94a",
+   "qgs_sha256": "ef17670a41a4c4f192be4c238ed3a1d1576744520f906bd326c5d46785b12d56",
+   "user": {
+    "Authority": 1,
+    "Methodology": 0.5,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 0,
+    "problems": [],
+    "decision": "excluded: irrelevant"
+   }
+  },
+  {
+   "id": "top-up-product-15",
+   "stratum": "product",
+   "order_rank": 7,
+   "repo": "zernie/vigiles",
+   "inputs_sha256": "de76d6684d39aa51ed749708e16a79bac8189af36576e914bd9d59a1e054222c",
+   "qgs_sha256": "25988d7fd984cf1a3a465280b0b00d4ede7d170aeaf46caf93a87c0a1f619c04",
+   "user": {
+    "Authority": 1,
+    "Methodology": 1,
+    "Objectivity": 1,
+    "Position": 1,
+    "Relevance": 1,
+    "problems": [
+     "S10",
+     "S12",
+     "S13",
+     "S15",
+     "S17",
+     "S18",
+     "S2",
+     "S20",
+     "S23",
+     "S24",
+     "S4",
+     "S6",
+     "S7",
+     "S8",
+     "S9"
+    ],
+    "decision": "eligible"
+   }
+  }
+ ]
+}

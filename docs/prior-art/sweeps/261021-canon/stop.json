@@ -1,0 +1,14 @@
+{
+ "date": "2026-10-28",
+ "decision": "the user chose deep reading of the reference-eligible sources over stage 2 across the pool",
+ "threats": [
+  "stage 2 never ran: the sweep stopped at the scale checkpoint on the user's decision, so the 36,507-row pool (config 7,084, product 29,423) is covered only by the 150 drawn rows; recall against the quasi-gold standard was not measured",
+  "stage 1 uncertified: under the rule of a one-sided 95% lower bound of 0.95 on 76 pooled positives, rung 1 (claude-sonnet-5-5, brief) gave 0.684 and 0.712, rung 2 (claude-opus-5-5 with claude-sonnet-5-5, brief) 0.727 and 0.727, rung 3 (paths) 0.742 and 0.742, rung 4 (readme, drawn rows only) 0.802 and 0.772",
+  "no judge qualified: screening-B (claude-sonnet-5-5) reached sensitivity 0.531 and 0.625 (kappa 0.538, 0.629) on config and 0.750 and 0.682 (kappa 0.601, 0.470) on product; qgs-B reached 0.477 and 0.500 on config and 0.741 and 0.741 on product, against 0.90 and kappa 0.60; in 51 of 52 screening-B misses the reference's mechanism file was not among the judge's inputs",
+  "deepseek runs incomplete: the Aperture gateway refused every call from 2026-10-28 about 09:25 (balance below its threshold); screening-A holds 12 config and 5 product rows of run 1, qgs-A and the reader none",
+  "the reference is relative: labels come from claude-fable-5-1 (calibration, the top-up first pass and its round 1) and its substitute claude-opus-5-5 at xhigh effort (top-up round 3), so the picks measure agreement with this reference, not accuracy; the 30-row citation check covered the calibration batch only and found 1 unsupported (one-sided 95% upper bound 0.149), with a checker straddle the user accepted on 2026-10-27",
+  "the drawn rows are a calibration sample, not a best-of-pool list: no drawn eligible source carries S32, one carries S31 and two carry S30",
+  "the supplement (anthropics/claude-plugins-official, lloydjf/ratchet, tigerless-labs/cost-xray) is studied without a reference label and fills S27, S30, S31 and S32 only in part: its checks report cost or compare model tiers but fail no artifact; three other candidates carried none of those problems and were not studied",
+  "deep reading found the reference's mechanisms weaker than labelled in 9 of the 15 picks (sopify, ouroboros, DashClaw, llmtrim, skillport, app-it, agent-ready-template, pluxx, compass): a test that checks its own fixtures, a preflight that regenerates its snapshots, an advisory gate, a warning-only rule, a CI script that does not exist, claims made in prose only; each card states what is code and what is prose, so the reference's Relevance labels overstate the evidence"
+ ]
+}

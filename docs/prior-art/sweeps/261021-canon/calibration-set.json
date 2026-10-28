@@ -1,0 +1,1094 @@
+{
+ "sweep": "261021-canon",
+ "batch": "calibration",
+ "purpose": "the calibration set",
+ "drawn": "2026-10-21",
+ "criteria": "docs/prior-art/quality-criteria-v4.md",
+ "criteria_sha256": "cd293f69906d173218db0300e3089651db0fa0d00a825587730fdd68e7010672",
+ "rows_per_stratum": {
+  "config": 60,
+  "product": 60
+ },
+ "rows": [
+  {
+   "id": "calibration-config-1",
+   "stratum": "config",
+   "order_rank": 4893,
+   "repo": "LaravelDaily/Cursor-Rules-Generator",
+   "commit": "https://github.com/LaravelDaily/Cursor-Rules-Generator/commit/d967449b932964faacc851b399d93a743ab61696",
+   "inputs_sha256": "f1c0a990b0742cc194b7a2f4baeb7ae6620e22f9b5f26745e01d7e2859f038f0",
+   "qgs_sha256": "e743c92c8d858b2613b09362eabaa07af2dd021804fc2ddd020e193574a3a8a0"
+  },
+  {
+   "id": "calibration-config-2",
+   "stratum": "config",
+   "order_rank": 3004,
+   "repo": "ripplo/claude-plugin",
+   "commit": "https://github.com/ripplo/claude-plugin/commit/43eb06a68eb32094d3e7ce5d2f4c09f155a9e4f5",
+   "inputs_sha256": "466f96eb98c71c1a1601eb31442a9b8428c02c789b1174a4deb33873a1e2b36c",
+   "qgs_sha256": "87d981f84a963fdc81ed58ace93e0576d016833c75cb8a64c4d631a552a808bd"
+  },
+  {
+   "id": "calibration-config-3",
+   "stratum": "config",
+   "order_rank": 6438,
+   "repo": "pipepie/pipepie",
+   "commit": "https://github.com/pipepie/pipepie/commit/9a53cb33fba16b42eb5b88f933f39932819f8e37",
+   "inputs_sha256": "527d8b61732a6d86bf7615823f4d31e945f93cdcee50f4f088e70941070de621",
+   "qgs_sha256": "34cdd0e8c523b80096c08f9c17a55308717b105627e1729be8859aee9998c566"
+  },
+  {
+   "id": "calibration-config-4",
+   "stratum": "config",
+   "order_rank": 3141,
+   "repo": "winfunc/opcode",
+   "commit": "https://github.com/winfunc/opcode/commit/d1ca30a3c0c39fff01fde2f86c2d5af6a1db658b",
+   "inputs_sha256": "332c546d81d05103ccacce8b875969972672fe6b886af2e6e8a7cc83ad119e70",
+   "qgs_sha256": "99f4b9295ad77ed2dbfa3216c9f7e28e23c41e2ed92ee6d270cd1fdba2276e0a"
+  },
+  {
+   "id": "calibration-config-5",
+   "stratum": "config",
+   "order_rank": 5773,
+   "repo": "supermemoryai/supermemory-mcp",
+   "commit": "https://github.com/supermemoryai/supermemory-mcp/commit/84f5dc9f1cf077ba753decbf56805205b5c0443a",
+   "inputs_sha256": "00b35f8341fb312d3c00722e38b9436d2abe4f96a6ad9bf80800860b5ebaffdc",
+   "qgs_sha256": "a2d66ac0fa6fe770d9d809f2078defc919b64702b61f5e08483b1772ea370030"
+  },
+  {
+   "id": "calibration-config-6",
+   "stratum": "config",
+   "order_rank": 2800,
+   "repo": "savvasioakeim/OctoShell",
+   "commit": "https://github.com/savvasioakeim/OctoShell/commit/a038825e64c8cb8b4f596df2e0605183e9650288",
+   "inputs_sha256": "76dbee21bf9d1b6d65152aeb803bb59216ed19afa5b8d93c21f1a013f622d4f8",
+   "qgs_sha256": "ff50374a615f407862f8537347ca849e658aa58def9928fe624f4d979e22002b"
+  },
+  {
+   "id": "calibration-config-7",
+   "stratum": "config",
+   "order_rank": 4106,
+   "repo": "SivaJyothiPamarthy/prompt-enhancer-pack",
+   "commit": "https://github.com/SivaJyothiPamarthy/prompt-enhancer-pack/commit/b4bebad62b16f487ced6c80d7a612563c79b2e10",
+   "inputs_sha256": "5d36b4d2e0eb47f95a473d0d26ef755040828f3b8a1d4ea02e7fff010ef1df6e",
+   "qgs_sha256": "5873795af6a3a7924ccd3b8fca45854f465868ec5d33aaf9eda344df51b92e19"
+  },
+  {
+   "id": "calibration-config-8",
+   "stratum": "config",
+   "order_rank": 625,
+   "repo": "phantom/phantom-agent-kit",
+   "commit": "https://github.com/phantom/phantom-agent-kit/commit/4162aa88131f0a6b6f0c050b176736f0773d038c",
+   "inputs_sha256": "21735584696af6931cfbacd74e72736db4c247c83caaa7f38ccec6996f448b09",
+   "qgs_sha256": "af79513b9e5a1d827b525777ef3d9b47d86ee222530e38a260c2bb042bd04797"
+  },
+  {
+   "id": "calibration-config-9",
+   "stratum": "config",
+   "order_rank": 7007,
+   "repo": "openyak/openyak",
+   "commit": "https://github.com/openyak/openyak/commit/ab052e4cd4a94d2432a20b5fc433e80ce8bdc698",
+   "inputs_sha256": "22cf8bed2a9be324f303535ba0001b1083b4a0f67e24a31e4ca760e1ed3397db",
+   "qgs_sha256": "9cc5c4861cf5ce638f2577a4fbe14ab3f30840c5abfd8234acaa24bcbf764af7"
+  },
+  {
+   "id": "calibration-config-10",
+   "stratum": "config",
+   "order_rank": 6234,
+   "repo": "miurahr/pykakasi",
+   "commit": "https://github.com/miurahr/pykakasi/commit/717c52850d240f33b5b87f3a6fa021e07c9c82b5",
+   "inputs_sha256": "65c5232cf44e670c7bd2074bdbb9a31083abd29cca31674d84471f7adf6b6558",
+   "qgs_sha256": "e9c873e4766e685085bdb8602c06fe8a4f6265bd3d81cda656ba157befbc80b5"
+  },
+  {
+   "id": "calibration-config-11",
+   "stratum": "config",
+   "order_rank": 2151,
+   "repo": "deepshal99/notch-so-good",
+   "commit": "https://github.com/deepshal99/notch-so-good/commit/266d224aaef116a862125760d6df24f4939b7ac4",
+   "inputs_sha256": "d5070448898b4f4d8cfc7248f41dd313cd6c49180828d4fd7eb124fa28fec555",
+   "qgs_sha256": "eeecb4834af6e45390b558d99a363d27d57b0c6829f2f1c339a5fc5a758affcf"
+  },
+  {
+   "id": "calibration-config-12",
+   "stratum": "config",
+   "order_rank": 6330,
+   "repo": "XeroAPI/xero-mcp-server",
+   "commit": "https://github.com/XeroAPI/xero-mcp-server/commit/f24583c867df7c1f4806f7532eb0691e85892865",
+   "inputs_sha256": "ab1d346dc035bc6a2ff52cb0b39cdbbdc17d5d6721388080b7495c9466b3c71e",
+   "qgs_sha256": "b249579f4fb97e2783aa9467ba61f610db1fc0e8e2da4da62dc4408c9e97095c"
+  },
+  {
+   "id": "calibration-config-13",
+   "stratum": "config",
+   "order_rank": 6974,
+   "repo": "Sequenzy/skills",
+   "commit": "https://github.com/Sequenzy/skills/commit/158f0b2e5df689a996e88ce587006c4a60c26643",
+   "inputs_sha256": "15ec139f4e9a132266bd58093dc182de7ed8ba4a35fb0001711d6a3f5badb3c8",
+   "qgs_sha256": "50025065062601ef22a28eb3e2628430e6de1f2048c665cddd2667e2083319ea"
+  },
+  {
+   "id": "calibration-config-14",
+   "stratum": "config",
+   "order_rank": 1408,
+   "repo": "ngmeyer/librarian-mcp",
+   "commit": "https://github.com/ngmeyer/librarian-mcp/commit/5a008aa32d88c8850ec3b4569f9157c27ffd75f2",
+   "inputs_sha256": "1f498ce3950d8de11518f79dfd32ffbd37b54ab8c01e83a14ff79765f41b673d",
+   "qgs_sha256": "6a7364e286a7407de008b921c7ac0e9acce4ed18f79d03ec53026ad8a37105e2"
+  },
+  {
+   "id": "calibration-config-15",
+   "stratum": "config",
+   "order_rank": 6593,
+   "repo": "FarhanAliRaza/claude-context-local",
+   "commit": "https://github.com/FarhanAliRaza/claude-context-local/commit/711d5ea26d78e060728fcf1259e103abcbefecc2",
+   "inputs_sha256": "0d6b61628bba511474cfcec9f6f5a146b4cc854109a86f06d49fd04c2e4ae8ce",
+   "qgs_sha256": "257b1eea0bc5fc341b86138cd5cbe1a2a502ee2b665ec7c3a5d77062f0d69cd9"
+  },
+  {
+   "id": "calibration-config-16",
+   "stratum": "config",
+   "order_rank": 816,
+   "repo": "adobe/skills",
+   "commit": "https://github.com/adobe/skills/commit/7e98bc712b635204e93e8a931d4e5e60c8110258",
+   "inputs_sha256": "7f58e37d50426aa1e8990feb698d6e3bcaabbc0eb379577d5dda685713dd5f7a",
+   "qgs_sha256": "0b1cb761e278b25a009f63435294cf402ef2603b8c56815a947356eee62d9cae"
+  },
+  {
+   "id": "calibration-config-17",
+   "stratum": "config",
+   "order_rank": 6267,
+   "repo": "Zaki-1052/GPTPortal",
+   "commit": "https://github.com/Zaki-1052/GPTPortal/commit/eb320cd2763afc7dcf0c290029fc499b43444666",
+   "inputs_sha256": "fc27e483de62629c74fa601e33fafff6ce116c3755368e54d8a4a2e40cd41434",
+   "qgs_sha256": "ab7a639c10eb0a6d3ea8605b39d5eacaa92d55f6a526579746e57b47525db720"
+  },
+  {
+   "id": "calibration-config-18",
+   "stratum": "config",
+   "order_rank": 5789,
+   "repo": "twelvedata/mcp",
+   "commit": "https://github.com/twelvedata/mcp/commit/d139a77ea0f7d40995e6979cd09c22dd142fbfe8",
+   "inputs_sha256": "a4b299b7d307b319865e5b1377563547ebd60f9ca7c1888d5cdc36f4143a7343",
+   "qgs_sha256": "a6adda7f16ae09ba25f22b4eb9ac8fdea8409ac2e1ae509d92faafda7b2ea6b2"
+  },
+  {
+   "id": "calibration-config-19",
+   "stratum": "config",
+   "order_rank": 4991,
+   "repo": "TencentCloudBase/CloudBase-AI-Toolkit",
+   "commit": "https://github.com/TencentCloudBase/CloudBase-AI-Toolkit/commit/2ce2eed4c42358d6c3087e01fb224d6064d9fed3",
+   "inputs_sha256": "2c5749b3838194bc004b82f8b1963faf3d5c694d68963b2344db5834faa02fa9",
+   "qgs_sha256": "96628b45d67e1e58c10c945397abb8fc940857159a11dd9f3c6810b81a69cde0"
+  },
+  {
+   "id": "calibration-config-20",
+   "stratum": "config",
+   "order_rank": 5471,
+   "repo": "jtalk22/slack-mcp-server",
+   "commit": "https://github.com/jtalk22/slack-mcp-server/commit/fa2bedac114d4cc6583534cbf3b2894e458bf669",
+   "inputs_sha256": "192d24ffe7f2f0c56766a6fd7681e274f7873ab9db06b4b9c843629044ea2c57",
+   "qgs_sha256": "c4eac8a00d59ac0971fcf86f11fd29d127e2b93de6c86c31e8263b6715a895e4"
+  },
+  {
+   "id": "calibration-config-21",
+   "stratum": "config",
+   "order_rank": 3677,
+   "repo": "ATreep/one-workflow",
+   "commit": "https://github.com/ATreep/one-workflow/commit/59b16a0490f79f6028f7217e684845defe1076de",
+   "inputs_sha256": "627f1cab288f482e512d551a3d075035dcf0f1f9d53df8c1b02bea27d74e1c5b",
+   "qgs_sha256": "448ea48eaba8cb3232429a6e11ddacce5ecbd55fa2dbf651af05f60e9e556a43"
+  },
+  {
+   "id": "calibration-config-22",
+   "stratum": "config",
+   "order_rank": 6587,
+   "repo": "hyperbrowserai/mcp",
+   "commit": "https://github.com/hyperbrowserai/mcp/commit/7492e83cf1825b3cf9725bfa25c5086df702599a",
+   "inputs_sha256": "3e3df1597aef36e4d1d4230414d8ebe6be5e6736b8604a95e260696569f9a1cf",
+   "qgs_sha256": "cb7e1be4b31a63134101500103d829c8c7ad19353701804561815eceab36fe3f"
+  },
+  {
+   "id": "calibration-config-23",
+   "stratum": "config",
+   "order_rank": 3364,
+   "repo": "ahmedkhaledmohamed/PM-AI-Partner-Framework",
+   "commit": "https://github.com/ahmedkhaledmohamed/PM-AI-Partner-Framework/commit/c791632c439f8489d90f07a2432336162ac19918",
+   "inputs_sha256": "39af40ecde4af0965a506ee205bf869e9f0a24f93581f22b2df1bc0afe0b0365",
+   "qgs_sha256": "21e3e1b3f26d46b95cf8be9eb1259ea4f670f345a26bed36176627ac9ffc29ae"
+  },
+  {
+   "id": "calibration-config-24",
+   "stratum": "config",
+   "order_rank": 3077,
+   "repo": "deployhq/deployhq-cli",
+   "commit": "https://github.com/deployhq/deployhq-cli/commit/66bb6202711496d69026eaec54e25ca346564a74",
+   "inputs_sha256": "0715f4be13531e1a9d501e7663c4c5eec4501c6164b84675d134b0b27f720b11",
+   "qgs_sha256": "e0f6336914f884976bab0625fcef65827d94a320de4fa55d1382f347f7d941cf"
+  },
+  {
+   "id": "calibration-config-25",
+   "stratum": "config",
+   "order_rank": 2492,
+   "repo": "plasma-ai/wiki",
+   "commit": "https://github.com/plasma-ai/wiki/commit/04d475405674229d10c9447804b3f1c633603053",
+   "inputs_sha256": "83b71a4d0f73a24fc24b89ead51fae323dcdf542820596057f50734d30ee6565",
+   "qgs_sha256": "222d0f65a8ffb3d25ae63d165255ec0314f04676d45b8b42468fe79a77a0fe76"
+  },
+  {
+   "id": "calibration-config-26",
+   "stratum": "config",
+   "order_rank": 5212,
+   "repo": "wcatz/ghost",
+   "commit": "https://github.com/wcatz/ghost/commit/c5b0dbabfaf9112bdc04de424bad59e89e3b4a8a",
+   "inputs_sha256": "174c929b79e569f045a136b919e5acece45cec0606c4daf92db4621d3d803c5f",
+   "qgs_sha256": "9277006dd390178c407c160cf10e3d1032cd4a7d4aceb971a2c53a1dabdc54ac"
+  },
+  {
+   "id": "calibration-config-27",
+   "stratum": "config",
+   "order_rank": 5231,
+   "repo": "arcmira/mcp",
+   "commit": "https://github.com/arcmira/mcp/commit/1e2ab75c80bdc4ceb2df481e6d4bca9a7e20202a",
+   "inputs_sha256": "5867a643f0d977e2dac54094c66043f1ef465af25669b2f9997a7c7e1b4e82a0",
+   "qgs_sha256": "eaecd12182232f1c39db7eda8c54041a9b2535d843766165b242daf16025bea7"
+  },
+  {
+   "id": "calibration-config-28",
+   "stratum": "config",
+   "order_rank": 1531,
+   "repo": "google-labs-code/stitch-skills",
+   "commit": "https://github.com/google-labs-code/stitch-skills/commit/0337446dadde6f8c94210444e2aa9d546126480f",
+   "inputs_sha256": "3f43fc985766a51e72c403f14d4d111769d24e495341c4608c402d0ae6249189",
+   "qgs_sha256": "76c73a6c08e0621f388d58c4fbe004990e308d540740df134418f91421cae44f"
+  },
+  {
+   "id": "calibration-config-29",
+   "stratum": "config",
+   "order_rank": 1599,
+   "repo": "Vibecoder79/KI-Masterclass-Koerting-",
+   "commit": "https://github.com/Vibecoder79/KI-Masterclass-Koerting-/commit/c81d623364d39684a96201d7a102e6c16d684110",
+   "inputs_sha256": "569e9c8b13a0b6847f3827e32341b6b115ac460edbd65b18fbfb51a2ef8375dd",
+   "qgs_sha256": "0af72f3ab1ce6df1ac4b99a0bb847803bcc8339c341e47d2cb0f55aca47431a7"
+  },
+  {
+   "id": "calibration-config-30",
+   "stratum": "config",
+   "order_rank": 4395,
+   "repo": "mazetezr/full-claude-code-guide",
+   "commit": "https://github.com/mazetezr/full-claude-code-guide/commit/5c01a3fae6f8a5e691c7ab3099e7139f76b53f8e",
+   "inputs_sha256": "95d26f6eb2e2c3c56b6c83b739a49ed03c5e22a28b0f04e2776f551f84c13028",
+   "qgs_sha256": "227c45869bea02c54f10e72d84af21ae3f1e55f2ebb37a810df5bd53d191f1ec"
+  },
+  {
+   "id": "calibration-config-31",
+   "stratum": "config",
+   "order_rank": 3092,
+   "repo": "op7418/Humanizer-zh",
+   "commit": "https://github.com/op7418/Humanizer-zh/commit/f4518a8eab97b8bfebc66a89d34320a89bef6930",
+   "inputs_sha256": "f0e2c7589f2137d327727073426b163afec05a5d25f211a23452d08fed40643d",
+   "qgs_sha256": "71728877c99c6d99e6ed05e362d1494bd0c5eabb021061bf9da9de440c6a032f"
+  },
+  {
+   "id": "calibration-config-32",
+   "stratum": "config",
+   "order_rank": 3966,
+   "repo": "decrystal/mineru-claude-plugin",
+   "commit": "https://github.com/decrystal/mineru-claude-plugin/commit/54352b71209b25b59705c2d2d824c957fed0625e",
+   "inputs_sha256": "618377b533d16da3ab57b0e1c45aa1e8c07182ded6c8a2f3f878dce422ec5740",
+   "qgs_sha256": "e08ed921b761e54d26796e7cf90e4d26f84fd62749cd31fdafdafbf35bb5ac04"
+  },
+  {
+   "id": "calibration-config-33",
+   "stratum": "config",
+   "order_rank": 3971,
+   "repo": "xmu-csnoob/PraxisKit",
+   "commit": "https://github.com/xmu-csnoob/PraxisKit/commit/d820c7785b5e98ae3de603a4b5342e6fed76659d",
+   "inputs_sha256": "df413147ff1ece74c04a28c27166f404ab078ce6e89f8f02ea28365500e97832",
+   "qgs_sha256": "780c815664e6c8a85e6b54cf7d161d8eb886d3c45a10a73ec671745fcec1b91a"
+  },
+  {
+   "id": "calibration-config-34",
+   "stratum": "config",
+   "order_rank": 4911,
+   "repo": "ladliulivecn/cursor-rules",
+   "commit": "https://github.com/ladliulivecn/cursor-rules/commit/d36ef010f3f6bfbee35d17fac6b9eb620ce94441",
+   "inputs_sha256": "c13750d05f12559ab0ba34f7b7113ce04f3985a04467fb03d0ea558838d2558e",
+   "qgs_sha256": "87efa6d38918d760e93a7427901a5e17a93cf9f1b0be2bc9c70eb11b75ae9ae3"
+  },
+  {
+   "id": "calibration-config-35",
+   "stratum": "config",
+   "order_rank": 5501,
+   "repo": "bahayonghang/academic-writing-skills",
+   "commit": "https://github.com/bahayonghang/academic-writing-skills/commit/8183f08718ecfbd2200d112f72855ee20d2e4d1c",
+   "inputs_sha256": "7b59617d3822ae775536dea39165c0ef6fd458f276af3b0eda7bdea530fb1dbd",
+   "qgs_sha256": "43c3b76fcd68dfb144ea720ea840ccb2f8393c072b809f75792be9287ab093e8"
+  },
+  {
+   "id": "calibration-config-36",
+   "stratum": "config",
+   "order_rank": 6489,
+   "repo": "cloudinary/mcp-servers",
+   "commit": "https://github.com/cloudinary/mcp-servers/commit/dca5790c0af2bcde291d732af05c47ad7f75d341",
+   "inputs_sha256": "628defa4c1d4eeaa92c83cc947f48028e7ce373108f560082488e4506ccbf7c6",
+   "qgs_sha256": "c07d89a189e33e34d8eb92bc5e83c84d4c2cdcb5b64ed6090b8799867787151a"
+  },
+  {
+   "id": "calibration-config-37",
+   "stratum": "config",
+   "order_rank": 2655,
+   "repo": "larashero3-dotcom/lieflat-charts",
+   "commit": "https://github.com/larashero3-dotcom/lieflat-charts/commit/ed436ba56b3cbeee20b9b9966b38a9a9689e239c",
+   "inputs_sha256": "ca03c090d65ef0545c8c5f27a92737a498fb0a58a7f1e5d7483eb3242af185bd",
+   "qgs_sha256": "c37781a8b364066da3feacb623fb60f84acaa97bb7170d0a895a1ec5a66f559f"
+  },
+  {
+   "id": "calibration-config-38",
+   "stratum": "config",
+   "order_rank": 4622,
+   "repo": "zcag/readdown-plugin",
+   "commit": "https://github.com/zcag/readdown-plugin/commit/e9a5eab57a0d105d2dc0fe66dfb42ed45321131c",
+   "inputs_sha256": "b6be94bac96b050af58523e350e3a2cd5016211d5a7ea35751aaf178f26114a9",
+   "qgs_sha256": "41d5d76fdcb4aa2c4ee89a09251b6737ed7849986049295bf05c75791fc6a38c"
+  },
+  {
+   "id": "calibration-config-39",
+   "stratum": "config",
+   "order_rank": 4792,
+   "repo": "gruckion/nested-subagent",
+   "commit": "https://github.com/gruckion/nested-subagent/commit/36e9820486ea5b134737d78e09931fc759982e23",
+   "inputs_sha256": "48a5635363d5d623ebedc6670abcaba9e408c8a06e5ddd3c4fe6989d44599ade",
+   "qgs_sha256": "1d7ce5e90f9c61b305db46cea8f00d013d46b105104c2479831cdbf7db47d557"
+  },
+  {
+   "id": "calibration-config-40",
+   "stratum": "config",
+   "order_rank": 3006,
+   "repo": "SerhiiKorniienko/bullshit-detector",
+   "commit": "https://github.com/SerhiiKorniienko/bullshit-detector/commit/d5f6156a8a5c72977bf2d4edae834dd22f7fa736",
+   "inputs_sha256": "10a3a3506b0cdafe6eb1f4106d863fa0ef0b36aff5c2ec91817ff033b40c6cf3",
+   "qgs_sha256": "59ed3c8357bc1a6684dc2a9a64d5e2866b057e34214ccb1242fe2c109f92a5d6"
+  },
+  {
+   "id": "calibration-config-41",
+   "stratum": "config",
+   "order_rank": 4970,
+   "repo": "microsoft/skills-for-fabric",
+   "commit": "https://github.com/microsoft/skills-for-fabric/commit/bc42aaf734771bf752c1d7082dd91e5a6ca72b9f",
+   "inputs_sha256": "e7efd1b84d6fa9e6229562698cfc9d181a25e5d7207c02a702171f8761cfdc86",
+   "qgs_sha256": "adfc74463e00840ae5d153418591686a93c52e1a2ca15ce25a8c1b7d48f37142"
+  },
+  {
+   "id": "calibration-config-42",
+   "stratum": "config",
+   "order_rank": 1784,
+   "repo": "asynkor/asynkor",
+   "commit": "https://github.com/asynkor/asynkor/commit/5fbf51cca6b3cfd6e849e70998fea7a5c95cfe51",
+   "inputs_sha256": "f3cd72459f1bff67bcb50989f4ac7f9dc788e79cb3079b3f645d6ec2f0ccc267",
+   "qgs_sha256": "0c36299fcc49ada5e317bb935ccbc37a116e5d1ac4f22323b3ac46692f504bd1"
+  },
+  {
+   "id": "calibration-config-43",
+   "stratum": "config",
+   "order_rank": 2694,
+   "repo": "danjdewhurst/story-skills",
+   "commit": "https://github.com/danjdewhurst/story-skills/commit/4b8019d7fa08e1e1866be360fadab2a2f7cbcf11",
+   "inputs_sha256": "77de3c12aa3a85e5f5975d6e21639e7c68b973e04f9ea51744599232dcbb2485",
+   "qgs_sha256": "24e0620a7d0c5d6ba6eb252dc673675eedd23fe00362b08eecdd4a53f47c94d4"
+  },
+  {
+   "id": "calibration-config-44",
+   "stratum": "config",
+   "order_rank": 1728,
+   "repo": "Void3110/rego-skill",
+   "commit": "https://github.com/Void3110/rego-skill/commit/6fbcf7fc5b913fa68bf097223b7753fd0dce67af",
+   "inputs_sha256": "b459f037fedae40b9734213f77d4b7e5ab71106bc77043f616456fde37155f0b",
+   "qgs_sha256": "5d1a0f81292044c5949e555f3d45ac5995c02360b901d413778b8f2200f73a66"
+  },
+  {
+   "id": "calibration-config-45",
+   "stratum": "config",
+   "order_rank": 5281,
+   "repo": "line/line-bot-mcp-server",
+   "commit": "https://github.com/line/line-bot-mcp-server/commit/874ca7e1a7c11136110bc8644ace3cdfc9e2a713",
+   "inputs_sha256": "d5d0c6335c19c0d2836258222f0719997231582e91e5abe0a8d52561274b8ff4",
+   "qgs_sha256": "52ba1dbb44147e2c8aed7d97b3848076f8955548455a7378fd021621b09b70a8"
+  },
+  {
+   "id": "calibration-config-46",
+   "stratum": "config",
+   "order_rank": 2263,
+   "repo": "shengyanlin/claude-overlay",
+   "commit": "https://github.com/shengyanlin/claude-overlay/commit/16a4e7e6dbdab8cb62d9c6b3667326cc7f47f80d",
+   "inputs_sha256": "610f5719bef6dd5996de3f3ae414dd72b3f5cfe2bd1d078c62b1e8136e00f53e",
+   "qgs_sha256": "b32ae08b3ddb68f9e187941710caa556d5030b434b3f88c76f554388ab2fe63a"
+  },
+  {
+   "id": "calibration-config-47",
+   "stratum": "config",
+   "order_rank": 3073,
+   "repo": "WatsonTsai/pdf-text-router",
+   "commit": "https://github.com/WatsonTsai/pdf-text-router/commit/082e21cf46467906cae928cabb823b15ad83d44f",
+   "inputs_sha256": "d01fb7272ec4eb27c42d5eeecb4b5aed0ea7616c5826c6f1810c78df7d732731",
+   "qgs_sha256": "44a96e77c50fd8b04c3d72042bd4a10db2e71ad2a3d67aa18c04c4cc726c393a"
+  },
+  {
+   "id": "calibration-config-48",
+   "stratum": "config",
+   "order_rank": 2767,
+   "repo": "titanwings/distilly",
+   "commit": "https://github.com/titanwings/distilly/commit/0afc45c29c360ba7bc8260f1bb0bf34e9155f4fa",
+   "inputs_sha256": "8f176d96bab2237352abb5e9aaa7091f8a3c87bc859ee1550504263b7cbc402b",
+   "qgs_sha256": "915676975a74b542234766d20711c3292246652c1e4748e78d20d58bf7bb450b"
+  },
+  {
+   "id": "calibration-config-49",
+   "stratum": "config",
+   "order_rank": 6609,
+   "repo": "longevity-genie/opengenes-mcp",
+   "commit": "https://github.com/longevity-genie/opengenes-mcp/commit/02accbdc443200ba1cd755cbb165f57ef5ff5b6d",
+   "inputs_sha256": "07bbf37bb26a1fd04a90329f1fa3cc4dc85b36697587507000ce7d979cc0a120",
+   "qgs_sha256": "6e84241ea072287a0627804b0b93ab54329c34bacadf936fe5154872c6f218ef"
+  },
+  {
+   "id": "calibration-config-50",
+   "stratum": "config",
+   "order_rank": 6843,
+   "repo": "Omega-JS-Stack/omega",
+   "commit": "https://github.com/Omega-JS-Stack/omega/commit/490bcd8a1dbf8f1de98ee752ef3b545c34cacda9",
+   "inputs_sha256": "4910508cdf648592f43308ab49fd037c65c51be54b99e7b2e89b51eaddd66c6b",
+   "qgs_sha256": "ae6f281dcb3540c0045d6ecfd825e1c3a4b5957f578baed8303f126c75125a74"
+  },
+  {
+   "id": "calibration-config-51",
+   "stratum": "config",
+   "order_rank": 3756,
+   "repo": "KarolusD/fellowship",
+   "commit": "https://github.com/KarolusD/fellowship/commit/0aa0ab174ab8a0c1ea85c530c99a473189dea301",
+   "inputs_sha256": "f5949e0cbaac628f7642ecf151ef843e32a4aff69da91383ccec2106aed19050",
+   "qgs_sha256": "0b9f825db4edd9b3ff202089b38f74aa95461dcf1738ced5bfc34d776e454567"
+  },
+  {
+   "id": "calibration-config-52",
+   "stratum": "config",
+   "order_rank": 6303,
+   "repo": "jackjin1997/ClawForge",
+   "commit": "https://github.com/jackjin1997/ClawForge/commit/896286f3d171429c9e8553fae87ddae90c8265c8",
+   "inputs_sha256": "49a318b3d8eaa08ab93ed9ff06b97b158670aa1b780e96b0c2e6d75fa4300649",
+   "qgs_sha256": "90b86ad53a59205e67019b2b513e8de6269bd4752e5c2dd32a40c2c43454ecda"
+  },
+  {
+   "id": "calibration-config-53",
+   "stratum": "config",
+   "order_rank": 607,
+   "repo": "dotsecenv/dotsecenv",
+   "commit": "https://github.com/dotsecenv/dotsecenv/commit/5c0391ea7473093c0178873e8ba04c53b49c2905",
+   "inputs_sha256": "07418d0f9008f271fad29871581e224da4dc61533de63a89a67e7bf320a4a6af",
+   "qgs_sha256": "31b81a2f2786ad4c55401fd3f554ee75b67d3df7015ac7009cbb2635fede3924"
+  },
+  {
+   "id": "calibration-config-54",
+   "stratum": "config",
+   "order_rank": 865,
+   "repo": "PenguinAlleyApps/paco-framework",
+   "commit": "https://github.com/PenguinAlleyApps/paco-framework/commit/722ba7028e9651c471e8f52a89344b7553941b25",
+   "inputs_sha256": "3f5d9d10fa3dbb0099369ce2cd448a5a68fb3c0d188800ff82a68fe71a1028db",
+   "qgs_sha256": "68d3a7837dfb08014b3afc059ce271087bf9b71d8cf0f42726a32eae79975d74"
+  },
+  {
+   "id": "calibration-config-55",
+   "stratum": "config",
+   "order_rank": 6402,
+   "repo": "openai/simple-evals",
+   "commit": "https://github.com/openai/simple-evals/commit/652c89d0ca9df547706735883097e9537d40dc47",
+   "inputs_sha256": "5c0138855cbca52c9ca9a03a13cd52f44f148a683318bb1587053ef1ce2288f8",
+   "qgs_sha256": "27155490131d0854baf216e7382b3fc8cd497fa531d07418d77a01a964a91531"
+  },
+  {
+   "id": "calibration-config-56",
+   "stratum": "config",
+   "order_rank": 6145,
+   "repo": "cometkim/cc-monitor-worker",
+   "commit": "https://github.com/cometkim/cc-monitor-worker/commit/731ff2925938e57a809a706829210849358b1901",
+   "inputs_sha256": "d6c3aeca89f1c932c36a81a575e045263d00d264ff50509ae1dd9d6f226132ff",
+   "qgs_sha256": "b2e12551929a452faeafd5dcb1307023a83125d9a573f178c4a5b8bf3443d384"
+  },
+  {
+   "id": "calibration-config-57",
+   "stratum": "config",
+   "order_rank": 2062,
+   "repo": "onorbumbum/aslan-browser",
+   "commit": "https://github.com/onorbumbum/aslan-browser/commit/c4c7c32b6d9c4eb1e667ee3090acd8d7ee9bed9d",
+   "inputs_sha256": "301ff5c0cf25aa0f234bc0ca606ea3ae183e901f7e0f5d00199516744d013f64",
+   "qgs_sha256": "48a4a58cba3125ad35d8a39e778e12ebee083e87e2c97c3c5ce354dfc0ef58d4"
+  },
+  {
+   "id": "calibration-config-58",
+   "stratum": "config",
+   "order_rank": 1219,
+   "repo": "evidentloop/sopify",
+   "commit": "https://github.com/evidentloop/sopify/commit/9d9b319cb06713f3f9d695bf98f629e50291bba3",
+   "inputs_sha256": "5219de148533d61ec469279f4416500dc5a4ea3d745feb5aa4ffd7ba59507257",
+   "qgs_sha256": "620e50a983b0f64bc74a26bcb48b6e321592b502cdbd9e2e712b7d96f2849c44"
+  },
+  {
+   "id": "calibration-config-59",
+   "stratum": "config",
+   "order_rank": 536,
+   "repo": "anthropics/claude-agent-sdk-python",
+   "commit": "https://github.com/anthropics/claude-agent-sdk-python/commit/c01a99416a02805b0a050d058da51bde53f6df64",
+   "inputs_sha256": "cfcc9b067d727535e9b5f096917177e7c02944edb569ba61f137ca45cf684c3a",
+   "qgs_sha256": "35e6157b11056cedb2a0c85f37807b91698e575438980363f3bbd4037db918c9"
+  },
+  {
+   "id": "calibration-config-60",
+   "stratum": "config",
+   "order_rank": 5798,
+   "repo": "sam1siam/astrofabric-mcp",
+   "commit": "https://github.com/sam1siam/astrofabric-mcp/commit/b131f78c9171e68766006faaac55c2f52cf094e9",
+   "inputs_sha256": "bd142f2ea3a301699059627893af2f335de6d98a6867ae7bd6d4ce13b4e4aa55",
+   "qgs_sha256": "411a733d0308615c635d99a89e2ddcccc4e5aa92d934953149d4f3bf25ec0688"
+  },
+  {
+   "id": "calibration-product-1",
+   "stratum": "product",
+   "order_rank": 4369,
+   "repo": "trippletrouble/event-platform-infrastructure",
+   "commit": "https://github.com/trippletrouble/event-platform-infrastructure/commit/cdc628cbede548f7fc7df4262cbfcad4c6b4d43b",
+   "inputs_sha256": "5d810c662bae83a6c3a91203d5732c3cabec97ce30e5d463e60656f391a97b79",
+   "qgs_sha256": "43780dab6614f5981050d8515bc66135de3d0f06b9d99a30c2f4c910a6d86d54"
+  },
+  {
+   "id": "calibration-product-2",
+   "stratum": "product",
+   "order_rank": 5540,
+   "repo": "Janlaywss/cloud-code",
+   "commit": "https://github.com/Janlaywss/cloud-code/commit/b9c6043709e5c0450d08a8bc892c10f5149b77c7",
+   "inputs_sha256": "3939c4f9ce997deba3ccd35ffed831816fdb9ba4b534a52e43f39b7cf419336d",
+   "qgs_sha256": "2ca7d4c9192b5a1e39b55f22ffc03b302a5ccae7c2d3ad900fcb10b599fee02e"
+  },
+  {
+   "id": "calibration-product-3",
+   "stratum": "product",
+   "order_rank": 229,
+   "repo": "Bevel-Software/Hexis",
+   "commit": "https://github.com/Bevel-Software/Hexis/commit/01240b1ac88d52b22c82913a53caa97f08b3af29",
+   "inputs_sha256": "b6258884187c6c4bbaa03b00c5889ed8e7545b0a36ba15200ea1489440396309",
+   "qgs_sha256": "57ebb4e606a0eb498f8e73cb83bdc9b65ec476d9218caa021b6f392a527ccb02"
+  },
+  {
+   "id": "calibration-product-4",
+   "stratum": "product",
+   "order_rank": 18096,
+   "repo": "n-ima/todo-app",
+   "commit": "https://github.com/n-ima/todo-app/commit/122c456835df80c99adbe9c2e0376413c7255c66",
+   "inputs_sha256": "aff6d904472f778786fc77765bb623172e5720b3a82d89d2eedf8be0bf8481f6",
+   "qgs_sha256": "1bd805570ecee9c3813fe1f50dafc31002c9f25c48a4dded9899b3564afa33d1"
+  },
+  {
+   "id": "calibration-product-5",
+   "stratum": "product",
+   "order_rank": 10887,
+   "repo": "simstudioai/sim",
+   "commit": "https://github.com/simstudioai/sim/commit/15e816bd4e57685b57b157b7ad1609c75da76fa1",
+   "inputs_sha256": "3a9d9647375444f5509a10a7592960735fad4c8b65f090f4e7faad39214f19f4",
+   "qgs_sha256": "4e682a8697cc59b97881e5066fe3432aff8a374db4536b664d65b9aefea6000b"
+  },
+  {
+   "id": "calibration-product-6",
+   "stratum": "product",
+   "order_rank": 26555,
+   "repo": "centralmind/gateway",
+   "commit": "https://github.com/centralmind/gateway/commit/82eaeff6f61493731907d96795d18c4751f2d996",
+   "inputs_sha256": "55effa7e381b9501d61aaf374fdf14312193254286d9d1592d8689b97a6a9080",
+   "qgs_sha256": "940b208b5fbc312604f97b545ed61951895c3b31ab8804a10c69dedbd14a41fa"
+  },
+  {
+   "id": "calibration-product-7",
+   "stratum": "product",
+   "order_rank": 15380,
+   "repo": "quickwit-oss/quickwit-datasource",
+   "commit": "https://github.com/quickwit-oss/quickwit-datasource/commit/8e894b7d6113c6408bcc7d4003aba7c041bb89cc",
+   "inputs_sha256": "b6db7647231142b40a0f12d415793a2e2d850fad2df76d643ffa2b68ce826a46",
+   "qgs_sha256": "9d07b478a9184e4b25f4942a013b85253b7bf8b86acd8bb5b6fff518d3f674b6"
+  },
+  {
+   "id": "calibration-product-8",
+   "stratum": "product",
+   "order_rank": 6601,
+   "repo": "ucsandman/DashClaw",
+   "commit": "https://github.com/ucsandman/DashClaw/commit/704824de5f5f2fa052d4c36ec269a1ab0dbfcc8a",
+   "inputs_sha256": "25bb88492589afec93a31be81e87e815ea19392ab4cdec50fb34851be0833f8a",
+   "qgs_sha256": "5341c5dd363d6c6b7f676d8ef60646ec054c7ca2d968a415f9d75f798cd78ae3"
+  },
+  {
+   "id": "calibration-product-9",
+   "stratum": "product",
+   "order_rank": 11958,
+   "repo": "JoelA510/agent-ready-template",
+   "commit": "https://github.com/JoelA510/agent-ready-template/commit/5b75c70984ec9bebf37d0391ebcd1d5968bd8589",
+   "inputs_sha256": "ab898a7c48781e1a0418b4783355c853c52f538ba8b45f4f5ab22085a975fd65",
+   "qgs_sha256": "c94383a179951f1a604d7360fa06bba7e1adcec628c8f74eb8e59ffc0c0fd484"
+  },
+  {
+   "id": "calibration-product-10",
+   "stratum": "product",
+   "order_rank": 1446,
+   "repo": "BoringInfraCo/Root",
+   "commit": "https://github.com/BoringInfraCo/Root/commit/fa06544eb057e49495d80d8fa5cf4365ae47acbd",
+   "inputs_sha256": "7fc090661fa103630dc2dbabb94e071fe8cdde882408a481672a14d666bd7f84",
+   "qgs_sha256": "42821e7eb88e4f28be8b9c0208be77f79b50b384767a7767d3841895e35d41ec"
+  },
+  {
+   "id": "calibration-product-11",
+   "stratum": "product",
+   "order_rank": 16281,
+   "repo": "makeev/alphai-claude-skills",
+   "commit": "https://github.com/makeev/alphai-claude-skills/commit/d5012a98ef4dc23a2e8dfe728deabb037992e1f0",
+   "inputs_sha256": "f042239456d73c18684e0591a249b6a4d068d206ec35458c63a8a57f5b586aef",
+   "qgs_sha256": "c2234e40aaaa34a0e1b581a7e502bf95f95ce3b7aff7b8772fd12c5c02dee479"
+  },
+  {
+   "id": "calibration-product-12",
+   "stratum": "product",
+   "order_rank": 26653,
+   "repo": "bricks-cloud/BricksLLM",
+   "commit": "https://github.com/bricks-cloud/BricksLLM/commit/c7d80a62c2de95733c1e6c95a4eaedc50afaad75",
+   "inputs_sha256": "6d74435e3ea3ad6564d0f409edca8abfd50e6871f010c44ca7083f09f15fdcf7",
+   "qgs_sha256": "a332a5834287abce4019eddcc54cc7f6320aa2fd3128b8e8d98575f6ec682b83"
+  },
+  {
+   "id": "calibration-product-13",
+   "stratum": "product",
+   "order_rank": 7642,
+   "repo": "ryanthedev/oberskills",
+   "commit": "https://github.com/ryanthedev/oberskills/commit/75ee4389b5c3bb2092063600eec7bdeba787075f",
+   "inputs_sha256": "f23b9228ea56144afa3b08f8c24c127b0b1dfec3e461a9ed217c4f6b0f763276",
+   "qgs_sha256": "eeb91246523da979da10e22377e6acbb2558945d1650e6a03bd956ee7e0b6d93"
+  },
+  {
+   "id": "calibration-product-14",
+   "stratum": "product",
+   "order_rank": 24954,
+   "repo": "luotwo/BSC-SIF-Amazon-keyword-database",
+   "commit": "https://github.com/luotwo/BSC-SIF-Amazon-keyword-database/commit/0d29c4fafce21fe687ea73c2807c69e6d53a7b0b",
+   "inputs_sha256": "fef952aa6a7e1cdd4ab5110dc2abe4d2b9ac667dfc39eabc45b91b9e022e0c5d",
+   "qgs_sha256": "d52b351f08f90350f9f97a110354c9357debbb527ff9568b0cdf871a82c1cbcb"
+  },
+  {
+   "id": "calibration-product-15",
+   "stratum": "product",
+   "order_rank": 12920,
+   "repo": "Codevetter/codevetter",
+   "commit": "https://github.com/Codevetter/codevetter/commit/1b9e5a96e311b1fb363a1a1e5536abf2f2477b0e",
+   "inputs_sha256": "d8f8bbb8b0d75dc71e5a74d495a3b84119518812b360daa0cfec499d2ce83b98",
+   "qgs_sha256": "8406e19a69545d1c017eb1e85899dd23a074b719798d37b68070403617be8509"
+  },
+  {
+   "id": "calibration-product-16",
+   "stratum": "product",
+   "order_rank": 19306,
+   "repo": "JustinDFuller/ban-code-comments",
+   "commit": "https://github.com/JustinDFuller/ban-code-comments/commit/0ecb4e8c51778949c0cb6af35a9ad35936abe7f6",
+   "inputs_sha256": "75be4bf7bf5afcdd8b1c5d5373f7dca66bdc30e2c545ad19dc82372753ab8892",
+   "qgs_sha256": "1f27a8efe5d11092ab7e8760b01f405a7a8fa886675e2ff4da520aeb04971c15"
+  },
+  {
+   "id": "calibration-product-17",
+   "stratum": "product",
+   "order_rank": 28514,
+   "repo": "smlfg/sidecar-v5",
+   "commit": "https://github.com/smlfg/sidecar-v5/commit/5868535313255654f6d46dcd5efa6c45c774a3d5",
+   "inputs_sha256": "499b97b17041bfbd6bcbcda52303079212a2caf66c9f90186357296b9d5c79c7",
+   "qgs_sha256": "66c1d365220bc395fc74925cf3508db7b00faff1754be02ac01c5029bb9c7c51"
+  },
+  {
+   "id": "calibration-product-18",
+   "stratum": "product",
+   "order_rank": 20097,
+   "repo": "Junaid-PK/laravel-development-workflow",
+   "commit": "https://github.com/Junaid-PK/laravel-development-workflow/commit/e8747afc1a427ae16e70ec01ad994788e71936a4",
+   "inputs_sha256": "cf76bb8683f86fef565cbe8c2609ed2ec4befe2e06b65948551868992707bbea",
+   "qgs_sha256": "16c46b302006f1132b768c9716c9d003b20c98c6902598384da6a5ac99124000"
+  },
+  {
+   "id": "calibration-product-19",
+   "stratum": "product",
+   "order_rank": 27395,
+   "repo": "TheColliery/CoalLedger",
+   "commit": "https://github.com/TheColliery/CoalLedger/commit/85a4d1a51fd6bc8b61acc42484fe2e630db118c0",
+   "inputs_sha256": "e80ec2dc29fb4d0c627351020fbe4ac0bfdba0f212829415965c6abd36a7b684",
+   "qgs_sha256": "fceb2c4e8722481972de10970674e03a0319022158e8ac09878d10e2b962bc7d"
+  },
+  {
+   "id": "calibration-product-20",
+   "stratum": "product",
+   "order_rank": 26445,
+   "repo": "pluveto/daan",
+   "commit": "https://github.com/pluveto/daan/commit/7f6d120fb25dd27ebccf8f2ffcddfb5b31c90613",
+   "inputs_sha256": "f502182e454d2f53740c2f43806c49f05b4b0d13f6f8c9e150091b6c371df4fe",
+   "qgs_sha256": "23a02bedbbe448b23cfbb5f94fe4bd86e39a8c83c18dd6fed99825e61720890c"
+  },
+  {
+   "id": "calibration-product-21",
+   "stratum": "product",
+   "order_rank": 16056,
+   "repo": "jszsource/team-front-skill",
+   "commit": "https://github.com/jszsource/team-front-skill/commit/9a9a2801ff3ac8487309883d260ef3ec499b9a75",
+   "inputs_sha256": "c135cf43d215acfb55f0cada5f242fd86e623ea487dd286eb1bd1dd9d055199e",
+   "qgs_sha256": "0b822fcf42c62c3bf688ed5e7035f724ce9aff464cc148721a77150573b06b8d"
+  },
+  {
+   "id": "calibration-product-22",
+   "stratum": "product",
+   "order_rank": 26298,
+   "repo": "elkuku/iitc-theme-template",
+   "commit": "https://github.com/elkuku/iitc-theme-template/commit/d35671b6162ea48ceffa426fcfde9b83e8f0f883",
+   "inputs_sha256": "88aa8aaa7e7e39f4c42ae080355a2f2f10d8f95509aa36c534fc456cb9e72a77",
+   "qgs_sha256": "97b4457a9a0659fc98c4a9cf1501fadef520a37abc3603b985b0e48496f5cb18"
+  },
+  {
+   "id": "calibration-product-23",
+   "stratum": "product",
+   "order_rank": 17677,
+   "repo": "human-plus-machine/monkeyskills",
+   "commit": "https://github.com/human-plus-machine/monkeyskills/commit/935f77cd98a2b0ac98ec553acf82e4f613e3b9c0",
+   "inputs_sha256": "2275151fed474250ff3b4462e975a757e609ba070b9678c628666e8e0b3b7266",
+   "qgs_sha256": "d7a33abdfa5ac49725001c36aa513b85edc3cee363929905fe2de3bd3647de1b"
+  },
+  {
+   "id": "calibration-product-24",
+   "stratum": "product",
+   "order_rank": 13161,
+   "repo": "masondelan/selvedge",
+   "commit": "https://github.com/masondelan/selvedge/commit/66c51d3b4d2a3aa21e8bb668767552ec4ca465e0",
+   "inputs_sha256": "f67ae57e4c48d33d635013a9eb6e66f76e30c219e4d92f83aa73a1555bc84857",
+   "qgs_sha256": "c0b095530d75c30394f7505d0fdc2b41ed69e0ec837a696c9d14b4e857597c35"
+  },
+  {
+   "id": "calibration-product-25",
+   "stratum": "product",
+   "order_rank": 11162,
+   "repo": "VictoriaMetrics/victoriametrics-datasource",
+   "commit": "https://github.com/VictoriaMetrics/victoriametrics-datasource/commit/c460a4f3ee0651ac0faabbe6fb2eef9b3098bf49",
+   "inputs_sha256": "6811389b2e23242f095448346062a7b903176068f4a6eb8902ab42d964ef78fc",
+   "qgs_sha256": "9356c5b4e5e5286b0144920acddf6c012657fc77d8e1efcbdcf39e88394e37bc"
+  },
+  {
+   "id": "calibration-product-26",
+   "stratum": "product",
+   "order_rank": 8982,
+   "repo": "ahujasid/mcp-for-blender",
+   "commit": "https://github.com/ahujasid/mcp-for-blender/commit/98b991c8daf91ab9d5451ee6b923d89367f733a5",
+   "inputs_sha256": "a89cb75e7322ef6661931ddd231c37f823476e72147f643bfa0570244a619298",
+   "qgs_sha256": "80c9ee42318d6bf5237b21a597bf4b19e0a37f6932a5c559b02f14c5bf53279c"
+  },
+  {
+   "id": "calibration-product-27",
+   "stratum": "product",
+   "order_rank": 24754,
+   "repo": "box-community/mcp-server-box",
+   "commit": "https://github.com/box-community/mcp-server-box/commit/9452db09218fdaba46e5ed6ca2ebf0a72419c076",
+   "inputs_sha256": "7f558ee053ad9387af5bdcb25f2f58b4b7907b41e9b36d7bfb145966f80e6dd5",
+   "qgs_sha256": "ccdc960fd7c688e43cf776000b554dbad18454a5fbecf8d6156c1e04024745d4"
+  },
+  {
+   "id": "calibration-product-28",
+   "stratum": "product",
+   "order_rank": 15006,
+   "repo": "Naxasware/Naxasware-Plugins",
+   "commit": "https://github.com/Naxasware/Naxasware-Plugins/commit/7b5877eacc920781aec8140ffc4e4597dd1252b0",
+   "inputs_sha256": "211512ec6749c23fec5d2728683e1a38249599062e4bf68cb32ea1dee8c231ed",
+   "qgs_sha256": "084439c51dc6f2fdb719d5d57e85469efb6c27a155680f45bea10781d5824f18"
+  },
+  {
+   "id": "calibration-product-29",
+   "stratum": "product",
+   "order_rank": 25110,
+   "repo": "lazymac2x/lazymac-mcp",
+   "commit": "https://github.com/lazymac2x/lazymac-mcp/commit/093b69cc149dc0adc33b3544313df46b843c18e2",
+   "inputs_sha256": "3c4dc51763ee5923c4ecb5ed32f3df19fab6c9aedf871c3d36351d329bc6ea5b",
+   "qgs_sha256": "4580239d4c3405e0350bd5c856e7a4318f16709e4dfcd2979b447ac55e112cfe"
+  },
+  {
+   "id": "calibration-product-30",
+   "stratum": "product",
+   "order_rank": 1122,
+   "repo": "tjboudreaux/cc-thinking-skills",
+   "commit": "https://github.com/tjboudreaux/cc-thinking-skills/commit/7b8fece345dfaa11773be7152ccd194589cb5437",
+   "inputs_sha256": "d440b83597f4cae96dbf7dc260d57462685bb9251b1810b3fec490bf8a7732e5",
+   "qgs_sha256": "009436e99c57d775b737ec487fdc2ecc776caf8b66ca5f47ab7c2191d9e164d9"
+  },
+  {
+   "id": "calibration-product-31",
+   "stratum": "product",
+   "order_rank": 11988,
+   "repo": "k4yt3x/meka",
+   "commit": "https://github.com/k4yt3x/meka/commit/73004204ab968863ee5feb2e52b734a80ddc96af",
+   "inputs_sha256": "245c4f1846819ebbd6529cab526143099d07f530eb0b50bf03dfe325f7fa8fa7",
+   "qgs_sha256": "29fbf28319e146849f1eb1c2974a3162f76d927057d886a5c8f4bd711c173775"
+  },
+  {
+   "id": "calibration-product-32",
+   "stratum": "product",
+   "order_rank": 17617,
+   "repo": "yowainwright/eslint-plugin-legibility",
+   "commit": "https://github.com/yowainwright/eslint-plugin-legibility/commit/087b64c46e8d18e8930f8f7f4e324a4b5e8836ca",
+   "inputs_sha256": "5cfdd620bf725b86d3540be32642aaca391cef1afd1361d7aa854d73c3dd5119",
+   "qgs_sha256": "a80fe7b247d79c0fc91ad8e75c804c0ecc19bad0ff575896ab835e3d28f5211b"
+  },
+  {
+   "id": "calibration-product-33",
+   "stratum": "product",
+   "order_rank": 28833,
+   "repo": "ZmoleCristian/lawkeeper",
+   "commit": "https://github.com/ZmoleCristian/lawkeeper/commit/3cbb4598c4dbfd99c292064eeaa6a6ceb561cfce",
+   "inputs_sha256": "38b6f867d8a17dca8b00fee4ab079ccf92445463dcb949cfa8fa7623b67b8fee",
+   "qgs_sha256": "e71eae6106787d183fe25c8e31be1548fd763e706e563944af2a8ed693340338"
+  },
+  {
+   "id": "calibration-product-34",
+   "stratum": "product",
+   "order_rank": 19182,
+   "repo": "vercel/next-devtools-mcp",
+   "commit": "https://github.com/vercel/next-devtools-mcp/commit/1e8dcfa4789777901144b5d9710137f0eff72036",
+   "inputs_sha256": "b61ec1ffa7b8344fd0d2268ce1c9514c07b03cff3bd80fa06466036ff6b047be",
+   "qgs_sha256": "d5d3d2d02bc809c2e5e268975f5b989691a88d4a497aa9504f2b7f47440586ed"
+  },
+  {
+   "id": "calibration-product-35",
+   "stratum": "product",
+   "order_rank": 923,
+   "repo": "fkiene/llmtrim",
+   "commit": "https://github.com/fkiene/llmtrim/commit/9586780b3ed9bae2592203b2d4f93ba7228f1a2a",
+   "inputs_sha256": "aae95e8f7c56595e2a9d7b7429991356face4b75ffd377ad83142930468d9620",
+   "qgs_sha256": "a4556586b9acb10eb343e530166551ecc75964c747ad5437a198d9bb316d2a24"
+  },
+  {
+   "id": "calibration-product-36",
+   "stratum": "product",
+   "order_rank": 260,
+   "repo": "dshakes/compass",
+   "commit": "https://github.com/dshakes/compass/commit/fb41822123b4b556079b9a1c945c2521404ec978",
+   "inputs_sha256": "68867daaa06b3e193253411679c511fe6b6b81e8face100594b2e3b9cf59e1ed",
+   "qgs_sha256": "4df77bf34a555ed5e1c9bff11d0a7a22a5e2bb88d32fec20647e13319bb519b3"
+  },
+  {
+   "id": "calibration-product-37",
+   "stratum": "product",
+   "order_rank": 21924,
+   "repo": "niyatna/openintent",
+   "commit": "https://github.com/niyatna/openintent/commit/80c13b234f9a94a5a45121986a6d53c688549403",
+   "inputs_sha256": "8c1b2504091b20146b693930cc0abc893dc2b6bc393e572f3df0c645cc0153de",
+   "qgs_sha256": "0f68a3b64412773a91b4e127ace34909252dd3b1910200505812d2fd78d5f80f"
+  },
+  {
+   "id": "calibration-product-38",
+   "stratum": "product",
+   "order_rank": 4262,
+   "repo": "nim-video/skills",
+   "commit": "https://github.com/nim-video/skills/commit/a7f8fabf86d3508199fe0740b7c34edf0deff3da",
+   "inputs_sha256": "c4926c3c6a98aae336e75a496d31a3fc393dde3f4737c424c5a658f628e73c7d",
+   "qgs_sha256": "4b90a426c6e983946bba1a1ec1d26a290e4e1fd59db0f675cfca21eab3a4bf11"
+  },
+  {
+   "id": "calibration-product-39",
+   "stratum": "product",
+   "order_rank": 1148,
+   "repo": "gotalab/skillport",
+   "commit": "https://github.com/gotalab/skillport/commit/51334ae94919fc1c261673ffefdce9176c9094ef",
+   "inputs_sha256": "9f0e5a9771922391131530a4d7a8add02348275ae8ab0edf8a8ccb5bd1fe6b31",
+   "qgs_sha256": "2537a6cda8c44b4d376370c7891cdf1d22dd4461df14aeb232e391466781e096"
+  },
+  {
+   "id": "calibration-product-40",
+   "stratum": "product",
+   "order_rank": 2807,
+   "repo": "ChromeDevTools/chrome-devtools-mcp",
+   "commit": "https://github.com/ChromeDevTools/chrome-devtools-mcp/commit/9a6b03acf768993dc0b3ff83ed59a5f9e1f65735",
+   "inputs_sha256": "6e67c5c99402582048fdadb2becdc81cfd9311f00dd9892b59145f1232cb4bfa",
+   "qgs_sha256": "2faea01b2d45ee3e9934484bb9b958a9b475f73ef3bd787fd844e0a89d69d590"
+  },
+  {
+   "id": "calibration-product-41",
+   "stratum": "product",
+   "order_rank": 28388,
+   "repo": "orchidautomation/pluxx",
+   "commit": "https://github.com/orchidautomation/pluxx/commit/80f67d2486e437e82839b06f2b7b9f9589b82b91",
+   "inputs_sha256": "dedec0779d6742e80e0932e807916c9e0ad75594e3ec0876ef02077e95206877",
+   "qgs_sha256": "c0b735aa1d68d344d817d537327be304850da843e8d4cf263dbcde586b12c616"
+  },
+  {
+   "id": "calibration-product-42",
+   "stratum": "product",
+   "order_rank": 19535,
+   "repo": "tfohlmeister/convex-evalbench",
+   "commit": "https://github.com/tfohlmeister/convex-evalbench/commit/105c07ddd1d927e0bbb3ba321c1df939489e1852",
+   "inputs_sha256": "2e6f9961585f11d4543c03956f2ebe250689e483dcce5407bc0ad9253d7b3723",
+   "qgs_sha256": "a708161b9df12c4fd35d54956afdeda9240dac374d74b93f03737b9a59b875d9"
+  },
+  {
+   "id": "calibration-product-43",
+   "stratum": "product",
+   "order_rank": 11210,
+   "repo": "waybarrios/vllm-mlx",
+   "commit": "https://github.com/waybarrios/vllm-mlx/commit/1a6fe3fa5986d137209460ea86c3e3c9c7f307e4",
+   "inputs_sha256": "4fe8ed39ac80454a3ef188c4fe64cfc980c43571260e84f3e418f7e0dbab18a1",
+   "qgs_sha256": "70242e0e0dc05ef2e3202471f593a6962c52ece42502b4859383f56c6c01a175"
+  },
+  {
+   "id": "calibration-product-44",
+   "stratum": "product",
+   "order_rank": 2277,
+   "repo": "zzttzzmyswy/multica-android",
+   "commit": "https://github.com/zzttzzmyswy/multica-android/commit/d74e326111f7b988f893c9b074cf52a9736ed852",
+   "inputs_sha256": "4be452804c2c37d85675d91a48d87c2704a6197b646eaf313ccc5142c992ac29",
+   "qgs_sha256": "ff58942d725ceac16f92dd5d0bdf3b1139dc550c6a988f19367185d23f5590ed"
+  },
+  {
+   "id": "calibration-product-45",
+   "stratum": "product",
+   "order_rank": 42,
+   "repo": "Q00/ouroboros",
+   "commit": "https://github.com/Q00/ouroboros/commit/842b1020d063a4a9968be90de99d5f093c6b196d",
+   "inputs_sha256": "6a9e64a6e1448958e03fffa59253c0c091c37b370bfd16ac8e8a08102ba87318",
+   "qgs_sha256": "ef88abb1d74973dfc9a8c0622efbaaa1275066263dd0bbdb38f49a10e31f63cd"
+  },
+  {
+   "id": "calibration-product-46",
+   "stratum": "product",
+   "order_rank": 8322,
+   "repo": "SUMITDROY/LH-backend",
+   "commit": "https://github.com/SUMITDROY/LH-backend/commit/4c15bdc4459a576cf2a2daba35e43378ee0de271",
+   "inputs_sha256": "305f14b236f8b4accd2ca79dfec18e5a58092cec68363d4cb8b9f99dd108a168",
+   "qgs_sha256": "ad6641b37b8c5725999554bfc9f04ddd9e856350433eb7733777d7511ccbf9de"
+  },
+  {
+   "id": "calibration-product-47",
+   "stratum": "product",
+   "order_rank": 28458,
+   "repo": "baabakk/llm-ports",
+   "commit": "https://github.com/baabakk/llm-ports/commit/2fbf497365da81458dee1faecd233d3fd4391774",
+   "inputs_sha256": "18ca819f2f9a9616e6bb959339e8d23c62afd3762bcb52b06e879816fb437b51",
+   "qgs_sha256": "9418add64089f573920c5b79ce51a97f638408e4c013a122834d702fcbdb6fde"
+  },
+  {
+   "id": "calibration-product-48",
+   "stratum": "product",
+   "order_rank": 505,
+   "repo": "microsoft/azure-skills",
+   "commit": "https://github.com/microsoft/azure-skills/commit/cf79ce8778ad063eeac19dbe8bf982d71b466ce0",
+   "inputs_sha256": "f5dd12f0446b696ac43cc05cab6f6ac8d4b8efc26fc661378a1851082062aab9",
+   "qgs_sha256": "ed9076920f69d854862a0b49a6ec3b5ce378b73c951e3e1cb26b4d328c716a4c"
+  },
+  {
+   "id": "calibration-product-49",
+   "stratum": "product",
+   "order_rank": 14848,
+   "repo": "conorholds/cedros-login",
+   "commit": "https://github.com/conorholds/cedros-login/commit/bf9d3a1fd8cecdd423034a5dfa9fb544a31ce06b",
+   "inputs_sha256": "cd094d7f4a262ad148cdfd8580f74f8ecaab789a10ed0e2daa442bde1d55e0ed",
+   "qgs_sha256": "fc928800327ce74edb02baa6a78a13c7e397ca29d5e4323e7f9e3e2772e9ec7d"
+  },
+  {
+   "id": "calibration-product-50",
+   "stratum": "product",
+   "order_rank": 14759,
+   "repo": "wangqiqi/planrun",
+   "commit": "https://github.com/wangqiqi/planrun/commit/80d200fc0cd50661ae7f7449965ed7f34d9b160d",
+   "inputs_sha256": "d65dcdd78de87a707f9a06ce47c84a25e17e6a9be4b4b3198644f815c7eb9820",
+   "qgs_sha256": "dc71a1eb3a255ee4d31d936c2dcf88db2854a5c38fecccdd191d625423c606d9"
+  },
+  {
+   "id": "calibration-product-51",
+   "stratum": "product",
+   "order_rank": 80,
+   "repo": "JasonColapietro/suede-creator-skills",
+   "commit": "https://github.com/JasonColapietro/suede-creator-skills/commit/4287faf9790de7a25b46c0e9b31dce3ec602b715",
+   "inputs_sha256": "148b3bb73b5bbca5cf71ee63dbe1514881b5d08a6255f39dcba037474a851cbd",
+   "qgs_sha256": "b54f8790d54192b16eb10030358f47e3de4bc1a5fe53c7ec0d8d7177fe4f2c77"
+  },
+  {
+   "id": "calibration-product-52",
+   "stratum": "product",
+   "order_rank": 9230,
+   "repo": "Bryant-Tang/turbo-plugins-claude",
+   "commit": "https://github.com/Bryant-Tang/turbo-plugins-claude/commit/217ead693709e7d68753d17f0e403e7a091b4069",
+   "inputs_sha256": "da9092bc2133e9dea735913b2183644d93a888b7cb82a0a6957492b398f75b68",
+   "qgs_sha256": "a632f0466cf4ad2726bcb15f3a6e3209d187e1d99b59ee6b01564332bd265811"
+  },
+  {
+   "id": "calibration-product-53",
+   "stratum": "product",
+   "order_rank": 17653,
+   "repo": "Christian-Katzmann/app-it",
+   "commit": "https://github.com/Christian-Katzmann/app-it/commit/9ad064e62c2f2cdde7125e9f6577a0c487906e94",
+   "inputs_sha256": "e80981ebe77e5e08e5e945345bbf6e04d01e405d9206753402ce762cea79ae89",
+   "qgs_sha256": "498723d5b818682f198c8e071fa4fa78f3ccfbb957b6fafe883554f9d18bc840"
+  },
+  {
+   "id": "calibration-product-54",
+   "stratum": "product",
+   "order_rank": 20886,
+   "repo": "llm-jp/simple-evals-mm",
+   "commit": "https://github.com/llm-jp/simple-evals-mm/commit/979e030f867c0dea8da093078965b3057fdd2416",
+   "inputs_sha256": "efdb1b2c8a761aac7aac07e2db05a40832b4c879a44ca3805f631f50d453e978",
+   "qgs_sha256": "a45b8348446e98edeb4779fd216035f609ac72c0c3a040c0df1b2caf110fd153"
+  },
+  {
+   "id": "calibration-product-55",
+   "stratum": "product",
+   "order_rank": 12208,
+   "repo": "netresearch/typo3-conformance-skill",
+   "commit": "https://github.com/netresearch/typo3-conformance-skill/commit/a7ae9fd248f828498d2f4385d04643da38682601",
+   "inputs_sha256": "443f8f17da644f8f55932aa3174a4a0a1bafd9f927994a3e62683986dda2a63b",
+   "qgs_sha256": "1081dc31b3280b72b41838a1b234d65443e1faba7d8f194278d680f6bf1b1cdd"
+  },
+  {
+   "id": "calibration-product-56",
+   "stratum": "product",
+   "order_rank": 8470,
+   "repo": "rcbroo/claw-code-supachat-fork",
+   "commit": "https://github.com/rcbroo/claw-code-supachat-fork/commit/723a4fbf65852c854420f1a93e08ad9e309e2e43",
+   "inputs_sha256": "122a8dc3a7fa6a35c5bd254f7051f04423f408fc2a17bfc62674757121b30ccf",
+   "qgs_sha256": "a5528e91a37ca64c035ea99082e670f74a1a449448c60b543bae09f774218124"
+  },
+  {
+   "id": "calibration-product-57",
+   "stratum": "product",
+   "order_rank": 24430,
+   "repo": "demo112/yunqu-ai-skills",
+   "commit": "https://github.com/demo112/yunqu-ai-skills/commit/6676d21fc4e06b54cf1f072d828d2f41ce25eee2",
+   "inputs_sha256": "21fa33ea5b81085eacd6e8e4c49ead9da7b5f3a4e2f37b07334c1ad88ca38671",
+   "qgs_sha256": "fec726d65eb685264e341234e0d65a22067260e26b34cd9bf3a73ce3ac66385b"
+  },
+  {
+   "id": "calibration-product-58",
+   "stratum": "product",
+   "order_rank": 9676,
+   "repo": "future-agi/future-agi",
+   "commit": "https://github.com/future-agi/future-agi/commit/d3e2db1c725172f3a3a294d8628139508f3af003",
+   "inputs_sha256": "51b0d5170d4a08508c021772a52031f9d222922e1a505e02461296cbbe66fddf",
+   "qgs_sha256": "0c33e92ef7ea2cd86d95a4813147721b33d9ab682b439eee6f820fb580acc9c1"
+  },
+  {
+   "id": "calibration-product-59",
+   "stratum": "product",
+   "order_rank": 13321,
+   "repo": "serpro69/capy",
+   "commit": "https://github.com/serpro69/capy/commit/595018f1c54ad5dc4ad3b0a7b57a8d9791b65e0b",
+   "inputs_sha256": "519e169c0bc8e7a3d13ad0a3c1ada79ee195167be55ef2e557cc7e52058432b2",
+   "qgs_sha256": "75602f8f7ef791c378787c6e3fc473924445b59fff9dfa50f9099cf499c9a0c4"
+  },
+  {
+   "id": "calibration-product-60",
+   "stratum": "product",
+   "order_rank": 15913,
+   "repo": "patakuti/cc-semaphore",
+   "commit": "https://github.com/patakuti/cc-semaphore/commit/aaaf8d4818828c4dec7c3f90fc7feea9b4135e83",
+   "inputs_sha256": "b6b208d1dbcd04d52602c04852373ed37bcedb3661153bf765251ed3919b25e6",
+   "qgs_sha256": "3a20f9b088efdb4a002e7f7c4475db700b3cd38b90ce11da184f400597849201"
+  }
+ ]
+}
