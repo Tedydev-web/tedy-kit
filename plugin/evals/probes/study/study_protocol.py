@@ -1,5 +1,6 @@
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from study_agreement import KAPPA_CRITERIA, session_kappas
@@ -8,6 +9,7 @@ from study_session_prompt import template_sha256
 from study_topic import TopicError, pilot_rows, screened_strata, session_a, session_b
 
 FREEZE_FILE = "protocol-freeze.json"
+SCREEN_KEY = re.compile(r"[a-z0-9]+-[AB]")
 EMPTY_TABLE = {"aliases": {}, "class": {}, "default": "new"}
 
 
@@ -50,7 +52,7 @@ def pilot_comparison(rows):
 
 def screen_sessions(work):
     meta = Path(work) / "meta.json"
-    return {k: v for k, v in (json.loads(meta.read_text()).get("sessions", {}) if meta.is_file() else {}).items() if "-pilot-" not in k and v.get("blocks")}
+    return {k: v for k, v in (json.loads(meta.read_text()).get("sessions", {}) if meta.is_file() else {}).items() if SCREEN_KEY.fullmatch(k) and v.get("blocks")}
 
 
 def pilot_sessions(work):

@@ -110,6 +110,13 @@ class FreezeTest(unittest.TestCase):
         write_jsonl(self.work / "config-screen-B.jsonl", [])
         self.assertIn("screen sessions already ran (config-screen-B.jsonl)", self.run_freeze().stderr)
 
+    def test_reference_stage1_and_calibration_judge_runs_before_the_freeze_are_not_screen_sessions(self):
+        meta = json.loads((self.work / "meta.json").read_text())
+        for key in ("reference-calibration-config", "judge-config-stage1-brief-claude-sonnet-5-5-run1", "citation-check-claude-opus-5-5"):
+            meta["sessions"][key] = {"blocks": [{"ranks": [4]}]}
+        write_json(self.work / "meta.json", meta)
+        self.assertEqual(self.run_freeze().returncode, 0)
+
     def test_a_pilot_block_without_session_files_is_refused(self):
         (self.work / "config-pilot-A.jsonl").unlink()
         self.assertIn("config-pilot-A.jsonl", self.run_freeze().stderr)
