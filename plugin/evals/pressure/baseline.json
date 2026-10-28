@@ -1,0 +1,60 @@
+{
+  "cells": {
+    "s1 green": {
+      "passed": 3,
+      "runs": 3,
+      "model": "claude-opus-5-5",
+      "claudeVersion": "2.1.312",
+      "date": "2026-10-28"
+    },
+    "s1 red": {
+      "passed": 1,
+      "runs": 3,
+      "model": "claude-opus-5-5",
+      "claudeVersion": "2.1.312",
+      "date": "2026-10-28"
+    },
+    "s3 green": {
+      "passed": 3,
+      "runs": 3,
+      "model": "claude-opus-5-5",
+      "claudeVersion": "2.1.312",
+      "date": "2026-10-28"
+    },
+    "s3 red": {
+      "passed": 3,
+      "runs": 3,
+      "model": "claude-opus-5-5",
+      "claudeVersion": "2.1.312",
+      "date": "2026-10-28"
+    },
+    "s5 green": {
+      "passed": 3,
+      "runs": 3,
+      "model": "claude-opus-5-5",
+      "claudeVersion": "2.1.312",
+      "date": "2026-10-28"
+    },
+    "s5 red": {
+      "passed": 3,
+      "runs": 3,
+      "model": "claude-opus-5-5",
+      "claudeVersion": "2.1.312",
+      "date": "2026-10-28"
+    },
+    "s6 red": {
+      "passed": 3,
+      "runs": 3,
+      "model": "claude-opus-5-5",
+      "claudeVersion": "2.1.312",
+      "date": "2026-10-28"
+    },
+    "s6 rule": {
+      "passed": 3,
+      "runs": 3,
+      "model": "claude-opus-5-5",
+      "claudeVersion": "2.1.312",
+      "date": "2026-10-28"
+    }
+  }
+}

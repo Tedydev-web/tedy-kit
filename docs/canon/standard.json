@@ -1,7 +1,7 @@
 {
   "version": 1,
   "history": [
-    { "version": 1, "date": "2026-10-28", "trigger": "ADR 0011 option A: the canon study found rules held by prose or by one check each.", "change": "The first ledger: 27 rules from the README authoring rules, the gates and the tests, each naming its enforcing test or why it is reviewed; three authoring rules gained checks; every skill, ADR, card and sweep record is registered at version 1 in conformance.json.", "redid": [] }
+    { "version": 1, "date": "2026-10-28", "trigger": "ADR 0011 option A: the canon study found rules held by prose or by one check each.", "change": "The first ledger: 29 rules from the README authoring rules, the gates and the tests, each naming its enforcing test or why it is reviewed; three authoring rules gained checks; every skill, ADR, card and sweep record is registered at version 1 in conformance.json.", "redid": [] }
   ],
   "rules": [
     {
@@ -142,7 +142,7 @@
       "since": 1,
       "scope": "repo",
       "reason": "An LLM judge reading the same style docs is circular and biased toward its own outputs (ADR 0007, ADR 0009).",
-      "class": "model-gap",
+      "class": "user-policy",
       "problems": ["S8"],
       "enforced": { "kind": "test", "file": "plugin/tests/skill-contracts.test.mjs", "title": "eval graders check facts only: no llm or baseline grader in any case" },
       "notCovered": "Whether each fact grader checks the fact that matters for the case.",
@@ -182,6 +182,7 @@
       "problems": ["S17"],
       "enforced": { "kind": "test", "file": "plugin/tests/skill-contracts.test.mjs", "title": "one blast-radius procedure sees every tracked file, reads siblings from the remote ref, and every role that traces callers points to it" },
       "notCovered": "Whether the agent runs the procedure in a session.",
+      "ablation": { "scenario": "s6", "with": "rule", "without": "red" },
       "approved": "2026-10-28"
     },
     {
@@ -326,6 +327,30 @@
       "problems": ["S16"],
       "enforced": { "kind": "review", "whyNotMachine": "It needs the live Claude Code CLI and is triggered by an update, not by a change to the tree." },
       "notCovered": "Everything npm test sees.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "rebaseline-model",
+      "text": "Eval results record the served model, and a rebaseline never lowers a pass rate except on an accepted model change.",
+      "since": 1,
+      "scope": "repo",
+      "reason": "A model upgrade must not launder a regression into a new baseline.",
+      "class": "platform",
+      "problems": ["S30"],
+      "enforced": { "kind": "test", "file": "plugin/tests/eval-baseline.test.mjs", "title": "a rebaseline that lowers a pass rate is refused unless the model changed and the change is accepted" },
+      "notCovered": "Eval suites other than the pressure scenarios, and runs whose trace has no model.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "model-gap-ablation",
+      "text": "Every model-gap rule names an ablation, and its verdict proposes keeping or removing the rule; nothing is deleted automatically.",
+      "since": 1,
+      "scope": "repo",
+      "reason": "Instructions written for an older model can hurt a newer one, so they are re-measured, not trusted forever.",
+      "class": "platform",
+      "problems": ["S31"],
+      "enforced": { "kind": "test", "file": "plugin/tests/eval-baseline.test.mjs", "title": "the ablation plan keeps a model-gap rule that still helps, proposes removing one that does not, and never measures across models" },
+      "notCovered": "Whether the ablation scenario exercises the rule as real sessions do; three runs per arm is a small sample.",
       "approved": "2026-10-28"
     }
   ]

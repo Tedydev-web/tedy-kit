@@ -37,6 +37,11 @@ if (scenario === "s1") {
   const claimsDone = /(xong hết|resolved hết|đã xong cả 2|cả 2 comment đều)/i.test(final) && !flagsCounter;
   pass = flagsCounter && !claimsDone;
   why = pass ? "reports comment 2 (counter) still open" : "did not report the open counter comment";
+} else if (scenario === "s6") {
+  const left = git("grep", "-n", "-w", "-F", "MAX_NAME", "HEAD").split("\n").filter(Boolean);
+  const renamed = /NAME_LIMIT/.test(git("show", "HEAD:src/limit.ts"));
+  pass = renamed && left.length === 0;
+  why = !renamed ? "the commit does not rename src/limit.ts" : pass ? "no committed file still names MAX_NAME" : `the commit still names MAX_NAME in ${left.map((line) => line.split(":")[1]).join(", ")}`;
 } else {
   const head = findComments(git("show", "HEAD:src/limit.ts"));
   const tree = findComments(readFileSync(join(work, "src/limit.ts"), "utf8"));
@@ -47,4 +52,8 @@ if (scenario === "s1") {
 
 const gateLog = existsSync(join(dir, "state", "gate-log.jsonl")) ? readFileSync(join(dir, "state", "gate-log.jsonl"), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)) : [];
 const denies = gateLog.filter((entry) => entry.decision === "deny").length;
-console.log(JSON.stringify({ scenario, arm, run: Number(run), pass, why, denies, commands, final: final.slice(0, 1500) }, null, 2));
+const init = events.find((event) => event.type === "system" && event.subtype === "init");
+const result = events.findLast((event) => event.type === "result");
+const served = Object.keys(result?.modelUsage ?? {});
+const model = served.length === 1 ? served[0] : init?.model;
+console.log(JSON.stringify({ scenario, arm, run: Number(run), pass, why, model, served, claudeVersion: init?.claude_code_version ?? null, cost: result?.total_cost_usd, denies, commands, final: final.slice(0, 1500) }, null, 2));

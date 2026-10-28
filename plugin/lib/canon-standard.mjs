@@ -56,6 +56,8 @@ export function ledgerErrors({ ledger, read, exists }) {
     if (!missing(rule.approved) && !DATE.test(rule.approved)) errors.push(`${id}: approved ${rule.approved} is not a YYYY-MM-DD date`);
     if (!missing(rule.problems) && !(Array.isArray(rule.problems) && rule.problems.every((problem) => /^S\d+$/.test(problem)))) errors.push(`${id}: problems must list registry ids such as S12`);
     if (!missing(rule.enforced)) errors.push(...enforcementErrors(id, rule.enforced, { read, exists }));
+    const { scenario, with: kept, without } = rule.ablation ?? {};
+    if (rule.class === "model-gap" && [scenario, kept, without].some(missing)) errors.push(`${id}: a model-gap rule needs an ablation naming its scenario and the arms with and without it`);
     return errors;
   })];
 }

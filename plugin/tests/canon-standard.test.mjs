@@ -22,7 +22,7 @@ const rule = (fields) => ({
   ...fields,
 });
 
-test("a rule whose test file, test title, fields, class, kind, version, date or problems are wrong fails", () => {
+test("a rule whose test file, test title, fields, class, kind, version, date, problems or model-gap ablation are wrong fails", () => {
   assert.deepEqual(ledgerErrors(fixture([rule({}), rule({ id: "judged", enforced: { kind: "review", whyNotMachine: "A judgment." } })])), []);
   assert.deepEqual(ledgerErrors(fixture([
     rule({ id: "gone", enforced: { kind: "test", file: "plugin/tests/gone.test.mjs", title: "every skill is small" } }),
@@ -32,6 +32,8 @@ test("a rule whose test file, test title, fields, class, kind, version, date or 
     rule({ id: "bare", reason: "", notCovered: undefined }),
     rule({ id: "odd", class: "taste", scope: "everywhere", enforced: { kind: "lint" } }),
     rule({ id: "future", since: 2, approved: "28/10/2026", problems: ["P1"] }),
+    rule({ id: "gap", class: "model-gap", ablation: { scenario: "s9", with: "rule" } }),
+    rule({ id: "measured", class: "model-gap", ablation: { scenario: "s9", with: "rule", without: "red" } }),
     rule({ id: "unexplained", enforced: { kind: "review" } }),
     rule({ id: "unexplained" }),
   ])), [
@@ -47,6 +49,7 @@ test("a rule whose test file, test title, fields, class, kind, version, date or 
     "future: since 2 is not a standard version from 1 to 1",
     "future: approved 28/10/2026 is not a YYYY-MM-DD date",
     "future: problems must list registry ids such as S12",
+    "gap: a model-gap rule needs an ablation naming its scenario and the arms with and without it",
     "unexplained: a review rule needs whyNotMachine",
     "unexplained: the id repeats",
   ]);
