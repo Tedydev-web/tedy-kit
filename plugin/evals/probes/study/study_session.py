@@ -130,7 +130,7 @@ def append_lines(files):
 
 def check_header(sessions, key, header, ranks):
     existing = sessions.get(key)
-    if existing is None:
+    if existing is None or not (existing.get("blocks") or existing.get("refused")):
         return
     for field in SESSION_FIELDS:
         if existing.get(field) != header[field]:

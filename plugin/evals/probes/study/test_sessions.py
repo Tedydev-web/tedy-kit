@@ -114,6 +114,16 @@ class BlockRecordTest(SessionBase):
         self.assertIn("ran with effort 'high'", str(raised.exception))
         self.assertEqual(fetch.called("claude -p"), [])
 
+    def test_a_session_whose_blocks_were_all_dropped_runs_again_under_new_settings(self):
+        self.pilot(FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one")))]))
+        script("drop-run").main(["--topic", "demo", "--repo", str(self.repo), "--work", str(self.work), "--key", "config-pilot-A", "--ranks", "1-1",
+                                 "--reason", "settings changed", "--today", "2026-10-20"])
+        self.write_topic({**SESSIONS, "A": {**SESSIONS["A"], "effort": "low"}})
+        write_jsonl(self.work / "config-screening-inputs.jsonl", [{"order_rank": 1, "repo": "o/one", "sha": SHA, "facts": {}, "listing": [], "readme": "x", "files": []}])
+        self.pilot(FakeFetch([("claude -p", claude_reply(reply_row(1, "o/one")))]), "A", "1-1")
+        entry = self.meta()["config-pilot-A"]
+        self.assertEqual((entry["effort"], [b["ranks"] for b in entry["blocks"]]), ("low", [[1]]))
+
     def test_parallel_sessions_never_lose_each_others_meta_entries(self):
         import threading
         from study_session import update_sessions
