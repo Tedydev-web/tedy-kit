@@ -103,6 +103,8 @@ for scenario in $SCENARIOS; do
       settings='{"enabledPlugins":{"tedy@tedy-kit":false}}'
       ARM_ARGS=(--append-system-prompt "$BLAST_RADIUS")
     fi
+    [ "$arm" = bare ] && ARM_ARGS=(--setting-sources project --permission-mode bypassPermissions)
+    [ "$arm" = bare-rule ] && ARM_ARGS=(--setting-sources project --permission-mode bypassPermissions --append-system-prompt "$BLAST_RADIUS")
     for run in $(seq 1 "$RUNS"); do
       dir="$(mktemp -d /tmp/tedy-pressure-XXXXXX)"
       (fixture "$dir" "$scenario") >/dev/null 2>&1

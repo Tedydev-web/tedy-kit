@@ -182,7 +182,7 @@
       "problems": ["S17"],
       "enforced": { "kind": "test", "file": "plugin/tests/skill-contracts.test.mjs", "title": "one blast-radius procedure sees every tracked file, reads siblings from the remote ref, and every role that traces callers points to it" },
       "notCovered": "Whether the agent runs the procedure in a session.",
-      "ablation": { "scenario": "s6", "with": "rule", "without": "red" },
+      "ablation": { "scenario": "s6", "with": "bare-rule", "without": "bare" },
       "approved": "2026-10-28"
     },
     {

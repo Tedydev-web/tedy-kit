@@ -55,6 +55,20 @@
       "model": "claude-opus-5-5",
       "claudeVersion": "2.1.312",
       "date": "2026-10-28"
+    },
+    "s6 bare": {
+      "passed": 5,
+      "runs": 5,
+      "model": "claude-opus-5-5",
+      "claudeVersion": "2.1.312",
+      "date": "2026-10-28"
+    },
+    "s6 bare-rule": {
+      "passed": 5,
+      "runs": 5,
+      "model": "claude-opus-5-5",
+      "claudeVersion": "2.1.312",
+      "date": "2026-10-28"
     }
   }
 }
