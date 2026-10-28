@@ -13,11 +13,11 @@ The plugin holds no personal or project data. Everything that belongs to one use
 ## Install
 
 ```text
-/plugin marketplace add Tedydev-web/tedy-kit#v0.2.13
+/plugin marketplace add Tedydev-web/tedy-kit#v0.2.14
 /plugin install tedy@tedy-kit
 ```
 
-The `#v0.2.13` pins a release: the plugin changes only when you move the pin and run `claude plugin marketplace update tedy-kit`.
+The `#v0.2.14` pins a release: the plugin changes only when you move the pin and run `claude plugin marketplace update tedy-kit`.
 
 ### Local release worktree
 
