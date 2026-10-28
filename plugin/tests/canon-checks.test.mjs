@@ -5,6 +5,7 @@ import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { docReferenceErrors, kitDocFiles, kitRetiredNames, kitSkills, kitSourceFiles, kitTagVersions, retiredReferenceErrors, skillDescriptionErrors, skillSectionErrors, sourceCommentErrors, tagVersionErrors } from "../lib/canon-checks.mjs";
+import { applies, kitConformance } from "../lib/canon-standard.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
@@ -97,14 +98,19 @@ test("no published kit file names a file the kit retired", () => {
   assert.deepEqual(retiredReferenceErrors(kitRetiredNames(REPO)), []);
 });
 
+const skillsUnder = (rule) => {
+  const register = kitConformance(REPO);
+  return kitSkills(REPO).filter(({ name }) => applies(register, rule, `plugin/skills/${name}/SKILL.md`));
+};
+
 test("every kit skill opens with a persona paragraph, then iron laws, then a not-this-skill section", () => {
-  const skills = kitSkills(REPO);
+  const skills = skillsUnder("skill-sections");
   assert.ok(skills.length >= 7, String(skills.length));
   assert.deepEqual(skillSectionErrors(skills), []);
 });
 
 test("every kit skill description is under 1,024 characters and reads the same in plain YAML", () => {
-  assert.deepEqual(skillDescriptionErrors(kitSkills(REPO)), []);
+  assert.deepEqual(skillDescriptionErrors(skillsUnder("description-yaml")), []);
 });
 
 test("the kit's tracked JavaScript and Python hold no comment other than a tool directive", () => {

@@ -10,6 +10,7 @@ const PATH_SPAN = /`((?:plugin|docs|scripts)\/[\w./-]+?)(?::(\d+)(?:-(\d+))?)?`/
 const FENCE = /^\s*(?:```|~~~)/;
 const MANIFEST = "plugin/.claude-plugin/plugin.json";
 const FRONT_MATTER = /^---\n([\s\S]*?)\n---\n/;
+const CARD = /^---\n(?:(?!---\n)[^\n]*\n)*?name: /;
 const PYTHON_COMMENTS = fileURLToPath(new URL("../evals/probes/python-comments.py", import.meta.url));
 
 const parts = (version) => version.split(".").map(Number);
@@ -20,23 +21,32 @@ const behind = (a, b) => {
 };
 const git = (repo, ...args) => execFileSync("git", ["-C", repo, ...args], { encoding: "utf8", maxBuffer: 1 << 26 });
 
+const latestRelease = (tags) => tags.filter((tag) => RELEASE_TAG.test(tag)).map((tag) => tag.slice(1)).reduce((a, b) => (a && !behind(a, b) ? a : b), null);
+
+export function latestReleaseTag(repo) {
+  const latest = latestRelease(git(repo, "tag").split("\n").filter(Boolean));
+  return latest && `v${latest}`;
+}
+
+export function showAt(repo, ref, path) {
+  try {
+    return execFileSync("git", ["-C", repo, "show", `${ref}:${path}`], { encoding: "utf8", maxBuffer: 1 << 26, stdio: ["ignore", "pipe", "pipe"] });
+  } catch {
+    return undefined;
+  }
+}
+
 export function tagVersionErrors({ tags, manifestAt, headVersion }) {
   const releases = tags.filter((tag) => RELEASE_TAG.test(tag));
   const errors = releases.flatMap((tag) => (manifestAt(tag) === tag.slice(1) ? [] : [`tag ${tag} holds plugin.json version ${manifestAt(tag)}`]));
-  const latest = releases.map((tag) => tag.slice(1)).reduce((a, b) => (a && !behind(a, b) ? a : b), null);
+  const latest = latestRelease(releases);
   if (latest && behind(headVersion, latest)) errors.push(`plugin.json at HEAD is ${headVersion}, behind the latest release tag v${latest}`);
   return errors;
 }
 
 export function kitTagVersions(repo) {
   const version = (text) => (text ? JSON.parse(text).version : undefined);
-  const manifestAt = (tag) => {
-    try {
-      return version(git(repo, "show", `${tag}:${MANIFEST}`));
-    } catch {
-      return undefined;
-    }
-  };
+  const manifestAt = (tag) => version(showAt(repo, tag, MANIFEST));
   return { tags: git(repo, "tag").split("\n").filter(Boolean), manifestAt, headVersion: version(readFileSync(join(repo, MANIFEST), "utf8")) };
 }
 
@@ -69,7 +79,7 @@ export function docReferenceErrors({ files, read, exists }) {
 }
 
 export function kitDocFiles(repo) {
-  const card = (file) => /^---\n(?:(?!---\n)[^\n]*\n)*?name: /.test(readFileSync(join(repo, file), "utf8"));
+  const card = (file) => CARD.test(readFileSync(join(repo, file), "utf8"));
   const files = git(repo, "ls-files", "README.md", "docs", "plugin").split("\n")
     .filter((file) => file.endsWith(".md") && !file.startsWith("docs/adr/") && !file.startsWith("docs/prior-art/sweeps/") && !card(file));
   const isFile = (path) => existsSync(join(repo, path)) && statSync(join(repo, path)).isFile();
@@ -115,6 +125,12 @@ export function skillDescriptionErrors(skills) {
 export function kitSkills(repo) {
   const root = join(repo, "plugin/skills");
   return readdirSync(root).filter((name) => existsSync(join(root, name, "SKILL.md"))).map((name) => ({ name, text: readFileSync(join(root, name, "SKILL.md"), "utf8") }));
+}
+
+export function kitArtifacts(repo) {
+  const tracked = git(repo, "ls-files", "plugin/skills", "docs/adr", "docs/prior-art").split("\n").filter(Boolean);
+  return tracked.filter((file) => /^plugin\/skills\/[^/]+\/SKILL\.md$/.test(file) || /^docs\/adr\/[^/]+\.md$/.test(file) || /^docs\/prior-art\/sweeps\/[^/]+\.md$/.test(file)
+    || (/^docs\/prior-art\/[^/]+\.md$/.test(file) && CARD.test(readFileSync(join(repo, file), "utf8"))));
 }
 
 export function sourceCommentErrors({ scripts, python, cwd }) {
