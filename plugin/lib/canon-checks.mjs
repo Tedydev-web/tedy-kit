@@ -1,12 +1,16 @@
-import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, normalize } from "node:path";
+import { fileURLToPath } from "node:url";
+import { findComments } from "./comment-scan.mjs";
 
 const RELEASE_TAG = /^v(\d+)\.(\d+)\.(\d+)$/;
 const LINK = /\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
 const PATH_SPAN = /`((?:plugin|docs|scripts)\/[\w./-]+?)(?::(\d+)(?:-(\d+))?)?`/g;
 const FENCE = /^\s*(?:```|~~~)/;
 const MANIFEST = "plugin/.claude-plugin/plugin.json";
+const FRONT_MATTER = /^---\n([\s\S]*?)\n---\n/;
+const PYTHON_COMMENTS = fileURLToPath(new URL("../evals/probes/python-comments.py", import.meta.url));
 
 const parts = (version) => version.split(".").map(Number);
 const behind = (a, b) => {
@@ -84,4 +88,48 @@ export function kitRetiredNames(repo) {
   const scanned = now.filter((file) => (file.startsWith("plugin/") || file === "README.md") && /\.(?:mjs|md|json|sh|py)$/.test(file))
     .map((file) => ({ file, text: readFileSync(join(repo, file), "utf8") }));
   return { retired, scanned };
+}
+
+export function skillSectionErrors(skills) {
+  return skills.flatMap(({ name, text }) => {
+    const body = text.replace(FRONT_MATTER, "");
+    const laws = body.search(/^## Iron laws$/m);
+    const notThis = body.search(/^## Not this skill$/m);
+    if (laws < 0) return [`${name}: no ## Iron laws section`];
+    const errors = body.slice(0, laws).trim().split(/\n\s*\n/).at(-1).startsWith("You ") ? [] : [`${name}: the paragraph before ## Iron laws is not a persona opening with "You "`];
+    if (notThis < laws) errors.push(`${name}: no ## Not this skill section after ## Iron laws`);
+    return errors;
+  });
+}
+
+export function skillDescriptionErrors(skills) {
+  return skills.flatMap(({ name, text }) => {
+    const description = text.match(FRONT_MATTER)?.[1].match(/^description: (.*)$/m)?.[1];
+    if (description === undefined || /^[|>]/.test(description)) return [`${name}: no one-line description in the front matter`];
+    const errors = description.length < 1024 ? [] : [`${name}: the description is ${description.length} characters, not under 1,024`];
+    if (/ #|: /.test(description)) errors.push(`${name}: the description holds " #" or ": ", which plain YAML reads as a comment or a mapping`);
+    return errors;
+  });
+}
+
+export function kitSkills(repo) {
+  const root = join(repo, "plugin/skills");
+  return readdirSync(root).filter((name) => existsSync(join(root, name, "SKILL.md"))).map((name) => ({ name, text: readFileSync(join(root, name, "SKILL.md"), "utf8") }));
+}
+
+export function sourceCommentErrors({ scripts, python, cwd }) {
+  const errors = scripts.flatMap(({ file, text }) => findComments(text).map((comment) => `${file}:${comment.line}: ${comment.text}`));
+  if (!python.length) return errors;
+  const run = spawnSync("python3", ["-B", PYTHON_COMMENTS, ...python], { cwd, encoding: "utf8", maxBuffer: 1 << 26 });
+  if (run.error || run.status !== 0) return [...errors, `python3 could not scan the Python files: ${run.error?.message ?? (run.stderr.trim().split("\n").at(-1) || `exit ${run.status}`)}`];
+  return [...errors, ...run.stdout.split("\n").filter(Boolean)];
+}
+
+export function kitSourceFiles(repo) {
+  const tracked = git(repo, "ls-files").split("\n").filter(Boolean);
+  return {
+    scripts: tracked.filter((file) => /\.(?:mjs|cjs|js)$/.test(file)).map((file) => ({ file, text: readFileSync(join(repo, file), "utf8") })),
+    python: tracked.filter((file) => file.endsWith(".py")),
+    cwd: repo,
+  };
 }

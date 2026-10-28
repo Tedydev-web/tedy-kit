@@ -24,7 +24,7 @@ Each option is scored by the registry problems it would hold with a machine chec
 Option A, built in phases ordered by how many studied sources show the gap, each phase a check that is shown to fail on a wrong fixture before it is trusted (S8):
 
 1. Release and docs: manifest version against the tag (S15), dead links and runnable commands in published docs (S6), retired surfaces (S18).
-2. The ledger: `standard.json` with reason, class and enforcing check per rule (S23), the date the user approved it (S25, recorded, not enforced), and the test that fails a rule without its check.
+2. The ledger: `standard.json` with reason, class and enforcing check per rule (S23), the date the user approved it (S25, recorded, not enforced), and the test that fails a rule without its check. A rule no machine can check is enforced by review and must say why no machine can check it (`whyNotMachine`); every other rule names a test by its file and exact title.
 3. Versioning: a standard-version stamp on every artifact, checks gated by the version that added them so an old artifact is judged by its own rules, and a waiver list that may only shrink (S1, S2, S3, S13).
 4. Model change: model ids in eval results, a rebaseline that refuses pass-to-fail without a model-change flag (S30), and a per-rule ablation for model-gap rules that proposes removals and never deletes (S31).
 

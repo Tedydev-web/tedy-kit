@@ -1,0 +1,302 @@
+{
+  "version": 1,
+  "rules": [
+    {
+      "id": "skill-size",
+      "text": "Every SKILL.md stays at 9,000 characters or fewer.",
+      "since": 1,
+      "reason": "Skill bodies load into context when invoked; the budget keeps each role affordable.",
+      "class": "platform",
+      "problems": ["S22"],
+      "enforced": { "kind": "test", "file": "plugin/tests/skill-size.test.mjs", "title": "every SKILL.md stays at 9,000 characters or fewer" },
+      "notCovered": "Reference and shared files a skill reads on demand are not measured.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "no-rule-numbers",
+      "text": "The engine never cites a profile rule by its number.",
+      "since": 1,
+      "reason": "Each profile numbers its rules its own way, so a number points at the wrong rule elsewhere.",
+      "class": "user-policy",
+      "problems": ["S12"],
+      "enforced": { "kind": "test", "file": "plugin/tests/rule-citations.test.mjs", "title": "the engine never cites a rule by number, because each profile numbers its rules its own way" },
+      "notCovered": "A rule named by a paraphrase instead of a number is not detected.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "adr-prior-art",
+      "text": "Every ADR from 0009 on has a Prior art section with pinned evidence, a card per GitHub source and a social source or a no-social line.",
+      "since": 1,
+      "reason": "A design is chosen after established practice is studied, and the study can be re-checked.",
+      "class": "user-policy",
+      "problems": ["S11", "S20"],
+      "enforced": { "kind": "test", "file": "plugin/tests/adr-prior-art.test.mjs", "title": "the kit's own ADRs pass" },
+      "notCovered": "Whether the pinned lines still hold on GitHub is checked by prior-art-verify.mjs outside npm test.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "commit-trailers",
+      "text": "Every feat or fix commit since the latest tag carries an ADR: or Prior-art: trailer.",
+      "since": 1,
+      "reason": "Each behaviour change traces to the decision or the study behind it.",
+      "class": "user-policy",
+      "problems": ["S11"],
+      "enforced": { "kind": "test", "file": "plugin/tests/commit-prior-art.test.mjs", "title": "the kit's own commits since its latest tag carry their trailers" },
+      "notCovered": "Commits before the latest tag, and whether the named ADR actually covers the change.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "cards-studied",
+      "text": "Every prior-art card is the source of a study row in a sweep record, and every sweep record passes its method checks.",
+      "since": 1,
+      "reason": "A card without a recorded selection cannot show why that source was studied.",
+      "class": "user-policy",
+      "problems": ["S11"],
+      "enforced": { "kind": "test", "file": "plugin/tests/sweep-record.test.mjs", "title": "the kit's own sweep records, cards, ADRs, coverage matrix and mechanism tables pass" },
+      "notCovered": "Whether a card's lessons follow from its evidence is a review judgment.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "entry-points",
+      "text": "Every module with an argv guard exports run, and its guard only calls run.",
+      "since": 1,
+      "reason": "Tests and shims call run directly, so command-line behaviour stays testable without a subprocess.",
+      "class": "platform",
+      "problems": ["S12"],
+      "enforced": { "kind": "test", "file": "plugin/tests/entry-points.test.mjs", "title": "every module with an argv guard exports run and its guard only calls run" },
+      "notCovered": "Modules started some other way than the argv guard.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "shim-parity",
+      "text": "Every shim in plugin/scripts names a module that exists, and every guarded module has a shim.",
+      "since": 1,
+      "reason": "Older paths keep working after a module moves.",
+      "class": "platform",
+      "problems": ["S19"],
+      "enforced": { "kind": "test", "file": "plugin/tests/shim-parity.test.mjs", "title": "every shim in scripts/ names a module that exists, and every guarded module has a shim" },
+      "notCovered": "Paths outside plugin/scripts that users may have saved.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "label-keys",
+      "text": "Every language pack of the menu labels has exactly the keys of the English pack.",
+      "since": 1,
+      "reason": "A missing key shows a raw key or the wrong language in a menu.",
+      "class": "user-policy",
+      "problems": ["S12"],
+      "enforced": { "kind": "test", "file": "plugin/tests/labels.test.mjs", "title": "every language pack has exactly the keys of the English pack" },
+      "notCovered": "Whether a translation means the same as the English label.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "regex-time",
+      "text": "No gate regex takes longer than 250 ms on a crafted 200,000-character input.",
+      "since": 1,
+      "reason": "A gate that hangs blocks every tool call it guards.",
+      "class": "platform",
+      "problems": ["S12"],
+      "enforced": { "kind": "test", "file": "plugin/tests/regex-backtracking.test.mjs", "title": "no gate regex takes longer than 250 ms on a crafted 200,000-character input" },
+      "notCovered": "Regexes outside the gates, and inputs shaped unlike the crafted ones.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "tracker-contract",
+      "text": "Every command the tracker adapter accepts has a section in the tracker contract.",
+      "since": 1,
+      "reason": "Skills call the adapter from the contract, so an undocumented command is unusable or misused.",
+      "class": "platform",
+      "problems": ["S12"],
+      "enforced": { "kind": "test", "file": "plugin/tests/tracker-contract.test.mjs", "title": "every command the OpenProject adapter accepts has a section in the tracker contract" },
+      "notCovered": "Whether each section describes the command's behaviour correctly.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "gates-fail-closed",
+      "text": "The five PreToolUse gates block the tool call when their hook fails.",
+      "since": 1,
+      "reason": "A gate that crashes open lets the unapproved action through.",
+      "class": "platform",
+      "problems": ["S26"],
+      "enforced": { "kind": "test", "file": "plugin/tests/hooks.test.mjs", "title": "the five PreToolUse gates block the tool call when their hook fails" },
+      "notCovered": "Whether the installed Claude Code honours onFailure is re-probed by run-probes.sh, not by npm test.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "fact-graders",
+      "text": "Eval graders check facts only: no LLM or baseline grader in any case.",
+      "since": 1,
+      "reason": "An LLM judge reading the same style docs is circular and biased toward its own outputs (ADR 0007, ADR 0009).",
+      "class": "model-gap",
+      "problems": ["S8"],
+      "enforced": { "kind": "test", "file": "plugin/tests/skill-contracts.test.mjs", "title": "eval graders check facts only: no llm or baseline grader in any case" },
+      "notCovered": "Whether each fact grader checks the fact that matters for the case.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "verbatim-preview",
+      "text": "Every approval before a github-write post, reply or edit carries the verbatim body in an AskUserQuestion preview.",
+      "since": 1,
+      "reason": "The user answers for every word published under their name.",
+      "class": "user-policy",
+      "problems": ["S12"],
+      "enforced": { "kind": "test", "file": "plugin/tests/skill-contracts.test.mjs", "title": "every approval before a github-write post, reply or edit carries the verbatim body in an AskUserQuestion preview" },
+      "notCovered": "Publishing paths that do not go through github-write.mjs.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "answer-mode-target",
+      "text": "Every write command line in the skills names the target that answer mode needs.",
+      "since": 1,
+      "reason": "A one-use approval ticket matches only a command whose target it can read.",
+      "class": "platform",
+      "problems": ["S12"],
+      "enforced": { "kind": "test", "file": "plugin/tests/skill-contracts.test.mjs", "title": "every write command line in the skills names the target answer mode needs" },
+      "notCovered": "Write commands an agent composes outside the skill text.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "blast-radius",
+      "text": "One blast-radius procedure sees every tracked file and reads siblings from the remote ref, and every role that traces callers points to it.",
+      "since": 1,
+      "reason": "A fix to one caller leaves its siblings broken unless every caller is found the same way.",
+      "class": "model-gap",
+      "problems": ["S17"],
+      "enforced": { "kind": "test", "file": "plugin/tests/skill-contracts.test.mjs", "title": "one blast-radius procedure sees every tracked file, reads siblings from the remote ref, and every role that traces callers points to it" },
+      "notCovered": "Whether the agent runs the procedure in a session.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "tag-version",
+      "text": "Every vX.Y.Z tag holds plugin.json version X.Y.Z, and the manifest at HEAD is not behind the latest tag.",
+      "since": 1,
+      "reason": "The installed plugin must be the version its tag names, so a rollback lands on a known release.",
+      "class": "platform",
+      "problems": ["S15"],
+      "enforced": { "kind": "test", "file": "plugin/tests/canon-checks.test.mjs", "title": "the kit's release tags match their manifests and its manifest is not behind the latest tag" },
+      "notCovered": "Whether the release worktree is checked out at the latest tag.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "doc-references",
+      "text": "The published docs hold no dead relative link, missing repository path or line number past the end of its file.",
+      "since": 1,
+      "reason": "A reader following a dead reference cannot use the docs.",
+      "class": "platform",
+      "problems": ["S6"],
+      "enforced": { "kind": "test", "file": "plugin/tests/canon-checks.test.mjs", "title": "the kit's published docs hold no dead link, missing path or out-of-range line" },
+      "notCovered": "External URLs, commands shown in docs, and a line cite that is in range but points at moved text.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "retired-names",
+      "text": "No kit file names a file that git history deleted and that no longer exists under any path.",
+      "since": 1,
+      "reason": "A reference to a retired file breaks a hook or misleads a reader.",
+      "class": "platform",
+      "problems": ["S18"],
+      "enforced": { "kind": "test", "file": "plugin/tests/canon-checks.test.mjs", "title": "no published kit file names a file the kit retired" },
+      "notCovered": "Retired commands, flags and config keys that were never separate files.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "skill-sections",
+      "text": "Each SKILL.md opens with a persona, the iron laws and a not-this-skill section naming the sibling that owns that work.",
+      "since": 1,
+      "reason": "The agent reads who it is, what it never does and where other work belongs before any procedure.",
+      "class": "model-gap",
+      "problems": ["S12"],
+      "enforced": { "kind": "test", "file": "plugin/tests/canon-checks.test.mjs", "title": "every kit skill opens with a persona paragraph, then iron laws, then a not-this-skill section" },
+      "notCovered": "Whether the not-this-skill section names the right siblings.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "description-yaml",
+      "text": "A skill description stays under 1,024 characters and parses as plain YAML: no ' #' and no ': ' inside it.",
+      "since": 1,
+      "reason": "Claude Code truncates or misreads a longer or YAML-ambiguous description, and the skill stops routing.",
+      "class": "platform",
+      "problems": ["S12", "S22"],
+      "enforced": { "kind": "test", "file": "plugin/tests/canon-checks.test.mjs", "title": "every kit skill description is under 1,024 characters and reads the same in plain YAML" },
+      "notCovered": "A block-scalar description fails as not one line; a quoted one is measured with its quotes.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "no-source-comments",
+      "text": "Kit source holds no comments; tool directives are the only exception.",
+      "since": 1,
+      "reason": "Explanations belong in the commit or PR description, where they cannot drift from the code.",
+      "class": "user-policy",
+      "problems": ["S12"],
+      "enforced": { "kind": "test", "file": "plugin/tests/canon-checks.test.mjs", "title": "the kit's tracked JavaScript and Python hold no comment other than a tool directive" },
+      "notCovered": "Shell scripts and YAML files are not scanned.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "model-invocation",
+      "text": "A skill is model-invocable only when the agent must reach it on its own; otherwise it sets disable-model-invocation: true.",
+      "since": 1,
+      "reason": "Every model-invocable description costs always-loaded context and can route the wrong request.",
+      "class": "platform",
+      "problems": ["S7"],
+      "enforced": { "kind": "review", "whyNotMachine": "Whether the agent must reach a skill on its own is a judgment about its use." },
+      "notCovered": "Everything; a reviewer checks it on each new skill.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "checkable-steps",
+      "text": "Every skill step ends on a checkable completion criterion, and rules are stated positively with a one-clause reason.",
+      "since": 1,
+      "reason": "An agent stops at a step it can verify and follows a rule whose reason it can weigh.",
+      "class": "model-gap",
+      "problems": ["S12", "S21"],
+      "enforced": { "kind": "review", "whyNotMachine": "Whether a sentence is a checkable criterion or a positive rule is a reading of natural language." },
+      "notCovered": "Everything; a reviewer checks it on each skill change.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "literal-labels",
+      "text": "Menu labels are keys of plugin/lib/labels.mjs, never literal text.",
+      "since": 1,
+      "reason": "A literal label skips the profile's language and drifts from the other menus.",
+      "class": "user-policy",
+      "problems": ["S12"],
+      "enforced": { "kind": "review", "whyNotMachine": "A literal label looks like any other prose in a skill, so no pattern separates it reliably." },
+      "notCovered": "Everything; a reviewer checks it on each skill change.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "fail-first",
+      "text": "Every check is shown to fail on a wrong fixture before its result is trusted.",
+      "since": 1,
+      "reason": "A check that cannot fail is the most common failure of a standard (ADR 0011).",
+      "class": "user-policy",
+      "problems": ["S8"],
+      "enforced": { "kind": "review", "whyNotMachine": "It is a fact about how the change was made, not about the tree." },
+      "notCovered": "Everything; a reviewer checks that each new check has a failing fixture.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "public-scan",
+      "text": "Published text holds no home path, personal data, secret or denylisted term.",
+      "since": 1,
+      "reason": "Anything pushed to a public repository stays public.",
+      "class": "user-policy",
+      "problems": ["S14"],
+      "enforced": { "kind": "review", "whyNotMachine": "The denylist lives in the user's profile, outside the repository; run public-scan.mjs tree and history before a public push." },
+      "notCovered": "Everything npm test sees; the scan runs by hand before a push.",
+      "approved": "2026-10-28"
+    },
+    {
+      "id": "probes-after-update",
+      "text": "After a Claude Code update, run-probes.sh re-checks the platform behaviour the hooks rely on before the kit is trusted.",
+      "since": 1,
+      "reason": "A platform change can silently disable a gate.",
+      "class": "platform",
+      "problems": ["S16"],
+      "enforced": { "kind": "review", "whyNotMachine": "It needs the live Claude Code CLI and is triggered by an update, not by a change to the tree." },
+      "notCovered": "Everything npm test sees.",
+      "approved": "2026-10-28"
+    }
+  ]
+}
