@@ -89,3 +89,4 @@ S27 and S32 stay partial: no studied source fails an artifact on a harness-surfa
 - Option A turns the canon from prose into a ledger the tests read; every new rule costs one enforcing check and one failing fixture.
 - The standard version becomes part of every artifact, so a version bump has a migration cost that the waiver list makes visible.
 - The weakest link: the picks come from a calibration sample and the reference overstated nine of them, so the canon rests on the code the cards checked, not on the labels.
+- The first ablation (2026-10-28, claude-opus-5-5) proposed removing blast-radius: scenario s6 passed 3 of 3 with and without it. The user kept the rule: three runs per arm is a small sample, and both arms ran under the user's global instructions, which already teach searching past ignore rules, so the arm without the rule was not free of it. The next model change re-measures s6 with a home folder that has no global instructions.
