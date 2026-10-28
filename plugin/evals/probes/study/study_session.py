@@ -192,19 +192,36 @@ def aperture_call(fetch, option, prompt, call_id, work=None, key=None):
     folder = Path(tempfile.mkdtemp(prefix="study-aperture-"))
     try:
         body = folder / f"aperture-{call_id}.json"
-        body.write_text(json.dumps({"model": option["model"], "messages": [{"role": "user", "content": prompt}]}, ensure_ascii=False))
-        return call_isolated(fetch, ["curl", "-sS", "-m", "900", "-H", "Content-Type: application/json", "--data-binary", f"@{body}",
+        body.write_text(json.dumps({"model": option["model"], "stream": True, "messages": [{"role": "user", "content": prompt}]}, ensure_ascii=False))
+        return call_isolated(fetch, ["curl", "-sS", "-N", "-m", "900", "-H", "Content-Type: application/json", "--data-binary", f"@{body}",
                                      f"{option['endpoint']}/v1/chat/completions"], work, key)
     finally:
         shutil.rmtree(folder, ignore_errors=True)
+
+
+def streamed_completion(where, out):
+    events = [line[len("data:"):].strip() for line in out.splitlines() if line.startswith("data:")]
+    if not events or events[-1] != "[DONE]":
+        raise TopicError(f"{where}: the stream ended before [DONE]")
+    try:
+        chunks = [json.loads(e) for e in events[:-1]]
+    except ValueError as error:
+        raise TopicError(f"{where}: a stream chunk is not JSON: {error}") from error
+    if any("error" in c for c in chunks):
+        raise TopicError(f"{where}: the stream reported an error: {next(c['error'] for c in chunks if 'error' in c)}")
+    deltas = [choice.get("delta") or {} for c in chunks for choice in c.get("choices") or []]
+    models = sorted({c.get("model") for c in chunks})
+    message = {"content": "".join(d.get("content") or "" for d in deltas), "tool_calls": [t for d in deltas for t in d.get("tool_calls") or []]}
+    return {"model": models[0] if len(models) == 1 else ", ".join(map(str, models)), "choices": [{"message": message}]}
 
 
 def aperture_reply(option, out, status):
     where = f"aperture {option['model']}"
     if status != "ok":
         raise TopicError(f"{where}: {status}")
+    streamed = streamed_completion(where, out) if str(out).lstrip().startswith("data:") else None
     try:
-        body = json.loads(out)
+        body = streamed or json.loads(out)
         message = body["choices"][0]["message"]
     except (ValueError, KeyError, IndexError, TypeError) as error:
         raise TopicError(f"{where}: the reply is not a chat completion: {str(out)[:200]}") from error

@@ -168,6 +168,34 @@ class ApertureSessionTest(SessionBase):
             self.pilot(FakeFetch(), "B", "1-1", "--endpoint", "http://100.127.1.240")
         self.assertIn("--endpoint names the Aperture URL", str(raised.exception))
 
+    def stream(self, *deltas, done=True, model=None):
+        chunks = [{"model": model or self.DEEPSEEK["model"], "choices": [{"index": 0, "delta": d}]} for d in deltas]
+        return "".join(f"data: {json.dumps(c)}\n\n" for c in chunks) + ("data: [DONE]\n\n" if done else "")
+
+    def streamed(self, reply):
+        self.write_topic({**SESSIONS, "A": self.DEEPSEEK})
+        models = json.dumps({"data": [{"id": self.DEEPSEEK["model"]}]})
+        fetch = FakeFetch([("/v1/models", models), ("--data-binary", reply)])
+        self.pilot(fetch, "A", "1-1", "--endpoint", "http://100.127.1.240", which=lambda cli: cli == "curl")
+        return fetch
+
+    def test_session_a_on_aperture_streams_the_completion_so_a_gateway_timeout_never_cuts_it(self):
+        row = reply_row(1, "o/one")
+        fetch = self.streamed(self.stream({"role": "assistant"}, {"content": row[:40]}, {"content": row[40:]}))
+        self.assertIn(" -N ", fetch.called("--data-binary")[0])
+        self.assertEqual(json.loads((self.work / "config-pilot-A.jsonl").read_text())["repo"], "o/one")
+
+    def test_a_streamed_reply_with_a_tool_call_another_model_or_no_done_line_is_refused(self):
+        row = reply_row(1, "o/one")
+        for reply, message in ((self.stream({"tool_calls": [{"id": "t"}]}), "holds a tool call"),
+                               (self.stream({"content": row}, model="other/model"), "served other/model"),
+                               (self.stream({"content": row}, done=False), "stream ended before [DONE]")):
+            with self.subTest(message=message):
+                with self.assertRaises(SystemExit) as raised:
+                    self.streamed(reply)
+                self.assertIn(message, str(raised.exception))
+                self.assertFalse((self.work / "config-pilot-A.jsonl").exists())
+
     def test_a_model_id_with_a_slash_names_one_file(self):
         self.assertEqual(run_name("config", "qgs-A", self.DEEPSEEK, 1), "judge-config-qgs-A-deepseek--deepseek-v4.1-flash-run1")
 
