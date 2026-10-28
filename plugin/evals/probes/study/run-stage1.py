@@ -72,7 +72,7 @@ def main(argv=None, fetch=None, which=shutil.which, environ=os.environ):
             raise TopicError(f"the stage-1 freeze holds no packet for {args.stratum}")
         worked = examples_text(topic)
         name, ranks, reference_freeze = plan(topic, args.work, args.stratum, args.shape, args.model, args.set, args.run)
-        inputs = stage1_inputs(args.work, args.stratum, args.shape)
+        inputs = stage1_inputs(args.work, args.stratum, args.shape, None if args.set == "pool" else ranks)
         missing = sorted(set(ranks) - set(inputs))
         if missing:
             raise TopicError(f"ranks {missing[:10]} are not in {inputs_name(args.stratum, args.shape)}")

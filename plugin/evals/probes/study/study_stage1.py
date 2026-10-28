@@ -116,24 +116,32 @@ def auto_pass(row):
     return not (row["description"] or row.get("asset_paths") or row.get("readme_lead") or row.get("readme_lead_sha256"))
 
 
-def build_inputs(work, stratum, shape, fetch):
+def build_inputs(work, stratum, shape, fetch, ranks=None):
     if shape not in SHAPES:
         raise TopicError(f"shape {shape!r} is not one of {', '.join(SHAPES)}")
     order = read_jsonl(Path(work), f"{stratum}-screening-order.jsonl")
     if not order:
         raise TopicError(f"no {stratum}-screening-order.jsonl in {work}; export the whole pool with export-screening-order.py --all")
-    rows = [stage1_row(work, stratum, r, shape, fetch) for r in order]
     target = Path(work) / inputs_name(stratum, shape)
+    if ranks is not None and target.exists():
+        raise TopicError(f"{target.name} already exists; the drawn rows are built only before the whole pool, never over it")
+    rows = [stage1_row(work, stratum, r, shape, fetch) for r in order if ranks is None or r["order_rank"] in ranks]
     target.write_text("".join(json.dumps(r, ensure_ascii=False) + "\n" for r in rows))
     return rows
 
 
-def stage1_inputs(folder, stratum, shape):
+def stage1_inputs(folder, stratum, shape, ranks=None):
     rows = {r["order_rank"]: r for r in read_jsonl(Path(folder), inputs_name(stratum, shape))}
     if not rows:
         raise TopicError(f"no {inputs_name(stratum, shape)} in {folder}; build it with build-stage1-inputs.py")
     pool = {(r["order_rank"], r["repo"].lower()) for r in read_jsonl(Path(folder), f"{stratum}-screening-order.jsonl")}
     held = {(rank, r["repo"].lower()) for rank, r in rows.items()}
+    if ranks is not None:
+        repos = dict(pool)
+        wrong = sorted(r for r in ranks if r not in rows or rows[r]["repo"].lower() != repos.get(r))
+        if wrong:
+            raise TopicError(f"{inputs_name(stratum, shape)} lacks or differs from {stratum}-screening-order.jsonl on ranks {wrong[:10]}; build it again")
+        return rows
     if pool != held:
         shown = sorted(r for _, r in pool ^ held)[:10]
         raise TopicError(f"{inputs_name(stratum, shape)} is not the final {stratum} pool of {stratum}-screening-order.jsonl (differs on {shown}); build it again after "
@@ -203,7 +211,7 @@ def rung_run(folder, rung, run, labelled, held_out=False):
     per_stratum, passed = {}, {}
     for stratum in sorted({r["stratum"] for r in labelled}):
         rows = [r for r in labelled if r["stratum"] == stratum]
-        inputs = stage1_inputs(folder, stratum, rung["shape"])
+        inputs = stage1_inputs(folder, stratum, rung["shape"], [r["order_rank"] for r in rows])
         names = {m: held_out_name(stratum, rung["shape"], m) if held_out else calibration_name(stratum, rung["shape"], m, run) for m in rung["models"]}
         answers = {m: verdicts(folder, names[m]) for m in rung["models"]}
         for m, found in answers.items():

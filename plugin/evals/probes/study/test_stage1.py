@@ -315,6 +315,28 @@ class Stage1Test(unittest.TestCase):
         with self.assertRaisesRegex(TopicError, f"{key}: ranks \\[1\\] were not judged on the rows stage1-inputs-config-brief.jsonl holds now"):
             choose_rung(self.work, labelled(self.work))
 
+    def test_a_rung_runs_on_inputs_built_for_the_drawn_rows_only_and_the_pool_still_needs_the_whole_pool(self):
+        from study_calibration_set import labelled
+        from study_stage1 import LADDER, rung_run, stage1_inputs
+        rows = self.calibrated()
+        for rank in range(1, 51):
+            write_json(self.work / f"cache/trees/c__r{rank}.json", {"oid": "e" * 40, "paths": ["README.md", "skills/tdd/SKILL.md"]})
+        fetch = FakeFetch([("/readme", "# lead\n")])
+        for stratum in STRATA:
+            self.call("build-stage1-inputs", "--stratum", stratum, "--shape", "readme", "--drawn-only", fetch=fetch)
+        drawn = sorted(r["order_rank"] for r in rows if r["stratum"] == "config")
+        built = [json.loads(line)["order_rank"] for line in (self.work / "stage1-inputs-config-readme.jsonl").read_text().splitlines()]
+        self.assertEqual((built, len(fetch.called("/readme"))), (drawn, len(rows)))
+        for model in (OPUS, SONNET):
+            self.runs(rows, "readme", model, 1)
+        self.assertIsNotNone(rung_run(self.work, LADDER[3], 1, labelled(self.work)))
+        with self.assertRaisesRegex(TopicError, "stage1-inputs-config-readme.jsonl is not the final config pool"):
+            stage1_inputs(self.work, "config", "readme")
+        with self.assertRaisesRegex(SystemExit, "stage1-inputs-config-readme.jsonl already exists"):
+            self.call("build-stage1-inputs", "--stratum", "config", "--shape", "readme", "--drawn-only", fetch=fetch)
+        self.call("build-stage1-inputs", "--stratum", "config", "--shape", "readme", fetch=fetch)
+        self.assertEqual(len(stage1_inputs(self.work, "config", "readme")), 50)
+
     def test_stage1_inputs_must_be_the_final_pool_after_the_config_pool_channel_and_the_snowball(self):
         from study_stage1 import stage1_inputs
         self.inputs(10)
