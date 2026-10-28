@@ -132,6 +132,17 @@ class TopicQgsTest(unittest.TestCase):
         self.assertEqual((written["final"], written["labels"]["o/g"], written["candidates"]), (["o/a", "o/g", "o/d", "o/e"], ["X2", "X3"], 7))
         self.assertIn("every candidate is judged by both Claude judges, or dropped with a recorded reason", written["rule"])
 
+    def test_strata_written_as_the_reply_format_words_them_read_as_the_list(self):
+        from study_session_reply import parse_qgs_reply
+        given = [("yes", "both", ["config", "product"]), ("yes", "config", ["config"]), ("yes", "product", ["product"]), ("no", "", []), ("unsure", None, []),
+                 ("no", "none", [])]
+        reply = "\n".join(json.dumps({"order_rank": n, "repo": f"o/r{n}", "verdict": v, "problems": ["X1"] if v == "yes" else [], "strata": s, "why": "w"})
+                          for n, (v, s, _) in enumerate(given, 1))
+        rows, problems = parse_qgs_reply(reply, {n: {"repo": f"o/r{n}"} for n in range(1, len(given) + 1)}, ["X1"], strata=True)
+        self.assertEqual((problems, [r["strata"] for r in rows]), ([], [want for _, _, want in given]))
+        bad = json.dumps({"order_rank": 1, "repo": "o/r1", "verdict": "yes", "problems": ["X1"], "strata": "everywhere", "why": "w"})
+        self.assertEqual(parse_qgs_reply(bad, {1: {"repo": "o/r1"}}, ["X1"], strata=True)[1], ["rank 1 needs strata naming config, product or both for a yes, and none otherwise"])
+
     def test_the_judges_label_each_member_stratum_and_product_members_come_from_those_labels(self):
         from study_qgs import stratum_members
         from study_session_reply import parse_qgs_reply

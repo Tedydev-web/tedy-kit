@@ -93,6 +93,11 @@ def row_problems(row, expected):
 
 
 STRATA = ("config", "product")
+STRATA_WORDS = {"both": ["config", "product"], "config": ["config"], "product": ["product"], "": [], "none": [], None: []}
+
+
+def strata_list(value):
+    return STRATA_WORDS.get(value, value) if isinstance(value, str) or value is None else value
 
 
 def parse_qgs_reply(text, expected, topic_problems, allowed=("yes", "no", "unsure"), strata=False):
@@ -123,7 +128,8 @@ def parse_qgs_reply(text, expected, topic_problems, allowed=("yes", "no", "unsur
             if row.get("verdict") == "yes" and not row["problems"]:
                 issues.append(f"rank {rank} answers yes without a problem id")
         if strata:
-            named = row.get("strata")
+            named = strata_list(row.get("strata"))
+            row["strata"] = named
             if not isinstance(named, list) or not set(named) <= set(STRATA) or (row.get("verdict") == "yes") != bool(named):
                 issues.append(f"rank {rank} needs strata naming config, product or both for a yes, and none otherwise")
         if rank in rows:
