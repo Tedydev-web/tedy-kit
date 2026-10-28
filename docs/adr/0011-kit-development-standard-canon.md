@@ -1,6 +1,6 @@
 # 0011: The kit's development standard (canon): a versioned rule ledger with a check behind every rule
 
-Status: proposed (2026-10-28); the user chooses an option before anything is built
+Status: accepted (2026-10-28): option A, built in the four phases below
 
 ## Context
 - The registry `docs/prior-art/problems-canon.md` lists 32 behaviours a kit-development standard must get right (S1-S32): versioning the standard, redoing or waiving old artifacts, naming what enforces each rule, release, retirement, measurement and cost. Its "mitigated by" column shows most of them held by prose or by one check each.
