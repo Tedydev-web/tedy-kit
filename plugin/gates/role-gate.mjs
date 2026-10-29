@@ -9,14 +9,16 @@ import { shellWords, walkCommands } from "../lib/shell-segments.mjs";
 
 const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 const SCRIPT_WRITES = [
+  { kind: "tracker-status", pattern: /^(?=[\s\S]*--apply\b)(?![\s\S]*--(?:priority|estimate|start|due)\b)[\s\S]*?openproject\.mjs["']?\s+set\b/ },
   { kind: "tracker", pattern: /openproject\.mjs["']?\s+apply\b|pg\.py["']?\s+set\b|^(?=[\s\S]*--apply\b)[\s\S]*?(?:openproject\.mjs["']?\s+(?:set|comment|comment-edit|relation|relation-delete|rollback)|op_apply\.py|pg\.py["']?\s+(?:sync|rollback))\b/ },
   { kind: "doc-figma", pattern: /gdoc-comments\.mjs["']?\s+(reply|anchor|post|edit|delete)\b|figma-comments\.mjs["']?\s+(post|reply|delete)\b|doc-comment-file\.mjs/ },
   { kind: "code", pattern: /github-write\.mjs["']?\s+pr-body\b/ },
   { kind: "pr-review", pattern: /github-write\.mjs["']?\s+(post|resolve|unresolve|edit|minimize)\b/ },
 ];
-const OWNER = { tracker: "pm", "doc-figma": "pm", "pr-review": "review", code: "dev" };
+const OWNER = { tracker: "pm", "tracker-status": "pm", "doc-figma": "pm", "pr-review": "review", code: "dev" };
 const WHAT = {
   tracker: "writing to the tracker",
+  "tracker-status": "changing a work package's status or assignee",
   "doc-figma": "Doc or Figma comments",
   "pr-review": "posting or resolving PR review comments",
   code: "changing or committing product code",
@@ -26,7 +28,7 @@ const FORBIDDEN = {
   devops: new Set(["tracker", "doc-figma", "pr-review"]),
   review: new Set(["code", "tracker", "doc-figma"]),
   pm: new Set(["code", "pr-review"]),
-  dispatch: new Set(["code", "tracker", "doc-figma", "pr-review"]),
+  dispatch: new Set(["code", "tracker", "tracker-status", "doc-figma", "pr-review"]),
 };
 
 function repoOf(map, path) {

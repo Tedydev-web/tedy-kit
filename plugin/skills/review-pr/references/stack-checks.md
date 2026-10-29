@@ -4,6 +4,10 @@ What to look for first in a diff on the stacks the user's projects run: React an
 
 The repository's own patterns decide. A library the repository does not install is never a finding, and a pattern its sibling files already use is the baseline, not a defect. A project's `review-calibration.md` (next to its map) outranks this file.
 
+## Hand-written lines
+
+The 400-line threshold for independent lenses (SKILL step 6) counts hand-written lines only: lockfiles, generated code, snapshots, locale JSON and assets do not count.
+
 ## Pre-pass on the added lines
 
 Run these on `gh pr diff <n>` before the full read; each hit is a lead to verify, not a finding yet.

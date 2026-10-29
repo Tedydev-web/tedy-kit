@@ -49,4 +49,8 @@ test("the plan prints one line per package and the set command, with the author 
   ]);
   const open = { fe: [...listed.fe, { number: 4, state: "OPEN", baseRefName: "dev", title: "fix: follow-up", mergedAt: null, body: "OP#21" }], be: listed.be };
   assert.deepEqual(planLines(await gatherFacts(21, { request, listPrs: (repo) => open[repo.name], repos, project: 183, started: false }), TRACKER), ["#21 Bug [Merged/Code Review] skip: already Merged/Code Review · Fee shows twice"]);
+  const merging = await gatherFacts(21, { request, listPrs: (repo) => open[repo.name], repos, project: 183, started: false, merging: { repo: "fe", number: 4 }, now: "2026-10-29T00:00:00Z" });
+  assert.equal(planLines(merging, TRACKER)[0], "#21 Bug [Merged/Code Review] → Fixed (Dev Done), assign Tess Ter · merged: fe#1, fe#4, be#3 · Fee shows twice");
+  const elsewhere = await gatherFacts(21, { request, listPrs: (repo) => open[repo.name], repos, project: 183, started: false, merging: { repo: "be", number: 4 } });
+  assert.match(planLines(elsewhere, TRACKER)[0], /skip: already Merged\/Code Review/);
 });

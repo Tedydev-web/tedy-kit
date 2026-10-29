@@ -11,6 +11,7 @@
     "docs/adr/0009-fact-based-ablation-evals.md": 1,
     "docs/adr/0010-dev-red-step-and-honest-green.md": 1,
     "docs/adr/0011-kit-development-standard-canon.md": 1,
+    "docs/adr/0012-work-package-status-follows-pull-requests.md": 2,
     "docs/prior-art/agent-ready-template.md": 1,
     "docs/prior-art/app-it.md": 1,
     "docs/prior-art/atmosphere.md": 1,

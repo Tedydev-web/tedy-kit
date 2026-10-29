@@ -1,13 +1,14 @@
 import { execFileSync } from "node:child_process";
+import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { loadConfig } from "./openproject-client.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { mapRepos } from "./source-pin-git.mjs";
-import { linkedIds, planStatus } from "./status-flow.mjs";
+import { flowOf, linkedIds, planStatus } from "./status-flow.mjs";
 
 const userId = (link) => link?.href?.split("/").pop() ?? null;
 
-export async function gatherFacts(id, { request, listPrs, repos, project, started }) {
+export async function gatherFacts(id, { request, listPrs, repos, project, started, merging = null, now = new Date().toISOString() }) {
   const workPackage = await request(`/api/v3/work_packages/${id}`);
   const author = userId(workPackage._links.author);
   const filters = encodeURIComponent(JSON.stringify([{ project: { operator: "=", values: [String(project)] } }, { principal: { operator: "=", values: [author] } }]));
@@ -16,7 +17,8 @@ export async function gatherFacts(id, { request, listPrs, repos, project, starte
   const prs = repos.flatMap((repo) =>
     listPrs(repo, id)
       .filter((pr) => linkedIds(pr.body).includes(Number(id)))
-      .map((pr) => ({ repo: repo.name, number: pr.number, state: pr.state.toLowerCase(), base: pr.baseRefName, integration: repo.integration, title: pr.title, mergedAt: pr.mergedAt, url: pr.url })),
+      .map((pr) => ({ repo: repo.name, number: pr.number, state: pr.state.toLowerCase(), base: pr.baseRefName, integration: repo.integration, title: pr.title, mergedAt: pr.mergedAt, url: pr.url }))
+      .map((pr) => (merging?.repo === pr.repo && merging.number === pr.number && pr.state === "open" ? { ...pr, state: "merged", mergedAt: now } : pr)),
   );
   const facts = { type: workPackage._links.type.title, status: workPackage._links.status.title, authorRoles, started, assigneeIsAuthor: userId(workPackage._links.assignee) === author, prs };
   return { workPackage, facts };
@@ -40,22 +42,31 @@ export function listPullRequests(repo, id) {
 }
 
 async function main(argv) {
-  const ids = argv.filter((arg) => /^\d+$/.test(arg));
-  if (argv[0] !== "plan" || !ids.length) {
-    console.error("usage: op-status.mjs plan <work package id>... [--started]");
+  const at = argv.indexOf("--merging");
+  const mergingNumber = at >= 0 ? Number(argv[at + 1]) : null;
+  const ids = argv.filter((arg, index) => /^\d+$/.test(arg) && index !== at + 1);
+  if (argv[0] !== "plan" || !ids.length || (at >= 0 && !Number.isInteger(mergingNumber))) {
+    console.error("usage: op-status.mjs plan <work package id>... [--started] [--merging <PR number of the repo checked out here>]");
     return 2;
   }
   const resolved = resolveMap(process.cwd());
   if (!resolved) throw new Error(`no project map covers ${process.cwd()}; run /tedy:setup`);
   const { map } = resolved;
-  if (!map.tracker?.flow) {
+  if (!Object.keys(flowOf(map.tracker ?? {})).length) {
     console.log(`the map ${map.name} has no tracker.flow; add it with /tedy:setup update`);
     return 1;
   }
   const client = loadConfig();
   const repos = mapRepos(map).map((repo) => ({ ...repo, integration: repo.branches[0] }));
+  let merging = null;
+  if (mergingNumber !== null) {
+    const top = realpathSync(execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim());
+    const here = repos.find((repo) => realpathSync(repo.dir) === top);
+    if (!here) throw new Error(`--merging needs the checkout of a map repository; ${top} is not one`);
+    merging = { repo: here.name, number: mergingNumber };
+  }
   for (const id of ids) {
-    const gathered = await gatherFacts(id, { request: (path) => client.request(path), listPrs: listPullRequests, repos, project: map.tracker.project, started: argv.includes("--started") });
+    const gathered = await gatherFacts(id, { request: (path) => client.request(path), listPrs: listPullRequests, repos, project: map.tracker.project, started: argv.includes("--started"), merging });
     for (const line of planLines(gathered, map.tracker)) console.log(line);
   }
   return 0;

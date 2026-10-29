@@ -13,7 +13,7 @@ Status: accepted (2026-10-08 to 2026-10-14, recorded 2026-10-17)
 - PRD and Figma say what the product must be, the package says what one person builds now; a mismatch stops that part until the PM session writes the user's choice into the package (rule 22).
 - The review session reads every package the PR body points to (`OP#<id>`, a work package link, or a five-digit `#id` next to the word OP) and hands drift to the PM session (rule 23).
 - A package that changed after the PR opened means reconcile again and refresh the body; closed or rejected means stop and ask; a PR closed without merge means ask whether to drop the package or open a new PR (rule 24).
-- Status moves only through one batch hand-off from review to PM and one approval: `In progress` when the PR opens, the map's `merge_status` after merge, back to `In progress` or `Re-Work` after a revert (rule 25).
+- Status moves only through one batch hand-off from review to PM and one approval: `In progress` when the PR opens, the map's `merge_status` after merge, back to `In progress` or `Re-Work` after a revert (rule 25). Superseded for status and assignee changes by ADR 0012 (2026-10-29): the session that acts applies them; the sweep's batch stays for events outside the skills.
 
 ## Enforcement
 git-gate denies `gh pr create` without `OP#<id>`; `pr-body`, `reconcile` and `merged-sweep` carry the details of rules 22, 24 and 25.

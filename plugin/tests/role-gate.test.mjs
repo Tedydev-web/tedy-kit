@@ -35,7 +35,9 @@ test("code edits are edits inside a mapped repository or worktree, outside plans
 
 test("writes through the tracker, Doc, Figma and review scripts are classified; previews are not", () => {
   assert.equal(bash("node /k/scripts/openproject.mjs apply d.json").kind, "tracker");
-  assert.equal(bash("node /k/scripts/openproject.mjs set 21298 --status Closed --apply --lock 3").kind, "tracker");
+  assert.equal(bash("node /k/scripts/openproject.mjs set 21298 --status Closed --apply --lock 3").kind, "tracker-status");
+  assert.equal(bash('node /k/scripts/openproject.mjs set 21298 --status "Fixed (Dev Done)" --assignee "Tess Ter" --apply --lock 3').kind, "tracker-status");
+  assert.equal(bash("node /k/scripts/openproject.mjs set 21298 --status Closed --estimate 4 --apply --lock 3").kind, "tracker");
   assert.equal(bash("node /k/scripts/openproject.mjs preview d.json"), null);
   assert.equal(bash("node /k/scripts/openproject.mjs set 21298 --status Closed"), null);
   assert.equal(bash("python3 ~/.agents/skills/pg-project-management/scripts/pg.py set 183 21298 --status Closed").kind, "tracker");
@@ -91,6 +93,10 @@ test("each role is asked only about the other roles' writes, and the owner sessi
   assert.equal(decide(map, "Review PR - Shop", { kind: "pr-review", repo: null }), null);
   assert.match(decide(map, "DevOps - Shop", { kind: "tracker", repo: null }), /pm session "PM - Shop"/);
   assert.equal(decide(map, "DevOps - Shop", code), null);
+  const status = { kind: "tracker-status", repo: null };
+  assert.equal(decide(map, "Dev TMA - Shop", status), null);
+  assert.equal(decide(map, "Review PR - Shop", status), null);
+  assert.match(decide(map, "Dispatch - Shop", status) ?? "", /changing a work package's status or assignee belongs to the pm session/);
   assert.equal(decide(map, "Agent Assistant", prd), null);
   assert.equal(decide(map, "PM - Shop", null), null);
 });

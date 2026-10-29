@@ -6,6 +6,16 @@ import { existsSync, readFileSync } from "node:fs";
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const script = (name) => existsSync(new URL(`../scripts/${name}.mjs`, import.meta.url));
 
+test("every role that moves a work package's status follows one status procedure, and review merges only on the user's yes", () => {
+  const procedure = read("shared/status-flow.md");
+  for (const phrase of ["op-status.mjs plan", "--started", "--merging", "without `--apply`", "--apply --lock"]) assert.ok(procedure.includes(phrase), phrase);
+  assert.equal(read("skills/dev/SKILL.md").match(/shared\/status-flow\.md/g)?.length, 2);
+  const merge = read("skills/review-pr/references/status-after-merge.md");
+  for (const phrase of ["`merge.header`", "`merge.yes`", "`merge.no`", "--merging <n>", "gh pr merge <n>", "status-flow.md"]) assert.ok(merge.includes(phrase), phrase);
+  assert.match(read("skills/review-pr/SKILL.md"), /^4\. Merge only on the user's yes \(`references\/status-after-merge\.md`\), never close a PR;/m);
+  assert.ok(script("op-status"));
+});
+
 test("learn reads every mapped repo's memory, ranks each lesson by the strongest form, and scans what leaves the project", () => {
   const learn = read("skills/learn/SKILL.md");
   for (const phrase of ["memory-stats.mjs", "public-scan.mjs file", "pending.mjs stub", "repeat-of", "learn_held", "## Metrics", "gate-log.jsonl", "baseline", "ISO timestamp", "docs/prior-art/", "none found"]) assert.ok(learn.includes(phrase), phrase);
