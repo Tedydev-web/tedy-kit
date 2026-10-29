@@ -8,47 +8,43 @@ import { loadConfig } from "./openproject-client.mjs";
 import { chatLanguage, fill, labels } from "./labels.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { notBefore, sinceTime } from "./since.mjs";
+import { gatherFacts, listPullRequests } from "./op-status.mjs";
+import { mapRepos } from "./source-pin-git.mjs";
+import { flowOf, linkedIds, planStatus } from "./status-flow.mjs";
 
 export const searchSince = (since) => `${new Date(sinceTime(since)).toISOString().slice(0, 19)}Z`;
 
-const LINK = /\bOP#(\d+)\b|\/work_packages\/(\d+)\b/g;
 const FIRST_RUN_DAYS = 7;
 
-export const linkedIds = (text) => [...new Set([...String(text ?? "").matchAll(LINK)].map((match) => Number(match[1] ?? match[2])))];
+export { linkedIds };
 
 const assigneeId = (workPackage) => Number(workPackage._links.assignee?.href?.split("/").pop()) || null;
 
-export const kindOf = (pr) => (!pr.mergedAt ? "open" : /^Revert\b/.test(pr.title ?? "") ? "revert" : "merged");
-
-const newer = (held, pr) => !held || (kindOf(held) === "open" && kindOf(pr) !== "open") || (kindOf(pr) !== "open" && kindOf(held) !== "open" && held.mergedAt < pr.mergedAt);
-
-export function pickUpdates({ prs, workPackages, meId, targets, notStarted = [] }) {
-  const latest = new Map();
-  for (const pr of prs) {
-    for (const id of linkedIds(pr.body)) {
-      if (newer(latest.get(id), pr)) latest.set(id, pr);
-    }
-  }
+export function sweepPlan({ gathered, meId, tracker }) {
   const updates = [];
   const skipped = [];
-  for (const id of [...latest.keys()].sort((a, b) => a - b)) {
-    const workPackage = workPackages.get(id);
-    const type = workPackage?._links.type.title;
-    const status = workPackage?._links.status.title;
-    const pr = latest.get(id);
-    const kind = kindOf(pr);
-    const to = targets[kind]?.[type];
-    const why = !workPackage ? "not found" : workPackage.closed ? "closed" : assigneeId(workPackage) !== meId ? "assigned to someone else" : !to ? `type ${type} has no ${kind} status` : status === to ? `already ${status}` : kind === "open" && !notStarted.includes(status) ? `already started (${status})` : null;
-    if (why) skipped.push({ id, why });
-    else updates.push({ id, subject: workPackage.subject, type, from: status, to, lockVersion: workPackage.lockVersion, pr });
+  for (const { id, workPackage, facts } of [...gathered].sort((a, b) => a.id - b.id)) {
+    if (!workPackage) {
+      skipped.push({ id, why: "not found" });
+      continue;
+    }
+    if (assigneeId(workPackage) !== meId) {
+      skipped.push({ id, why: "assigned to someone else" });
+      continue;
+    }
+    const plan = planStatus(facts, tracker);
+    if (plan.skip) skipped.push({ id, why: plan.skip });
+    else {
+      const prs = facts.prs.filter((pr) => pr.base === pr.integration && pr.state !== "closed");
+      updates.push({ id, subject: workPackage.subject, type: facts.type, from: facts.status, to: plan.to, assign: plan.assign === "author" ? workPackage._links.author.title : null, event: plan.event, prs });
+    }
   }
   return { updates, skipped };
 }
 
 export function handoffBody(updates) {
-  const event = (pr) => ({ open: `opened in ${pr.repo}#${pr.number} ${pr.url}`, revert: `reverted in ${pr.repo}#${pr.number} ${pr.url} on ${pr.mergedAt?.slice(0, 10)}`, merged: `merged in ${pr.repo}#${pr.number} ${pr.url} on ${pr.mergedAt?.slice(0, 10)}` })[kindOf(pr)];
-  const rows = updates.map((update) => `- #${update.id} ${String(update.subject ?? "").replace(/\s+/g, " ")} (${update.type}, ${update.from} → ${update.to}) · ${event(update.pr)}`);
-  const commands = updates.map((update) => `node <plugin>/scripts/openproject.mjs set ${update.id} --status "${update.to}"`);
+  const rows = updates.map((update) => `- #${update.id} ${String(update.subject ?? "").replace(/\s+/g, " ")} (${update.type}, ${update.from} → ${update.to}${update.assign ? `, assign ${update.assign}` : ""}) · ${update.event}: ${update.prs.map((pr) => `${pr.repo}#${pr.number} ${pr.url ?? ""}`.trim()).join(", ")}`);
+  const commands = updates.map((update) => `node <plugin>/scripts/openproject.mjs set ${update.id} --status "${update.to}"${update.assign ? ` --assignee "${update.assign}"` : ""}`);
   return `Status from the user's own PRs (opened, merged or reverted), found by merged-sweep.mjs. Run each command without --apply, quote the preview lines, ask one approval for the whole batch, then run them again with --apply --lock <n>.\n\n${rows.join("\n")}\n\n\`\`\`\n${commands.join("\n")}\n\`\`\`\n\n## User decisions\nNone yet: the batch waits for one approval in the PM session.\n\n## First safe step\nRun the first command above without --apply and quote its preview.\n\n## Sources\nmerged-sweep.mjs over the user's PRs; each row links its PR.\n`;
 }
 
@@ -94,34 +90,33 @@ async function main(argv) {
   const resolved = resolveMap(process.cwd());
   if (!resolved) throw new Error(`no project map covers ${process.cwd()}; run /tedy:setup`);
   const { map } = resolved;
-  const targets = { merged: map.tracker?.merge_status, open: map.tracker?.open_status, revert: map.tracker?.revert_status };
-  if (!targets.merged) {
-    console.log(`the map ${map.name} has no tracker.merge_status; add the status per work package type with /tedy:setup update`);
+  if (!Object.keys(flowOf(map.tracker ?? {})).length) {
+    console.log(`the map ${map.name} has no tracker.flow or tracker.merge_status; add the status per work package type with /tedy:setup update`);
     return 1;
   }
   const startedAt = new Date().toISOString();
   const since = flag("--since") ?? readSince(map.name) ?? new Date(Date.now() - FIRST_RUN_DAYS * 86_400_000).toISOString();
   sinceTime(since);
-  const { prs, skipped } = listedPrs(map, since, Boolean(targets.open));
+  const { prs, skipped } = listedPrs(map, since, true);
   const ids = [...new Set(prs.flatMap((pr) => linkedIds(pr.body)))];
   console.log(`since ${since}: ${prs.filter((pr) => pr.mergedAt).length} merged and ${prs.filter((pr) => !pr.mergedAt).length} newly opened PR(s), ${ids.length} linked work package(s)`);
   let updates = [];
   if (ids.length) {
     const client = loadConfig();
     const meId = (await client.request("/api/v3/users/me")).id;
-    const closedNames = new Set((await client.request("/api/v3/statuses"))._embedded.elements.filter((status) => status.isClosed).map((status) => status.name));
-    const workPackages = new Map();
+    const repos = mapRepos(map).map((repo) => ({ ...repo, integration: repo.branches[0] }));
+    const gathered = [];
     for (const id of ids) {
       try {
-        const workPackage = await client.request(`/api/v3/work_packages/${id}`);
-        workPackages.set(id, { ...workPackage, closed: closedNames.has(workPackage._links.status.title) });
+        gathered.push({ id, ...(await gatherFacts(id, { request: (path) => client.request(path), listPrs: listPullRequests, repos, project: map.tracker.project, started: false })) });
       } catch (error) {
         console.log(`#${id}: ${error.message}`);
+        gathered.push({ id });
       }
     }
-    const picked = pickUpdates({ prs, workPackages, meId, targets, notStarted: map.tracker?.not_started ?? [] });
+    const picked = sweepPlan({ gathered, meId, tracker: map.tracker });
     updates = picked.updates;
-    for (const update of updates) console.log(`update #${update.id} ${update.type} ${update.from} → ${update.to} · ${kindOf(update.pr)} ${update.pr.repo}#${update.pr.number}`);
+    for (const update of updates) console.log(`update #${update.id} ${update.type} ${update.from} → ${update.to}${update.assign ? `, assign ${update.assign}` : ""} · ${update.event} ${update.prs.map((pr) => `${pr.repo}#${pr.number}`).join(", ")}`);
     for (const skip of picked.skipped) console.log(`skip #${skip.id}: ${skip.why}`);
   }
   if (!handoff) return 0;
