@@ -114,7 +114,7 @@ test("draft-lint fails when a map repo or the PR head cannot be pinned, and pass
   const noPr = project(draftWith("The label is wrong.").replace("#701", "#702"));
   const missing = noPr.lint("pr-comment", noPr.at("d.md"), "--diff", noPr.at("pr.diff"));
   assert.equal(missing.status, 1);
-  assert.match(missing.out, /^sources: cannot pin the head of PR #702: origin of \. has no refs\/pull\/702\/head$/m);
+  assert.match(missing.out, /^sources: cannot pin the head of PR #702: GitHub reports no head for o\/r#702$/m);
 });
 
 test("post refuses a draft that was never linted, and one edited after its pins were taken", () => {
@@ -269,12 +269,12 @@ test("reply and edit write only to the repository and PR the lint pinned, while 
   for (const head of [`${pinned.slice(0, 8)}${"0".repeat(32)}`, ""]) {
     const near = wrongPr.write(["reply", "701", "123", "--repo", "o/fe", "--body-file", wrongPr.file], { head });
     assert.equal(near.status, 1, near.out);
-    assert.match(near.out, /^refused: GitHub shows o\/fe#701 at .+?, not at the pinned [0-9a-f]{8}, so the PR changed;/m);
+    assert.match(near.out, /^refused: \S+ pull\/701\/head (moved from [0-9a-f]{8} to [0-9a-f]{0,8} since it was pinned, so the PR under review changed|no longer exists on origin)/m);
     assert.equal(near.writes.length, 0);
   }
   const moved = wrongPr.write(["reply", "701", "123", "--repo", "o/fe", "--body-file", wrongPr.file], { head: "f".repeat(40) });
   assert.equal(moved.status, 1, moved.out);
-  assert.match(moved.out, new RegExp(`^refused: GitHub shows o/fe#701 at ffffffff, not at the pinned ${pinned.slice(0, 8)}, so the PR changed; re-read it, lint again and ask the user again$`, "m"));
+  assert.match(moved.out, new RegExp(`^refused: \\S+ pull/701/head moved from ${pinned.slice(0, 8)} to ffffffff since it was pinned, so the PR under review changed$`, "m"));
   for (const result of [other, otherEdit, noPr, moved]) assert.equal(result.writes.length, 0);
   const posted = wrongPr.write(["reply", "701", "123", "--repo", "O/FE", "--body-file", wrongPr.file], { head: pinned });
   assert.equal(posted.status, 0, posted.out);
@@ -380,7 +380,7 @@ test("a pin-sources that fails keeps the draft's frozen original", () => {
 
 function originCalls(env = {}) {
   const p = project();
-  assert.equal(p.lint("pin-sources", p.at("d.md"), "--pr", "701").status, 0);
+  assert.equal(p.lint("pin-sources", p.at("d.md"), "--pr", "701", "--branch", ".:dev").status, 0);
   p.rewrite("d.md", DRAFT);
   p.be.push("src/c.ts", "c1\n", "chore: pushed after the read, so the lint fetches it");
   git(p.fe.clone, "config", "core.sshCommand", "ssh -i /keys/review");

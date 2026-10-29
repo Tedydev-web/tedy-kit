@@ -11,6 +11,7 @@ const HEAD = "abc1234" + "0".repeat(33);
 const DIFF = "diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -9,2 +10,2 @@\n context line\n+added line\n";
 const DRAFT = "# PR #701: comment line by line (head abc1234)\n\n## 1. `src/a.ts:10`\nThe label is wrong, `src/a.ts:1@dev` sets it.\n";
 const POSTED = { diff: DIFF, head: HEAD, reviewComments: [{ id: 1, path: "src/a.ts", line: 10, side: "RIGHT", commit_id: HEAD }] };
+const AT_CHECKOUT = { diff: DIFF, reviewComments: POSTED.reviewComments };
 const TAB = "Crypto takes the price in USDT and the fee in GRAM from the payer\n";
 const FIGMA_NODE = "https://www.figma.com/design/F1/App?node-id=1-2";
 const ITEM = { group: "A", epic: "09", where: "UC_SW_13 BR1", quote: "Crypto takes the price in USDT", comment: "Which wallet pays the fee?" };
@@ -512,7 +513,7 @@ test("a branch cite that no repo pins warns at the lint, and the post needs that
 });
 
 test("a cite of the reviewed repo's own branch warns that it pins nothing, unless a pin-sources --branch read pin holds it", async () => {
-  const review = () => world({ pr: 701, gh: POSTED, map: { name: "p", repos: [{ path: ".", role: "FE", branch: "dev" }], language: { pr_review: "en" } } });
+  const review = () => world({ pr: 701, gh: AT_CHECKOUT, map: { name: "p", repos: [{ path: ".", role: "FE", branch: "dev" }], language: { pr_review: "en" } } });
   const draft = (w) => DRAFT.replaceAll("abc1234", w.checkout.pr(701).slice(0, 7));
   const bare = review();
   bare.file("d.md", draft(bare));
@@ -596,7 +597,7 @@ test("every lint pins the links in its text and the map repos, and figma-comment
   assert.match((await figma.run("draft-lint", ["figma-comment", "f.md", "--file", "F1"])).out, /^warning: no --node, so Figma F1 is pinned as a whole file and any edit to it refuses the post/m);
   const record = JSON.parse(readFileSync(join(figma.dir, "state", "drafts", `${join(figma.dir, "f.md").replace(/\//g, "_")}.sources.json`), "utf8"));
   assert.deepEqual(record.warnings.map((line) => line.split(",")[0]), ["warning: no --node", "warning: no read pins for f.md"]);
-  const review = world({ pr: 701, gh: POSTED, web: { document: textDoc(TAB) }, map: { name: "p", repos: [{ path: ".", role: "FE", branch: "dev" }], language: { pr_review: "en" } } });
+  const review = world({ pr: 701, gh: AT_CHECKOUT, web: { document: textDoc(TAB) }, map: { name: "p", repos: [{ path: ".", role: "FE", branch: "dev" }], language: { pr_review: "en" } } });
   review.file("d.md", DRAFT.replace("sets it.", `sets it, see ${FIGMA_NODE}.`));
   const reviewPins = await lint(review, "draft-lint", ["pr-comment", "d.md"]);
   assert.ok(reviewPins.some((line) => line.startsWith("pinned: Figma F1 ")), reviewPins.join("\n"));

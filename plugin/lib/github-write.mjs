@@ -104,7 +104,7 @@ function inRepoAt(head) {
       return true;
     } catch (error) {
       if (error.status === 1) return false;
-      throw new Error(`git grep at ${head.slice(0, 8)} failed; fetch the PR head first (git fetch origin pull/<n>/head)`);
+      throw new Error(`git grep at ${head.slice(0, 8)} failed; fetch the PR head first (git fetch origin ${head})`);
     }
   };
 }

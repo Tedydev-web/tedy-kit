@@ -1,19 +1,27 @@
-import { spawnSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { profileWith, tempDir } from "./temp-dir-for-tests.mjs";
 
 const FAKE_GH = `#!/usr/bin/env node
 import { appendFileSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 const args = process.argv.slice(2);
 appendFileSync(process.env.GH_LOG, JSON.stringify(args) + "\\n");
 const fx = JSON.parse(readFileSync(process.env.GH_FIXTURE, "utf8"));
 const out = (v) => process.stdout.write(typeof v === "string" ? v : JSON.stringify(v));
 const has = (x) => args.includes(x);
+const originPullHead = (pr) => {
+  try {
+    return execFileSync(process.env.REAL_GIT || "git", ["ls-remote", "origin", "refs/pull/" + pr + "/head"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).split("\\t")[0].trim();
+  } catch {
+    return "";
+  }
+};
 if (has("graphql")) out(fx.graphql ?? {});
 else if (args[0] === "repo" && args[1] === "view") out(fx.repo ?? "o/r");
 else if (args[0] === "pr" && args[1] === "diff") out(fx.diff ?? "");
-else if (args[0] === "pr" && args[1] === "view" && has("headRefOid")) out(fx.head ?? "");
+else if (args[0] === "pr" && args[1] === "view" && has("headRefOid")) out(fx.head ?? originPullHead(args[2]));
 else if (args[0] === "pr" && args[1] === "view") out(fx.prView ?? {});
 else if (args[0] === "api" && args[1] === "user") out(fx.login ?? "");
 else if (args.some((t) => /^-X/.test(t))) out(fx.write ?? {});
@@ -23,6 +31,7 @@ else if (args.some((t) => /\\/pulls\\/comments\\/\\d+$/.test(t))) out(fx.comment
 else out(fx.default ?? "");
 `;
 
+const REAL_GIT = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
 const BIN = tempDir("tedy-ghbin-");
 writeFileSync(join(BIN, "gh"), FAKE_GH);
 chmodSync(join(BIN, "gh"), 0o755);
@@ -39,6 +48,7 @@ export function runWithFakeGh(script, args, { fixture = {}, cwd, stateDir = temp
     env: {
       ...process.env,
       PATH: `${BIN}:${process.env.PATH}`,
+      REAL_GIT,
       GH_FIXTURE: fxFile,
       GH_LOG: log,
       TEDY_STATE_DIR: stateDir,

@@ -122,11 +122,6 @@ const remoteOf = (pin) => pin.remote ?? `refs/heads/${pin.ref.replace(/^origin\/
 
 export const tipKey = (pin) => `${pin.repo}\0${remoteOf(pin)}`;
 
-function remoteTip(git, dir, ref) {
-  const line = git(dir, ["ls-remote", "origin", ref]).split("\n").find((entry) => entry.split("\t")[1] === ref);
-  return line ? line.split("\t")[0] : null;
-}
-
 function hasCommit(git, dir, sha) {
   try {
     git(dir, ["cat-file", "-e", `${sha}^{commit}`]);
@@ -139,7 +134,12 @@ function hasCommit(git, dir, sha) {
 function fetchCommit(git, dir, remote, sha) {
   if (hasCommit(git, dir, sha)) return;
   git(dir, ["fetch", "-q", "origin", remote]);
+  if (!hasCommit(git, dir, sha)) git(dir, ["fetch", "-q", "origin", sha]);
   git(dir, ["cat-file", "-e", `${sha}^{commit}`]);
+}
+
+export function apiPullHead(github, pr) {
+  return execFileSync("gh", ["pr", "view", String(pr), "--repo", github, "--json", "headRefOid", "-q", ".headRefOid"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: GIT_TIMEOUT_MS }).trim() || null;
 }
 
 function takeTip(git, dir, pin) {
@@ -220,7 +220,7 @@ const realPath = (path) => {
   }
 };
 
-export function pinPullHead(pr, repos, { repo } = {}, git = runGit) {
+export function pinPullHead(pr, repos, { repo } = {}, git = runGit, headOf = apiPullHead) {
   let top;
   try {
     top = git(process.cwd(), ["rev-parse", "--show-toplevel"]);
@@ -238,8 +238,8 @@ export function pinPullHead(pr, repos, { repo } = {}, git = runGit) {
   if (repo !== undefined && github?.toLowerCase() !== repo.toLowerCase()) return { pins: [], problems: [`cannot pin the head of PR #${pr}: --repo ${repo} is not the repository checked out at ${top}, whose origin is ${url}; run from the checkout of ${repo}`] };
   const pin = { kind: "git", repo: name, dir: top, github, pr: Number(pr), ref: `pull/${pr}/head`, remote: `refs/pull/${pr}/head`, local: `refs/pr/${pr}` };
   try {
-    const sha = remoteTip(git, top, pin.remote);
-    if (!sha) return { pins: [], problems: [`cannot pin the head of PR #${pr}: origin of ${name} has no ${pin.remote}`] };
+    const sha = headOf(github, pr);
+    if (!sha) return { pins: [], problems: [`cannot pin the head of PR #${pr}: GitHub reports no head for ${github}#${pr}`] };
     return { pins: [takeTip(git, top, { ...pin, sha })], problems: [] };
   } catch (error) {
     return { pins: [], problems: [`cannot pin the head of PR #${pr}: ${gitReason(error)}`] };
@@ -259,21 +259,28 @@ function recheckRepo(pin, dir, texts, git, now) {
   const remote = remoteOf(pin);
   if (!now) return { refusal: `refused: ${pin.repo} ${pin.ref} no longer exists on origin; ${RECHECK}` };
   if (now === pin.sha) return {};
-  fetchCommit(git, dir, remote, now);
-  if (!hasCommit(git, dir, pin.sha)) return { refusal: `refused: ${pin.repo} ${pin.ref}: the pinned commit ${pin.sha.slice(0, 8)} is not in the clone, so what changed cannot be listed; fetch it or lint again, then ask the user again` };
   const moved = `${pin.repo} ${pin.ref} moved from ${pin.sha.slice(0, 8)} to ${now.slice(0, 8)} since it was pinned`;
+  try {
+    fetchCommit(git, dir, remote, now);
+  } catch (error) {
+    if (pin.pr) return { refusal: [`refused: ${moved}, so the PR under review changed`, `  ${RECHECK}`].join("\n") };
+    throw error;
+  }
+  if (!hasCommit(git, dir, pin.sha)) return { refusal: `refused: ${pin.repo} ${pin.ref}: the pinned commit ${pin.sha.slice(0, 8)} is not in the clone, so what changed cannot be listed; fetch it or lint again, then ask the user again` };
   if (pin.pr) return { refusal: [`refused: ${moved}, so the PR under review changed`, ...commitLines(git, dir, pin.sha, now, []), `  ${RECHECK}`].join("\n") };
   const named = changedPaths(git, dir, pin.sha, now).filter((path) => namedIn(texts, path, rootsOf(pin, dir)));
   if (!named.length) return { notice: `notice: ${moved}; no changed file is named in the text being posted, so it posts as drafted` };
   return { refusal: [`refused: ${moved} and changed a file the text being posted names`, `  files: ${named.join(", ")}`, ...commitLines(git, dir, pin.sha, now, named), `  ${RECHECK}`].join("\n") };
 }
 
-export async function recheckRepos(pins, repos, texts, git = runGit, { tips = new Map(), ask = remoteTips } = {}) {
+const viaApi = (pin) => pin.pr !== undefined && Boolean(pin.github);
+
+export async function recheckRepos(pins, repos, texts, git = runGit, { tips = new Map(), ask = remoteTips, pullHead = apiPullHead } = {}) {
   const located = pins.filter((candidate) => candidate.kind === "git").map((pin) => ({ pin, dir: pin.dir ?? repos.find((candidate) => candidate.name === pin.repo)?.dir }));
   const answers = new Map(
     await Promise.all(
       unique(located.flatMap(({ dir }) => (dir ? [dir] : []))).map(async (dir) => {
-        const refs = unique(located.filter((entry) => entry.dir === dir && !tips.has(tipKey(entry.pin))).map((entry) => remoteOf(entry.pin)));
+        const refs = unique(located.filter((entry) => entry.dir === dir && !viaApi(entry.pin) && !tips.has(tipKey(entry.pin))).map((entry) => remoteOf(entry.pin)));
         try {
           return [dir, refs.length ? await ask(dir, refs) : new Map()];
         } catch (error) {
@@ -292,8 +299,9 @@ export async function recheckRepos(pins, repos, texts, git = runGit, { tips = ne
     let verdict;
     try {
       const answer = answers.get(dir);
-      if (answer instanceof Error) throw answer;
-      verdict = recheckRepo(pin, dir, texts, git, tips.has(tipKey(pin)) ? tips.get(tipKey(pin)) : answer.get(remoteOf(pin)));
+      if (viaApi(pin)) verdict = recheckRepo(pin, dir, texts, git, pullHead(pin.github, pin.pr));
+      else if (answer instanceof Error) throw answer;
+      else verdict = recheckRepo(pin, dir, texts, git, tips.has(tipKey(pin)) ? tips.get(tipKey(pin)) : answer.get(remoteOf(pin)));
     } catch (error) {
       verdict = { refusal: `refused: ${pin.repo} ${pin.ref} could not be rechecked (${gitReason(error)}); fetch it, then publish again` };
     }

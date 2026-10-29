@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { branchTokens, lsRemoteHeads, mapRepos, namedIn, pinRepos, recheckRepos, remoteTips, runGit, tipKey } from "../lib/source-pin-git.mjs";
+import { branchTokens, lsRemoteHeads, mapRepos, namedIn, pinPullHead, pinRepos, recheckRepos, remoteTips, runGit, tipKey } from "../lib/source-pin-git.mjs";
 import { linkedDocs, nodeId } from "../lib/source-pin-links.mjs";
 import { pinnedSources, sourcesPath, versionCheck, writeSources } from "../lib/source-pins.mjs";
 import { git, siblingRepo } from "./git-sibling-for-tests.mjs";
@@ -229,6 +229,41 @@ test("a PR head pin refuses any move of the head, whatever the text names", asyn
   const moved = sibling.pr(701);
   const { refusals } = await recheckRepos([pin], [], ["nothing named"]);
   assert.match(refusals[0], new RegExp(`^refused: fe pull/701/head moved from ${first.slice(0, 8)} to ${moved.slice(0, 8)} since it was pinned, so the PR under review changed\\n  commit ${moved.slice(0, 7)} fix: the author pushes during the read\\n`));
+});
+
+test("a PR head is pinned at the head GitHub's API reports and fetched by that commit, even while refs/pull lags behind", async () => {
+  const sibling = siblingRepo();
+  const stale = sibling.pr(701);
+  const head = sibling.push("src/b.ts", "b2\n", "fix: resolve comments");
+  const home = process.cwd();
+  process.chdir(sibling.clone);
+  try {
+    const asked = [];
+    const { pins, problems } = pinPullHead(701, [], { repo: "o/r" }, runGit, (github, pr) => {
+      asked.push(`${github}#${pr}`);
+      return head;
+    });
+    assert.deepEqual(problems, []);
+    assert.deepEqual(asked, ["o/r#701"]);
+    assert.equal(pins[0].sha, head);
+    assert.notEqual(pins[0].sha, stale);
+    assert.equal(git(sibling.clone, "rev-parse", "refs/pr/701"), head);
+    assert.deepEqual(pinPullHead(701, [], { repo: "o/r" }, runGit, () => null).problems, ["cannot pin the head of PR #701: GitHub reports no head for o/r#701"]);
+  } finally {
+    process.chdir(home);
+  }
+});
+
+test("a PR head pin is rechecked against GitHub's API head, not the lagging refs/pull", async () => {
+  const sibling = siblingRepo();
+  sibling.pr(701);
+  const head = sibling.push("src/b.ts", "b2\n", "fix: resolve comments");
+  git(sibling.clone, "fetch", "-q", "origin", "dev");
+  const pin = { kind: "git", repo: "fe", dir: sibling.clone, github: "o/r", pr: 701, ref: "pull/701/head", remote: "refs/pull/701/head", local: "refs/pr/701", sha: head };
+  assert.deepEqual(await recheckRepos([pin], [], ["nothing named"], undefined, { pullHead: () => head }), { refusals: [], notices: [] });
+  const later = sibling.push("src/a.ts", "a3\n", "fix: another round");
+  const { refusals } = await recheckRepos([pin], [], ["nothing named"], undefined, { pullHead: () => later });
+  assert.match(refusals[0], new RegExp(`^refused: fe pull/701/head moved from ${head.slice(0, 8)} to ${later.slice(0, 8)} since it was pinned, so the PR under review changed`));
 });
 
 test("a lint fails on a map repo whose branch origin does not have, or whose origin cannot be reached", async () => {

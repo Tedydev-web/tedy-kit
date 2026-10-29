@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { chmodSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
@@ -12,18 +12,27 @@ import { tempDir } from "./temp-dir-for-tests.mjs";
 const exec = promisify(execFile);
 const VI = LABELS.vi;
 export const SCRIPTS = new URL("../scripts/", import.meta.url).pathname;
+const REAL_GIT = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
 
 const FAKE_GH = `#!/usr/bin/env node
 import { appendFileSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 const args = process.argv.slice(2);
 const fx = JSON.parse(readFileSync(process.env.GH_FIXTURE, "utf8"));
 const out = (value) => process.stdout.write(typeof value === "string" ? value : JSON.stringify(value));
+const originPullHead = (pr) => {
+  try {
+    return execFileSync(process.env.REAL_GIT || "git", ["ls-remote", "origin", "refs/pull/" + pr + "/head"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).split("\\t")[0].trim();
+  } catch {
+    return "";
+  }
+};
 const write = args.some((token) => /^-X/.test(token)) || (args.includes("graphql") && args.some((token) => /mutation/.test(token)));
 if (write) appendFileSync(process.env.WRITES, "gh " + args.join(" ") + (args.includes("--input") ? " " + JSON.stringify(readFileSync(0, "utf8")) : "") + "\\n");
 if (args.includes("graphql")) out(fx.graphql ?? {});
 else if (args[0] === "repo" && args[1] === "view") out(fx.repo ?? "o/r");
 else if (args[0] === "pr" && args[1] === "diff") out(fx.diff ?? "");
-else if (args[0] === "pr" && args[1] === "view" && args.includes("headRefOid")) out(fx.head ?? "");
+else if (args[0] === "pr" && args[1] === "view" && args.includes("headRefOid")) out(fx.head ?? originPullHead(args[2]));
 else if (args[0] === "pr" && args[1] === "view") out(fx.prView ?? {});
 else if (args[0] === "api" && args[1] === "user") out(fx.login ?? "me");
 else if (write) out(fx.write ?? { id: 77, html_url: "https://x/77", body: fx.writeBody ?? "" });
@@ -204,7 +213,8 @@ export function fakeOpenProject({ closedStatus = true } = {}) {
 export function world({ mode = "answer", gh = {}, web = {}, map = { name: "w" }, opUrl = null, pr } = {}) {
   const dir = tempDir("tedy-world-");
   const checkout = pr !== undefined || map?.repos?.some((repo) => repo.path === ".") ? pullRequestCheckout(dir, pr ?? 701) : null;
-  if (checkout) gh = { head: checkout.pr(pr ?? 701), comment: { pull_request_url: `https://api.github.com/repos/o/r/pulls/${pr ?? 701}` }, ...gh };
+  if (checkout) checkout.pr(pr ?? 701);
+  if (checkout) gh = { comment: { pull_request_url: `https://api.github.com/repos/o/r/pulls/${pr ?? 701}` }, ...gh };
   const bin = join(dir, "bin");
   mkdirSync(bin);
   writeFileSync(join(bin, "gh"), FAKE_GH);
@@ -229,7 +239,7 @@ export function world({ mode = "answer", gh = {}, web = {}, map = { name: "w" },
   const state = join(dir, "state");
   const settings = join(dir, "claude-settings.json");
   writeFileSync(settings, JSON.stringify({ permissions: { deny: stateDenyRules(state) } }));
-  const env = { ...process.env, TEDY_CLAUDE_SETTINGS: settings, PATH: `${bin}:${process.env.PATH}`, HOME: dir, WRITES: writesLog, READS: readsLog, GH_FIXTURE: join(dir, "gh.json"), FAKE_WEB: join(dir, "web.json"), TEDY_STATE_DIR: state, TEDY_PROFILE_DIR: profile, OP_SYNC_DIR: join(dir, ".config", "op", "sync"), NODE_OPTIONS: `--import=${join(dir, "fake-fetch.mjs")}` };
+  const env = { ...process.env, REAL_GIT, TEDY_CLAUDE_SETTINGS: settings, PATH: `${bin}:${process.env.PATH}`, HOME: dir, WRITES: writesLog, READS: readsLog, GH_FIXTURE: join(dir, "gh.json"), FAKE_WEB: join(dir, "web.json"), TEDY_STATE_DIR: state, TEDY_PROFILE_DIR: profile, OP_SYNC_DIR: join(dir, ".config", "op", "sync"), NODE_OPTIONS: `--import=${join(dir, "fake-fetch.mjs")}` };
   const approve = (preview, question = "Q?") => recordApprovals({ session_id: "s", tool_use_id: "t", tool_input: { questions: [{ question, header: "x", multiSelect: false, options: [{ label: VI["post.asIs"], description: "d", preview }, { label: VI["post.hold"], description: "n" }] }] }, tool_response: { questions: [], answers: { [question]: VI["post.asIs"] }, annotations: { [question]: { preview } } } }, { dir: join(state, "approvals"), accepted: [VI["post.asIs"], VI["approve.all"]] });
   const run = (script, args) => exec("node", [join(SCRIPTS, `${script}.mjs`), ...args], { cwd: dir, env, timeout: 30_000 }).then((result) => ({ code: 0, out: `${result.stdout}${result.stderr}` }), (error) => ({ code: error.code, out: `${error.stdout ?? ""}${error.stderr ?? ""}` }));
   const writes = () => readFileSync(writesLog, "utf8").split("\n").filter(Boolean);
