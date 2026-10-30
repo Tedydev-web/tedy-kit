@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { docReferenceErrors, installedClaudeVersion, inventoryDigest, inventoryVersionErrors, kitArtifacts, kitDocFiles, kitSurfaceFit, topicLineErrors, kitRetiredNames, kitSkills, kitSourceFiles, kitTagVersions, retiredReferenceErrors, skillDescriptionErrors, skillSectionErrors, sourceCommentErrors, surfaceFitErrors, tagVersionErrors } from "../lib/canon-checks.mjs";
+import { alwaysOnChars, docReferenceErrors, footprintErrors, hookEventErrors, installedClaudeVersion, inventoryDigest, kitFootprint, kitHookEvents, skillModelErrors, inventoryVersionErrors, kitArtifacts, kitDocFiles, kitSurfaceFit, topicLineErrors, kitRetiredNames, kitSkills, kitSourceFiles, kitTagVersions, retiredReferenceErrors, skillDescriptionErrors, skillSectionErrors, sourceCommentErrors, surfaceFitErrors, tagVersionErrors } from "../lib/canon-checks.mjs";
 import { applies, kitConformance } from "../lib/canon-standard.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
@@ -172,4 +172,43 @@ test("every kit need is judged against every Claude Code surface of the current 
   assert.ok(fit.needs.length >= 8 && inventory.hookEvents.length >= 30, `${fit.needs.length} needs, ${inventory.hookEvents.length} hook events`);
   assert.deepEqual(surfaceFitErrors(inventory, fit), []);
   assert.deepEqual(inventoryVersionErrors(inventory.claudeCode, installedClaudeVersion()), []);
+});
+
+test("always-on text counts each skill's and agent's description and when_to_use", () => {
+  const doc = (front) => `---\nname: x\n${front}\n---\nbody that never counts\n`;
+  assert.equal(alwaysOnChars([doc("description: abcd"), doc("description: ef\nwhen_to_use: ghi"), "no front matter"]), 9);
+});
+
+test("always-on text over its budget, or a budget raised since the latest release without a new standard version, fails", () => {
+  assert.deepEqual(footprintErrors({ chars: 900, budget: 1000, tag: "v0.2.16", tagBudget: 1000, version: 3, tagVersion: 3 }), []);
+  assert.deepEqual(footprintErrors({ chars: 900, budget: 1000, tag: "v0.2.16", tagBudget: undefined, version: 3, tagVersion: 2 }), []);
+  assert.deepEqual(footprintErrors({ chars: 1200, budget: 1100, tag: "v0.2.16", tagBudget: 1000, version: 4, tagVersion: 3 }), [
+    "the kit's always-on text is 1200 characters, over its budget of 1100 in docs/canon/footprint-budget.json",
+  ]);
+  assert.deepEqual(footprintErrors({ chars: 900, budget: 1100, tag: "v0.2.16", tagBudget: 1000, version: 3, tagVersion: 3 }), [
+    "the always-on budget rose from 1000 at v0.2.16 to 1100 without a new standard version",
+  ]);
+});
+
+test("a kit hook on an event that adds text to every prompt or every subagent spawn fails", () => {
+  assert.deepEqual(hookEventErrors(["PreToolUse", "SessionStart", "Stop"]), []);
+  assert.deepEqual(hookEventErrors(["UserPromptSubmit", "SubagentStart", "Stop"]), [
+    "hooks.json registers UserPromptSubmit, whose output enters the context on every prompt or every subagent spawn",
+    "hooks.json registers SubagentStart, whose output enters the context on every prompt or every subagent spawn",
+  ]);
+});
+
+test("a skill that sets model: in its front matter fails", () => {
+  const skill = (name, front) => ({ name, text: `---\nname: ${name}\ndescription: d\n${front}---\nbody\n` });
+  assert.deepEqual(skillModelErrors([skill("ok", ""), skill("pinned", "model: claude-haiku-5-5\n")]), [
+    "pinned: sets model: in its front matter, which switches the session model and starts a cold prompt cache",
+  ]);
+});
+
+test("the kit's always-on text, hook events and skill models stay within the quota rules", () => {
+  const footprint = kitFootprint(REPO);
+  assert.ok(footprint.chars > 1000, String(footprint.chars));
+  assert.deepEqual(footprintErrors(footprint), []);
+  assert.deepEqual(hookEventErrors(kitHookEvents(REPO)), []);
+  assert.deepEqual(skillModelErrors(kitSkills(REPO)), []);
 });

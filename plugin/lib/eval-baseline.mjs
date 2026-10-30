@@ -1,5 +1,6 @@
 const rate = (cell) => cell.passed / cell.runs;
 const share = (cell) => `${cell.passed}/${cell.runs} on ${cell.model}`;
+const round = (usd) => Math.round(usd * 1e6) / 1e6;
 
 export function tally(results) {
   const errors = [];
@@ -10,17 +11,47 @@ export function tally(results) {
       errors.push(`${key} run ${result.run}: no served model recorded`);
       continue;
     }
-    const cell = (cells[key] ??= { passed: 0, runs: 0, model: result.model, claudeVersion: result.claudeVersion ?? null });
+    const cell = (cells[key] ??= { passed: 0, runs: 0, model: result.model, claudeVersion: result.claudeVersion ?? null, costMean: null, costRuns: 0 });
     if (cell.model !== result.model) errors.push(`${key}: runs on ${cell.model} and ${result.model}`);
     cell.runs += 1;
     if (result.pass) cell.passed += 1;
+    if (typeof result.cost === "number") {
+      cell.costMean = round(((cell.costMean ?? 0) * cell.costRuns + result.cost) / (cell.costRuns + 1));
+      cell.costRuns += 1;
+    }
   }
   const costs = results.map((result) => result.cost);
   const spend = { usd: costs.filter((cost) => typeof cost === "number").reduce((a, b) => a + b, 0), unmeasured: costs.filter((cost) => typeof cost !== "number").length };
   return { errors, cells, spend };
 }
 
-export function rebaseline({ baseline, results, acceptModelChange = false, date }) {
+export function costTolerance(costs, cellRuns = 3) {
+  if (costs.length < 2) throw new Error(`the noise band needs at least 2 runs with a cost, got ${costs.length}`);
+  const mean = costs.reduce((a, b) => a + b, 0) / costs.length;
+  const sd = Math.sqrt(costs.reduce((sum, cost) => sum + (cost - mean) ** 2, 0) / (costs.length - 1));
+  return Math.round((2 * sd) / mean / Math.sqrt(cellRuns) * 1000) / 1000;
+}
+
+function costErrors({ before, cells, tolerance, acceptModelChange, acceptCostRise }) {
+  const errors = [];
+  let untolerated = false;
+  for (const [key, cell] of Object.entries(cells)) {
+    const old = before[key];
+    if (typeof old?.costMean !== "number" || (acceptModelChange && old.model !== cell.model)) continue;
+    if (cell.costRuns < cell.runs) {
+      errors.push(`${key}: ${cell.runs - cell.costRuns} of ${cell.runs} runs report no cost, so the cost cannot be compared with the baseline; rerun`);
+      continue;
+    }
+    if (typeof tolerance !== "number") untolerated = true;
+    else if (!acceptCostRise && cell.costMean > old.costMean * (1 + tolerance)) {
+      errors.push(`${key}: mean cost USD ${old.costMean.toFixed(4)} rose to USD ${cell.costMean.toFixed(4)} (+${Math.round((cell.costMean / old.costMean - 1) * 100)}%), past the ${Math.round(tolerance * 100)}% noise band; find the cause, or pass --accept-cost-rise`);
+    }
+  }
+  if (untolerated) errors.push("baseline.json has no costTolerance: measure the noise first with rebaseline.mjs <folder> --noise --write");
+  return errors;
+}
+
+export function rebaseline({ baseline, results, acceptModelChange = false, acceptCostRise = false, date }) {
   if (!results.length) return { errors: ["no results to compare"], baseline };
   const { errors, cells, spend } = tally(results);
   if (errors.length) return { errors, baseline, spend };
@@ -31,9 +62,10 @@ export function rebaseline({ baseline, results, acceptModelChange = false, date 
     if (!acceptModelChange) errors.push(`${key}: ${share(old)} fell to ${share(cell)}; rerun, fix the regression, or pass --accept-model-change when the model changed`);
     else if (old.model === cell.model) errors.push(`${key}: ${share(old)} fell to ${share(cell)} on the same model; --accept-model-change applies only to a model change`);
   }
+  errors.push(...costErrors({ before, cells, tolerance: baseline?.costTolerance, acceptModelChange, acceptCostRise }));
   if (errors.length) return { errors, baseline, spend };
   const next = Object.fromEntries(Object.entries(cells).map(([key, cell]) => [key, { ...cell, date }]));
-  return { errors: [], baseline: { cells: { ...before, ...next } }, spend };
+  return { errors: [], baseline: { ...baseline, cells: { ...before, ...next } }, spend };
 }
 
 export function ablationPlan({ ledger, baseline, model }) {

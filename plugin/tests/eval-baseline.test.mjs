@@ -1,7 +1,7 @@
 import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ablationPlan, rebaseline, tally } from "../lib/eval-baseline.mjs";
+import { ablationPlan, costTolerance, rebaseline, tally } from "../lib/eval-baseline.mjs";
 
 const run = (scenario, arm, pass, fields = {}) => ({ scenario, arm, run: 1, pass, model: "model-a", cost: 0.1, ...fields });
 const cell = (passed, runs, model = "model-a") => ({ passed, runs, model, claudeVersion: null, date: "2026-10-27" });
@@ -9,7 +9,7 @@ const cell = (passed, runs, model = "model-a") => ({ passed, runs, model, claude
 test("tally counts passes per scenario and arm, refuses a run without a served model or a cell on two models, and keeps unmeasured spend apart", () => {
   const { errors, cells, spend } = tally([run("s1", "green", true), run("s1", "green", false, { cost: undefined }), run("s1", "red", false)]);
   assert.deepEqual(errors, []);
-  assert.deepEqual(cells, { "s1 green": { passed: 1, runs: 2, model: "model-a", claudeVersion: null }, "s1 red": { passed: 0, runs: 1, model: "model-a", claudeVersion: null } });
+  assert.deepEqual(cells, { "s1 green": { passed: 1, runs: 2, model: "model-a", claudeVersion: null, costMean: 0.1, costRuns: 1 }, "s1 red": { passed: 0, runs: 1, model: "model-a", claudeVersion: null, costMean: 0.1, costRuns: 1 } });
   assert.deepEqual(spend, { usd: 0.2, unmeasured: 1 });
   assert.deepEqual(tally([run("s1", "green", true, { model: undefined }), run("s1", "red", true), run("s1", "red", true, { model: "model-b" })]).errors, [
     "s1 green run 1: no served model recorded",
@@ -24,7 +24,7 @@ test("a rebaseline that lowers a pass rate is refused unless the model changed a
   assert.deepEqual(rebaseline({ baseline, results: worse, acceptModelChange: true, date: "2026-10-28" }).errors, ["s1 green: 3/3 on model-a fell to 1/2 on model-a on the same model; --accept-model-change applies only to a model change"]);
   const moved = rebaseline({ baseline, results: worse.map((result) => ({ ...result, model: "model-b" })), acceptModelChange: true, date: "2026-10-28" });
   assert.deepEqual(moved.errors, []);
-  assert.deepEqual(moved.baseline.cells["s1 green"], { passed: 1, runs: 2, model: "model-b", claudeVersion: null, date: "2026-10-28" });
+  assert.deepEqual(moved.baseline.cells["s1 green"], { passed: 1, runs: 2, model: "model-b", claudeVersion: null, costMean: 0.1, costRuns: 2, date: "2026-10-28" });
   assert.deepEqual(moved.baseline.cells["s3 green"], cell(2, 3));
   assert.deepEqual(rebaseline({ baseline, results: [run("s3", "green", true)], date: "2026-10-28" }).errors, []);
   assert.deepEqual(rebaseline({ baseline: null, results: [], date: "2026-10-28" }).errors, ["no results to compare"]);
@@ -42,4 +42,28 @@ test("the ablation plan keeps a model-gap rule that still helps, proposes removi
   assert.deepEqual(ablationPlan({ ledger, baseline }).map(({ rule, verdict }) => `${rule} ${verdict}`), ["helps keep", "idle propose removal", "unrun unmeasured", "mixed stale"]);
   assert.match(ablationPlan({ ledger, baseline }).find((row) => row.rule === "idle").detail, /nothing is deleted/);
   assert.deepEqual(ablationPlan({ ledger, baseline, model: "model-c" })[0], { rule: "helps", verdict: "stale", detail: "measured on model-a, the kit now runs on model-c; rerun both arms" });
+});
+
+test("a rebaseline whose mean cost rises past the noise band is refused unless the rise is accepted or the model changed", () => {
+  const priced = (passed, runs, costMean, model = "model-a") => ({ ...cell(passed, runs, model), costMean, costRuns: runs });
+  const baseline = { costTolerance: 0.2, cells: { "s1 green": priced(3, 3, 0.1) } };
+  const at = (cost, fields = {}) => [1, 2, 3].map((n) => run("s1", "green", true, { run: n, cost, ...fields }));
+  assert.deepEqual(rebaseline({ baseline, results: at(0.11), date: "2026-10-30" }).errors, []);
+  assert.deepEqual(rebaseline({ baseline, results: at(0.15), date: "2026-10-30" }).errors, [
+    "s1 green: mean cost USD 0.1000 rose to USD 0.1500 (+50%), past the 20% noise band; find the cause, or pass --accept-cost-rise",
+  ]);
+  assert.deepEqual(rebaseline({ baseline, results: at(0.15), acceptCostRise: true, date: "2026-10-30" }).errors, []);
+  assert.deepEqual(rebaseline({ baseline, results: at(0.15, { model: "model-b" }), acceptModelChange: true, date: "2026-10-30" }).errors, []);
+  assert.deepEqual(rebaseline({ baseline, results: [...at(0.1).slice(0, 2), run("s1", "green", true, { run: 3, cost: undefined })], date: "2026-10-30" }).errors, [
+    "s1 green: 1 of 3 runs report no cost, so the cost cannot be compared with the baseline; rerun",
+  ]);
+  assert.deepEqual(rebaseline({ baseline: { cells: baseline.cells }, results: at(0.1), date: "2026-10-30" }).errors, [
+    "baseline.json has no costTolerance: measure the noise first with rebaseline.mjs <folder> --noise --write",
+  ]);
+  assert.equal(rebaseline({ baseline, results: at(0.11), date: "2026-10-30" }).baseline.costTolerance, 0.2);
+});
+
+test("the cost noise band is two standard errors of a three-run mean, relative to the mean", () => {
+  assert.equal(costTolerance([0.9, 1.1]), 0.163);
+  assert.throws(() => costTolerance([1]), /at least 2 runs/);
 });

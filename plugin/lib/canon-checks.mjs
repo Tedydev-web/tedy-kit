@@ -189,3 +189,49 @@ export function kitSurfaceFit(repo) {
   const read = (file) => JSON.parse(readFileSync(join(repo, "docs/canon", file), "utf8"));
   return { inventory: read("claude-code-inventory.json"), fit: read("surface-fit.json") };
 }
+
+const PER_TURN_EVENTS = ["UserPromptSubmit", "UserPromptExpansion", "InstructionsLoaded", "SubagentStart"];
+
+export function alwaysOnChars(texts) {
+  return texts.reduce((sum, text) => {
+    const front = text.match(FRONT_MATTER)?.[1] ?? "";
+    return sum + ["description", "when_to_use"].reduce((n, key) => n + (front.match(new RegExp(`^${key}: (.*)$`, "m"))?.[1].length ?? 0), 0);
+  }, 0);
+}
+
+export function footprintErrors({ chars, budget, tag, tagBudget, version, tagVersion }) {
+  const errors = chars <= budget ? [] : [`the kit's always-on text is ${chars} characters, over its budget of ${budget} in docs/canon/footprint-budget.json`];
+  if (tagBudget !== undefined && budget > tagBudget && version <= tagVersion) errors.push(`the always-on budget rose from ${tagBudget} at ${tag} to ${budget} without a new standard version`);
+  return errors;
+}
+
+export function kitFootprint(repo) {
+  const docs = [...kitSkills(repo).map(({ text }) => text), ...readdirSync(join(repo, "plugin/agents")).filter((f) => f.endsWith(".md")).map((f) => readFileSync(join(repo, "plugin/agents", f), "utf8"))];
+  const BUDGET = "docs/canon/footprint-budget.json";
+  const STANDARD = "docs/canon/standard.json";
+  const tag = latestReleaseTag(repo);
+  const at = (path) => {
+    const text = tag && showAt(repo, tag, path);
+    return text ? JSON.parse(text) : undefined;
+  };
+  return {
+    chars: alwaysOnChars(docs),
+    budget: JSON.parse(readFileSync(join(repo, BUDGET), "utf8")).alwaysOnChars,
+    tag,
+    tagBudget: at(BUDGET)?.alwaysOnChars,
+    version: JSON.parse(readFileSync(join(repo, STANDARD), "utf8")).version,
+    tagVersion: at(STANDARD)?.version ?? 0,
+  };
+}
+
+export function hookEventErrors(events) {
+  return events.filter((event) => PER_TURN_EVENTS.includes(event)).map((event) => `hooks.json registers ${event}, whose output enters the context on every prompt or every subagent spawn`);
+}
+
+export function kitHookEvents(repo) {
+  return Object.keys(JSON.parse(readFileSync(join(repo, "plugin/hooks/hooks.json"), "utf8")).hooks ?? {});
+}
+
+export function skillModelErrors(skills) {
+  return skills.filter(({ text }) => /^model:/m.test(text.match(FRONT_MATTER)?.[1] ?? "")).map(({ name }) => `${name}: sets model: in its front matter, which switches the session model and starts a cold prompt cache`);
+}

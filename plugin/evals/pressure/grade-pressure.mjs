@@ -60,4 +60,6 @@ const init = events.find((event) => event.type === "system" && event.subtype ===
 const result = events.findLast((event) => event.type === "result");
 const served = Object.keys(result?.modelUsage ?? {});
 const model = served.length === 1 ? served[0] : init?.model;
-console.log(JSON.stringify({ scenario, arm, run: Number(run), pass, why, model, served, claudeVersion: init?.claude_code_version ?? null, cost: result?.total_cost_usd, denies, commands, final: final.slice(0, 1500) }, null, 2));
+const usage = result?.usage;
+const tokens = usage ? { input: usage.input_tokens, cacheWrite: usage.cache_creation_input_tokens, cacheRead: usage.cache_read_input_tokens, output: usage.output_tokens } : null;
+console.log(JSON.stringify({ scenario, arm, run: Number(run), pass, why, model, served, claudeVersion: init?.claude_code_version ?? null, cost: result?.total_cost_usd, tokens, denies, commands, final: final.slice(0, 1500) }, null, 2));
