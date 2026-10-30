@@ -5,6 +5,7 @@ const round = (usd) => Math.round(usd * 1e6) / 1e6;
 export function tally(results) {
   const errors = [];
   const cells = {};
+  const costs = {};
   for (const result of results) {
     const key = `${result.scenario} ${result.arm}`;
     if (!result.model) {
@@ -18,10 +19,12 @@ export function tally(results) {
     if (typeof result.cost === "number") {
       cell.costMean = round(((cell.costMean ?? 0) * cell.costRuns + result.cost) / (cell.costRuns + 1));
       cell.costRuns += 1;
+      (costs[key] ??= []).push(result.cost);
     }
   }
-  const costs = results.map((result) => result.cost);
-  const spend = { usd: costs.filter((cost) => typeof cost === "number").reduce((a, b) => a + b, 0), unmeasured: costs.filter((cost) => typeof cost !== "number").length };
+  for (const [key, cell] of Object.entries(cells)) cell.costBand = cell.costRuns >= 2 ? costTolerance(costs[key]) : null;
+  const all = results.map((result) => result.cost);
+  const spend = { usd: all.filter((cost) => typeof cost === "number").reduce((a, b) => a + b, 0), unmeasured: all.filter((cost) => typeof cost !== "number").length };
   return { errors, cells, spend };
 }
 
@@ -29,7 +32,7 @@ export function costTolerance(costs, cellRuns = 3) {
   if (costs.length < 2) throw new Error(`the noise band needs at least 2 runs with a cost, got ${costs.length}`);
   const mean = costs.reduce((a, b) => a + b, 0) / costs.length;
   const sd = Math.sqrt(costs.reduce((sum, cost) => sum + (cost - mean) ** 2, 0) / (costs.length - 1));
-  return Math.round((2 * sd) / mean / Math.sqrt(cellRuns) * 1000) / 1000;
+  return Math.round((2 * sd * Math.sqrt(2 / cellRuns)) / mean * 1000) / 1000;
 }
 
 function costErrors({ before, cells, tolerance, acceptModelChange, acceptCostRise }) {
@@ -42,9 +45,13 @@ function costErrors({ before, cells, tolerance, acceptModelChange, acceptCostRis
       errors.push(`${key}: ${cell.runs - cell.costRuns} of ${cell.runs} runs report no cost, so the cost cannot be compared with the baseline; rerun`);
       continue;
     }
-    if (typeof tolerance !== "number") untolerated = true;
-    else if (!acceptCostRise && cell.costMean > old.costMean * (1 + tolerance)) {
-      errors.push(`${key}: mean cost USD ${old.costMean.toFixed(4)} rose to USD ${cell.costMean.toFixed(4)} (+${Math.round((cell.costMean / old.costMean - 1) * 100)}%), past the ${Math.round(tolerance * 100)}% noise band; find the cause, or pass --accept-cost-rise`);
+    if (typeof tolerance !== "number") {
+      untolerated = true;
+      continue;
+    }
+    const band = Math.max(old.costBand ?? 0, tolerance);
+    if (!acceptCostRise && cell.costMean > old.costMean * (1 + band)) {
+      errors.push(`${key}: mean cost USD ${old.costMean.toFixed(4)} rose to USD ${cell.costMean.toFixed(4)} (+${Math.round((cell.costMean / old.costMean - 1) * 100)}%), past the ${Math.round(band * 100)}% noise band; find the cause, or pass --accept-cost-rise`);
     }
   }
   if (untolerated) errors.push("baseline.json has no costTolerance: measure the noise first with rebaseline.mjs <folder> --noise --write");

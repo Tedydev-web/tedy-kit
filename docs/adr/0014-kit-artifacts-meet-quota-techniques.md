@@ -12,7 +12,7 @@ Status: accepted (2026-10-30)
 - T2, hook output (Q3, Q10): `hookEventErrors` fails a `hooks.json` that registers an event whose output enters the context on every prompt or every subagent spawn (UserPromptSubmit, UserPromptExpansion, InstructionsLoaded, SubagentStart). The kit's hooks speak at session start, after compaction and on a prose question only.
 - T3, skill model (Q4): `skillModelErrors` fails a skill whose front matter sets `model:`, because a skill model switches the session model and starts a cold prompt cache. Agents may pin a model at their own boundary.
 - T4, reviewer spawn context (Q16): `plugin/agents/reviewer.md` sets `omitClaudeMd: true` and restates the kit rules it needs, adopted only if an ADR 0009 arm shows the review findings hold without the user's CLAUDE.md.
-- T5, quota gate (Q24, Q25): pressure results record tokens and cost; `baseline.json` keeps each cell's mean cost and a `costTolerance` measured from repeated runs (two standard errors of a three-run mean, relative); `rebaseline.mjs` refuses a mean cost past that band unless `--accept-cost-rise`, and refuses a cell whose runs report no cost once the baseline has one.
+- T5, quota gate (Q24, Q25): pressure results record tokens and cost; `baseline.json` keeps each cell's mean cost and its own `costBand`, and a `costTolerance` floor measured from ten runs of one cell; both are two standard errors of the difference between two three-run means, relative to the mean; `rebaseline.mjs` refuses a mean cost past the larger of the two unless `--accept-cost-rise`, and refuses a cell whose runs report no cost once the baseline has one.
 - T6, reviewer model and effort (Q20): pinned only from measured parity with the default, never mid-session.
 - The S32 rules enter `standard.json` in the next standard version, together with S27's, once the T4 to T6 measurements are in.
 
@@ -78,4 +78,5 @@ no social prior art: 2026-10-30 x: "skill token budget CI fail"; youtube: "claud
 
 ## Consequences
 - T1 to T3 and the T5 gate are checks today at no spend; T4 and T6 change what the reviewer sees or runs on and wait for their evals, priced at about USD 9 to 12 each, and T5 needs a priced baseline and its noise run, about USD 21 to 27.
-- Weakest link: every source's exit behaviour was read, not run; four have no licence file or a custom one; the noise band comes from one cell and three-run means, below trg's four-run floor; T2 bounds when hooks speak, not how long a notice grows.
+- Measured 2026-10-30 (47 runs on claude-opus-5-5, USD 16.83): ten runs of s1 green gave a 6% floor, while the cells' own three-run bands ran from 1% to 66%, so one band for every cell would refuse honest reruns; each cell now carries its own band. Bare cells cost USD 0.06 to 0.08 a run and full-setup cells 0.40 to 0.51 with green about equal to red, so the user's own setup, not the kit, is most of a run's cost and no cell yet isolates the kit's share.
+- Weakest link: every source's exit behaviour was read, not run; four have no licence file or a custom one; each cell's band comes from three runs, below trg's four-run floor; T2 bounds when hooks speak, not how long a notice grows.

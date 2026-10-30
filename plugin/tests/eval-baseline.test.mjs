@@ -9,7 +9,7 @@ const cell = (passed, runs, model = "model-a") => ({ passed, runs, model, claude
 test("tally counts passes per scenario and arm, refuses a run without a served model or a cell on two models, and keeps unmeasured spend apart", () => {
   const { errors, cells, spend } = tally([run("s1", "green", true), run("s1", "green", false, { cost: undefined }), run("s1", "red", false)]);
   assert.deepEqual(errors, []);
-  assert.deepEqual(cells, { "s1 green": { passed: 1, runs: 2, model: "model-a", claudeVersion: null, costMean: 0.1, costRuns: 1 }, "s1 red": { passed: 0, runs: 1, model: "model-a", claudeVersion: null, costMean: 0.1, costRuns: 1 } });
+  assert.deepEqual(cells, { "s1 green": { passed: 1, runs: 2, model: "model-a", claudeVersion: null, costMean: 0.1, costRuns: 1, costBand: null }, "s1 red": { passed: 0, runs: 1, model: "model-a", claudeVersion: null, costMean: 0.1, costRuns: 1, costBand: null } });
   assert.deepEqual(spend, { usd: 0.2, unmeasured: 1 });
   assert.deepEqual(tally([run("s1", "green", true, { model: undefined }), run("s1", "red", true), run("s1", "red", true, { model: "model-b" })]).errors, [
     "s1 green run 1: no served model recorded",
@@ -24,7 +24,7 @@ test("a rebaseline that lowers a pass rate is refused unless the model changed a
   assert.deepEqual(rebaseline({ baseline, results: worse, acceptModelChange: true, date: "2026-10-28" }).errors, ["s1 green: 3/3 on model-a fell to 1/2 on model-a on the same model; --accept-model-change applies only to a model change"]);
   const moved = rebaseline({ baseline, results: worse.map((result) => ({ ...result, model: "model-b" })), acceptModelChange: true, date: "2026-10-28" });
   assert.deepEqual(moved.errors, []);
-  assert.deepEqual(moved.baseline.cells["s1 green"], { passed: 1, runs: 2, model: "model-b", claudeVersion: null, costMean: 0.1, costRuns: 2, date: "2026-10-28" });
+  assert.deepEqual(moved.baseline.cells["s1 green"], { passed: 1, runs: 2, model: "model-b", claudeVersion: null, costMean: 0.1, costRuns: 2, costBand: 0, date: "2026-10-28" });
   assert.deepEqual(moved.baseline.cells["s3 green"], cell(2, 3));
   assert.deepEqual(rebaseline({ baseline, results: [run("s3", "green", true)], date: "2026-10-28" }).errors, []);
   assert.deepEqual(rebaseline({ baseline: null, results: [], date: "2026-10-28" }).errors, ["no results to compare"]);
@@ -63,7 +63,21 @@ test("a rebaseline whose mean cost rises past the noise band is refused unless t
   assert.equal(rebaseline({ baseline, results: at(0.11), date: "2026-10-30" }).baseline.costTolerance, 0.2);
 });
 
-test("the cost noise band is two standard errors of a three-run mean, relative to the mean", () => {
-  assert.equal(costTolerance([0.9, 1.1]), 0.163);
+test("a cell is judged on its own measured cost band, never narrower than the noise floor", () => {
+  const priced = (costMean, costBand) => ({ ...cell(3, 3), costMean, costRuns: 3, costBand });
+  const at = (cost) => [1, 2, 3].map((n) => run("s6", "bare", true, { run: n, cost }));
+  const baseline = { costTolerance: 0.05, cells: { "s6 bare": priced(0.1, 0.3) } };
+  assert.deepEqual(rebaseline({ baseline, results: at(0.125), date: "2026-10-30" }).errors, []);
+  assert.deepEqual(rebaseline({ baseline, results: at(0.14), date: "2026-10-30" }).errors, [
+    "s6 bare: mean cost USD 0.1000 rose to USD 0.1400 (+40%), past the 30% noise band; find the cause, or pass --accept-cost-rise",
+  ]);
+  const narrow = { costTolerance: 0.05, cells: { "s6 bare": priced(0.1, 0.01) } };
+  assert.deepEqual(rebaseline({ baseline: narrow, results: at(0.104), date: "2026-10-30" }).errors, []);
+  assert.equal(rebaseline({ baseline: narrow, results: at(0.106), date: "2026-10-30" }).errors.length, 1);
+  assert.equal(tally([0.9, 1.1, 1].map((cost, n) => run("s6", "bare", true, { run: n + 1, cost }))).cells["s6 bare"].costBand, costTolerance([0.9, 1.1, 1]));
+});
+
+test("the cost noise band is two standard errors of the difference between two three-run means, relative to the mean", () => {
+  assert.equal(costTolerance([0.9, 1.1]), 0.231);
   assert.throws(() => costTolerance([1]), /at least 2 runs/);
 });
