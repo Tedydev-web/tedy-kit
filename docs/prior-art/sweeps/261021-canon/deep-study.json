@@ -1245,6 +1245,42 @@
     "S32"
    ],
    "reason": "Partial S27: plugins/claude-code-setup/skills/claude-automation-recommender/SKILL.md maps codebase signals to 5 surface types from a static catalog that is never re-checked (issue 6341); partial S32 because plugins/session-report/skills/session-report/analyze-sessions.mjs attributes spend per skill and flags cache breaks without failing anything."
+  },
+  {
+   "repo": "retif/claudecode-linter",
+   "stratum": "product",
+   "commit": "https://github.com/retif/claudecode-linter/commit/94fb3ddd05d16cee82a43cbedc0cead23546c444",
+   "problems": [
+    "S27"
+   ],
+   "reason": "Added 2026-10-30 by a purposive search after the stop: its CI extracts the tools, hook events, frontmatter keys and settings fields from the latest Claude Code on npm and exits 1 when they differ from the committed contracts, so it fails on inventory drift; it guards its own contract table, not a mapping of needs to surfaces, and has no key for LSP, monitor, channel, output style or workflow."
+  },
+  {
+   "repo": "JuliusBrussee/caveman",
+   "stratum": "config",
+   "commit": "https://github.com/JuliusBrussee/caveman/commit/9b68f7ed12b05e7efaff18e65c5a3fc2849fd0a4",
+   "problems": [
+    "S27"
+   ],
+   "reason": "Added 2026-10-30 by a purposive search after the stop: probe-installed.mjs exits 1 when the installed agent is newer than the profile's tested version, and a pin moves only after its recorded check is re-run; the CI drift lane is continue-on-error and the probe runs only --version and --help."
+  },
+  {
+   "repo": "EmadMokhtar/skill-evaluator",
+   "stratum": "product",
+   "commit": "https://github.com/EmadMokhtar/skill-evaluator/commit/1ce02bc689899cf801d4b6fa83c16e26b41be3e5",
+   "problems": [
+    "S32"
+   ],
+   "reason": "Added 2026-10-30 by a purposive search after the stop: its default budget evaluator fails a skill eval case over its declared token, cost or latency budget and the gate exits non-zero; it covers SKILL.md eval cases only, not cache TTL, prefix order or context share."
+  },
+  {
+   "repo": "tardigrde/agent-skill-eval",
+   "stratum": "product",
+   "commit": "https://github.com/tardigrde/agent-skill-eval/commit/59de161f657b82bfaf8f6abe83dfff38552deb21",
+   "problems": [
+    "S32"
+   ],
+   "reason": "Added 2026-10-30 by a purposive search after the stop: per-case input, total, cost and non-cached-input token limits fail a budget assertion, and the run exits 1 only under --fail-on-assertions or --min-pass-rate; SKILL.md eval cases only."
   }
  ]
 }
