@@ -28,10 +28,10 @@ if (args.includes("--noise")) {
   }
   process.exit(0);
 }
-const outcome = rebaseline({ baseline, results, acceptModelChange: args.includes("--accept-model-change"), acceptCostRise: args.includes("--accept-cost-rise"), date: new Date().toISOString().slice(0, 10) });
+const ledger = JSON.parse(readFileSync(join(KIT, "docs/canon/standard.json"), "utf8"));
+const outcome = rebaseline({ baseline, results, ledger, acceptModelChange: args.includes("--accept-model-change"), acceptCostRise: args.includes("--accept-cost-rise"), date: new Date().toISOString().slice(0, 10) });
 console.log(`spend: USD ${outcome.spend?.usd.toFixed(2) ?? "0.00"} measured, ${outcome.spend?.unmeasured ?? 0} runs unmeasured`);
 for (const error of outcome.errors) console.error(`refused: ${error}`);
-const ledger = JSON.parse(readFileSync(join(KIT, "docs/canon/standard.json"), "utf8"));
 const models = [...new Set(results.map((result) => result.model).filter(Boolean))];
 for (const row of ablationPlan({ ledger, baseline: outcome.baseline, model: models.length === 1 ? models[0] : undefined })) console.log(`ablation ${row.rule}: ${row.verdict} (${row.detail})`);
 if (outcome.errors.length) process.exit(1);

@@ -30,6 +30,18 @@ test("a rebaseline that lowers a pass rate is refused unless the model changed a
   assert.deepEqual(rebaseline({ baseline: null, results: [], date: "2026-10-28" }).errors, ["no results to compare"]);
 });
 
+test("a pass-rate fall is refused only on the kit-on arm and the with arm of a ledger ablation, so a control arm doing worse is recorded", () => {
+  const ledger = { rules: [{ id: "blast-radius", class: "model-gap", ablation: { scenario: "s7", with: "bare-rule", without: "bare" } }] };
+  const baseline = { cells: { "s1 green": cell(3, 3), "s1 red": cell(1, 3), "s7 bare": cell(1, 3), "s7 bare-rule": cell(3, 3) } };
+  const fall = (scenario, arm) => [run(scenario, arm, false)];
+  const controls = rebaseline({ baseline, results: [...fall("s1", "red"), ...fall("s7", "bare")], ledger, date: "2026-10-30" });
+  assert.deepEqual(controls.errors, []);
+  assert.equal(controls.baseline.cells["s1 red"].passed, 0);
+  assert.equal(rebaseline({ baseline, results: fall("s1", "green"), ledger, date: "2026-10-30" }).errors.length, 1);
+  assert.equal(rebaseline({ baseline, results: fall("s7", "bare-rule"), ledger, date: "2026-10-30" }).errors.length, 1);
+  assert.equal(rebaseline({ baseline, results: fall("s1", "red"), date: "2026-10-30" }).errors.length, 1);
+});
+
 test("the ablation plan keeps a model-gap rule that still helps, proposes removing one that does not, and never measures across models", () => {
   const ledger = { rules: [
     { id: "helps", class: "model-gap", ablation: { scenario: "s6", with: "rule", without: "red" } },

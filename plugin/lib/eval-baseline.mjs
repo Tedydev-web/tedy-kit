@@ -58,14 +58,20 @@ function costErrors({ before, cells, tolerance, acceptModelChange, acceptCostRis
   return errors;
 }
 
-export function rebaseline({ baseline, results, acceptModelChange = false, acceptCostRise = false, date }) {
+const guarded = (key, ledger) => {
+  if (!ledger) return true;
+  const [scenario, arm] = key.split(" ");
+  return arm === "green" || ledger.rules.some((rule) => rule.ablation?.scenario === scenario && rule.ablation.with === arm);
+};
+
+export function rebaseline({ baseline, results, ledger, acceptModelChange = false, acceptCostRise = false, date }) {
   if (!results.length) return { errors: ["no results to compare"], baseline };
   const { errors, cells, spend } = tally(results);
   if (errors.length) return { errors, baseline, spend };
   const before = baseline?.cells ?? {};
   for (const [key, cell] of Object.entries(cells)) {
     const old = before[key];
-    if (!old || rate(cell) >= rate(old)) continue;
+    if (!old || rate(cell) >= rate(old) || !guarded(key, ledger)) continue;
     if (!acceptModelChange) errors.push(`${key}: ${share(old)} fell to ${share(cell)}; rerun, fix the regression, or pass --accept-model-change when the model changed`);
     else if (old.model === cell.model) errors.push(`${key}: ${share(old)} fell to ${share(cell)} on the same model; --accept-model-change applies only to a model change`);
   }
