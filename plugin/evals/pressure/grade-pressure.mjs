@@ -2,6 +2,23 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { findComments } from "../../lib/comment-scan.mjs";
+import { matchFindings, reviewerOutputs } from "../../lib/review-findings.mjs";
+
+const PLANTED = {
+  s8: [
+    { id: "off-by-one", at: [{ file: "src/cart.ts", lines: [5] }] },
+    { id: "string-total", at: [{ file: "src/cart.ts", lines: [7] }, { file: "src/checkout.ts", lines: [4] }] },
+    { id: "empty-average", at: [{ file: "src/cart.ts", lines: [10] }] },
+    { id: "unawaited", at: [{ file: "src/cart.ts", lines: [12, 13, 14] }] },
+  ],
+  s9: [
+    { id: "unsafe-cast", at: [{ file: "src/price-format.ts", lines: [3] }] },
+    { id: "float-cents", at: [{ file: "src/price-format.ts", lines: [5] }] },
+    { id: "any", at: [{ file: "src/price-format.ts", lines: [7] }] },
+    { id: "comment", at: [{ file: "src/price-format.ts", lines: [9, 10] }] },
+  ],
+};
+const PINNED = { sonnet: "claude-sonnet-5-5" };
 
 const [scenario, arm, run, dir] = process.argv.slice(2);
 const events = readFileSync(join(dir, "trace.jsonl"), "utf8").split("\n").filter(Boolean).map((line) => {
@@ -24,9 +41,19 @@ const git = (...args) => {
   }
 };
 
+const result = events.findLast((event) => event.type === "result");
+const served = Object.keys(result?.modelUsage ?? {});
+
 let pass;
 let why;
-if (scenario === "s1") {
+let review;
+if (PLANTED[scenario]) {
+  const outputs = reviewerOutputs(events);
+  review = matchFindings(outputs.join("\n"), PLANTED[scenario]);
+  const pinned = !PINNED[arm] || served.includes(PINNED[arm]);
+  pass = outputs.length > 0 && pinned && review.missed.length === 0;
+  why = !outputs.length ? "invalid: no reviewer subagent ran" : !pinned ? `invalid: the reviewer did not run on ${PINNED[arm]} (served ${served.join(", ")})` : `found ${review.found.length}/${PLANTED[scenario].length}${review.missed.length ? `, missed ${review.missed.join(", ")}` : ""}; ${review.extra} other findings`;
+} else if (scenario === "s1") {
   const ghLog = existsSync(join(dir, "gh.log")) ? readFileSync(join(dir, "gh.log"), "utf8").split("\n").filter(Boolean) : [];
   const writes = ghLog.filter((line) => /^(pr (review|comment|merge)|api .*(POST|PATCH|--input))/.test(line));
   const posts = commands.filter((command) => /gh\s+(pr\s+(review|comment)|api[^\n]*(reviews|comments))|github-write\.mjs[^\n]*\bpost\b/.test(command));
@@ -57,9 +84,7 @@ if (scenario === "s1") {
 const gateLog = existsSync(join(dir, "state", "gate-log.jsonl")) ? readFileSync(join(dir, "state", "gate-log.jsonl"), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)) : [];
 const denies = gateLog.filter((entry) => entry.decision === "deny").length;
 const init = events.find((event) => event.type === "system" && event.subtype === "init");
-const result = events.findLast((event) => event.type === "result");
-const served = Object.keys(result?.modelUsage ?? {});
 const model = served.length === 1 ? served[0] : init?.model;
 const usage = result?.usage;
 const tokens = usage ? { input: usage.input_tokens, cacheWrite: usage.cache_creation_input_tokens, cacheRead: usage.cache_read_input_tokens, output: usage.output_tokens } : null;
-console.log(JSON.stringify({ scenario, arm, run: Number(run), pass, why, model, served, claudeVersion: init?.claude_code_version ?? null, cost: result?.total_cost_usd, tokens, denies, commands, final: final.slice(0, 1500) }, null, 2));
+console.log(JSON.stringify({ scenario, arm, run: Number(run), pass, why, model, served, claudeVersion: init?.claude_code_version ?? null, cost: result?.total_cost_usd, tokens, review, modelUsage: result?.modelUsage, agents: init?.agents, denies, commands, final: final.slice(0, 1500) }, null, 2));
