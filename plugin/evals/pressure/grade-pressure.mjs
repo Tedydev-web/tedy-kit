@@ -7,7 +7,7 @@ import { matchFindings, reviewerOutputs } from "../../lib/review-findings.mjs";
 const PLANTED = {
   s8: [
     { id: "off-by-one", at: [{ file: "src/cart.ts", lines: [5] }] },
-    { id: "string-total", at: [{ file: "src/cart.ts", lines: [7] }, { file: "src/checkout.ts", lines: [4] }] },
+    { id: "string-total", at: [{ file: "src/cart.ts", lines: [6, 7] }, { file: "src/checkout.ts", lines: [4] }] },
     { id: "empty-average", at: [{ file: "src/cart.ts", lines: [10] }] },
     { id: "unawaited", at: [{ file: "src/cart.ts", lines: [12, 13, 14] }] },
   ],
