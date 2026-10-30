@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { docReferenceErrors, kitArtifacts, kitDocFiles, topicLineErrors, kitRetiredNames, kitSkills, kitSourceFiles, kitTagVersions, retiredReferenceErrors, skillDescriptionErrors, skillSectionErrors, sourceCommentErrors, tagVersionErrors } from "../lib/canon-checks.mjs";
+import { docReferenceErrors, installedClaudeVersion, inventoryDigest, inventoryVersionErrors, kitArtifacts, kitDocFiles, kitSurfaceFit, topicLineErrors, kitRetiredNames, kitSkills, kitSourceFiles, kitTagVersions, retiredReferenceErrors, skillDescriptionErrors, skillSectionErrors, sourceCommentErrors, surfaceFitErrors, tagVersionErrors } from "../lib/canon-checks.mjs";
 import { applies, kitConformance } from "../lib/canon-standard.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
@@ -128,4 +128,48 @@ test("the kit's tracked JavaScript and Python hold no comment other than a tool 
   const source = kitSourceFiles(REPO);
   assert.ok(source.scripts.length >= 150 && source.python.length >= 100, `${source.scripts.length} scripts, ${source.python.length} python`);
   assert.deepEqual(sourceCommentErrors(source), []);
+});
+
+test("a kit need that leaves a surface of the inventory unjudged, or a fit judged against an older inventory, fails", () => {
+  const inventory = { claudeCode: "2.1.314", docsDigest: "d1", hookEvents: ["PreToolUse", "Stop"], components: ["skill", "hooks", "MCP server", "theme"] };
+  const fit = {
+    inventory: inventoryDigest(inventory),
+    extraSurfaces: ["sandbox"],
+    notUsed: { theme: "colors only", sandbox: "user setting" },
+    needs: [{ need: "gates", uses: { hooks: "PreToolUse" }, rejected: { skill: "advice, not a gate", "MCP server": "bypasses the shell gates" } }],
+  };
+  assert.deepEqual(surfaceFitErrors(inventory, fit), []);
+  const grown = { ...inventory, hookEvents: [...inventory.hookEvents, "PostToolBatch"], components: [...inventory.components, "monitor"] };
+  assert.deepEqual(surfaceFitErrors(grown, fit), [
+    `surface-fit.json was judged against inventory ${fit.inventory}, the snapshot is now ${inventoryDigest(grown)}: re-judge every need against it, then set "inventory" to ${inventoryDigest(grown)}`,
+    "gates: monitor is neither used, rejected with a reason, nor in notUsed",
+  ]);
+  const bad = {
+    ...fit,
+    notUsed: { theme: "", sandbox: "user setting", channel: "gone" },
+    needs: [{ need: "gates", uses: { hooks: "PreToolUse", sandbox: "x" }, rejected: { "MCP server": "bypasses the shell gates" } }],
+  };
+  assert.deepEqual(surfaceFitErrors(inventory, bad), [
+    "notUsed: theme has no reason",
+    "notUsed: channel is not in the inventory",
+    "gates: skill is neither used, rejected with a reason, nor in notUsed",
+    "gates: sandbox is in notUsed but this need uses it",
+  ]);
+});
+
+test("an inventory snapshot a minor version or more behind the installed Claude Code fails, a patch behind passes, and no installed Claude Code skips the check", () => {
+  assert.deepEqual(inventoryVersionErrors("2.1.314", "2.1.314"), []);
+  assert.deepEqual(inventoryVersionErrors("2.1.302", "2.1.314"), []);
+  assert.deepEqual(inventoryVersionErrors("2.1.314", null), []);
+  assert.deepEqual(inventoryVersionErrors("2.1.314", "2.2.0"), [
+    "docs/canon/claude-code-inventory.json is from Claude Code 2.1.314, installed is 2.2.0: run python3 plugin/evals/probes/claude-code-inventory.py --json docs/canon/claude-code-inventory.json",
+  ]);
+  assert.equal(inventoryVersionErrors("2.9.0", "3.0.1").length, 1);
+});
+
+test("every kit need is judged against every Claude Code surface of the current inventory", () => {
+  const { inventory, fit } = kitSurfaceFit(REPO);
+  assert.ok(fit.needs.length >= 8 && inventory.hookEvents.length >= 30, `${fit.needs.length} needs, ${inventory.hookEvents.length} hook events`);
+  assert.deepEqual(surfaceFitErrors(inventory, fit), []);
+  assert.deepEqual(inventoryVersionErrors(inventory.claudeCode, installedClaudeVersion()), []);
 });

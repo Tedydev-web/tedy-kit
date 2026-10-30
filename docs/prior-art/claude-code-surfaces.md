@@ -6,8 +6,8 @@ Inventory of the Claude Code surfaces the kit can build on and of the current Cl
 
 Rerun after each Claude Code upgrade and diff this block. No count here is a gate.
 
-- Claude Code: `2.1.302 (Claude Code)`
-- Date: 2026-10-18 (Asia/Saigon)
+- Claude Code: `2.1.314 (Claude Code)`
+- Date: 2026-10-30 (Asia/Saigon)
 - `https://code.claude.com/docs/llms.txt`: 275 doc links, 239 unique; sha256[:16] of the sorted unique list: `2e7feb769e350232`
 - Hook events (`### ` headings under `## Hook events` of `https://code.claude.com/docs/en/hooks.md`): 33; lifecycle table 33, exit code 2 table 33
 

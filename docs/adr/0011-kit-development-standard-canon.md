@@ -30,6 +30,8 @@ Option A, built in phases ordered by how many studied sources show the gap, each
 
 S27 and S32 stay partial: no studied source fails an artifact on a harness-surface or quota-efficiency check, so the kit would be first; they wait for evidence.
 
+Amended by ADR 0013 (2026-10-30): the narrow mechanisms of S27 and S32 have prior art; the kit goes first on mapping every need to the whole inventory and on quota checks beyond per-case budgets.
+
 ## Prior art
 
 - Q00/ouroboros (MIT, studied 2026-10-28, via github)

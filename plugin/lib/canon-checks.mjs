@@ -1,4 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -152,4 +153,39 @@ export function kitSourceFiles(repo) {
     python: tracked.filter((file) => file.endsWith(".py")),
     cwd: repo,
   };
+}
+
+export const inventoryDigest = ({ docsDigest, hookEvents, components }) => createHash("sha256").update(JSON.stringify({ docsDigest, hookEvents, components })).digest("hex").slice(0, 16);
+
+export function surfaceFitErrors(inventory, fit) {
+  const surfaces = [...inventory.components, ...fit.extraSurfaces];
+  const digest = inventoryDigest(inventory);
+  const errors = fit.inventory === digest ? [] : [`surface-fit.json was judged against inventory ${fit.inventory}, the snapshot is now ${digest}: re-judge every need against it, then set "inventory" to ${digest}`];
+  const judged = (where, entries) => entries.flatMap(([surface, reason]) => [
+    ...(String(reason ?? "").trim() ? [] : [`${where}: ${surface} has no reason`]),
+    ...(surfaces.includes(surface) ? [] : [`${where}: ${surface} is not in the inventory`]),
+  ]);
+  errors.push(...judged("notUsed", Object.entries(fit.notUsed)));
+  for (const { need, uses, rejected } of fit.needs) {
+    errors.push(...judged(need, [...Object.entries(uses), ...Object.entries(rejected)]));
+    errors.push(...surfaces.filter((s) => !(s in uses) && !(s in rejected) && !(s in fit.notUsed)).map((s) => `${need}: ${s} is neither used, rejected with a reason, nor in notUsed`));
+    errors.push(...Object.keys(uses).filter((s) => s in fit.notUsed).map((s) => `${need}: ${s} is in notUsed but this need uses it`));
+  }
+  return errors;
+}
+
+export function inventoryVersionErrors(snapshot, installed) {
+  const minor = (version) => version.split(".").slice(0, 2).join(".");
+  if (!installed || !behind(minor(snapshot), minor(installed))) return [];
+  return [`docs/canon/claude-code-inventory.json is from Claude Code ${snapshot}, installed is ${installed}: run python3 plugin/evals/probes/claude-code-inventory.py --json docs/canon/claude-code-inventory.json`];
+}
+
+export function installedClaudeVersion() {
+  const result = spawnSync("claude", ["--version"], { encoding: "utf8", timeout: 30000 });
+  return result.status === 0 ? result.stdout.match(/^(\d+\.\d+\.\d+)/)?.[1] ?? null : null;
+}
+
+export function kitSurfaceFit(repo) {
+  const read = (file) => JSON.parse(readFileSync(join(repo, "docs/canon", file), "utf8"));
+  return { inventory: read("claude-code-inventory.json"), fit: read("surface-fit.json") };
 }

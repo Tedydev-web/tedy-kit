@@ -9,7 +9,10 @@ from pathlib import Path
 UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
 LLMS = "https://code.claude.com/docs/llms.txt"
 HOOKS = "https://code.claude.com/docs/en/hooks.md"
-PLUGIN = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parents[2]
+ARGS = sys.argv[1:]
+JSON_OUT = Path(ARGS.pop(ARGS.index("--json") + 1)) if "--json" in ARGS else None
+ARGS = [a for a in ARGS if a != "--json"]
+PLUGIN = Path(ARGS[0]) if ARGS else Path(__file__).resolve().parents[2]
 
 
 def fetch(url):
@@ -79,6 +82,10 @@ def main():
     checks, kit_hooks, pinned = kit_components()
     version = subprocess.run(["claude", "--version"], capture_output=True, text=True).stdout.strip() or "unknown"
     today = datetime.now(timezone(timedelta(hours=7))).date().isoformat()
+    if JSON_OUT:
+        components = [name for name, kind, _, _ in checks if kind != "manifest"]
+        snapshot = {"claudeCode": version.split()[0], "date": today, "docsDigest": digest, "hookEvents": headings, "components": components}
+        JSON_OUT.write_text(json.dumps(snapshot, indent=2) + "\n")
 
     out = [
         f"- Claude Code: `{version}`",
