@@ -22,6 +22,7 @@ test("a planted problem counts as found when a finding header names one of its l
   assert.deepEqual(matchFindings(text, planted), { found: ["off-by-one", "string-total", "unawaited"], missed: [], findings: 4, extra: 1 });
   assert.deepEqual(matchFindings("### 1. CONFIRMED · src/cart.ts:9\nPre-existing:\n### 2. CONFIRMED · src/cart.ts:5", planted), { found: [], missed: ["off-by-one", "string-total", "unawaited"], findings: 1, extra: 1 });
   assert.deepEqual(matchFindings("### 1. CONFIRMED · src/money.ts:5", planted).found, []);
+  assert.deepEqual(matchFindings("  ### 1. CONFIRMED · src/cart.ts:5\n  Pre-existing:\n  ### 2. CONFIRMED · src/cart.ts:6", planted), { found: ["off-by-one"], missed: ["string-total", "unawaited"], findings: 1, extra: 0 });
 });
 
 test("only the reviewer subagent's own results are read, not the main session's relay", () => {

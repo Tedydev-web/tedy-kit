@@ -1,7 +1,7 @@
-const HEADER = /^###\s*\d+\.\s*(?:CONFIRMED|PLAUSIBLE)\s*\S\s*(\S+?):(\d+)/gm;
+const HEADER = /^[ \t]*###\s*\d+\.\s*(?:CONFIRMED|PLAUSIBLE)\s*\S\s*(\S+?):(\d+)/gm;
 
 export function matchFindings(text, planted) {
-  const own = text.split(/^Pre-existing:/m)[0];
+  const own = text.split(/^[ \t]*Pre-existing:/m)[0];
   const findings = [...own.matchAll(HEADER)].map(([, path, line]) => ({ path, line: Number(line) }));
   const hits = (finding, spot) => (finding.path === spot.file || finding.path.endsWith(`/${spot.file}`)) && spot.lines.includes(finding.line);
   const found = planted.filter((problem) => findings.some((finding) => problem.at.some((spot) => hits(finding, spot)))).map((problem) => problem.id);
