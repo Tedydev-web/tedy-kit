@@ -1,0 +1,81 @@
+# 0014: Kit artifacts meet six quota techniques, each failed by a check
+
+Status: accepted (2026-10-30)
+
+## Context
+- S32 asks that every kit artifact meets the quota techniques the quota study establishes, and that a machine check fails one that does not. ADR 0013 left it partial until the quota study chose its techniques.
+- On 2026-10-30 the quota study ran by deep reading, the user's choice over the full v4 sweep: three purposive searches over 76 candidates found two holds for every registry row except Q5 and the quality halves of Q12, Q18, Q19 and Q20. Ten rows (Q1, Q2, Q5, Q6, Q11, Q12, Q14, Q21, Q22, Q23) are session practice, not kit artifacts, and stay in the registry as guidance outside S32. Rows Q8, Q9, Q24 and Q25 were re-checked on Claude Code 2.1.314.
+- The user chose techniques T1 to T6 (2026-10-30). Eleven sources are studied as supplement sources of sweep `261021-canon`.
+
+## Decision
+- T1, footprint (Q7, Q8, Q9): `docs/canon/footprint-budget.json` holds the characters of every skill's and agent's `description` and `when_to_use`, which Claude Code lists in every session (2,628 at tedy 0.2.16). `footprintErrors` fails a total over the budget, and a budget higher than at the latest release tag unless the standard version rose.
+- T2, hook output (Q3, Q10): `hookEventErrors` fails a `hooks.json` that registers an event whose output enters the context on every prompt or every subagent spawn (UserPromptSubmit, UserPromptExpansion, InstructionsLoaded, SubagentStart). The kit's hooks speak at session start, after compaction and on a prose question only.
+- T3, skill model (Q4): `skillModelErrors` fails a skill whose front matter sets `model:`, because a skill model switches the session model and starts a cold prompt cache. Agents may pin a model at their own boundary.
+- T4, reviewer spawn context (Q16): `plugin/agents/reviewer.md` sets `omitClaudeMd: true` and restates the kit rules it needs, adopted only if an ADR 0009 arm shows the review findings hold without the user's CLAUDE.md.
+- T5, quota gate (Q24, Q25): pressure results record tokens and cost; `baseline.json` keeps each cell's mean cost and a `costTolerance` measured from repeated runs (two standard errors of a three-run mean, relative); `rebaseline.mjs` refuses a mean cost past that band unless `--accept-cost-rise`, and refuses a cell whose runs report no cost once the baseline has one.
+- T6, reviewer model and effort (Q20): pinned only from measured parity with the default, never mid-session.
+- The S32 rules enter `standard.json` in the next standard version, together with S27's, once the T4 to T6 measurements are in.
+
+## Prior art
+
+- agent-sh/agnix (MIT OR Apache-2.0, studied 2026-10-30, via github)
+  - card: agnix
+  - https://github.com/agent-sh/agnix/blob/0247144e59ee88337cdecc832b887718dc2acc44/crates/agnix-core/src/schemas/claude_md.rs#L26 "pub const MAX_INSTRUCTION_FILE_LINES: usize = 200;"
+  - Lesson: always-on text has a budget a linter can fail, but its combined figure is only informational.
+  - Taken: T1 makes the combined figure fail.
+- agent-ecosystem/skill-validator (MIT, studied 2026-10-30, via github)
+  - card: skill-validator
+  - https://github.com/agent-ecosystem/skill-validator/blob/899dba96e0d0d7d964308ac4df9657c68f581347/structure/tokens.go#L89-L91 "if bodyCount > 5000 {"
+  - Lesson: a skill body is counted against a budget and fails over it.
+  - Taken: the kit keeps its stricter 9,000-character SKILL.md test and adds the listing total in T1.
+- alexgreensh/token-optimizer (NOASSERTION, studied 2026-10-30, via github)
+  - card: token-optimizer
+  - https://github.com/alexgreensh/token-optimizer/blob/734da4eb1e96e10f93c0a93cd1dfecfeae93713d/tests/test_fresh_nudge_once.py#L49 "def test_shows_once_even_when_the_cache_loses_its_flag(m):"
+  - Lesson: injected text is tested to appear once, not on every turn.
+  - Taken: T2 keeps the kit off per-turn events.
+- mksglu/context-mode (Elastic-2.0, studied 2026-10-30, via github)
+  - card: context-mode
+  - https://github.com/mksglu/context-mode/blob/849c8690bdf86eef60156e13d98efd10fcfd46fb/hooks/core/routing.mjs#L121-L123 "function guidanceOnce(type, content, sessionId) {"
+  - Lesson: guidance is injected once per session behind a marker.
+  - Not taken: a marker per session; the kit has no per-turn injection to throttle.
+- yonatangross/orchestkit (MIT, studied 2026-10-30, via github)
+  - card: orchestkit
+  - https://github.com/yonatangross/orchestkit/blob/22dfd9883087a6574174cec33ffb1e6b11aa6f60/src/hooks/src/lifecycle/model-switch-consent.ts#L76 "if (!sw.promptCacheWarm || sw.contextTokens <= WARM_CONTEXT_WARN_TOKENS) {"
+  - Lesson: a model switch on a warm cache is costly enough to warn about at run time.
+  - Taken: T3 prevents the switch statically for kit skills.
+- dbrownjave/claude-token-saver (MIT, studied 2026-10-30, via github)
+  - card: claude-token-saver
+  - https://github.com/dbrownjave/claude-token-saver/blob/437ba691a47b3f206a5783fe4bfe13a2f64c18ef/plugins/token-saver/hooks/register.js#L3062-L3063 "The cache is cold, so the next message re-reads ${fmt(used)} tokens either way."
+  - Lesson: the cost of a switch depends on whether the cache is warm.
+  - Taken: T3's reason in its error message.
+- renchris/claude-infrastructure (NOASSERTION, studied 2026-10-30, via github)
+  - card: claude-infrastructure
+  - https://github.com/renchris/claude-infrastructure/blob/9a9c67ce8186d6206d48eca26abf8528d03e05ac/tests/agents-omit-claudemd.bats#L33-L34 "frontmatter "$f" | grep -qx 'omitClaudeMd: true'"
+  - Lesson: a test pins `omitClaudeMd` and the rules each agent must restate; the saving was measured, the quality was not.
+  - Taken: T4, gated on an eval of review findings.
+- fagenorn/nix-config (NOASSERTION, studied 2026-10-30, via github)
+  - card: nix-config
+  - https://github.com/fagenorn/nix-config/blob/8212d8fb8e933120db864339e9a8d0d174462268/home/common/agent-skills/tests/test_agent_model_matrix.py#L397-L398 "self.assertEqual(metadata["effort"], data["roles"][role]["effort"], path)"
+  - Lesson: a test holds each agent's model and effort to a committed matrix, and its full reviewer keeps CLAUDE.md.
+  - Taken: T6's pin is tested once set. Not taken: a declared matrix; the kit's pin must come from measured parity.
+- TrogonStack/rusty-monorepo (MIT, studied 2026-10-30, via github)
+  - card: rusty-monorepo
+  - https://github.com/TrogonStack/rusty-monorepo/blob/c3904a6f333de0b35935327cfb1adc1479d5d352/crates/trg/docs/how-to/gate-a-change-on-cost-and-latency.md#L4-L7 "The keep-or-revert recommendation reads pass rates only, so a change that holds its pass rate and triples its cost is still a `keep`."
+  - Lesson: compare baseline and candidate arms on cost and tokens as well as pass rate, and fail only past noise.
+  - Taken: T5. Not taken: four runs a side and a per-run interval; the kit measures the band once and keeps three runs a cell.
+- Anteneh-T-Tessema/meshflow (Apache-2.0, studied 2026-10-30, via github)
+  - card: meshflow
+  - https://github.com/Anteneh-T-Tessema/meshflow/blob/081a368f238731d829a9f59201e57e02ad048a46/meshflow/eval/ci_gate.py#L1-L5 "CI budget gate — blocks a build when token/cost regression exceeds threshold."
+  - Lesson: a stored baseline gates tokens and cost, but a missing field reads as a pass.
+  - Taken: T5 refuses a run with no cost once the baseline has one.
+- ryanthedev/code-foundations (NOASSERTION, studied 2026-10-30, via github)
+  - card: code-foundations
+  - https://github.com/ryanthedev/code-foundations/blob/ca30ba90ebd3b44017365ad4d91938dd675808f9/benchmarks/model-tiers/REPORT.md#L92 "Floor rule: per task, floor(task) = cheapest ladder model with pass rate ≥4/5 at n=5."
+  - Lesson: a measured floor rule picks the cheapest model per task, and a pin that ignores it drifts.
+  - Taken: T6 pins only from the measurement.
+
+no social prior art: 2026-10-30 x: "skill token budget CI fail"; youtube: "claude code skill token budget CI eval"
+
+## Consequences
+- T1 to T3 and the T5 gate are checks today at no spend; T4 and T6 change what the reviewer sees or runs on and wait for their evals, priced at about USD 9 to 12 each, and T5 needs a priced baseline and its noise run, about USD 21 to 27.
+- Weakest link: every source's exit behaviour was read, not run; four have no licence file or a custom one; the noise band comes from one cell and three-run means, below trg's four-run floor; T2 bounds when hooks speak, not how long a notice grows.

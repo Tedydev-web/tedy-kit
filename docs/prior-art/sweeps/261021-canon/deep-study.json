@@ -1281,6 +1281,105 @@
     "S32"
    ],
    "reason": "Added 2026-10-30 by a purposive search after the stop: per-case input, total, cost and non-cached-input token limits fail a budget assertion, and the run exits 1 only under --fail-on-assertions or --min-pass-rate; SKILL.md eval cases only."
+  },
+  {
+   "repo": "agent-sh/agnix",
+   "stratum": "product",
+   "commit": "https://github.com/agent-sh/agnix/commit/0247144e59ee88337cdecc832b887718dc2acc44",
+   "problems": [
+    "S32"
+   ],
+   "reason": "Added 2026-10-30 by the quota study's deep reading: T1 footprint (Q7, Q8, Q9): a linter whose rules fail a memory file over 200 lines, a skill description over 1,536 characters and an oversized skill body, but only under --strict; the combined always-on figure is info and never fails."
+  },
+  {
+   "repo": "agent-ecosystem/skill-validator",
+   "stratum": "product",
+   "commit": "https://github.com/agent-ecosystem/skill-validator/commit/899dba96e0d0d7d964308ac4df9657c68f581347",
+   "problems": [
+    "S32"
+   ],
+   "reason": "Added 2026-10-30 by the quota study's deep reading: T1 footprint (Q9, Q8): counts a skill body and each reference with a tokenizer and exits non-zero over 5k body tokens or a 25k-token reference; it sees only references inside the skill folder."
+  },
+  {
+   "repo": "alexgreensh/token-optimizer",
+   "stratum": "config",
+   "commit": "https://github.com/alexgreensh/token-optimizer/commit/734da4eb1e96e10f93c0a93cd1dfecfeae93713d",
+   "problems": [
+    "S32"
+   ],
+   "reason": "Added 2026-10-30 by the quota study's deep reading: T2 hook output (Q10, Q1): a CI test asserts its nudge fires once per session and its quality warning re-fires only on a new lower band; custom licence."
+  },
+  {
+   "repo": "mksglu/context-mode",
+   "stratum": "config",
+   "commit": "https://github.com/mksglu/context-mode/commit/849c8690bdf86eef60156e13d98efd10fcfd46fb",
+   "problems": [
+    "S32"
+   ],
+   "reason": "Added 2026-10-30 by the quota study's deep reading: T2 hook output (Q10): routing guidance injected once per session through a marker; it also appends a block to every Agent prompt; Elastic-2.0."
+  },
+  {
+   "repo": "yonatangross/orchestkit",
+   "stratum": "config",
+   "commit": "https://github.com/yonatangross/orchestkit/commit/22dfd9883087a6574174cec33ffb1e6b11aa6f60",
+   "problems": [
+    "S32"
+   ],
+   "reason": "Added 2026-10-30 by the quota study's deep reading: T3 skill model (Q4): a PreModelSwitch hook warns on a switch while the cache is warm; it pins model: on 40 of its 116 skills, a run-time guard rather than a static check."
+  },
+  {
+   "repo": "dbrownjave/claude-token-saver",
+   "stratum": "config",
+   "commit": "https://github.com/dbrownjave/claude-token-saver/commit/437ba691a47b3f206a5783fe4bfe13a2f64c18ef",
+   "problems": [
+    "S32"
+   ],
+   "reason": "Added 2026-10-30 by the quota study's deep reading: T3 skill model (Q4): a PreModelSwitch hook denies a warm-cache switch unless the user picks Switch."
+  },
+  {
+   "repo": "renchris/claude-infrastructure",
+   "stratum": "config",
+   "commit": "https://github.com/renchris/claude-infrastructure/commit/9a9c67ce8186d6206d48eca26abf8528d03e05ac",
+   "problems": [
+    "S32"
+   ],
+   "reason": "Added 2026-10-30 by the quota study's deep reading: T4 reviewer spawn (Q16): a bats test asserts omitClaudeMd: true and that each writer agent restates the rules CLAUDE.md supplied, measured at 85,704 tokens per spawn; research quality unmeasured; no licence file."
+  },
+  {
+   "repo": "fagenorn/nix-config",
+   "stratum": "config",
+   "commit": "https://github.com/fagenorn/nix-config/commit/8212d8fb8e933120db864339e9a8d0d174462268",
+   "problems": [
+    "S32"
+   ],
+   "reason": "Added 2026-10-30 by the quota study's deep reading: T4 reviewer spawn and T6 pin (Q16, Q20): a unittest fixes which agents set omitClaudeMd (its full reviewer keeps CLAUDE.md) and that model and effort pins match a declared matrix, not a measured one; no licence file."
+  },
+  {
+   "repo": "TrogonStack/rusty-monorepo",
+   "stratum": "product",
+   "commit": "https://github.com/TrogonStack/rusty-monorepo/commit/c3904a6f333de0b35935327cfb1adc1479d5d352",
+   "problems": [
+    "S32"
+   ],
+   "reason": "Added 2026-10-30 by the quota study's deep reading: T5 quota gate (Q25, Q24): trg compares baseline and candidate skill eval runs on pass rate, cost and tokens with an interval and fails on revert, cost_regression or token_regression; at least 4 runs a side; tokens exclude cache writes."
+  },
+  {
+   "repo": "Anteneh-T-Tessema/meshflow",
+   "stratum": "product",
+   "commit": "https://github.com/Anteneh-T-Tessema/meshflow/commit/081a368f238731d829a9f59201e57e02ad048a46",
+   "problems": [
+    "S32"
+   ],
+   "reason": "Added 2026-10-30 by the quota study's deep reading: T5 quota gate (Q25, Q24): ci_gate.py fails on tokens, cost or pass rate against a stored baseline, with no noise band; a missing field reads as a pass."
+  },
+  {
+   "repo": "ryanthedev/code-foundations",
+   "stratum": "config",
+   "commit": "https://github.com/ryanthedev/code-foundations/commit/ca30ba90ebd3b44017365ad4d91938dd675808f9",
+   "problems": [
+    "S32"
+   ],
+   "reason": "Added 2026-10-30 by the quota study's deep reading: T6 pin (Q20): a measured floor rule (n=5 per model) drives a model pin in command text; its review pin contradicts its own measurement; no licence file."
   }
  ]
 }
