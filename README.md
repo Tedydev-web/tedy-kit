@@ -155,6 +155,8 @@ Three gaps remain. A `path:line@<branch>` cite of the reviewed repo's own integr
 | `/tedy:learn [project path]` | Turns repeated corrections into rules, style samples or map facts in your profile |
 | `/tedy:pending [done <file> \| stub <action>]` | Lists what waits on you (hand-offs, drafts in `plans/drafts/`, unpushed branches, draft PRs) and archives a finished draft |
 
+The independent review in `/tedy:review-pr`, `/tedy:dev` and `/tedy:reconcile` runs the `tedy:reviewer` agent on `claude-sonnet-5-5` without your `CLAUDE.md` files (ADR 0014). Its standards lens reads the repository's own `AGENTS.md`, `CLAUDE.md` and lint config. A personal rule from your user `CLAUDE.md` reaches it only when the calling skill passes that rule in the prompt.
+
 Menus and table words come in the profile's chat language (`language.chat`, English and Vietnamese today); comments follow the language each project map sets for PR reviews, the tracker, and Doc and Figma.
 
 ## Trackers
