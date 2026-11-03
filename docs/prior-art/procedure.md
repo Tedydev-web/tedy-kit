@@ -102,7 +102,7 @@ A note holds one finding distilled from posts, videos, docs, several sources or 
 title: <the finding in one line>
 domains: <domain>, <domain>
 use-when: <one line: when to read it>
-channels: <github | docs | blog | reddit | x | youtube | facebook | substack | npm | hacker-news | report>
+channels: <github | docs | blog | reddit | x | youtube | facebook | substack | npm | hacker-news | paper | report>
 verified: <yes once a source was re-read and supports the finding, else no>
 read: <YYYY-MM-DD the sources were read>
 ---

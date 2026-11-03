@@ -28,7 +28,7 @@ test("an entry without domains or use-when, a domain outside the vocabulary, or 
   ]);
   assert.deepEqual(entryErrors([note("n", "domains: cost\nuse-when: w\nchannels: tiktok\nverified: maybe\nread: soon\n", "")]), [
     "notes/n: no title: line",
-    "notes/n: channel tiktok is not one of github, docs, blog, reddit, x, youtube, facebook, substack, npm, hacker-news, report",
+    "notes/n: channel tiktok is not one of github, docs, blog, reddit, x, youtube, facebook, substack, npm, hacker-news, paper, report",
     "notes/n: verified must be yes or no",
     "notes/n: read must be the YYYY-MM-DD the sources were read",
     "notes/n: no source URL under ## Sources",

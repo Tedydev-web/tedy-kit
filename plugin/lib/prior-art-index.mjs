@@ -22,7 +22,7 @@ export const DOMAINS = {
   security: "secrets, permissions, supply chain and attack surface",
   testing: "test-first work, verification and tests that can fail",
 };
-export const CHANNELS = ["github", "docs", "blog", "reddit", "x", "youtube", "facebook", "substack", "npm", "hacker-news", "report"];
+export const CHANNELS = ["github", "docs", "blog", "reddit", "x", "youtube", "facebook", "substack", "npm", "hacker-news", "paper", "report"];
 
 const CARD = /^---\n(?:(?!---\n)[^\n]*\n)*?name: /;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
