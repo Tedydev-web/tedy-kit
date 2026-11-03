@@ -177,6 +177,8 @@ Uninstalling the plugin removes none of these.
 
 ## Development
 
+The knowledge base in [docs/prior-art/index.md](docs/prior-art/index.md) holds what was learned from open source, docs, the community and experts, by domain; agents read it before they design. The kit itself is built by its own standard, the canon: rules with the tests that hold them and a register of which standard each artifact meets. [docs/canon/canon-overview.html](docs/canon/canon-overview.html) explains both and when to use them.
+
 ```bash
 claude --plugin-dir ./plugin
 npm test
