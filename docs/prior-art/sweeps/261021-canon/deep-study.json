@@ -1380,6 +1380,65 @@
     "S32"
    ],
    "reason": "Added 2026-10-30 by the quota study's deep reading: T6 pin (Q20): a measured floor rule (n=5 per model) drives a model pin in command text; its review pin contradicts its own measurement; no licence file."
+  },
+  {
+   "repo": "mattpocock/skills",
+   "stratum": "config",
+   "commit": "https://github.com/mattpocock/skills/commit/4ae2317ddb22b046e26455e4f9c9b3aaaf62212d",
+   "problems": [
+    "S12",
+    "S22"
+   ],
+   "reason": "Added 2026-11-03 by the knowledge base's study of the sources the user's master plan names: skill authoring: user-started skills carry no trigger list, a ledger of rejected ideas, and a red check that must change the file."
+  },
+  {
+   "repo": "affaan-m/ECC",
+   "stratum": "config",
+   "commit": "https://github.com/affaan-m/ECC/commit/b38be6a7f6350964d59328b52f0624e1d1d552d1",
+   "problems": [
+    "S8",
+    "S26"
+   ],
+   "reason": "Added 2026-11-03 by the knowledge base's study of the sources the user's master plan names: eval design: every arm must be able to fail, a placebo arm separates content from interruption, and hooks fail closed on input they cannot see."
+  },
+  {
+   "repo": "wshobson/agents",
+   "stratum": "config",
+   "commit": "https://github.com/wshobson/agents/commit/7e2fb559cf4b824b27f1fec49fe88f7511066d26",
+   "problems": [
+    "S6",
+    "S12"
+   ],
+   "reason": "Added 2026-11-03 by the knowledge base's study of the sources the user's master plan names: doc counts checked against the live tree, labelled eval layers, and description lint in both directions."
+  },
+  {
+   "repo": "garrytan/gstack",
+   "stratum": "config",
+   "commit": "https://github.com/garrytan/gstack/commit/c197a139b7eba04aa3a7a937bfcd1019bff224fb",
+   "problems": [
+    "S8",
+    "S16"
+   ],
+   "reason": "Added 2026-11-03 by the knowledge base's study of the sources the user's master plan names: tests pin only what software reads, paid evals chosen from the diff, and a pinned Claude Code version with a daily canary."
+  },
+  {
+   "repo": "karanb192/claude-code-hooks",
+   "stratum": "config",
+   "commit": "https://github.com/karanb192/claude-code-hooks/commit/57a28c7687305e4a9b9dd50490e9b3c552c71ca4",
+   "problems": [
+    "S26"
+   ],
+   "reason": "Added 2026-11-03 by the knowledge base's study of the sources the user's master plan names: hook gates in one process, gates that protect tests, and gates that protect agent configuration files."
+  },
+  {
+   "repo": "alibaba/open-code-review",
+   "stratum": "config",
+   "commit": "https://github.com/alibaba/open-code-review/commit/b52b53b2b7763fddd38890ddacc3504e65b7535f",
+   "problems": [
+    "S8",
+    "S12"
+   ],
+   "reason": "Added 2026-11-03 by the knowledge base's study of the sources the user's master plan names: asymmetric filtering of review findings, comment anchors matched verbatim to the diff, and a per-file reviewed-or-skipped tally."
   }
  ]
 }

@@ -4,16 +4,18 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
 
 ## Contents
 
-- agent-skills: 11 entries
+- agent-skills: 14 entries
 - ai-models: 3 entries
-- cost: 17 entries
-- evals: 9 entries
-- governance: 10 entries
-- guardrails: 6 entries
-- platform: 7 entries
+- cost: 18 entries
+- evals: 12 entries
+- governance: 12 entries
+- guardrails: 9 entries
+- platform: 8 entries
+- qa: 1 entry
 - release: 7 entries
 - research: 1 entry
-- testing: 6 entries
+- security: 1 entry
+- testing: 9 entries
 
 ## agent-skills: writing skills, agents, plugins and their instructions
 
@@ -40,6 +42,15 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - Pin the exact set of agents that omit CLAUDE.md, so adding or dropping the flag is a visible test change (Q16, S32)
   - The source omits CLAUDE.md only on brief-driven agents and keeps it on the full reviewer, a counter-signal to T4 as written (Q16)
   - Measure start-up tokens before and after per agent type, then run a no-regression eval (Q16, Q24, Q25)
+- [garrytan/gstack](gstack.md): you decide which paid evals a change must run, what a skill test may pin, or how to keep generated skills and their size under control
+  - Test what software reads, not English sentences
+  - Select paid evals from the diff through a touchfile map, with an unknown file restoring everything
+  - Two tiers
+  - Pin the harness version and run a canary on the newest release (#3062)
+  - Per-skill size ratchet in tokens beside a flat cap
+  - Gate-integrity reading of every test, CI and lint-config hunk with one question, human decides
+  - Generated skills from templates and shared resolvers
+  - Project facts read from CLAUDE.md, asked once with AskUserQuestion, then persisted
 - [gotalab/skillport](skillport.md): you install, index and validate skills against a written front-matter standard
   - Every rule of the written frontmatter standard is a checker branch with a field, a message and a severity (S12, S23)
   - One budget, two checkers, two severities (S22, S4)
@@ -66,6 +77,17 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - Planning depth is chosen by a written trigger list (data model, public API, auth, a new dependency, behaviour others rely on, unknown cause), and a small change stops with no plan (S28)
   - Shared instruction files are held to the strictest documented limit among the agents a project selects, and each limit records its source page and date (S22, S11)
   - A question cap and a sibling sweep after a root-cause fix are skill and prompt prose only (S29, S17)
+- [mattpocock/skills](mattpocock-skills.md): you write or prune a skill's text, decide model- versus user-invocation, or record why a requested change was refused
+  - Prove a forced red actually changed the file before trusting it (#955)
+  - A user-invoked skill's description is for the human browsing commands, with trigger lists stripped (invocation.md line 5)
+  - Keep a one-file-per-concept ledger of rejected ideas listing every prior request, and close issues against it
+  - Accept a change request only on an observed failure in a real session, never on votes or "it would be better if"
+  - Fail a bad ref or empty diff before fanning out parallel reviewers (code-review line 23)
+  - Keep review axes separate and never rerank across them (code-review line 89)
+  - Subagents start with a fresh context and recursion is bounded by the harness, not by skill prose
+  - Expected values come from an independent source of truth
+  - Prompt the positive and hunt no-ops sentence by sentence, deleting any line the model already obeys by default
+  - Not taken
 - [obra/superpowers](superpowers.md): you need test-first work, fresh verification evidence before claiming done, or skill-writing discipline
   - Test-first, proven red, keyed to an observable predicate (bug fix or logic change, not copy or styling)
   - Regression proof by reverting the fix and watching the test fail
@@ -97,6 +119,17 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - Patch releases add surfaces
   - Merging each extraction with the previous one keeps every value ever seen, so a removed surface never shows up as drift (S27)
   - An extraction that loses more than half of a field's values fails instead of passing as an upstream removal, though its message says 30% where the code tests 50% (S27)
+- [wshobson/agents](wshobson-agents.md): you keep a large or multi-harness agent kit consistent with mechanical drift checks, or label which of your eval layers are validated
+  - Check every number a doc quotes against the thing it counts, because quoted counts go stale on every change (#676)
+  - Give every lint or test failure a `Fix:` line that says what to do
+  - Label every eval layer by whether it is validated, and cut docs back to what the code does (#733)
+  - When a check scores artifacts, snapshot its scores keyed by each artifact's content hash so a scorer change cannot move results unnoticed (evals/README.md line 11)
+  - Start eval design from error analysis of real traces, not from imagined criteria (evals/README.md line 25)
+  - Keep the always-loaded context file a short map with the size enforced by a check
+  - Lint descriptions mechanically
+  - Frame caller-supplied arguments as data in the prompt, and lint unframed interpolation (`ARGUMENTS_UNFRAMED`)
+  - Namespace agent names and fail CI on duplicates, because a runtime keyed by `name:` lets one plugin's agent replace another's (#500)
+  - Not taken
 
 ## ai-models: model generations, their traits, and choosing or switching models
 
@@ -140,6 +173,15 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - Startup output that the model does not need goes to a log, not the context (S32, Q10, Q7)
   - Key "once" by agent, not only by session, when subagents run hooks (S32, Q10)
   - The subagent 1h TTL is set and reverted by measured net, opt-in only (Q1)
+- [alibaba/open-code-review](open-code-review.md): you design how a review agent picks files, accounts for coverage, locates line comments or filters false positives
+  - Account for every reviewable file as reviewed or skipped with a reason
+  - Asymmetric fact-check
+  - Locate a comment by matching its quoted code against the diff, without a model, declining on zero or several hits
+  - Precision over recall as a declared trade-off, with an empty result as a valid result
+  - Per-path review rules merged with the system rules
+  - Zero selected work is not a clean pass (#1454, #1195)
+  - Do not ship a separate binary, provider config and multi-host manifests for review
+  - Secret paths excluded ahead of any include glob
 - [Anteneh-T-Tessema/meshflow](meshflow.md): you gate CI on token, cost and pass-rate regressions against a stored baseline
   - Tokens, cost and pass rate compared in one call with one exit code is the minimum shape of a quota-and-score gate (S32, Q25)
   - A point delta against a fixed threshold, with no interval, is the weaker form (Q25)
@@ -230,6 +272,17 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
 
 ## evals: measuring agent behaviour with scenarios, baselines, arms and judges
 
+- [affaan-m/ECC](affaan-m-ecc.md): you design a PreToolUse guard that must fail closed, or measure whether a gate changes outcomes at all
+  - An eval where every arm passes measures nothing; prove the task can fail before trusting the result
+  - Add a placebo arm that applies the same interruption with generic content, so an effect is attributed to what the kit says and not to stopping the agent (lines 16-18)
+  - Report a gate's cost next to its effect, and say "untested" rather than "no effect" when the arms cannot differ (lines 171-180)
+  - Fail closed when a guard cannot see the whole request, whether input was truncated, stdin never closed, or a nested shell goes past the parse depth
+  - A guard that cannot tell data from command blocks legitimate work and gets disabled by users (#3023 still open, #1422 users deleting the plugin)
+  - Keep `hooks.json` to keys the loader accepts and test that, because a shape the loader rejects unloads every hook at once (#1454)
+  - Keep the SessionStart path free of process spawns, or budget them
+  - Never activate instructions a repository ships just because it was opened
+  - Stop hooks honour `stop_hook_active`
+  - Not taken
 - [Anteneh-T-Tessema/meshflow](meshflow.md): you gate CI on token, cost and pass-rate regressions against a stored baseline
   - Tokens, cost and pass rate compared in one call with one exit code is the minimum shape of a quota-and-score gate (S32, Q25)
   - A point delta against a fixed threshold, with no interval, is the weaker form (Q25)
@@ -259,6 +312,15 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - Every bench case is billed at rates from a pinned, dated pricing file, and a model with no price stops the run (S24); this is the cost of the request measured, not the spend of running the bench, and issue 244 shows an unknown price must not be stored as zero
   - A release is cut only from a commit equal to origin/main with every CI check completed green and a non-zero check count, and the tag is the shared workspace version (S15)
   - A change measured only on its target metric hides harm to the task (S10)
+- [garrytan/gstack](gstack.md): you decide which paid evals a change must run, what a skill test may pin, or how to keep generated skills and their size under control
+  - Test what software reads, not English sentences
+  - Select paid evals from the diff through a touchfile map, with an unknown file restoring everything
+  - Two tiers
+  - Pin the harness version and run a canary on the newest release (#3062)
+  - Per-skill size ratchet in tokens beside a flat cap
+  - Gate-integrity reading of every test, CI and lint-config hunk with one question, human decides
+  - Generated skills from templates and shared resolvers
+  - Project facts read from CLAUDE.md, asked once with AskUserQuestion, then persisted
 - [lloydjf/ratchet](ratchet.md): you replay recorded agent runs after each skill edit and pin the model they were recorded on
   - Evidence is bound to the model it was measured on, and a run on another model is refused rather than compared (S30)
   - Each baseline records the harness version and the skills commit it ran against, and replays are grouped so none runs on a different harness (S16, S1)
@@ -295,6 +357,17 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - Both fail open on a first run
   - A missing or unreadable baseline file is an error, not a pass (Q25)
   - Gate tokens as well as cost, and say which tokens (Q24, Q25)
+- [wshobson/agents](wshobson-agents.md): you keep a large or multi-harness agent kit consistent with mechanical drift checks, or label which of your eval layers are validated
+  - Check every number a doc quotes against the thing it counts, because quoted counts go stale on every change (#676)
+  - Give every lint or test failure a `Fix:` line that says what to do
+  - Label every eval layer by whether it is validated, and cut docs back to what the code does (#733)
+  - When a check scores artifacts, snapshot its scores keyed by each artifact's content hash so a scorer change cannot move results unnoticed (evals/README.md line 11)
+  - Start eval design from error analysis of real traces, not from imagined criteria (evals/README.md line 25)
+  - Keep the always-loaded context file a short map with the size enforced by a check
+  - Lint descriptions mechanically
+  - Frame caller-supplied arguments as data in the prompt, and lint unframed interpolation (`ARGUMENTS_UNFRAMED`)
+  - Namespace agent names and fail CI on duplicates, because a runtime keyed by `name:` lets one plugin's agent replace another's (#500)
+  - Not taken
 
 ## governance: standards, rule ledgers, decision records and drift
 
@@ -347,6 +420,17 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - Planning depth is chosen by a written trigger list (data model, public API, auth, a new dependency, behaviour others rely on, unknown cause), and a small change stops with no plan (S28)
   - Shared instruction files are held to the strictest documented limit among the agents a project selects, and each limit records its source page and date (S22, S11)
   - A question cap and a sibling sweep after a root-cause fix are skill and prompt prose only (S29, S17)
+- [mattpocock/skills](mattpocock-skills.md): you write or prune a skill's text, decide model- versus user-invocation, or record why a requested change was refused
+  - Prove a forced red actually changed the file before trusting it (#955)
+  - A user-invoked skill's description is for the human browsing commands, with trigger lists stripped (invocation.md line 5)
+  - Keep a one-file-per-concept ledger of rejected ideas listing every prior request, and close issues against it
+  - Accept a change request only on an observed failure in a real session, never on votes or "it would be better if"
+  - Fail a bad ref or empty diff before fanning out parallel reviewers (code-review line 23)
+  - Keep review axes separate and never rerank across them (code-review line 89)
+  - Subagents start with a fresh context and recursion is bounded by the harness, not by skill prose
+  - Expected values come from an independent source of truth
+  - Prompt the positive and hunt no-ops sentence by sentence, deleting any line the model already obeys by default
+  - Not taken
 - [Q00/ouroboros](ouroboros.md): you run a spec-first agent workflow whose CI gates each name the rule they enforce
   - A grandfather list is checked against the base branch's copy, so an entry can be removed or its budget lowered but never added or raised, and the gate fails when it cannot read the base copy (S2, S25)
   - A defect class found at one call site is grepped across the tree, fixed everywhere, then locked by a CI guard whose test helpers import the guard's own logic (S17, S4)
@@ -383,9 +467,40 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - Every repo-relative markdown link must resolve, including links that escape the package they ship in (S6)
   - An autonomous run is capped by a stop hook that counts loops and hands back to the user at the cap, instead of asking at every step (S29)
   - A committed build output is rebuilt and compared with `git diff HEAD`, not the index, so a staged stale build cannot pass (S5)
+- [wshobson/agents](wshobson-agents.md): you keep a large or multi-harness agent kit consistent with mechanical drift checks, or label which of your eval layers are validated
+  - Check every number a doc quotes against the thing it counts, because quoted counts go stale on every change (#676)
+  - Give every lint or test failure a `Fix:` line that says what to do
+  - Label every eval layer by whether it is validated, and cut docs back to what the code does (#733)
+  - When a check scores artifacts, snapshot its scores keyed by each artifact's content hash so a scorer change cannot move results unnoticed (evals/README.md line 11)
+  - Start eval design from error analysis of real traces, not from imagined criteria (evals/README.md line 25)
+  - Keep the always-loaded context file a short map with the size enforced by a check
+  - Lint descriptions mechanically
+  - Frame caller-supplied arguments as data in the prompt, and lint unframed interpolation (`ARGUMENTS_UNFRAMED`)
+  - Namespace agent names and fail CI on duplicates, because a runtime keyed by `name:` lets one plugin's agent replace another's (#500)
+  - Not taken
 
 ## guardrails: gates and hooks that stop unsafe agent actions
 
+- [affaan-m/ECC](affaan-m-ecc.md): you design a PreToolUse guard that must fail closed, or measure whether a gate changes outcomes at all
+  - An eval where every arm passes measures nothing; prove the task can fail before trusting the result
+  - Add a placebo arm that applies the same interruption with generic content, so an effect is attributed to what the kit says and not to stopping the agent (lines 16-18)
+  - Report a gate's cost next to its effect, and say "untested" rather than "no effect" when the arms cannot differ (lines 171-180)
+  - Fail closed when a guard cannot see the whole request, whether input was truncated, stdin never closed, or a nested shell goes past the parse depth
+  - A guard that cannot tell data from command blocks legitimate work and gets disabled by users (#3023 still open, #1422 users deleting the plugin)
+  - Keep `hooks.json` to keys the loader accepts and test that, because a shape the loader rejects unloads every hook at once (#1454)
+  - Keep the SessionStart path free of process spawns, or budget them
+  - Never activate instructions a repository ships just because it was opened
+  - Stop hooks honour `stop_hook_active`
+  - Not taken
+- [alibaba/open-code-review](open-code-review.md): you design how a review agent picks files, accounts for coverage, locates line comments or filters false positives
+  - Account for every reviewable file as reviewed or skipped with a reason
+  - Asymmetric fact-check
+  - Locate a comment by matching its quoted code against the diff, without a model, declining on zero or several hits
+  - Precision over recall as a declared trade-off, with an empty result as a valid result
+  - Per-path review rules merged with the system rules
+  - Zero selected work is not a clean pass (#1454, #1195)
+  - Do not ship a separate binary, provider config and multi-host manifests for review
+  - Secret paths excluded ahead of any include glob
 - [avelikiy/great_cto](great-cto.md): an agent might weaken a check instead of fixing what the check found
   - Deny an edit that adds a skip or `.only` marker, counted before vs after over the whole file so existing markers and moves net zero
   - Deny an added lint or type suppression and a config that checks less
@@ -434,6 +549,15 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - Surface, runtime presence
   - Surface, result tally
   - Surface, runner forgery scan
+- [karanb192/claude-code-hooks](claude-code-hooks.md): you add, merge or test a PreToolUse gate, or weigh one dispatcher process against one Node process per gate
+  - One dispatcher process for the PreToolUse gates
+  - Vendored copies pinned byte-identical by a test
+  - Test-protection as a gate, not prose
+  - Guard the agent's own hook and settings files
+  - Regex-backtracking test over every exported rule
+  - Manifest must not re-declare the auto-loaded `hooks/hooks.json` (#51)
+  - Rule compliance tally that flags rules to promote into a hook
+  - InstructionsLoaded cannot block (README line 62), so detection there must pair with a UserPromptSubmit or PreToolUse arm
 - [nizos/tdd-guard](nizos-tdd-guard.md): you want a hook that blocks an agent from skipping tests or over-implementing
   - One failing test per acceptance item before the first source edit, failing on an assertion rather than an import
   - Changing what an assertion checks is a behaviour change
@@ -455,6 +579,17 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
 
 ## platform: Claude Code and other hosts: their surfaces and compatibility
 
+- [affaan-m/ECC](affaan-m-ecc.md): you design a PreToolUse guard that must fail closed, or measure whether a gate changes outcomes at all
+  - An eval where every arm passes measures nothing; prove the task can fail before trusting the result
+  - Add a placebo arm that applies the same interruption with generic content, so an effect is attributed to what the kit says and not to stopping the agent (lines 16-18)
+  - Report a gate's cost next to its effect, and say "untested" rather than "no effect" when the arms cannot differ (lines 171-180)
+  - Fail closed when a guard cannot see the whole request, whether input was truncated, stdin never closed, or a nested shell goes past the parse depth
+  - A guard that cannot tell data from command blocks legitimate work and gets disabled by users (#3023 still open, #1422 users deleting the plugin)
+  - Keep `hooks.json` to keys the loader accepts and test that, because a shape the loader rejects unloads every hook at once (#1454)
+  - Keep the SessionStart path free of process spawns, or budget them
+  - Never activate instructions a repository ships just because it was opened
+  - Stop hooks honour `stop_hook_active`
+  - Not taken
 - [anthropics/claude-plugins-official](claude-plugins-official.md): you match a codebase's needs to Claude Code surfaces or attribute token spend per skill and subagent
   - Before recommending a surface, read the project's existing Claude Code config and map each codebase signal to a surface type (S27)
   - Token and cache spend is attributed per skill, per subagent type and per prompt, and a call with more than 100k uncached input is listed as a cache break (S32)
@@ -496,6 +631,18 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - A mid-session switch on a warm large context is a counted cost, 113 switches in one month on one machine, 102 of them above 100k tokens, about 592 USD of estimated cache writes (Q4, S32)
   - A hook on the switch does not replace a static check on skill front matter (Q4, S32)
   - Warn at the switch, synchronously, with the cost and the hand-off (Q4)
+
+## qa: testers, end users and acceptance of what is built
+
+- [alibaba/open-code-review](open-code-review.md): you design how a review agent picks files, accounts for coverage, locates line comments or filters false positives
+  - Account for every reviewable file as reviewed or skipped with a reason
+  - Asymmetric fact-check
+  - Locate a comment by matching its quoted code against the diff, without a model, declining on zero or several hits
+  - Precision over recall as a declared trade-off, with an empty result as a valid result
+  - Per-path review rules merged with the system rules
+  - Zero selected work is not a clean pass (#1454, #1195)
+  - Do not ship a separate binary, provider config and multi-host manifests for review
+  - Secret paths excluded ahead of any include glob
 
 ## release: versioning, changelogs, distribution and published docs
 
@@ -571,6 +718,18 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - A results file states harness, rules commit, model, effort, inputs and label status, runs each mode as its own arm, and publishes a failing score (S9, S10, S7)
   - Run effort is logged per report (wall time, searches, tool calls, seconds per claim) and the gate refuses impossible counts
 
+## security: secrets, permissions, supply chain and attack surface
+
+- [karanb192/claude-code-hooks](claude-code-hooks.md): you add, merge or test a PreToolUse gate, or weigh one dispatcher process against one Node process per gate
+  - One dispatcher process for the PreToolUse gates
+  - Vendored copies pinned byte-identical by a test
+  - Test-protection as a gate, not prose
+  - Guard the agent's own hook and settings files
+  - Regex-backtracking test over every exported rule
+  - Manifest must not re-declare the auto-loaded `hooks/hooks.json` (#51)
+  - Rule compliance tally that flags rules to promote into a hook
+  - InstructionsLoaded cannot block (README line 62), so detection there must pair with a UserPromptSubmit or PreToolUse arm
+
 ## testing: test-first work, verification and tests that can fail
 
 - [avelikiy/great_cto](great-cto.md): an agent might weaken a check instead of fixing what the check found
@@ -613,6 +772,15 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - Surface, runtime presence
   - Surface, result tally
   - Surface, runner forgery scan
+- [garrytan/gstack](gstack.md): you decide which paid evals a change must run, what a skill test may pin, or how to keep generated skills and their size under control
+  - Test what software reads, not English sentences
+  - Select paid evals from the diff through a touchfile map, with an unknown file restoring everything
+  - Two tiers
+  - Pin the harness version and run a canary on the newest release (#3062)
+  - Per-skill size ratchet in tokens beside a flat cap
+  - Gate-integrity reading of every test, CI and lint-config hunk with one question, human decides
+  - Generated skills from templates and shared resolvers
+  - Project facts read from CLAUDE.md, asked once with AskUserQuestion, then persisted
 - [IonDen/skills](ionden-skills.md): you write tests that can actually fail, or a skill that teaches it
   - Spec-literal oracle (expected values and boundary inputs are literals from the spec, never the code's constants or current output)
   - Proof a test can fail by breaking the code (flip a comparison, return a constant, delete the body)
@@ -623,6 +791,26 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - Cheat catalog for red-to-green diffs (copied oracle, special-cased input, always-equal object, early exit, runner patching, swallowed exception, widened tolerance)
   - Red-flag flags in a test command (`--passWithNoTests`, `-u`/`--updateSnapshot`, `--allowOnly`, `--test-skip-pattern`, `--test-name-pattern`)
   - Static check of a red-to-green change (given test files hashed against the original, runner config files, skip-marker regex, zero tests counted as error, held-out suite)
+- [karanb192/claude-code-hooks](claude-code-hooks.md): you add, merge or test a PreToolUse gate, or weigh one dispatcher process against one Node process per gate
+  - One dispatcher process for the PreToolUse gates
+  - Vendored copies pinned byte-identical by a test
+  - Test-protection as a gate, not prose
+  - Guard the agent's own hook and settings files
+  - Regex-backtracking test over every exported rule
+  - Manifest must not re-declare the auto-loaded `hooks/hooks.json` (#51)
+  - Rule compliance tally that flags rules to promote into a hook
+  - InstructionsLoaded cannot block (README line 62), so detection there must pair with a UserPromptSubmit or PreToolUse arm
+- [mattpocock/skills](mattpocock-skills.md): you write or prune a skill's text, decide model- versus user-invocation, or record why a requested change was refused
+  - Prove a forced red actually changed the file before trusting it (#955)
+  - A user-invoked skill's description is for the human browsing commands, with trigger lists stripped (invocation.md line 5)
+  - Keep a one-file-per-concept ledger of rejected ideas listing every prior request, and close issues against it
+  - Accept a change request only on an observed failure in a real session, never on votes or "it would be better if"
+  - Fail a bad ref or empty diff before fanning out parallel reviewers (code-review line 23)
+  - Keep review axes separate and never rerank across them (code-review line 89)
+  - Subagents start with a fresh context and recursion is bounded by the harness, not by skill prose
+  - Expected values come from an independent source of truth
+  - Prompt the positive and hunt no-ops sentence by sentence, deleting any line the model already obeys by default
+  - Not taken
 - [nizos/tdd-guard](nizos-tdd-guard.md): you want a hook that blocks an agent from skipping tests or over-implementing
   - One failing test per acceptance item before the first source edit, failing on an assertion rather than an import
   - Changing what an assertion checks is a behaviour change
