@@ -105,6 +105,7 @@ use-when: <one line: when to read it>
 channels: <github | docs | blog | reddit | x | youtube | facebook | substack | npm | hacker-news | paper | report>
 verified: <yes once a source was re-read and supports the finding, else no>
 read: <YYYY-MM-DD the sources were read>
+strength: <measured | code | multi-source | single-source | opinion>
 ---
 
 <What works, why, where it fails, and how strong the evidence is.>
@@ -112,6 +113,36 @@ read: <YYYY-MM-DD the sources were read>
 ## Sources
 - <public URL> (<author or site>, <date>)
 ```
+
+`strength` is optional on older notes and rated on every new one. Within a domain, the index lists entries from the strongest evidence down: measured results first; then code, which every card counts as; then findings several independent sources agree on; then a single source; then opinion. Verified entries come before unverified ones of the same strength.
+
+## Searching every channel
+
+A study that reaches beyond GitHub follows the multivocal literature review guidelines for software engineering (Garousi, Felderer and Mäntylä, https://arxiv.org/abs/1707.02553). Grey literature is screened with the AACODS checklist (Tyndall, Flinders University, http://dspace.flinders.edu.au/dspace/).
+
+1. **Questions first.** Write the questions the study must answer, and the domain they file under, before searching.
+2. **Search each channel with saved queries**, and record every query with its date:
+   - GitHub: `gh search repos` and `gh search code`, awesome lists, and the repositories of the people the field cites;
+   - official docs and vendor engineering blogs;
+   - papers: arXiv and Google Scholar;
+   - X, Reddit, YouTube and Facebook through agent-reach;
+   - npm.
+3. **Rank the outlet**, following the guidelines' tiers of grey literature:
+   - tier 1: official docs, papers, books and white papers;
+   - tier 2: talks, videos, Q&A answers and wiki articles;
+   - tier 3: blog posts, threads and tweets.
+
+   Code at a pinned SHA stands as its own evidence and becomes a card.
+4. **Screen with AACODS.** For each source ask who wrote it and with what standing (authority), whether its claims are backed by method, data or references (accuracy), what it leaves out (coverage), what the author sells or favours (objectivity), and how old it is (date). Keep a source only when authority and accuracy hold, or when several tier-3 sources agree. Record the reason for every source dropped.
+5. **Stop on purpose.** Use one of the guidelines' stopping rules and record which:
+   - effort bounded: the top N hits per query;
+   - saturation: two rounds in a row that add no new finding;
+   - evidence exhaustion: everything the source pool holds.
+6. **Write it down.** Each kept source becomes a card (GitHub code) or a note (everything else). The note's `strength` comes from the evidence, not from the outlet's fame.
+
+## Re-sweep cadence
+
+Once a month, re-run the saved queries of each domain the kit relies on (agent skills, evals, guardrails, cost, platform, AI models). The 2026-10-27 delta sweep is the model. Add new findings as notes, re-read the sources of any note the new findings contradict, and re-check the Claude Code inventory. `prior-art-index.mjs` prints `re-sweep due` for every note read more than 180 days ago; re-read those sources or mark the note as superseded.
 
 `node plugin/scripts/prior-art-index.mjs write` regenerates `docs/prior-art/index.md` from the public cards and notes, and `docs/prior-art/private/index.md` from everything on this machine; `npm test` fails when the public index is stale or an entry misses a field.
 

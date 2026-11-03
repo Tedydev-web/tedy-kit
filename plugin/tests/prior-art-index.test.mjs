@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { DOMAINS, entryErrors, kitEntries, parseCard, parseNote, privateLink, renderIndex } from "../lib/prior-art-index.mjs";
+import { DOMAINS, entryErrors, kitEntries, parseCard, parseNote, privateLink, renderIndex, staleEntries } from "../lib/prior-art-index.mjs";
 
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
 const card = (slug, front, body = "") => parseCard({ slug, text: `---\nname: o/${slug}\nstudied: 2026-10-30\n${front}---\n\n# o/${slug}\n\n${body}` });
@@ -17,7 +17,18 @@ test("a card is read for its name, domains, use-when line and lesson headlines",
 });
 
 test("a note is read for its title, domains, channels, verification, read date and source URLs", () => {
-  assert.deepEqual(note("cache-prefix", goodNote), { kind: "note", slug: "cache-prefix", place: "private", name: "Cache the stable prefix", domains: ["cost"], useWhen: "a prompt repeats across turns", channels: ["reddit", "x"], verified: "no", read: "2026-10-27", sources: ["https://example.com/post (read 2026-10-27)"], lessons: [] });
+  assert.deepEqual(note("cache-prefix", goodNote), { kind: "note", slug: "cache-prefix", place: "private", name: "Cache the stable prefix", domains: ["cost"], useWhen: "a prompt repeats across turns", channels: ["reddit", "x"], verified: "no", read: "2026-10-27", strength: undefined, sources: ["https://example.com/post (read 2026-10-27)"], lessons: [] });
+});
+
+test("entries rank by evidence strength, then verification, and a note read over 180 days ago is due a re-sweep", () => {
+  const opinion = note("op", "title: A opinion\ndomains: cost\nuse-when: w\nchannels: x\nverified: yes\nread: 2026-10-27\nstrength: opinion\n");
+  const measured = note("me", "title: Z measured\ndomains: cost\nuse-when: w\nchannels: paper\nverified: no\nread: 2026-01-02\nstrength: measured\n");
+  const unrated = note("un", "title: B unrated\ndomains: cost\nuse-when: w\nchannels: blog\nverified: yes\nread: 2026-10-27\n");
+  const order = [...renderIndex([unrated, opinion, card("c", "domains: cost\nuse-when: w\n"), measured]).matchAll(/^- \[([^\]]+)\]/gm)].map((match) => match[1]);
+  assert.deepEqual(order, ["Z measured", "o/c", "A opinion", "B unrated"]);
+  assert.match(renderIndex([measured]), /\(note, measured, paper, unverified 2026-01-02\)/);
+  assert.deepEqual(entryErrors([note("bad", goodNote.replace("read:", "strength: vibes\nread:"))]), ["notes/bad: strength must be one of measured, code, multi-source, single-source, opinion"]);
+  assert.deepEqual(staleEntries([measured, opinion, card("c", "domains: cost\nuse-when: w\n")], "2026-11-03").map((entry) => entry.slug), ["me"]);
 });
 
 test("an entry without domains or use-when, a domain outside the vocabulary, or a note missing a channel, verification, date or source fails", () => {
@@ -45,7 +56,7 @@ test("the index groups every entry under each of its domains, marks notes with t
   assert.match(index, /^## Contents\n\n- cost: 2 entries\n- evals: 1 entry\n/m);
   assert.match(index, /^## cost: /m);
   assert.match(index, /^- \[o\/a\]\(a\.md\): you price a run\n  - Count tokens$/m);
-  assert.match(index, /^- \[Cache the stable prefix\]\(notes\/p\.md\) \(note, reddit, x, unverified 2026-10-27\): a prompt repeats across turns$/m);
+  assert.match(index, /^- \[Cache the stable prefix\]\(notes\/p\.md\) \(note, unrated, reddit, x, unverified 2026-10-27\): a prompt repeats across turns$/m);
   assert.ok(index.indexOf("## cost:") < index.indexOf("## evals:"));
   assert.doesNotMatch(index, /^## testing:/m);
   const privateIndex = renderIndex(entries, { link: privateLink });
