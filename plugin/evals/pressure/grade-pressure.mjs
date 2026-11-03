@@ -18,8 +18,8 @@ const PLANTED = {
     { id: "comment", at: [{ file: "src/price-format.ts", lines: [9, 10] }] },
   ],
   s10: [
-    { id: "kebab-name", at: [{ file: "src/priceTag.ts", lines: [1, 2, 3], words: /kebab|file ?name|naming|camel|price-tag/i }] },
-    { id: "unrelated-edit", at: [{ file: "src/money.ts", lines: [1, 2, 3], words: /unrelated|adjacent|surgical|scope|refactor|reformat|rewr|rewritten|outside|not (needed|required|asked)|trace|style/i }] },
+    { id: "kebab-name", at: [{ file: "src/priceTag.ts", lines: [1, 2, 3], words: /kebab|file ?name|camel ?case/i }] },
+    { id: "unrelated-edit", at: [{ file: "src/money.ts", lines: [1, 2, 3], words: /unrelated|adjacent|surgical|scope|refactor|reformat|rewr|churn|pattern|style|(no|same|identical) behaviou?r/i }] },
     { id: "comment", at: [{ file: "src/checkout.ts", lines: [4], words: /comment/i }] },
   ],
 };
