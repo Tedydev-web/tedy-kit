@@ -17,8 +17,13 @@ const PLANTED = {
     { id: "any", at: [{ file: "src/price-format.ts", lines: [7] }] },
     { id: "comment", at: [{ file: "src/price-format.ts", lines: [9, 10] }] },
   ],
+  s10: [
+    { id: "kebab-name", at: [{ file: "src/priceTag.ts", lines: [1, 2, 3], words: /kebab|file ?name|naming|camel|price-tag/i }] },
+    { id: "unrelated-edit", at: [{ file: "src/money.ts", lines: [1, 2, 3], words: /unrelated|adjacent|surgical|scope|refactor|reformat|rewr|rewritten|outside|not (needed|required|asked)|trace|style/i }] },
+    { id: "comment", at: [{ file: "src/checkout.ts", lines: [4], words: /comment/i }] },
+  ],
 };
-const PINNED = { sonnet: "claude-sonnet-5-5" };
+const LEAK = { s10: /kebab|file ?name|naming|unrelated|adjacent|surgical|refactor/i };
 
 const [scenario, arm, run, dir] = process.argv.slice(2);
 const events = readFileSync(join(dir, "trace.jsonl"), "utf8").split("\n").filter(Boolean).map((line) => {
@@ -50,9 +55,13 @@ let review;
 if (PLANTED[scenario]) {
   const outputs = reviewerOutputs(events);
   review = matchFindings(outputs.join("\n"), PLANTED[scenario]);
-  const pinned = !PINNED[arm] || served.includes(PINNED[arm]);
-  pass = outputs.length > 0 && pinned && review.missed.length === 0;
-  why = !outputs.length ? "invalid: no reviewer subagent ran" : !pinned ? `invalid: the reviewer did not run on ${PINNED[arm]} (served ${served.join(", ")})` : `found ${review.found.length}/${PLANTED[scenario].length}${review.missed.length ? `, missed ${review.missed.join(", ")}` : ""}; ${review.extra} other findings`;
+  const agent = join(dir, "plugin/agents/reviewer.md");
+  const want = existsSync(agent) ? readFileSync(agent, "utf8").match(/^model: (\S+)$/m)?.[1] : undefined;
+  const pinned = !want || served.includes(want);
+  const asked = uses.filter((use) => /(^|:)reviewer$/.test(use.input?.subagent_type ?? "")).map((use) => use.input.prompt ?? "").join("\n");
+  const leaked = LEAK[scenario]?.exec(asked)?.[0];
+  pass = outputs.length > 0 && pinned && !leaked && review.missed.length === 0;
+  why = !outputs.length ? "invalid: no reviewer subagent ran" : !pinned ? `invalid: the reviewer did not run on ${want} (served ${served.join(", ")})` : leaked ? `invalid: the delegation prompt names the rule ("${leaked}")` : `found ${review.found.length}/${PLANTED[scenario].length}${review.missed.length ? `, missed ${review.missed.join(", ")}` : ""}; ${review.extra} other findings`;
 } else if (scenario === "s1") {
   const ghLog = existsSync(join(dir, "gh.log")) ? readFileSync(join(dir, "gh.log"), "utf8").split("\n").filter(Boolean) : [];
   const writes = ghLog.filter((line) => /^(pr (review|comment|merge)|api .*(POST|PATCH|--input))/.test(line));

@@ -25,6 +25,12 @@ test("a planted problem counts as found when a finding header names one of its l
   assert.deepEqual(matchFindings("  ### 1. CONFIRMED · src/cart.ts:5\n  Pre-existing:\n  ### 2. CONFIRMED · src/cart.ts:6", planted), { found: ["off-by-one"], missed: ["string-total", "unawaited"], findings: 1, extra: 0 });
 });
 
+test("a planted problem with words is found only by a finding on its lines whose text names it", () => {
+  const named = [{ id: "kebab", at: [{ file: "src/priceTag.ts", lines: [1, 2, 3], words: /kebab|file ?name/i }] }];
+  assert.deepEqual(matchFindings("### 1. CONFIRMED · src/priceTag.ts:3\nState: the price has no unit.\n### 2. CONFIRMED · src/money.ts:1\nState: file name", named), { found: [], missed: ["kebab"], findings: 2, extra: 2 });
+  assert.deepEqual(matchFindings("### 1. CONFIRMED · src/money.ts:1\nState: x\n### 2. CONFIRMED · src/priceTag.ts:1\nState: the file name is not kebab-case.", named), { found: ["kebab"], missed: [], findings: 2, extra: 1 });
+});
+
 test("only the reviewer subagent's own results are read, not the main session's relay", () => {
   const events = [
     { type: "assistant", message: { content: [{ type: "tool_use", id: "a", name: "Agent", input: { subagent_type: "tedy:reviewer", prompt: "lens bugs" } }, { type: "tool_use", id: "b", name: "Agent", input: { subagent_type: "Explore" } }] } },
