@@ -213,7 +213,8 @@ test("the kit's always-on text, hook events and skill models stay within the quo
   assert.deepEqual(skillModelErrors(kitSkills(REPO)), []);
 });
 
-test("the reviewer agent runs on the model measured at parity with the session model", () => {
+test("the reviewer agent runs on the model measured at parity and without the user's CLAUDE.md, as measured", () => {
   const front = readFileSync(join(REPO, "plugin/agents/reviewer.md"), "utf8").split("---")[1];
   assert.match(front, /^model: claude-sonnet-5-5$/m);
+  assert.match(front, /^omitClaudeMd: true$/m);
 });

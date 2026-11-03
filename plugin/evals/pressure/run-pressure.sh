@@ -141,7 +141,7 @@ reviewer_plugin() {
   rm -rf "$1/plugin/evals" "$1/plugin/tests"
   local agent="$1/plugin/agents/reviewer.md"
   case "$2" in
-    omit|omit-read) sed -i '/^name: reviewer$/a omitClaudeMd: true' "$agent" ;;
+    omit|omit-read) sed -i -e '/^omitClaudeMd:/d' -e '/^name: reviewer$/a omitClaudeMd: true' "$agent" ;;
     sonnet) sed -i -e '/^model:/d' -e '/^name: reviewer$/a model: claude-sonnet-5-5' "$agent" ;;
   esac
   [ "$2" = omit-read ] && sed -i "s|^- \*\*standards\*\*: the repository's own rules (AGENTS.md, CLAUDE.md, |- **standards**: the repository's own rules (AGENTS.md, CLAUDE.md, the user's \`~/.claude/CLAUDE.md\` and every file it imports with \`@<path>\`, |" "$agent"
