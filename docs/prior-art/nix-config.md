@@ -4,6 +4,8 @@ pinned: https://github.com/fagenorn/nix-config/tree/8212d8fb8e933120db864339e9a8
 license: NOASSERTION
 studied: 2026-10-30
 channel: github
+domains: agent-skills, ai-models
+use-when: you hold each agent's model and effort to a declared matrix
 ---
 
 # fagenorn/nix-config

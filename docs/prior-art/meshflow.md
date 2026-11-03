@@ -4,6 +4,8 @@ pinned: https://github.com/Anteneh-T-Tessema/meshflow/tree/081a368f238731d829a9f
 license: Apache-2.0
 studied: 2026-10-30
 channel: github
+domains: evals, cost
+use-when: you gate CI on token, cost and pass-rate regressions against a stored baseline
 ---
 
 # Anteneh-T-Tessema/meshflow

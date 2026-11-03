@@ -4,6 +4,8 @@ pinned: https://github.com/tigerless-labs/cost-xray/tree/906ce15d931b8e145b5ed59
 license: MIT
 studied: 2026-10-28
 channel: github
+domains: cost
+use-when: you need to see what each request's context and cost are spent on
 ---
 
 # tigerless-labs/cost-xray

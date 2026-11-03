@@ -4,6 +4,8 @@ pinned: https://github.com/Atmosphere/atmosphere/tree/992532da1d04e6896204eea464
 license: Apache-2.0
 studied: 2026-10-28
 channel: github
+domains: release
+use-when: an agent runs a release to several registries (Maven, npm, Homebrew) from a skill
 ---
 
 # Atmosphere/atmosphere

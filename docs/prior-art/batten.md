@@ -4,6 +4,8 @@ pinned: https://github.com/button-inc/batten/tree/95e2f6aaef1370c1fcfbaa806a4652
 license: Apache-2.0
 studied: 2026-10-18
 channel: github
+domains: testing, guardrails
+use-when: an agent might edit tests until they pass instead of fixing the code
 ---
 
 # button-inc/batten

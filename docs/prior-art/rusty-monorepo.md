@@ -4,6 +4,8 @@ pinned: https://github.com/TrogonStack/rusty-monorepo/tree/c3904a6f333de0b359353
 license: MIT
 studied: 2026-10-30
 channel: github
+domains: evals, cost
+use-when: you compare baseline and candidate eval runs on cost, tokens and pass rate beyond noise
 ---
 
 # TrogonStack/rusty-monorepo

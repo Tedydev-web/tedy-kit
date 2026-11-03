@@ -4,6 +4,8 @@ pinned: https://github.com/EmadMokhtar/skill-evaluator/tree/1ce02bc689899cf801d4
 license: MIT
 studied: 2026-10-30
 channel: github
+domains: evals, cost
+use-when: you score SKILL.md cases on assertions, trajectory and a token or cost budget
 ---
 
 # EmadMokhtar/skill-evaluator

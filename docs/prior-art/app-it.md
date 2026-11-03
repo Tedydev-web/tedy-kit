@@ -4,6 +4,8 @@ pinned: https://github.com/Christian-Katzmann/app-it/tree/9ad064e62c2f2cdde7125e
 license: MIT
 studied: 2026-10-28
 channel: github
+domains: release, governance
+use-when: you want the build to fail on the conventions an AGENTS.md states
 ---
 
 # Christian-Katzmann/app-it

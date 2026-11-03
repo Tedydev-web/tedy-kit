@@ -4,6 +4,8 @@ pinned: https://github.com/agent-sh/agnix/tree/0247144e59ee88337cdecc832b887718d
 license: MIT OR Apache-2.0
 studied: 2026-10-30
 channel: github
+domains: agent-skills, cost
+use-when: you lint agent configuration files (CLAUDE.md, skills, hooks) or budget the text every session loads
 ---
 
 # agent-sh/agnix

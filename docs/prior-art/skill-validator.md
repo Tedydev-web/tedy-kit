@@ -4,6 +4,8 @@ pinned: https://github.com/agent-ecosystem/skill-validator/tree/899dba96e0d0d7d9
 license: MIT
 studied: 2026-10-30
 channel: github
+domains: agent-skills, cost
+use-when: you validate a skill package's structure, links and token counts
 ---
 
 # agent-ecosystem/skill-validator

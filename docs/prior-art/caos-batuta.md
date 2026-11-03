@@ -4,6 +4,8 @@ pinned: https://github.com/fsantibanezleal/CAOS_Batuta/tree/f854580600eddee36128
 license: Apache-2.0
 studied: 2026-10-18
 channel: github
+domains: testing, guardrails
+use-when: you want proof from git history that every green test run came after a red one
 ---
 
 # fsantibanezleal/CAOS_Batuta

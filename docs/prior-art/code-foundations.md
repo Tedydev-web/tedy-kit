@@ -4,6 +4,8 @@ pinned: https://github.com/ryanthedev/code-foundations/tree/ca30ba90ebd3b4401736
 license: NOASSERTION
 studied: 2026-10-30
 channel: github
+domains: ai-models, evals, cost
+use-when: you pick the cheapest model per task from measured pass rates
 ---
 
 # ryanthedev/code-foundations

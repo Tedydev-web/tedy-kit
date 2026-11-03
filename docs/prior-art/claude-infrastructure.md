@@ -4,6 +4,8 @@ pinned: https://github.com/renchris/claude-infrastructure/tree/9a9c67ce8186d6206
 license: NOASSERTION
 studied: 2026-10-30
 channel: github
+domains: agent-skills, cost
+use-when: you spawn subagents and weigh dropping CLAUDE.md from their context
 ---
 
 # renchris/claude-infrastructure

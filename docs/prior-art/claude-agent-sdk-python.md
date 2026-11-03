@@ -4,6 +4,8 @@ pinned: https://github.com/anthropics/claude-agent-sdk-python/tree/c01a99416a028
 license: MIT
 studied: 2026-10-28
 channel: github
+domains: release, governance
+use-when: you keep a release and CI standard in which each rule names the check that enforces it
 ---
 
 # anthropics/claude-agent-sdk-python

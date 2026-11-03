@@ -4,6 +4,8 @@ pinned: https://github.com/alexgreensh/token-optimizer/tree/734da4eb1e96e10f93c0
 license: NOASSERTION
 studied: 2026-10-30
 channel: github
+domains: cost
+use-when: you measure a session's context use and cost and act on it through hooks
 ---
 
 # alexgreensh/token-optimizer

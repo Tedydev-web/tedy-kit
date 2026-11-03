@@ -4,6 +4,8 @@ pinned: https://github.com/obra/superpowers/tree/bb92a77741419a4ab5f06e711a28334
 license: MIT
 studied: 2026-10-18
 channel: github
+domains: testing, agent-skills
+use-when: you need test-first work, fresh verification evidence before claiming done, or skill-writing discipline
 ---
 
 # obra/superpowers

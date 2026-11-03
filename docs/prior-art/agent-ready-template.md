@@ -4,6 +4,8 @@ pinned: https://github.com/JoelA510/agent-ready-template/tree/5b75c70984ec9bebf3
 license: MIT
 studied: 2026-10-28
 channel: github
+domains: governance, agent-skills
+use-when: you ship an agent process (skills, prompts, standards, evals) inside a project template
 ---
 
 # JoelA510/agent-ready-template

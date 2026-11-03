@@ -4,6 +4,8 @@ pinned: https://github.com/gotalab/skillport/tree/51334ae94919fc1c261673ffefdce9
 license: MIT
 studied: 2026-10-28
 channel: github
+domains: agent-skills, governance
+use-when: you install, index and validate skills against a written front-matter standard
 ---
 
 # gotalab/skillport

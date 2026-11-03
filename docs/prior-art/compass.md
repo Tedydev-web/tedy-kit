@@ -4,6 +4,8 @@ pinned: https://github.com/dshakes/compass/tree/fb41822123b4b556079b9a1c945c2521
 license: MIT
 studied: 2026-10-28
 channel: github
+domains: guardrails, cost, governance
+use-when: you set up hooks, a guardrail policy and a spend gate for Claude Code
 ---
 
 # dshakes/compass

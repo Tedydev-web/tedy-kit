@@ -18,3 +18,4 @@ plugin/evals/**/results/
 !plugin/tests/
 !plugin/tests/**
 .env*
+docs/prior-art/private/

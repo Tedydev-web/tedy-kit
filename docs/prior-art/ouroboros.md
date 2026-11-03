@@ -4,6 +4,8 @@ pinned: https://github.com/Q00/ouroboros/tree/842b1020d063a4a9968be90de99d5f093c
 license: MIT
 studied: 2026-10-28
 channel: github
+domains: governance, agent-skills
+use-when: you run a spec-first agent workflow whose CI gates each name the rule they enforce
 ---
 
 # Q00/ouroboros

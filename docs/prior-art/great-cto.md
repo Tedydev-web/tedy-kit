@@ -4,6 +4,8 @@ pinned: https://github.com/avelikiy/great_cto/tree/171db2576d39377942c9ae574e1e1
 license: MIT
 studied: 2026-10-18
 channel: github
+domains: guardrails, testing
+use-when: an agent might weaken a check instead of fixing what the check found
 ---
 
 # avelikiy/great_cto

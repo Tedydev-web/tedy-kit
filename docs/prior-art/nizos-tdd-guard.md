@@ -4,6 +4,8 @@ pinned: https://github.com/nizos/tdd-guard/tree/108992dcf7d7f8c90932e8a2cfe22c26
 license: MIT
 studied: 2026-10-18
 channel: github
+domains: testing, guardrails
+use-when: you want a hook that blocks an agent from skipping tests or over-implementing
 ---
 
 # nizos/tdd-guard

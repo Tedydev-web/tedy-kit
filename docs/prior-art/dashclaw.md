@@ -4,6 +4,8 @@ pinned: https://github.com/ucsandman/DashClaw/tree/704824de5f5f2fa052d4c36ec269a
 license: MIT
 studied: 2026-10-28
 channel: github
+domains: guardrails, governance
+use-when: you grade and hold agent actions through hooks and must prove the hook still blocks after harness changes
 ---
 
 # ucsandman/DashClaw

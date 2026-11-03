@@ -4,6 +4,8 @@ pinned: https://github.com/tardigrde/agent-skill-eval/tree/59de161f657b82bfaf8f6
 license: MIT
 studied: 2026-10-30
 channel: github
+domains: evals, cost
+use-when: you run a skill's eval cases across several agents and fail a case over its token or cost budget
 ---
 
 # tardigrde/agent-skill-eval

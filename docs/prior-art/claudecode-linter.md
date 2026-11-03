@@ -4,6 +4,8 @@ pinned: https://github.com/retif/claudecode-linter/tree/94fb3ddd05d16cee82a43cbe
 license: MIT
 studied: 2026-10-30
 channel: github
+domains: platform, agent-skills
+use-when: you lint plugins, skills, agents and hooks against the current Claude Code contract
 ---
 
 # retif/claudecode-linter

@@ -4,6 +4,8 @@ pinned: https://github.com/fkiene/llmtrim/tree/9586780b3ed9bae2592203b2d4f93ba72
 license: MPL-2.0
 studied: 2026-10-28
 channel: github
+domains: cost, evals
+use-when: you compress model input and output while keeping the cached prefix, gated on a benchmark
 ---
 
 # fkiene/llmtrim

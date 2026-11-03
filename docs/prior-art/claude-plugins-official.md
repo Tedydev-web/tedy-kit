@@ -4,6 +4,8 @@ pinned: https://github.com/anthropics/claude-plugins-official/tree/f8c5e7a1dcb71
 license: Apache-2.0
 studied: 2026-10-28
 channel: github
+domains: platform, cost, agent-skills
+use-when: you match a codebase's needs to Claude Code surfaces or attribute token spend per skill and subagent
 ---
 
 # anthropics/claude-plugins-official

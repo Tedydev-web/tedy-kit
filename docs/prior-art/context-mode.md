@@ -4,6 +4,8 @@ pinned: https://github.com/mksglu/context-mode/tree/849c8690bdf86eef60156e13d98e
 license: Elastic-2.0
 studied: 2026-10-30
 channel: github
+domains: cost, platform
+use-when: large tool output floods the conversation and should stay in a sandbox
 ---
 
 # mksglu/context-mode

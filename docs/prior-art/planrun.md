@@ -4,6 +4,8 @@ pinned: https://github.com/wangqiqi/planrun/tree/80d200fc0cd50661ae7f7449965ed7f
 license: MIT
 studied: 2026-10-28
 channel: github
+domains: governance, release
+use-when: you seed files into projects and must detect drift from what was installed
 ---
 
 # wangqiqi/planrun

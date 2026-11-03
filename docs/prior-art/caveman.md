@@ -4,6 +4,8 @@ pinned: https://github.com/JuliusBrussee/caveman/tree/9b68f7ed12b05e7efaff18e65c
 license: Apache-2.0
 studied: 2026-10-30
 channel: github
+domains: platform, cost
+use-when: one tool supports many coding agents and must record which host surfaces it uses on each
 ---
 
 # JuliusBrussee/caveman

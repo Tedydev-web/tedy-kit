@@ -4,6 +4,8 @@ pinned: https://github.com/lloydjf/ratchet/tree/350a343f4d3e02df53d53f55697db788
 license: Apache-2.0
 studied: 2026-10-28
 channel: github
+domains: evals, ai-models
+use-when: you replay recorded agent runs after each skill edit and pin the model they were recorded on
 ---
 
 # lloydjf/ratchet

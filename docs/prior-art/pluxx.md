@@ -4,6 +4,8 @@ pinned: https://github.com/orchidautomation/pluxx/tree/80f67d2486e437e82839b06f2
 license: MIT
 studied: 2026-10-28
 channel: github
+domains: platform, release
+use-when: one plugin source must build for Claude Code, Codex, Cursor and other hosts
 ---
 
 # orchidautomation/pluxx

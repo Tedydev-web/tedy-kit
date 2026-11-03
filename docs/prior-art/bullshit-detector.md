@@ -4,6 +4,8 @@ pinned: https://github.com/SerhiiKorniienko/bullshit-detector/tree/d5f6156a8a5c7
 license: MIT
 studied: 2026-10-28
 channel: github
+domains: governance, research
+use-when: you fact-check claims and stamp each report with the rules version it was judged by
 ---
 
 # SerhiiKorniienko/bullshit-detector

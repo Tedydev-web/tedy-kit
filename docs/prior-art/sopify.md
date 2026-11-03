@@ -4,6 +4,8 @@ pinned: https://github.com/evidentloop/sopify/tree/9d9b319cb06713f3f9d695bf98f62
 license: Apache-2.0
 studied: 2026-10-28
 channel: github
+domains: governance, release
+use-when: you choose plan depth by script or gate releases on working doc links
 ---
 
 # evidentloop/sopify

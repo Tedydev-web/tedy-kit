@@ -4,6 +4,8 @@ pinned: https://github.com/nano-step/eval-harness/tree/002aafee3ed60ab6cde5acda8
 license: MIT
 studied: 2026-10-28
 channel: github
+domains: evals
+use-when: you build an eval harness with baselines, A/B runs and a calibrated LLM judge
 ---
 
 # nano-step/eval-harness

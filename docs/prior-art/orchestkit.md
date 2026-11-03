@@ -4,6 +4,8 @@ pinned: https://github.com/yonatangross/orchestkit/tree/22dfd9883087a6574174cec3
 license: MIT
 studied: 2026-10-30
 channel: github
+domains: cost, platform
+use-when: a model switch in the middle of a session would re-cache a large context
 ---
 
 # yonatangross/orchestkit

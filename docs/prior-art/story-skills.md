@@ -4,6 +4,8 @@ pinned: https://github.com/danjdewhurst/story-skills/tree/4b8019d7fa08e1e1866be3
 license: MIT
 studied: 2026-10-28
 channel: github
+domains: evals, release
+use-when: you measure each skill against a no-skill baseline or refuse a release without a changelog
 ---
 
 # danjdewhurst/story-skills

@@ -91,6 +91,30 @@ channel: github
 - <lesson>: touches <kit file:line>; gap | overlap; cost.
 ```
 
+A card also carries `domains:` (from the vocabulary in `plugin/lib/prior-art-index.mjs`) and `use-when:` (one line: when to read it) in its front matter.
+
+## Note template
+
+A note holds one finding distilled from posts, videos, docs, several sources or a research report, when there is no GitHub file to pin. Notes start in `docs/prior-art/private/notes/<slug>.md`, which git ignores, and move to the public `notes` folder beside the cards only after they name no client, client project, private host or home path and `public-scan` is clean:
+
+```
+---
+title: <the finding in one line>
+domains: <domain>, <domain>
+use-when: <one line: when to read it>
+channels: <github | docs | blog | reddit | x | youtube | facebook | substack | npm | hacker-news | report>
+verified: <yes once a source was re-read and supports the finding, else no>
+read: <YYYY-MM-DD the sources were read>
+---
+
+<What works, why, where it fails, and how strong the evidence is.>
+
+## Sources
+- <public URL> (<author or site>, <date>)
+```
+
+`node plugin/scripts/prior-art-index.mjs write` regenerates `docs/prior-art/index.md` from the public cards and notes, and `docs/prior-art/private/index.md` from everything on this machine; `npm test` fails when the public index is stale or an entry misses a field.
+
 Every evidence line holds only the link and its quoted excerpt; notes go on the next sub-bullet. `prior-art-verify.mjs` reports any other line holding a GitHub blob, issue or PR link as `unparsed`. Find the ADRs that cite a card with `git grep -n 'card: <slug>'`.
 
 ## Commit trailers

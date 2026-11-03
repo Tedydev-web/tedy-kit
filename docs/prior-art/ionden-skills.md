@@ -4,6 +4,8 @@ pinned: https://github.com/IonDen/skills/tree/3c26c042ae79e31464a0c7c7b60de84fe3
 license: MIT
 studied: 2026-10-18
 channel: github
+domains: testing, agent-skills
+use-when: you write tests that can actually fail, or a skill that teaches it
 ---
 
 # IonDen/skills

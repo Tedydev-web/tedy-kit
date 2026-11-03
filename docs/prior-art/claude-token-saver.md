@@ -4,6 +4,8 @@ pinned: https://github.com/dbrownjave/claude-token-saver/tree/437ba691a47b3f206a
 license: MIT
 studied: 2026-10-30
 channel: github
+domains: cost, platform
+use-when: a model switch in the middle of a session would throw away a warm prompt cache
 ---
 
 # dbrownjave/claude-token-saver
