@@ -34,6 +34,9 @@ test("an entry without domains or use-when, a domain outside the vocabulary, or 
     "notes/n: no source URL under ## Sources",
   ]);
   assert.deepEqual(entryErrors([note("ok", goodNote)]), []);
+  const reportOnly = "## Sources\n- plans/reports/research-x.md\n";
+  assert.deepEqual(entryErrors([note("local", goodNote, reportOnly)]), []);
+  assert.deepEqual(entryErrors([note("shared", goodNote, reportOnly, "public")]), ["notes/shared: a public note needs a public source URL"]);
 });
 
 test("the index groups every entry under each of its domains, marks notes with their channels and verification, and links private notes from the private index", () => {

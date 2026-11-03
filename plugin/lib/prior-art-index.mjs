@@ -45,7 +45,7 @@ export function parseCard({ slug, text }) {
 export function parseNote({ slug, text, place }) {
   const { body, field, list } = split(text);
   const sourcesBlock = body.split(/^## Sources\n/m)[1]?.split(/^## /m)[0] ?? "";
-  const sources = sourcesBlock.split("\n").filter((line) => /^- https?:\/\//.test(line)).map((line) => line.slice(2).trim());
+  const sources = sourcesBlock.split("\n").filter((line) => /^- (https?:\/\/|plans\/)/.test(line)).map((line) => line.slice(2).trim());
   return { kind: "note", slug, place, name: field("title"), domains: list("domains"), useWhen: field("use-when") ?? "", channels: list("channels"), verified: field("verified"), read: field("read"), sources, lessons: [] };
 }
 
@@ -63,6 +63,7 @@ export function entryErrors(entries) {
     if (!["yes", "no"].includes(entry.verified)) errors.push(`${id}: verified must be yes or no`);
     if (!DATE.test(entry.read ?? "")) errors.push(`${id}: read must be the YYYY-MM-DD the sources were read`);
     if (!entry.sources.length) errors.push(`${id}: no source URL under ## Sources`);
+    if (entry.place === "public" && !entry.sources.some((source) => source.startsWith("http"))) errors.push(`${id}: a public note needs a public source URL`);
     return errors;
   });
 }
