@@ -1,6 +1,6 @@
 # 0010: The dev skill writes a failing test first and never calls a hollow run green
 
-Status: accepted (2026-10-19)
+Status: accepted (2026-10-19); clarified 2026-11-04: the script and hook are unmeasured for P2, not rejected
 measured: yes
 
 ## Context
@@ -12,7 +12,7 @@ measured: yes
 ## Decision
 - Build starts with Red: for a bug fix or a change in logic, the test is written and run before the first source edit, fails on an assertion, and its expected values are literals from the request or spec. The new test sits in a new file that stays out of the commit; a tracked team test changes only when the task asks for it.
 - Verify adds: a run with 0 tests or a skip in a touched file is not green and the counts are reported; a test is never weakened, skipped or deleted to get green; the change is broken once to watch its test fail. The report carries the red run and the counts. Three rows join the anti-rationalization table.
-- The script (A2) and the hook (A3) are not adopted. Neither beat A1 on its own or as an addition: S and H alone left P1 at the A0 level, and A3 against A1 was one run in five better on Opus and one run in five worse on Sonnet.
+- The script (A2) and the hook (A3) are not adopted. Neither beat A1 on its own or as an addition: S and H alone left P1 at the A0 level, and A3 against A1 was one run in five better on Opus and one run in five worse on Sonnet. This rests on P1 graders only: both target P2, which no case separated (below), so for P2 they are unmeasured, not rejected, until a case makes the no-plugin arm weaken a test.
 - The Red text sits at the head of step 4 (Build) instead of a step of its own, so the step numbers that `problems.md` and the cards cite stay valid. The words are those of arm A1.
 
 ## Variants
