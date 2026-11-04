@@ -1,6 +1,6 @@
 # 0012: A work package's status follows its pull requests, decided by one function and applied by the session that acts
 
-Status: accepted (2026-10-29)
+Status: accepted (2026-10-29); amended by 0015 for maps with `jobs`
 
 ## Context
 - Under ADR 0004 and the user's rule 25, status moved only through one batch hand-off from the review session to the PM session and one approval. On 2026-10-29 the user found that too slow and asked for the skills to move status themselves: In progress when `/tedy:dev` starts a task, Merged/Code Review when its PR opens, and, after a review that passes, a merge the user approves followed by Closed, or Fixed (Dev Done) and back to the tester for a bug a tester filed.

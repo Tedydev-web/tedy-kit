@@ -1,6 +1,6 @@
 # 0004: Every pull request follows one work package
 
-Status: accepted (2026-10-08 to 2026-10-14, recorded 2026-10-17)
+Status: accepted (2026-10-08 to 2026-10-14, recorded 2026-10-17); status and assignee moves are superseded by 0012
 
 ## Context
 - 2026-10-08: another tracker skill drafted work packages with function and file names, no estimates, and backend tasks nobody asked for.
