@@ -61,6 +61,7 @@ Status: accepted (2026-11-04); not yet implemented, and the platform facts it re
 
 ## Consequences
 - ADR 0003's role-per-session rule is superseded in a map with `jobs`, and removed in full when the legacy `sessions` path is removed.
+- ADR 0007 rejected a role persona through `claude --agent` because an agent body replaces the default Claude Code system prompt. The job agents have front matter and no body, which is expected to keep the default prompt and the skills list; the probe must confirm it, and if a body turns out to be required, 0007's rejection stands and jobs stop for the user.
 - ADR 0012 is amended for `jobs` maps: a status move goes through an inbox card that the cockpit applies; the job does not apply it.
 - Each job starts with a fresh context and carries its record in files (job file, drafts, reports), so a job re-reads its own sources.
 - A background session has no spend cap (`--max-budget-usd` works only with `--print`); the launcher and the probe bound it by stopping sessions.
