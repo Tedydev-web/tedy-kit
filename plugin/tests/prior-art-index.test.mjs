@@ -17,7 +17,7 @@ test("a card is read for its name, domains, use-when line and lesson headlines",
 });
 
 test("a note is read for its title, domains, channels, verification, read date and source URLs", () => {
-  assert.deepEqual(note("cache-prefix", goodNote), { kind: "note", slug: "cache-prefix", place: "private", name: "Cache the stable prefix", domains: ["cost"], useWhen: "a prompt repeats across turns", channels: ["reddit", "x"], verified: "no", read: "2026-10-27", strength: undefined, sources: ["https://example.com/post (read 2026-10-27)"], lessons: [] });
+  assert.deepEqual(note("cache-prefix", goodNote), { kind: "note", slug: "cache-prefix", place: "private", name: "Cache the stable prefix", domains: ["cost"], useWhen: "a prompt repeats across turns", channels: ["reddit", "x"], verified: "no", read: "2026-10-27", strength: undefined, positions: [], sources: ["https://example.com/post (read 2026-10-27)"], lessons: [] });
 });
 
 test("entries rank by evidence strength, then verification, and a note read over 180 days ago is due a re-sweep", () => {
@@ -59,6 +59,7 @@ test("the index groups every entry under each of its domains, marks notes with t
   assert.match(index, /^- \[Cache the stable prefix\]\(notes\/p\.md\) \(note, unrated, reddit, x, unverified 2026-10-27\): a prompt repeats across turns$/m);
   assert.ok(index.indexOf("## cost:") < index.indexOf("## evals:"));
   assert.doesNotMatch(index, /^## testing:/m);
+  assert.ok(renderIndex(entries, { preface: "## Positions\n\n- p\n" }).indexOf("## Positions") < renderIndex(entries, { preface: "## Positions\n\n- p\n" }).indexOf("## Contents"));
   const privateIndex = renderIndex(entries, { link: privateLink });
   assert.match(privateIndex, /\]\(\.\.\/a\.md\)/);
   assert.match(privateIndex, /\]\(notes\/p\.md\)/);

@@ -56,7 +56,8 @@
   <tr><td>Index</td><td><code>docs/prior-art/index.md</code> (public), <code>docs/prior-art/private/index.md</code> (your machine)</td><td>Every entry by domain (agent skills, AI models, backend, blockchain, cost, evals, frontend, governance, guardrails, infra, platform, product and PM, QA, release, research, security, testing), each with when to read it</td></tr>
   <tr><td>Cards</td><td><code>docs/prior-art/&lt;slug&gt;.md</code></td><td>One GitHub source read at file:line: pinned evidence, its issues, and lessons</td></tr>
   <tr><td>Notes</td><td><code>docs/prior-art/private/notes/</code>, then <code>docs/prior-art/notes/</code></td><td>One finding from posts, videos, docs or reports, with sources, channel and whether a source was re-read</td></tr>
-  <tr><td>Method</td><td><code>docs/prior-art/procedure.md</code></td><td>How to search, screen, study and write cards and notes</td></tr>
+  <tr><td>Positions</td><td><code>docs/prior-art/private/positions/</code> (your machine)</td><td>One page per recurring design question: the best current method, its ring and certainty, the notes it rests on, who disagrees, and whether the kit conforms; listed first in the private index and linted against the notes (ADR 0017)</td></tr>
+  <tr><td>Method</td><td><code>docs/prior-art/procedure.md</code></td><td>How to search, screen, study and write cards, notes and positions</td></tr>
 </table>
 <p>The global instructions tell every agent to read the matching domains before designing, cite what it relies on, treat an unverified note as a lead, and write a note for each durable finding when nothing covered the problem. <code>node plugin/scripts/prior-art-index.mjs write</code> rebuilds both indexes.</p>
 

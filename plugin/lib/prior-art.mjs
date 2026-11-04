@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
+export const FIRST_POSITION_ADR = 17;
 export const GRANDFATHERED = new Set([
   "0001-re-architecture-consolidation.md",
   "0002-publishing-and-push-approval.md",
@@ -100,9 +101,25 @@ function sourceErrors(source, cardExists) {
   return errors;
 }
 
-export function checkAdrText(text, { cardExists }) {
+const POSITION_FORMS = '"position: <slug> conforms", "position: <slug> deviates: <reason>" or "position: none (<why>)"';
+const POSITION_LINE = /^position: (?:none \(.+\)|([a-z0-9]+(?:-[a-z0-9]+)*) (?:conforms|deviates: \S.*))$/;
+
+function positionErrors(section, positionRequired, positionExists) {
+  const line = section.find((item) => item.startsWith("position: "));
+  if (!line) return positionRequired ? [`no ${POSITION_FORMS} line`] : [];
+  const match = line.match(POSITION_LINE);
+  if (!match) return [`position line must read ${POSITION_FORMS}: ${line}`];
+  if (match[1] && positionExists && !positionExists(match[1])) return [`position "${match[1]}" has no page in docs/prior-art/private/positions`];
+  return [];
+}
+
+export function checkAdrText(text, { cardExists, positionRequired = false, positionExists = null }) {
   const section = priorArtSection(text);
   if (!section) return ['no "## Prior art" section'];
+  return [...sourcesErrors(section, cardExists), ...positionErrors(section, positionRequired, positionExists)];
+}
+
+function sourcesErrors(section, cardExists) {
   const none = section.find((line) => line.startsWith("no prior art: "));
   if (none) return queryLineErrors("no prior art", none.slice(14), "one");
   const sources = [];
@@ -126,10 +143,13 @@ export function checkAdrFolder(adrDir, cardsDir) {
   const names = existsSync(adrDir) ? readdirSync(adrDir).sort() : [];
   if (!names.length) return [{ file: "docs/adr", error: "no ADR files" }];
   const cardExists = (slug) => existsSync(join(cardsDir, `${slug}.md`));
+  const positionsDir = join(cardsDir, "private", "positions");
+  const positionExists = existsSync(positionsDir) ? (slug) => existsSync(join(positionsDir, `${slug}.md`)) : null;
   return names.flatMap((file) => {
     if (!ADR_NAME.test(file)) return [{ file, error: "name is not NNNN-kebab-case.md" }];
     if (GRANDFATHERED.has(file)) return [];
-    return checkAdrText(readFileSync(join(adrDir, file), "utf8"), { cardExists }).map((error) => ({ file, error }));
+    const positionRequired = Number(file.slice(0, 4)) >= FIRST_POSITION_ADR;
+    return checkAdrText(readFileSync(join(adrDir, file), "utf8"), { cardExists, positionRequired, positionExists }).map((error) => ({ file, error }));
   });
 }
 

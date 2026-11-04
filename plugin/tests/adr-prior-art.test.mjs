@@ -87,6 +87,28 @@ test("a no-prior-art line replaces the sources and must name two channels, one o
   assert.match(check(section('no prior art: 18/10 github: "a"; x: "b"')).join("\n"), /no prior art: .*date/);
 });
 
+test("from ADR 0017 on the section names the position it follows or deviates from, or none with a reason", () => {
+  const withLine = (line) => checkAdrText(`# 0017 T\n\n${section(github(), social, line ? [line] : [])}`, { cardExists, positionRequired: true, positionExists: (slug) => slug === "role-coordination" });
+  assert.deepEqual(withLine("position: role-coordination conforms"), []);
+  assert.deepEqual(withLine("position: role-coordination deviates: jobs apply status in the cockpit"), []);
+  assert.deepEqual(withLine("position: none (no page covers how the knowledge base is synthesized)"), []);
+  assert.deepEqual(withLine(""), ['no "position: <slug> conforms", "position: <slug> deviates: <reason>" or "position: none (<why>)" line']);
+  assert.deepEqual(withLine("position: role-coordination maybe"), ['position line must read "position: <slug> conforms", "position: <slug> deviates: <reason>" or "position: none (<why>)": position: role-coordination maybe']);
+  assert.deepEqual(withLine("position: ghost conforms"), ['position "ghost" has no page in docs/prior-art/private/positions']);
+  assert.deepEqual(checkAdrText(`# 0017 T\n\n${section(github(), social, ["position: ghost conforms"])}`, { cardExists, positionRequired: true, positionExists: null }), []);
+  assert.deepEqual(checkAdrText(`# 0017 T\n\n${section('no prior art: 2026-10-18 github: "a"; x: "b"')}`, { cardExists, positionRequired: true, positionExists: null }), ['no "position: <slug> conforms", "position: <slug> deviates: <reason>" or "position: none (<why>)" line']);
+});
+
+test("the folder check asks for the position line from 0017 on and checks the slug where the pages exist", () => {
+  const ok = section('no prior art: 2026-10-18 github: "a"; x: "b"');
+  const { dir, cards: cardsDir } = adrDir({ "0016-old.md": `# o\n\n${ok}`, "0017-new.md": `# n\n\n${ok}`, "0018-cited.md": `# c\n\n${section('no prior art: 2026-10-18 github: "a"; x: "b"', ["position: thing conforms"])}` });
+  assert.deepEqual(checkAdrFolder(dir, cardsDir).map((problem) => `${problem.file} ${problem.error}`), ['0017-new.md no "position: <slug> conforms", "position: <slug> deviates: <reason>" or "position: none (<why>)" line']);
+  mkdirSync(join(cardsDir, "private", "positions"), { recursive: true });
+  assert.deepEqual(checkAdrFolder(dir, cardsDir).map((problem) => `${problem.file} ${problem.error}`).filter((line) => line.startsWith("0018")), ['0018-cited.md position "thing" has no page in docs/prior-art/private/positions']);
+  writeFileSync(join(cardsDir, "private", "positions", "thing.md"), "---\ntitle: t\n---\n");
+  assert.deepEqual(checkAdrFolder(dir, cardsDir).map((problem) => problem.file), ["0017-new.md"]);
+});
+
 function adrDir(files) {
   const root = tempDir("tedy-adr-");
   const dir = join(root, "adr");

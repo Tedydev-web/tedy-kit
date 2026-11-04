@@ -57,6 +57,8 @@ Every ADR from 0009 on has a `## Prior art` section, and every `feat`/`fix` comm
   - <evidence> "<short verbatim excerpt>"
   - Lesson: <one line>
   - Taken: <where> | Not taken: <why>
+
+position: <slug> conforms | position: <slug> deviates: <reason> | position: none (<why>)   (ADR 0017 on)
 ```
 
 Evidence is one of: `https://github.com/<o>/<r>/blob/<40-hex sha>/<path>#L<n>` (or `#L<n>-L<m>`, optionally `?plain=1` before it); `https://github.com/<o>/<r>/issues/<n>` or `/pull/<n>`; a web or social URL (YouTube with `t=`); a local `path:line`; a command with its version in backticks and parentheses. Paid installed sources use the license `proprietary (installed)`, point to `path:line` and carry no quoted text.
@@ -115,6 +117,47 @@ strength: <measured | code | multi-source | single-source | opinion>
 ```
 
 `strength` is optional on older notes and rated on every new one. Within a domain, the index lists entries from the strongest evidence down: measured results first; then code, which every card counts as; then findings several independent sources agree on; then a single source; then opinion. Verified entries come before unverified ones of the same strength.
+
+A note also carries `positions: <slug>, <slug>` naming the position pages it bears on, or `positions: none`. The field is required on a note read after a page's last review that shares one of the page's domains, so a new finding cannot sit unseen beside the page it contradicts.
+
+## Positions
+
+A position page answers one recurring design question with the best current method, so a kit change starts from a decided answer instead of re-reading every note. Pages live in `docs/prior-art/private/positions/<slug>.md`, because they cite private notes. The private index lists them first.
+
+```
+---
+title: <the best current method, stated as a claim>
+question: <the design question, one line>
+domains: <domain>, <domain>
+ring: <adopt | trial | assess | hold>
+certainty: <high | moderate | low | very-low> (<the downgrades: bias, inconsistency, indirectness, imprecision>)
+reviewed: <YYYY-MM-DD of the last full review>
+living: <yes, until <exit condition> | no>
+kit-status: <conforms (ADR NNNN) | deviates (ADR NNNN: reason) | not-applicable>
+---
+
+## Context and forces
+## Recommendation and consequences   (including when not to use it)
+## Options ranked                     (one row per option: ring, one-line reason)
+## Known uses                         (one bullet per real project or vendor named in a note)
+## Derived from                       (- `<note slug>`: the fact it contributes)
+## Against / dissent                  (each disagreeing note and why it did not win, or "none found" plus two quoted queries)
+## Not yet incorporated
+## Moves                              (one dated line per ring, certainty or kit-status change and its evidence)
+```
+
+Rules:
+- `adopt` needs at least 3 known uses, one of them measured or in production. `trial` needs 1. Otherwise use `assess`. `hold` means start nothing new on it. Certainty is graded apart from the ring, because strong evidence can still back a weak recommendation.
+- Write a page when a question recurs in the kit: an ADR opens on it, or several notes answer it. Keep one page per question. Replace a page by writing a new one and naming the old one in its first Moves line.
+- Every cited note names the page in its `positions:` line. A ring move needs new evidence and the user's approval; the lint marks a page pending, never moves it.
+- `node plugin/scripts/prior-art-index.mjs check` exits 1 while a page is pending, which happens when:
+  - a note names the page but the page cites it nowhere;
+  - a cited note was read after the page's review;
+  - a note in the page's domain read after the review has no `positions:` line;
+  - the dissent section is empty;
+  - the ring gate fails.
+  `plugin/tests/positions.test.mjs` runs the same lint on this machine's pages.
+- From ADR 0017 on, the `## Prior art` section holds one line: `position: <slug> conforms`, `position: <slug> deviates: <reason>` or `position: none (<why>)`. The slug is checked against the pages where they exist.
 
 ## Searching every channel
 
