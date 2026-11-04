@@ -1,7 +1,14 @@
 const REVERT = /^Revert\b/;
 const LINK = /\bOP#(\d+)\b|\/work_packages\/(\d+)\b/g;
 
-export const linkedIds = (text) => [...new Set([...String(text ?? "").matchAll(LINK)].map((match) => Number(match[1] ?? match[2])))];
+const KIT_BODY_HEADER = /^OP#(\d+)\r?\n\r?\nTask read at /;
+
+export const linkedIds = (text) => {
+  const body = String(text ?? "");
+  const header = body.match(KIT_BODY_HEADER);
+  if (header) return [Number(header[1])];
+  return [...new Set([...body.matchAll(LINK)].map((match) => Number(match[1] ?? match[2])))];
+};
 
 export function flowOf(tracker) {
   if (tracker.flow) return tracker.flow;

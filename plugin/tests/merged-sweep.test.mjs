@@ -29,6 +29,12 @@ test("linked ids come from OP#id and work package links in the PR body, once eac
   assert.deepEqual(linkedIds(null), []);
 });
 
+test("a kit-written PR body links only the package in its header, not packages its copied description names", () => {
+  const body = "OP#21298\n\nTask read at 2026-11-04T09:00:00Z\n\n## Cart total\n\nDepends on OP#21300; see https://task.example.com/work_packages/21301\n";
+  assert.deepEqual(linkedIds(body), [21298]);
+  assert.deepEqual(linkedIds(body.replaceAll("\n", "\r\n")), [21298]);
+});
+
 test("only the user's own packages move, each to what all its PRs say, and the rest are skipped with the reason", () => {
   const gathered = [
     entry(wp(1, "Task", "Merged/Code Review"), [pr(1, "merged")]),
