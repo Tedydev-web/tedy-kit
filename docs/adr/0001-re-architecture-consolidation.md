@@ -16,4 +16,4 @@ Status: accepted (2026-10-17)
 - Integrations kept: GitHub through `gh`, OpenProject over REST, Google Docs and Figma over their APIs. A local Markdown PRD provider and a GitHub Issues tracker are planned and deferred. Notion, Linear, Jira and Penpot are out of scope.
 
 ## What it avoids
-Personal data in the shared engine, unreleased edits in live sessions, and writes that bypass a gate because they were wrapped in another command.
+Personal data in the shared engine, unreleased edits in live sessions, and writes that bypass a gate because they were wrapped in another command (only the wrapped forms the gate can read; a write from a script file still passes, as the README's gate limits say).

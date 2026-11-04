@@ -67,7 +67,7 @@ The gates keep an honest but careless agent from publishing, merging, rewriting 
 | `gates.publishQuote` | off | Refuses a `github-write.mjs` post, reply or edit until the exact body was quoted to the user after its last change |
 | `gates.publishApproval` | `"ask"` | `"answer"` lets each kit script write only with a one-use ticket from an approving AskUserQuestion answer, so Claude Code shows no second prompt; see [Approval prompts](#approval-prompts) |
 
-A broken `config.json`, or a profile with `rules.md` and no `config.json`, turns every personal gate on and is reported at session start until `profile.mjs doctor` reports it ok. The five PreToolUse gates run with `onFailure: "block"`: a gate that cannot start, crashes or times out stops the tool call. A gate that catches its own error allows, except git-gate on a publish command and the profile guard, which ask; in `gates.publishApproval: "answer"` git-gate refuses such a publish instead.
+A broken `config.json`, or a profile with `rules.md` and no `config.json`, turns every personal gate on and is reported at session start until `profile.mjs doctor` reports it ok. The five PreToolUse gates run with `onFailure: "block"`: a gate that cannot start, crashes or times out stops the tool call. A gate that catches its own error does not pass the call silently, except the no-comments gate, which allows: tracker-token-gate refuses, role-gate and the profile guard ask, and git-gate refuses a command it cannot read and asks on any other error; in `gates.publishApproval: "answer"` git-gate refuses a publish instead of asking.
 
 Known limitations, by design or left out by the threat model:
 
