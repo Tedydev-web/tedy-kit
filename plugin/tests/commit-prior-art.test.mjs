@@ -84,7 +84,7 @@ test("a named pushed commit is checked against its corrected trailer instead of 
   assert.match(checkCommits(repo).map((problem) => problem.error).join("\n"), /n\/a is for fix commits only/);
   assert.deepEqual(checkCommits(repo, new Map([[sha, "https://github.com/o/r/issues/3"]])), []);
   assert.match(checkCommits(repo, new Map([[sha, "n/a (still internal)"]])).map((problem) => problem.error).join("\n"), /n\/a is for fix commits only/);
-  assert.deepEqual([...TRAILER_CORRECTIONS.keys()], ["5f471ed633c0709e48e974e13660a2c9fb9ffa90"]);
+  assert.deepEqual([...TRAILER_CORRECTIONS.keys()], ["5f471ed633c0709e48e974e13660a2c9fb9ffa90", "9069df620b984a25c26e8d67c3c991221e7abf6c"]);
 });
 
 test("the kit's own commits since its latest tag carry their trailers", () => {

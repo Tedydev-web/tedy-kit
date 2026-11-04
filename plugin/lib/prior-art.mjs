@@ -14,6 +14,7 @@ export const GRANDFATHERED = new Set([
 ]);
 export const TRAILER_CORRECTIONS = new Map([
   ["5f471ed633c0709e48e974e13660a2c9fb9ffa90", "https://platform.openai.com/docs/api-reference/chat"],
+  ["9069df620b984a25c26e8d67c3c991221e7abf6c", "https://code.claude.com/docs/en/tools-reference"],
 ]);
 export const SOCIAL = new Set(["x", "reddit", "youtube", "facebook"]);
 const CHANNELS = new Set(["github", "web", "local", ...SOCIAL]);
