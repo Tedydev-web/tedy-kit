@@ -1,6 +1,6 @@
 # 0003: One role per session, one list of what waits on the user
 
-Status: accepted (2026-10-09 to 2026-10-15, recorded 2026-10-17); the pending-list part is superseded by 0008
+Status: accepted (2026-10-09 to 2026-10-15, recorded 2026-10-17); the pending-list part is superseded by 0008; the role-per-session part is superseded by 0015 in a map with `jobs`, and removed in full when 0015's legacy removal lands
 
 ## Context
 - Several sessions (PM, Dev, review) wrote to the same tracker, Doc and Figma file, and the record drifted.

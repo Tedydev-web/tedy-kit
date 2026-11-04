@@ -14,6 +14,7 @@
     "docs/adr/0012-work-package-status-follows-pull-requests.md": 2,
     "docs/adr/0013-surface-fit-checked-against-a-committed-inventory.md": 3,
     "docs/adr/0014-kit-artifacts-meet-quota-techniques.md": 3,
+    "docs/adr/0015-jobs-replace-standing-role-sessions.md": 3,
     "docs/prior-art/affaan-m-ecc.md": 3,
     "docs/prior-art/agent-ready-template.md": 1,
     "docs/prior-art/agent-skill-eval.md": 3,
