@@ -27,6 +27,8 @@ Status: accepted (built 2026-10-22 in ceec792, recorded 2026-11-04)
 
 no social prior art: 2026-11-04 x: "claude code approval ticket bypassPermissions publish"; youtube: "claude code approve before publish permission ask rule hook"
 
+position: approval-to-absent-user conforms
+
 ## Consequences
 - The default mode keeps two prompts per publish; the knowledge base's approval position ranks that as the stronger shape.
 - A user who switches to answer mode must keep `gates.ghWrites` on and avoid `bypassPermissions` if writes outside the kit scripts are possible.

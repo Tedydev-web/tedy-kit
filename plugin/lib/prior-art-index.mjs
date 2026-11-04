@@ -130,7 +130,7 @@ export function run(argv = process.argv.slice(2), repo = fileURLToPath(new URL("
   for (const error of errors) console.error(error);
   if (errors.length) process.exit(1);
   const pages = kitPositions(repo);
-  const pending = positionErrors(pages, allEntries.filter((entry) => entry.kind === "note"));
+  const pending = existsSync(join(repo, "docs/prior-art/private/positions")) ? positionErrors(pages, allEntries.filter((entry) => entry.kind === "note")) : [];
   const targets = [[join(repo, "docs/prior-art/index.md"), renderIndex(publicEntries)]];
   if (existsSync(join(repo, "docs/prior-art/private"))) targets.push([join(repo, "docs/prior-art/private/index.md"), renderIndex(allEntries, { link: privateLink, title: "Prior-art knowledge index (private, this machine only)", preface: renderPositions(pages, pending) })]);
   let stale = 0;
