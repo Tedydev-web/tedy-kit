@@ -128,13 +128,13 @@
     },
     {
       "id": "gates-fail-closed",
-      "text": "The five PreToolUse gates block the tool call when their hook fails.",
+      "text": "The six PreToolUse gates block the tool call when their hook fails.",
       "since": 1,
       "scope": "repo",
       "reason": "A gate that crashes open lets the unapproved action through.",
       "class": "platform",
       "problems": ["S26"],
-      "enforced": { "kind": "test", "file": "plugin/tests/hooks.test.mjs", "title": "the five PreToolUse gates block the tool call when their hook fails" },
+      "enforced": { "kind": "test", "file": "plugin/tests/hooks.test.mjs", "title": "the six PreToolUse gates block the tool call when their hook fails" },
       "notCovered": "Whether the installed Claude Code honours onFailure is re-probed by run-probes.sh, not by npm test.",
       "approved": "2026-10-28"
     },

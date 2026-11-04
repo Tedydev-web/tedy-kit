@@ -30,6 +30,12 @@
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/tracker-token-gate.mjs\"", "timeout": 15, "onFailure": "block" }
         ]
+      },
+      {
+        "matcher": "^Bash$",
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/reviewer-gate.mjs\"", "timeout": 15, "onFailure": "block" }
+        ]
       }
     ],
     "PostToolUse": [
