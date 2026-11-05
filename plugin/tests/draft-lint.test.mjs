@@ -127,6 +127,20 @@ test("a PR comment refuses a Markdown image, a bare @handle and credential-shape
   ]) assert.deepEqual(lintComment(body, "en"), [], body);
 });
 
+test("a mention, credential-shaped text or non-Latin text inside a code span of any backtick length is not refused, and an unclosed backtick hides nothing", () => {
+  for (const body of [
+    "The guard matches `` @a`b `` in the template.",
+    "The fixture keeps `password: \"Password1\"` in plain text.",
+    "The fixture keeps ``token: \"s3cr3t-value-123\"`` in plain text.",
+    "The label `` 中`文 `` stays in the header.",
+  ]) assert.deepEqual(lintComment(body, "en"), [], body);
+  assert.deepEqual(lintChatComment("The label `` 中`文 `` stays in the header.", "doc", "en").filter((problem) => /non-Latin/.test(problem)), []);
+  for (const [body, pattern] of [
+    ["The `x total ignores refunds, as @minh noted.", /@minh.*backticks/],
+    ["The ``fixture` keeps token: \"s3cr3t-value-123\" in plain text.", /credential/],
+  ]) assert.ok(lintComment(body, "en").some((problem) => pattern.test(problem)), body);
+});
+
 test("English comments follow the English rules: a plain sentence first, no greeting or thanks", () => {
   assert.deepEqual(lintComment("The toast still uses the generic copy, not the PRD wording.", "en"), []);
   assert.deepEqual(lintComment("The total ignores refunds.\n\nPRD EPIC 03 · UC_CT_04 BR2:\n> Refunds lower the total.", "en"), []);

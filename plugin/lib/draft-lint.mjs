@@ -70,8 +70,33 @@ export function diffLines(diffText) {
   return files;
 }
 
+function withoutCodeSpans(text, filler = "``") {
+  const runs = [...text.matchAll(/`+/g)].map((match) => [match.index, match[0].length]);
+  const byLength = new Map();
+  runs.forEach(([, length], at) => {
+    if (!byLength.has(length)) byLength.set(length, { at: [], next: 0 });
+    byLength.get(length).at.push(at);
+  });
+  let kept = "";
+  let index = 0;
+  for (let at = 0; at < runs.length; ) {
+    const [start, length] = runs[at];
+    const same = byLength.get(length);
+    while (same.next < same.at.length && same.at[same.next] <= at) same.next += 1;
+    if (same.next === same.at.length) {
+      at += 1;
+      continue;
+    }
+    const close = same.at[same.next];
+    kept += text.slice(index, start) + filler;
+    index = runs[close][0] + length;
+    at = close + 1;
+  }
+  return kept + text.slice(index);
+}
+
 function withoutSpans(text) {
-  return text.replace(/`[^`]*`/g, "``").replace(/"[^"]*"/g, '""').replace(/“[^”]*”/g, '""');
+  return withoutCodeSpans(text).replace(/"[^"]*"/g, '""').replace(/“[^”]*”/g, '""');
 }
 
 export function lintComment(body, lang) {
@@ -82,13 +107,14 @@ export function lintComment(body, lang) {
   if (text.includes("```")) problems.push("no code block in a comment");
   if (text.length > MAX_BODY) problems.push(`body is ${text.length} characters; keep it at or under ${MAX_BODY}`);
   if (text.includes("![")) problems.push("no Markdown image in a comment");
-  const mention = text.replace(/`[^`]*`/g, "``").match(MENTION);
+  const code = withoutCodeSpans(text);
+  const mention = code.match(MENTION);
   if (mention) problems.push(`"${mention[0]}" notifies that person; drop it or put it in backticks`);
-  if (text.split("\n").some(secretShaped)) problems.push("credential-shaped text in the comment; remove it");
+  if (code.split("\n").some(secretShaped)) problems.push("credential-shaped text in the comment; remove it");
   if (!first.trimEnd().endsWith(rules.ending)) problems.push(`the first line must end with "${rules.ending}"`);
   if (/[.!?]\s+\S/.test(withoutSpans(first.trim()).slice(0, -rules.ending.length))) problems.push("the first line must be one sentence");
   if (rules.fillers.test(text)) problems.push(rules.fillerHint);
-  if (FOREIGN_SCRIPT.test(text.replace(/`[^`]*`/g, ""))) problems.push("non-Latin characters outside backticks");
+  if (FOREIGN_SCRIPT.test(withoutCodeSpans(text, ""))) problems.push("non-Latin characters outside backticks");
   rest.forEach((line, offset) => {
     const previous = offset === 0 ? first : rest[offset - 1];
     if (!line.trim()) return;
@@ -114,7 +140,7 @@ export function lintChatComment(text, channel, lang) {
   if (body.includes("```")) problems.push("no code block in a comment");
   if (body.length > MAX_CHAT) problems.push(`comment is ${body.length} characters; keep it at or under ${MAX_CHAT}`);
   if (rules.fillers.test(body)) problems.push(rules.fillerHint);
-  if (FOREIGN_SCRIPT.test(body.replace(/`[^`]*`/g, ""))) problems.push("non-Latin characters outside backticks");
+  if (FOREIGN_SCRIPT.test(withoutCodeSpans(body, ""))) problems.push("non-Latin characters outside backticks");
   if (channel === "figma" && !/^@\S/.test(body)) problems.push("a Figma comment opens with the @handle of whoever owns the fix");
   if (channel === "doc" && /(^|\s)@\S/.test(body)) problems.push("a Doc comment tags nobody");
   const prose = body.replace(/"[^"]*"|“[^”]*”/g, "");
