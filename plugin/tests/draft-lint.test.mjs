@@ -110,6 +110,23 @@ test("chat comments: Figma opens with a handle, Doc tags nobody, both stay short
   assert.ok(lintChatComment("@a Anh ơi xem giúp e", "figma", "vi").some((problem) => /openers/.test(problem)));
 });
 
+test("a PR comment refuses a Markdown image, a bare @handle and credential-shaped text, and keeps code spans, emails and commit shas", () => {
+  for (const [body, pattern] of [
+    ["The banner shows ![x](https://example.com/a.png) instead of the PRD copy.", /no Markdown image/],
+    ["The total ignores refunds, as @minh noted.", /@minh.*backticks/],
+    ["@minh the total ignores refunds.", /@minh.*backticks/],
+    ["The call sends Bearer abcdefghijklmnopqrstuvwxyz012345 in the URL.", /credential/],
+    ["The fixture keeps token: \"s3cr3t-value-123\" in plain text.", /credential/],
+    ["The config holds ghp_abcdefghijklmnopqrstuvwxyz0123 in the repo.", /credential/],
+  ]) assert.ok(lintComment(body, "en").some((problem) => pattern.test(problem)), body);
+  for (const body of [
+    "The import of `@scope/pkg` pulls the whole bundle.",
+    "The author field still reads ops@example.com instead of the PRD sender.",
+    "Commit 0123456789abcdef0123456789abcdef01234567 already moved this check.",
+    "The image alt text is missing on the banner.",
+  ]) assert.deepEqual(lintComment(body, "en"), [], body);
+});
+
 test("English comments follow the English rules: a plain sentence first, no greeting or thanks", () => {
   assert.deepEqual(lintComment("The toast still uses the generic copy, not the PRD wording.", "en"), []);
   assert.deepEqual(lintComment("The total ignores refunds.\n\nPRD EPIC 03 · UC_CT_04 BR2:\n> Refunds lower the total.", "en"), []);

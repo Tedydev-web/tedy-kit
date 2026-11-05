@@ -7,6 +7,7 @@ import { UC_ID } from "./prd-section.mjs";
 import { chatLanguage } from "./labels.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { nodeId } from "./source-pin-links.mjs";
+import { secretShaped } from "./public-scan.mjs";
 import { describePin, pinSourcesOf, recordPins, writeReadPins } from "./source-pins.mjs";
 
 export const MAX_BODY = 360;
@@ -15,6 +16,7 @@ const HEADER = /^# PR #(\d+)(:| —) comment line by line \(head ([0-9a-f]{7,40}
 const SECTION = /^## (\d+)\. `([^`]+):(\d+)`\s*$/gm;
 const PRD_HEADER = new RegExp(`^PRD EPIC \\d{2} · ${UC_ID.source} .+:$`);
 const FOREIGN_SCRIPT = /[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}]/u;
+const MENTION = /(?<![\w.@/+-])@[A-Za-z0-9][\w-]*/;
 const COMMENT_RULES = {
   vi: { ending: "ạ.", fillers: /anh ơi|cảm ơn|thank/i, fillerHint: 'drop openers and fillers such as "Anh ơi" or "cảm ơn"', userSees: 'vd "app hiện đang theo Figma"' },
   en: { ending: ".", fillers: /^\W*(hi|hey|hello)\b|\bthanks?\b|thank you/i, fillerHint: 'drop openers and fillers such as "Hi" or "thanks"', userSees: 'e.g. "the app follows Figma today"' },
@@ -79,6 +81,10 @@ export function lintComment(body, lang) {
   const [first, ...rest] = text.split("\n");
   if (text.includes("```")) problems.push("no code block in a comment");
   if (text.length > MAX_BODY) problems.push(`body is ${text.length} characters; keep it at or under ${MAX_BODY}`);
+  if (text.includes("![")) problems.push("no Markdown image in a comment");
+  const mention = text.replace(/`[^`]*`/g, "``").match(MENTION);
+  if (mention) problems.push(`"${mention[0]}" notifies that person; drop it or put it in backticks`);
+  if (text.split("\n").some(secretShaped)) problems.push("credential-shaped text in the comment; remove it");
   if (!first.trimEnd().endsWith(rules.ending)) problems.push(`the first line must end with "${rules.ending}"`);
   if (/[.!?]\s+\S/.test(withoutSpans(first.trim()).slice(0, -rules.ending.length))) problems.push("the first line must be one sentence");
   if (rules.fillers.test(text)) problems.push(rules.fillerHint);

@@ -34,13 +34,15 @@ function emailHit(line) {
   return false;
 }
 
+export const secretShaped = (line) => TOKEN_SHAPE.test(line.replace(PINNED_GITHUB_SHA, "$1").replace(LONG_HEX, "")) || QUOTED_SECRET.test(line) || KEY_MATERIAL.test(line);
+
 function lineRules(line, denylist) {
   const rules = [];
   if (HOME_PATH.test(line)) rules.push("home-path");
   if (emailHit(line)) rules.push("email");
   const unpinned = line.replace(PINNED_GITHUB_SHA, "$1");
   const withoutHex = unpinned.replace(LONG_HEX, "");
-  if (TOKEN_SHAPE.test(withoutHex) || QUOTED_SECRET.test(line) || KEY_MATERIAL.test(line)) rules.push("secret");
+  if (secretShaped(line)) rules.push("secret");
   if (withoutHex !== unpinned) rules.push("long-hex");
   for (const entry of denylist) if (entry.pattern.test(line)) rules.push(entry.rule);
   return rules;
