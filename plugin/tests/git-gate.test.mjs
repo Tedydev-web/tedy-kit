@@ -20,6 +20,12 @@ test("classify recognises git and gh actions through env vars and -C", () => {
   assert.deepEqual(classify("git push origin x", "/w"), { kind: "push", dir: "/w", args: ["origin", "x"] });
   assert.deepEqual(classify("FOO=1 git -C sub commit -am msg", "/w"), { kind: "commit", dir: "/w/sub", all: true });
   assert.deepEqual(classify("git -c core.x=y push", "/w"), { kind: "push", dir: "/w", args: [] });
+  for (const command of ["2>&1 git push origin x", "</dev/null git push origin x", "< /dev/null git push origin x", "2> err git push origin x", "&>/dev/null git push origin x", "FOO=1 >out git push origin x", "(2>&1 git push origin x)", "sudo 2>&1 git push origin x", "env 2>/dev/null git push origin x"]) {
+    assert.equal(classify(command, "/w").kind, "push", command);
+  }
+  for (const command of ["2>&1 gh pr merge 12", "</dev/null gh pr merge 12", ">/tmp/o gh pr edit 12 --title x"]) {
+    assert.equal(classify(command, "/w").kind, "github-write", command);
+  }
   assert.deepEqual(classify("cd ~/kit", "/w"), { kind: "cd", dir: join(homedir(), "kit") });
   assert.deepEqual(classify("cd", "/w"), { kind: "cd", dir: homedir() });
   assert.equal(classify("gh pr create --fill", "/w").kind, "pr-create");

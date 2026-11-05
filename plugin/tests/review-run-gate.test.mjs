@@ -140,6 +140,9 @@ test("gmake, a makefile, an attached directory, a node preload or test path insi
     ["PATH=$PWD/bin:$PATH node -v", wt],
     ["PATH=${PWD}/bin node -v", wt],
     ["PATH=:/usr/bin node -v", wt],
+    ["</dev/null npm test", wt],
+    ["2>&1 make test", wt],
+    ["2> err node -v ./src/a.ts", wt],
     [`${wt}/node_modules/.bin/npm test`, setup.repo],
     [`${wt}/bin/make test`, setup.repo],
   ]) {

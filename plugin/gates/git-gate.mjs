@@ -7,7 +7,7 @@ import { ALL_GATES_ON, ask, deny, gateSwitches, logGate, readHookInput } from ".
 import { CLAUDE_SETTINGS } from "../lib/publish-approval-settings.mjs";
 import { resolveMap } from "../lib/project-map.mjs";
 import { shellWords, splitSegments, substitutions, tokenize, walkCommands } from "../lib/shell-segments.mjs";
-import { INTERPRETER, SHELLS, readsUnreadableCode, scriptOperand, variableScriptArguments } from "../lib/shell-program-arguments.mjs";
+import { BARE_REDIRECT, INTERPRETER, REDIRECT, SHELLS, readsUnreadableCode, scriptOperand, variableScriptArguments } from "../lib/shell-program-arguments.mjs";
 import { check as checkQuoted } from "./publish-quote-gate.mjs";
 import { evaluate as trackerToken, trackerHost } from "./tracker-token-gate.mjs";
 
@@ -119,18 +119,30 @@ export function commandTokens(segment, keep) {
   return tokens.length && tokens[0].includes("/") ? [basename(tokens[0]), ...tokens.slice(1)] : tokens;
 }
 
+function redirectLength(tokens, at) {
+  const token = tokens[at] ?? "";
+  if (/^\d*<<(?!<)/.test(token)) return 0;
+  if (/^\d+$/.test(token) && /^[<>]/.test(tokens[at + 1] ?? "")) return 1 + redirectLength(tokens, at + 1);
+  if (BARE_REDIRECT.test(token)) return 2;
+  return REDIRECT.test(token) ? 1 : 0;
+}
+
 function strippedTokens(segment, keep = new Set()) {
   const all = tokenize(segment);
   let at = 0;
   for (;;) {
-    while (at < all.length && (ENV_ASSIGNMENT.test(all[at]) || /^[({!]+$/.test(all[at]))) at += 1;
-    if (at < all.length) all[at] = all[at].replace(/^[({!]+/, "");
+    for (let skip = 1; skip; at += skip) {
+      while (at < all.length && (ENV_ASSIGNMENT.test(all[at]) || /^[({!]+$/.test(all[at]))) at += 1;
+      if (at < all.length) all[at] = all[at].replace(/^[({!]+/, "");
+      skip = redirectLength(all, at);
+    }
     const flags = keep.has(basename(all[at] ?? "")) ? undefined : WRAPPERS.get(basename(all[at] ?? ""));
     if (!flags) break;
     let positionals = WRAPPER_ARGUMENTS.get(basename(all[at])) ?? 0;
     at += 1;
     while (at < all.length) {
       if (ENV_ASSIGNMENT.test(all[at])) at += 1;
+      else if (redirectLength(all, at)) at += redirectLength(all, at);
       else if (all[at].startsWith("-")) at += flags.includes(all[at]) ? 2 : 1;
       else if (positionals > 0) {
         positionals -= 1;
