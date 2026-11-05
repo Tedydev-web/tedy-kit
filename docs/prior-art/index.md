@@ -4,18 +4,18 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
 
 ## Contents
 
-- agent-skills: 14 entries
+- agent-skills: 15 entries
 - ai-models: 3 entries
 - cost: 18 entries
 - evals: 12 entries
 - governance: 12 entries
-- guardrails: 9 entries
+- guardrails: 11 entries
 - platform: 8 entries
-- qa: 1 entry
+- qa: 2 entries
 - release: 7 entries
 - research: 1 entry
-- security: 1 entry
-- testing: 9 entries
+- security: 2 entries
+- testing: 10 entries
 
 ## agent-skills: writing skills, agents, plugins and their instructions
 
@@ -119,6 +119,13 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - Patch releases add surfaces
   - Merging each extraction with the previous one keeps every value ever seen, so a removed surface never shows up as drift (S27)
   - An extraction that loses more than half of a field's values fails instead of passing as an upstream removal, though its message says 30% where the code tests 50% (S27)
+- [unclebob/ub-mode](ub-mode.md): someone proposes adopting a famous author's principle checklist skill, CRAP/duplication/mutation thresholds, or "push to main" autonomy in an agent coding workflow
+  - Prose-only gate
+  - Stub-out and mutation checks
+  - Fix Root Causes
+  - Compression without trigger or reason loses the operative step (Attack the Premise against its poteto source)
+  - Push to main, agent-chosen disk cleanup and "Delete dead code"
+  - Threshold drift between skill and tools (`< 10` and "eliminate ≥ 0.8" in the skill against "5–30 worth a look" and "candidates … worth review" in the tools); at 100% coverage CRAP equals CC, so `< 10` forces a split of any function with CC ≥ 10
 - [wshobson/agents](wshobson-agents.md): you keep a large or multi-harness agent kit consistent with mechanical drift checks, or label which of your eval layers are validated
   - Check every number a doc quotes against the thing it counts, because quoted counts go stale on every change (#676)
   - Give every lint or test failure a `Fix:` line that says what to do
@@ -508,6 +515,18 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - A run with skips is not green, and the count comes from the runner's summary
   - Drive every gate with the payload Claude Code sends (v3.38.0)
   - P1 (test written and run red before the fix)
+- [BridgLabs/opencodereview](bridglabs-opencodereview.md): you decide how an AI reviewer is sandboxed, how its citations are checked mechanically, which revision its rule files come from, or whether its comments may post without a person
+  - Check every reviewer citation mechanically (exact quote on the cited line, nearest within 3, tie fails), one repair, then drop with a warning and never call the review clean
+  - Compare the reviewer's list of read files with the diff's file list in the same validator
+  - Read the repository's rule files from the PR's base, never its head, so a PR cannot loosen the rules it is reviewed against
+  - Keep PR-head AI config files from loading as instructions
+  - Neutralise images, bare mentions and credential-shaped text in drafted comments
+  - The sandbox is the reviewer's boundary and the hook is friction
+  - Do not run PR code in the review's environment
+  - Never auto-post under a person's name, and never let the skill text claim an approval the code skips
+  - Incremental re-review with unresolved findings carried forward
+  - Dedupe by same file and same body at any line, never by `path:line`
+  - Benchmark under the product's own defaults, and pre-register criteria with run noise stated
 - [button-inc/batten](batten.md): an agent might edit tests until they pass instead of fixing the code
   - Replay the base form of each changed test against the new code, and send a failure to the owner as a question rather than a red
   - Ratchet the test count and the skip count against the base
@@ -576,6 +595,13 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - Numbers that docs repeat are derived from source and fail CI on drift (S6)
   - A skill naming its enforcing check is only as good as that check existing (S23, S6)
   - Copies of one hook drift (S5)
+- [unclebob/ub-mode](ub-mode.md): someone proposes adopting a famous author's principle checklist skill, CRAP/duplication/mutation thresholds, or "push to main" autonomy in an agent coding workflow
+  - Prose-only gate
+  - Stub-out and mutation checks
+  - Fix Root Causes
+  - Compression without trigger or reason loses the operative step (Attack the Premise against its poteto source)
+  - Push to main, agent-chosen disk cleanup and "Delete dead code"
+  - Threshold drift between skill and tools (`< 10` and "eliminate ≥ 0.8" in the skill against "5–30 worth a look" and "candidates … worth review" in the tools); at 100% coverage CRAP equals CC, so `< 10` forces a split of any function with CC ≥ 10
 
 ## platform: Claude Code and other hosts: their surfaces and compatibility
 
@@ -643,6 +669,18 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - Zero selected work is not a clean pass (#1454, #1195)
   - Do not ship a separate binary, provider config and multi-host manifests for review
   - Secret paths excluded ahead of any include glob
+- [BridgLabs/opencodereview](bridglabs-opencodereview.md): you decide how an AI reviewer is sandboxed, how its citations are checked mechanically, which revision its rule files come from, or whether its comments may post without a person
+  - Check every reviewer citation mechanically (exact quote on the cited line, nearest within 3, tie fails), one repair, then drop with a warning and never call the review clean
+  - Compare the reviewer's list of read files with the diff's file list in the same validator
+  - Read the repository's rule files from the PR's base, never its head, so a PR cannot loosen the rules it is reviewed against
+  - Keep PR-head AI config files from loading as instructions
+  - Neutralise images, bare mentions and credential-shaped text in drafted comments
+  - The sandbox is the reviewer's boundary and the hook is friction
+  - Do not run PR code in the review's environment
+  - Never auto-post under a person's name, and never let the skill text claim an approval the code skips
+  - Incremental re-review with unresolved findings carried forward
+  - Dedupe by same file and same body at any line, never by `path:line`
+  - Benchmark under the product's own defaults, and pre-register criteria with run noise stated
 
 ## release: versioning, changelogs, distribution and published docs
 
@@ -720,6 +758,18 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
 
 ## security: secrets, permissions, supply chain and attack surface
 
+- [BridgLabs/opencodereview](bridglabs-opencodereview.md): you decide how an AI reviewer is sandboxed, how its citations are checked mechanically, which revision its rule files come from, or whether its comments may post without a person
+  - Check every reviewer citation mechanically (exact quote on the cited line, nearest within 3, tie fails), one repair, then drop with a warning and never call the review clean
+  - Compare the reviewer's list of read files with the diff's file list in the same validator
+  - Read the repository's rule files from the PR's base, never its head, so a PR cannot loosen the rules it is reviewed against
+  - Keep PR-head AI config files from loading as instructions
+  - Neutralise images, bare mentions and credential-shaped text in drafted comments
+  - The sandbox is the reviewer's boundary and the hook is friction
+  - Do not run PR code in the review's environment
+  - Never auto-post under a person's name, and never let the skill text claim an approval the code skips
+  - Incremental re-review with unresolved findings carried forward
+  - Dedupe by same file and same body at any line, never by `path:line`
+  - Benchmark under the product's own defaults, and pre-register criteria with run noise stated
 - [karanb192/claude-code-hooks](claude-code-hooks.md): you add, merge or test a PreToolUse gate, or weigh one dispatcher process against one Node process per gate
   - One dispatcher process for the PreToolUse gates
   - Vendored copies pinned byte-identical by a test
@@ -830,3 +880,10 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - Rules reach subagents only through the dispatch prompt (#237)
   - Description trap
   - Prefer a gate over prose (#384)
+- [unclebob/ub-mode](ub-mode.md): someone proposes adopting a famous author's principle checklist skill, CRAP/duplication/mutation thresholds, or "push to main" autonomy in an agent coding workflow
+  - Prose-only gate
+  - Stub-out and mutation checks
+  - Fix Root Causes
+  - Compression without trigger or reason loses the operative step (Attack the Premise against its poteto source)
+  - Push to main, agent-chosen disk cleanup and "Delete dead code"
+  - Threshold drift between skill and tools (`< 10` and "eliminate ≥ 0.8" in the skill against "5–30 worth a look" and "candidates … worth review" in the tools); at 100% coverage CRAP equals CC, so `< 10` forces a split of any function with CC ≥ 10

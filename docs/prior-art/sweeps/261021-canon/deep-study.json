@@ -1439,6 +1439,26 @@
     "S12"
    ],
    "reason": "Added 2026-11-03 by the knowledge base's study of the sources the user's master plan names: asymmetric filtering of review findings, comment anchors matched verbatim to the diff, and a per-file reviewed-or-skipped tally."
+  },
+  {
+   "repo": "BridgLabs/opencodereview",
+   "stratum": "config",
+   "commit": "https://github.com/BridgLabs/opencodereview/commit/1a47d4f35f3f87acdd5dd4e1767477628dd27a25",
+   "problems": [
+    "S8",
+    "S26"
+   ],
+   "reason": "Added 2026-11-05 at the user's request: reviewer citations checked mechanically against the head, review rules read from the PR base, and a reviewer that never runs project code; its default auto-posting under the operator's login is the counterexample."
+  },
+  {
+   "repo": "unclebob/ub-mode",
+   "stratum": "config",
+   "commit": "https://github.com/unclebob/ub-mode/commit/3da62bf3fcfd2034de41f30d920d2739e566171f",
+   "problems": [
+    "S10",
+    "S12"
+   ],
+   "reason": "Added 2026-11-05 at the user's request: a prose-only discipline skill with no measured effect, whose compression dropped the operative step of a rule, and whose scoring tools can report green when nothing was checked."
   }
  ]
 }
