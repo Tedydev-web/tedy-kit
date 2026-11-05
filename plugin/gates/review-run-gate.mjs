@@ -88,7 +88,11 @@ function runner(program, args) {
 }
 
 function programDirs(words, prefix, here) {
-  const entries = prefix.filter((token) => token.startsWith("PATH=")).flatMap((token) => token.slice(5).split(":")).filter((entry) => entry && !entry.includes("$"));
+  const entries = prefix
+    .filter((token) => token.startsWith("PATH="))
+    .flatMap((token) => token.slice(5).split(":"))
+    .map((entry) => entry.replace(/^(?:\$PWD|\$\{PWD\}|\$\(pwd\))(?=\/|$)/, here) || here)
+    .filter((entry) => !entry.includes("$"));
   return [...words.filter((word) => word?.includes("/")), ...entries].map((path) => existingDir(resolve(here, expandHome(path))));
 }
 

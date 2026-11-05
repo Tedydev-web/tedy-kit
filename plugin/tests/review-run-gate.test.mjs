@@ -137,6 +137,11 @@ test("gmake, a makefile, an attached directory, a node preload or test path insi
     ["volta run ./bin/node -v", wt],
     [`${wt}/bin/node ${outside}`, setup.repo],
     [`PATH=${wt}/bin node ${outside}`, setup.repo],
+    ["PATH=$PWD/bin:$PATH node -v", wt],
+    ["PATH=${PWD}/bin node -v", wt],
+    ["PATH=:/usr/bin node -v", wt],
+    [`${wt}/node_modules/.bin/npm test`, setup.repo],
+    [`${wt}/bin/make test`, setup.repo],
   ]) {
     const result = verdict(setup, bash(command, cwd));
     assert.ok(result, `${command} in ${cwd}`);
