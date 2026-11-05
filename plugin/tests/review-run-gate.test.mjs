@@ -2,8 +2,8 @@ import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { evaluate } from "../gates/git-gate.mjs";
 import { reviewRunVerdict } from "../gates/review-run-gate.mjs";
@@ -74,6 +74,7 @@ test("both the current directory and every directory flag before -- are checked"
 
 test("corepack, volta run, env -C, make and a node run of a checkout file or of no file are refused in a review checkout", () => {
   const setup = reviewSetup();
+  symlinkSync(join(setup.worktree, "loop.js"), join(setup.worktree, "loop.js"));
   for (const [command, cwd] of [
     ["corepack pnpm test", setup.worktree],
     ["corepack npm test", setup.worktree],
@@ -95,6 +96,10 @@ test("corepack, volta run, env -C, make and a node run of a checkout file or of 
     ["node --run test", setup.worktree],
     ["node -e \"require('./src/a.ts')\"", setup.worktree],
     ["node /usr/lib/node_modules/npm/bin/npm-cli.js test", setup.worktree],
+    [`node ${join(setup.worktree, "loop.js")}`, setup.repo],
+    ["node -v ./src/a.ts", setup.worktree],
+    ["node -h", setup.worktree],
+    ["node --help", setup.worktree],
   ]) {
     const result = verdict(setup, bash(command, cwd));
     assert.ok(result, `${command} in ${cwd}`);
@@ -139,9 +144,15 @@ test("a kit script, a file outside the checkout and corepack or volta housekeepi
   const setup = reviewSetup();
   const outside = join(tempDir("tedy-review-run-outside-"), "probe.mjs");
   writeFileSync(outside, "console.log(1);\n");
+  const loop = join(dirname(outside), "loop.js");
+  symlinkSync(loop, loop);
   for (const [command, cwd] of [
     [`node ${GATE} --help`, setup.worktree],
     [`node ${outside}`, setup.worktree],
+    [`node ${loop}`, setup.worktree],
+    [`node /tmp/${"a".repeat(300)}/x.js`, setup.worktree],
+    ["node -v", setup.worktree],
+    ["node --version", setup.worktree],
     [`env -C ${setup.repo} node src/a.ts`, setup.repo],
     ["corepack enable", setup.worktree],
     ["volta list", setup.worktree],

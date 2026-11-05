@@ -17,6 +17,7 @@ const NODE_PRELOAD_FLAGS = new Set(["-r", "--require", "--import", "--loader", "
 const GLOB_CHAR = /[*?[{]/;
 const STAT_MISSES = new Set(["ENOENT", "ENOTDIR", "EACCES", "ENAMETOOLONG", "ELOOP"]);
 const NODE = /^node(?:js)?[\d.]*$/;
+const NODE_VERSION = new Set(["-v", "--version"]);
 const MANAGER_FILE = /\/node_modules\/(?:npm|pnpm|yarn|corepack|bun)\//;
 const VOLTA_VALUE_FLAGS = new Set(["--node", "--npm", "--pnpm", "--yarn", "--env"]);
 const REVIEW_FOLDER = /\/(?:\.claude\/worktrees|\.worktrees)\/pr-\d+$/;
@@ -27,7 +28,7 @@ function realPath(path) {
   try {
     return realpathSync(path);
   } catch (error) {
-    if (error.code === "ENOENT" || error.code === "ENOTDIR") return resolve(path);
+    if (STAT_MISSES.has(error.code)) return resolve(path);
     throw error;
   }
 }
@@ -86,6 +87,7 @@ function runner(program, args) {
 }
 
 function nodeDirs(args, dirs, here) {
+  if (args.length === 1 && NODE_VERSION.has(args[0])) return [];
   const preloads = flagValues(args, (flag) => NODE_PRELOAD_FLAGS.has(flag), here, fileUrlPath).map(existingDir);
   const { script, inline } = scriptOperand("node", args);
   if (inline || script === undefined || script === "-") {
