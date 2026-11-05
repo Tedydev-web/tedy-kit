@@ -171,8 +171,16 @@ test("gdoc reply, anchor, edit and delete write only with a ticket, once", async
     const w = world({ web: { drive: [thread, own], document: DOCUMENT } });
     w.file("g.md", `${body}\n`);
     const warnings = await lint(w, "draft-lint", ["doc-comment", "g.md", "--doc", "D"]);
-    await onceOnly(w, "gdoc-comments", args, (line) => (command === "delete" ? line : `${body}\n${warnings}${line}`), () => w.writes().length);
+    await onceOnly(w, "gdoc-comments", args, (line) => (command === "delete" ? line : `${body}\n${warnings}${line}`), () => w.writes().length, ["gdoc:D"]);
   }
+});
+
+test("gdoc reply refuses while another writer holds the Doc, and spends nothing", async () => {
+  const thread = { id: "c1", content: "Which wallet?", resolved: false, author: { me: false, displayName: "PM" }, replies: [], createdTime: "2026-10-01T00:00:00Z" };
+  const w = world({ web: { drive: [thread], document: DOCUMENT } });
+  w.file("g.md", "Which wallet pays the fee?\n");
+  const warnings = await lint(w, "draft-lint", ["doc-comment", "g.md", "--doc", "D"]);
+  await heldRefuses(w, "gdoc-comments", ["reply", "c1", "--body-file", "g.md", "--doc", "D"], (line) => `Which wallet pays the fee?\n${warnings}${line}`, "gdoc:D", () => w.writes().length);
 });
 
 test("doc-comment-file post --apply writes only with a ticket, once", async () => {

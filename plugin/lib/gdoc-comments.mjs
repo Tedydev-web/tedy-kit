@@ -9,7 +9,8 @@ import { canonicalJson } from "./figma-comments.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { notBefore, sinceTime } from "./since.mjs";
-import { requireFresh, sayNotices, versionCheck } from "./source-pins.mjs";
+import { withRecords } from "./record-lock.mjs";
+import { pinnedSince, requireFresh, sayNotices, versionCheck } from "./source-pins.mjs";
 
 const DRIVE = "https://www.googleapis.com/drive/v3";
 const DOCS = "https://docs.googleapis.com/v1";
@@ -243,15 +244,18 @@ export const stillThere = (comments, commentId, replyId) => {
 
 export const readDocument = (google) => google.request(`${DOCS}/documents/${google.doc}?includeTabsContent=true&suggestionsViewMode=SUGGESTIONS_INLINE`);
 
-export async function anchorComment(google, tab, quote, body, beforeWrite = () => {}) {
+export const docKey = (doc) => `gdoc:${doc}`;
+
+export async function anchorComment(google, tab, quote, body, beforeWrite = () => {}, afterWrite = () => {}) {
   const range = findQuoteRange(await readDocument(google), tab, quote);
   beforeWrite();
-  return insertAnchored(google, range, body);
+  return insertAnchored(google, range, body, afterWrite);
 }
 
-export async function insertAnchored(google, range, body) {
+export async function insertAnchored(google, range, body, afterWrite = () => {}) {
   console.log(`WRITE → Google Doc ${google.doc} tab ${range.tabId} : 1 comment anchored at ${range.startIndex}–${range.endIndex}`);
   await google.request(`${DOCS}/documents/${google.doc}:batchUpdate`, { method: "POST", body: { requests: [{ insertComment: { content: body, range } }] } });
+  afterWrite();
   const posted = (await listComments(google)).filter((comment) => comment.author.me && !comment.resolved && comment.content.trim() === body).at(-1);
   if (!posted) throw new Error("the anchored comment could not be read back with the same text");
   return posted.id;
@@ -286,44 +290,50 @@ async function main([command, target, ...rest]) {
   if ((command === "reply" && target) || command === "anchor") {
     const body = readBody(flags);
     const google = await session(flags, command === "anchor");
-    if (alreadyPosted(await listComments(google), command, target, body)) throw new Error(`the Doc already has this ${command === "reply" ? `reply in thread ${target}` : "comment"}; nothing posted`);
-    const { notices, warnings } = await recheckDocTarget(google.doc, flags["body-file"], relintDoc(flags["body-file"], google.doc), { texts: [body] });
-    const approve = () => {
-      consumeApproval(process.argv, [body, ...warnings]);
-      sayNotices(notices);
-    };
-    let id;
-    if (command === "reply") {
-      console.log(`WRITE → Google Doc ${google.doc} thread ${target} : 1 reply`);
-      approve();
-      await google.request(`${DRIVE}/files/${google.doc}/comments/${target}/replies?fields=id`, { method: "POST", body: { content: body } });
-      id = target;
-    } else {
-      id = await anchorComment(google, flags.tab, flags.quote, body, approve);
-    }
-    const comments = await listComments(google);
-    const found = comments.some((comment) => (command === "reply" ? comment.id === id && comment.replies.some((reply) => reply.content.trim() === body) : comment.content.trim() === body));
-    if (!found) throw new Error("the comment could not be read back with the same text");
-    console.log("posted and read back unchanged");
-    logPostedText(command === "reply" ? "doc-reply" : "doc-comment", flags["body-file"], id ?? "anchored", body);
-    return 0;
+    return withRecords([docKey(google.doc)], { job: flags.job, since: pinnedSince(flags["body-file"]) }, async (recorded) => {
+      if (alreadyPosted(await listComments(google), command, target, body)) throw new Error(`the Doc already has this ${command === "reply" ? `reply in thread ${target}` : "comment"}; nothing posted`);
+      const { notices, warnings } = await recheckDocTarget(google.doc, flags["body-file"], relintDoc(flags["body-file"], google.doc), { texts: [body] });
+      const approve = () => {
+        consumeApproval(process.argv, [body, ...warnings]);
+        sayNotices(notices);
+      };
+      let id;
+      if (command === "reply") {
+        console.log(`WRITE → Google Doc ${google.doc} thread ${target} : 1 reply`);
+        approve();
+        await google.request(`${DRIVE}/files/${google.doc}/comments/${target}/replies?fields=id`, { method: "POST", body: { content: body } });
+        recorded();
+        id = target;
+      } else {
+        id = await anchorComment(google, flags.tab, flags.quote, body, approve, recorded);
+      }
+      const comments = await listComments(google);
+      const found = comments.some((comment) => (command === "reply" ? comment.id === id && comment.replies.some((reply) => reply.content.trim() === body) : comment.content.trim() === body));
+      if (!found) throw new Error("the comment could not be read back with the same text");
+      console.log("posted and read back unchanged");
+      logPostedText(command === "reply" ? "doc-reply" : "doc-comment", flags["body-file"], id ?? "anchored", body);
+      return 0;
+    });
   }
   if (command === "edit" && target) {
     const body = readBody(flags);
     const google = await session(flags);
-    const item = editTarget(await listComments(google), target, flags.reply);
-    if (squash(item.content) === squash(body)) throw new Error("the posted text already matches the body file; nothing edited");
-    const { notices, warnings } = await recheckDocTarget(google.doc, flags["body-file"], relintDoc(flags["body-file"], google.doc), { texts: [body] });
-    const path = `${DRIVE}/files/${google.doc}/comments/${target}${flags.reply ? `/replies/${flags.reply}` : ""}?fields=id,content`;
-    console.log(`WRITE → Google Doc ${google.doc} thread ${target}${flags.reply ? ` reply ${flags.reply}` : ""} : edit 1 ${flags.reply ? "reply" : "comment"}`);
-    consumeApproval(process.argv, [body, ...warnings]);
-    sayNotices(notices);
-    await google.request(path, { method: "PATCH", body: { content: body } });
-    const after = editTarget(await listComments(google), target, flags.reply);
-    if (after.content.trim() !== body) throw new Error("the edited text could not be read back unchanged");
-    console.log("edited and read back unchanged");
-    logPostedText(flags.reply ? "doc-reply" : "doc-comment", flags["body-file"], flags.reply ?? target, body);
-    return 0;
+    return withRecords([docKey(google.doc)], { job: flags.job, since: pinnedSince(flags["body-file"]) }, async (recorded) => {
+      const item = editTarget(await listComments(google), target, flags.reply);
+      if (squash(item.content) === squash(body)) throw new Error("the posted text already matches the body file; nothing edited");
+      const { notices, warnings } = await recheckDocTarget(google.doc, flags["body-file"], relintDoc(flags["body-file"], google.doc), { texts: [body] });
+      const path = `${DRIVE}/files/${google.doc}/comments/${target}${flags.reply ? `/replies/${flags.reply}` : ""}?fields=id,content`;
+      console.log(`WRITE → Google Doc ${google.doc} thread ${target}${flags.reply ? ` reply ${flags.reply}` : ""} : edit 1 ${flags.reply ? "reply" : "comment"}`);
+      consumeApproval(process.argv, [body, ...warnings]);
+      sayNotices(notices);
+      await google.request(path, { method: "PATCH", body: { content: body } });
+      recorded();
+      const after = editTarget(await listComments(google), target, flags.reply);
+      if (after.content.trim() !== body) throw new Error("the edited text could not be read back unchanged");
+      console.log("edited and read back unchanged");
+      logPostedText(flags.reply ? "doc-reply" : "doc-comment", flags["body-file"], flags.reply ?? target, body);
+      return 0;
+    });
   }
   if (command === "changed") {
     const google = await session(flags);
@@ -359,13 +369,16 @@ async function main([command, target, ...rest]) {
   }
   if (command === "delete" && target) {
     const google = await session(flags);
-    deleteTarget(await listComments(google), target, flags.reply);
-    console.log(`WRITE → Google Doc ${google.doc} thread ${target}${flags.reply ? ` reply ${flags.reply}` : ""} : delete 1 own ${flags.reply ? "reply" : "comment"}`);
-    consumeApproval(process.argv, []);
-    await google.request(`${DRIVE}/files/${google.doc}/comments/${target}${flags.reply ? `/replies/${flags.reply}` : ""}`, { method: "DELETE" });
-    if (stillThere(await listComments(google), target, flags.reply)) throw new Error(`${flags.reply ? `reply ${flags.reply}` : `comment ${target}`} still reads back after the delete`);
-    console.log("deleted and confirmed gone");
-    return 0;
+    return withRecords([docKey(google.doc)], { job: flags.job, since: null }, async (recorded) => {
+      deleteTarget(await listComments(google), target, flags.reply);
+      console.log(`WRITE → Google Doc ${google.doc} thread ${target}${flags.reply ? ` reply ${flags.reply}` : ""} : delete 1 own ${flags.reply ? "reply" : "comment"}`);
+      consumeApproval(process.argv, []);
+      await google.request(`${DRIVE}/files/${google.doc}/comments/${target}${flags.reply ? `/replies/${flags.reply}` : ""}`, { method: "DELETE" });
+      recorded();
+      if (stillThere(await listComments(google), target, flags.reply)) throw new Error(`${flags.reply ? `reply ${flags.reply}` : `comment ${target}`} still reads back after the delete`);
+      console.log("deleted and confirmed gone");
+      return 0;
+    });
   }
   console.error("usage: gdoc-comments.mjs list [--since <ISO>] [--doc <id>] | reply <comment-id> --body-file <f> --doc <id> | anchor --tab <t.id> --quote <exact text> --body-file <f> --doc <id> | edit <comment-id> [--reply <reply-id>] --body-file <f> --doc <id> | delete <comment-id> [--reply <reply-id>] --doc <id> | changed [--since <ISO>] | export [--out <f>]");
   return 2;

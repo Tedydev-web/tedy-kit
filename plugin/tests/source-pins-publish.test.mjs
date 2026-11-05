@@ -3,8 +3,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { ledgerPath } from "../lib/record-lock.mjs";
 import { runWithFakeGh } from "./fake-gh-for-tests.mjs";
+import { world } from "./fake-services-for-tests.mjs";
 import { commitFile, git, siblingRepo } from "./git-sibling-for-tests.mjs";
 import { profileWith, tempDir } from "./temp-dir-for-tests.mjs";
 
@@ -476,4 +478,34 @@ test("pr-reply lints the body like a review comment and writes no pin when it fa
   assert.match(result.out, /the first line must end with "\."/);
   writeFileSync(p.at("r.txt"), "The label is still wrong.\n");
   assert.match(p.write(["reply", "701", "123", "--repo", "o/r", "--body-file", p.at("r.txt")]).out, /^refused: .*r\.txt has no pinned sources/m);
+});
+
+test("a Doc reply naming a job refuses when another job wrote the Doc after the draft's read pins, and one naming no job still posts", async () => {
+  const document = { tabs: [{ tabProperties: { tabId: "t.1" }, documentTab: { body: { content: [{ paragraph: { elements: [{ startIndex: 1, textRun: { content: "Crypto takes the price in USDT\n" } }] } }] } } }] };
+  const thread = { id: "c1", content: "Which wallet?", resolved: false, author: { me: false, displayName: "PM" }, replies: [], createdTime: "2026-10-01T00:00:00Z" };
+  const w = world({ web: { drive: [thread], document } });
+  const pinned = await w.run("draft-lint", ["pin-sources", "g.md", "--doc", "D"]);
+  assert.equal(pinned.code, 0, pinned.out);
+  const drafts = join(w.dir, "state", "drafts", join(w.dir, "g.md").replace(/\//g, "_"));
+  const readAt = JSON.parse(readFileSync(`${drafts}.read-pins.json`, "utf8")).at;
+  const otherAt = new Date(Date.parse(readAt) + 1).toISOString();
+  mkdirSync(dirname(ledgerPath("gdoc:D", join(w.dir, "state"))), { recursive: true });
+  writeFileSync(ledgerPath("gdoc:D", join(w.dir, "state")), `${JSON.stringify({ at: otherAt, key: "gdoc:D", job: "b.md", command: "gdoc-comments.mjs reply", pid: 1 })}\n`);
+  w.file("g.md", "Which wallet pays the fee?\n");
+  const lint = await w.run("draft-lint", ["doc-comment", "g.md", "--doc", "D"]);
+  assert.equal(lint.code, 0, lint.out);
+  assert.ok(Date.parse(JSON.parse(readFileSync(`${drafts}.sources.json`, "utf8")).at) > Date.parse(otherAt));
+  const warnings = lint.out.split("\n").filter((line) => line.startsWith("warning: ")).map((line) => `${line}\n`).join("");
+  const withJob = ["reply", "c1", "--body-file", "g.md", "--doc", "D", "--job", "plans/jobs/a.md"];
+  w.approve(`Which wallet pays the fee?\n${warnings}${w.line("gdoc-comments", withJob)}`);
+  const refused = await w.run("gdoc-comments", withJob);
+  assert.equal(refused.code, 1, refused.out);
+  assert.ok(refused.out.includes(`refused: gdoc:D got a kit write from job b.md at ${otherAt}, after this draft's sources were pinned at ${readAt}; read the record again, update the draft, lint it and ask the user again.`), refused.out);
+  assert.deepEqual(w.writes(), []);
+  assert.equal(w.tickets(), 1);
+  const plain = ["reply", "c1", "--body-file", "g.md", "--doc", "D"];
+  w.approve(`Which wallet pays the fee?\n${warnings}${w.line("gdoc-comments", plain)}`, "Q2?");
+  const posted = await w.run("gdoc-comments", plain);
+  assert.equal(posted.code, 0, posted.out);
+  assert.deepEqual(w.ledger("gdoc:D").map((entry) => entry.job), ["b.md", null]);
 });
