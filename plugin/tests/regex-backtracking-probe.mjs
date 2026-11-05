@@ -4,6 +4,7 @@ import { evaluate as trackerToken } from "../gates/tracker-token-gate.mjs";
 import { classifyAction } from "../gates/role-gate.mjs";
 import { checkEdit } from "../gates/no-comments-gate.mjs";
 import { publishes } from "../gates/publish-quote-gate.mjs";
+import { reviewRunVerdict } from "../gates/review-run-gate.mjs";
 import { lintChatComment, lintComment, parseDraft } from "../lib/draft-lint.mjs";
 
 const LIMIT_MS = 250;
@@ -45,6 +46,7 @@ const TARGETS = {
   "role-gate classifyAction (SCRIPT_WRITES)": (text) => classifyAction({ tool_name: "Bash", tool_input: { command: text }, cwd: "/w" }, { sessions: [{ name: "a", role: "dev" }] }),
   "no-comments-gate checkEdit (comment-scan DIRECTIVE, TEST_PATH)": (text) => checkEdit("Edit", { file_path: "/w/x.mjs", old_string: "", new_string: text }),
   "publish-quote-gate publishes (SCRIPT)": (text) => publishes(text, "/w", () => ""),
+  "review-run-gate reviewRunVerdict (MANAGERS, DIR_FLAGS, REVIEW_FOLDER)": (text) => reviewRunVerdict({ tool_name: "Bash", cwd: "/w", tool_input: { command: text } }),
   "draft-lint lintComment (COMMENT_RULES, DEV_WORDS, LOCATOR, PRD_HEADER, FOREIGN_SCRIPT)": (text) => lintComment(text, "en"),
   "draft-lint lintChatComment (DEV_WORDS, LOCATOR)": (text) => lintChatComment(text, "doc", "vi"),
   "draft-lint parseDraft (HEADER, SECTION)": (text) => parseDraft(text),
