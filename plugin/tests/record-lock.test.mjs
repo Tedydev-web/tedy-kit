@@ -140,6 +140,19 @@ test("a --job before the verb is not a write, since the publish gates read the v
   const posted = await w.run("figma-comments", ["--job", "plans/jobs/one.md", "post", "1:2", "--body-file", "f.md", "--file", "F"]);
   assert.equal(posted.code, 2, posted.out);
   assert.deepEqual(w.writes(), []);
+  for (const [script, args, options] of [
+    ["gdoc-comments", ["reply", "c1", "--body-file", "f.md", "--doc", "D"]],
+    ["openproject", ["comment", "21298", "--body-file", "f.md"], { opUrl: "http://op.test" }],
+    ["github-write", ["post", "f.md", "--repo", "o/r"]],
+    ["doc-comment-file", ["post", "items.json", "--html", "c.html", "--apply", "--doc", "D"]],
+  ]) {
+    const other = world(options);
+    other.file("f.md", "@lam Màn này thiếu trạng thái rỗng.\n");
+    const result = await other.run(script, ["--job", "plans/jobs/one.md", ...args]);
+    assert.equal(result.code, 2, `${script}: ${result.out}`);
+    assert.match(result.out, /usage:/, script);
+    assert.deepEqual(other.writes(), [], script);
+  }
 });
 
 test("a Figma post with --job before its node id posts to that node and records the job", async () => {

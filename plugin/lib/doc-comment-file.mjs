@@ -134,7 +134,7 @@ const flagValue = (args, name) => (args.includes(name) ? args[args.indexOf(name)
 async function main(input) {
   const { job, argv: [itemsFile, ...rest] } = splitJob(input);
   if (itemsFile === "post") return post(rest[0]?.startsWith("--") ? undefined : rest[0], { html: flagValue(rest, "--html"), doc: flagValue(rest, "--doc"), apply: rest.includes("--apply"), job });
-  if (!itemsFile) {
+  if (!itemsFile || itemsFile.startsWith("-")) {
     console.error('usage: doc-comment-file.mjs <items.json>   items.json = { "title": "...", "items": [{ "group": "A|B", "epic": "09", "where": "UC_SW_13 BR1", "quote": "...", "comment": "...", "note": "..." }] }');
     return 2;
   }
