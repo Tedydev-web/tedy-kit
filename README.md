@@ -136,6 +136,8 @@ Each pin prints a `pinned:` line for the approval preview, ending in `(read <tim
 
 A refusal leaves the approval ticket unused. A notice goes to the terminal only, after the approval is spent, so the text written is the text approved.
 
+Every kit write to a PR, a work package, a project, a Doc or a Figma file holds a lock on that record from the recheck of its pins through the approval, the write and its read-back; a dry run or a preview takes none. A second writer on the same record refuses at once, names the process that holds it and since when, and spends and writes nothing; run it again when that one finishes. The next writer breaks a lock whose process is gone; a lock from another pid namespace, or one that cannot be read, only after 30 minutes. Each write is also added to the record's write ledger. A write that names its job with `--job <job file>` refuses when a different job wrote the same record after the draft's sources were pinned (its earliest read pin, else its lint): a Doc pin leaves comments out and a PR pin holds only the head, so two jobs commenting on one Doc or PR would pass both pins. Re-read the record, update the draft, lint it and ask the user again. A write that names no job is never refused by the ledger, so a session posting a batch of comments to one file keeps working.
+
 Three gaps remain. A `path:line@<branch>` cite of the reviewed repo's own integration branch pins nothing in that repo, so a merge into it that changes the cited line still posts; the lint warns only when no other repo pins that branch either. A finding that cites such a line needs `pin-sources --pr <n> --repo <owner/repo> --branch .:<branch>` (with the reviewed repo's map path in place of `.`) before the read. After `pin-sources`, only the draft's modification time shows it was rewritten after the new read, so a redraft that moves its header to the new head sha and keeps the old body unchanged still lints and posts. And a Doc image replaced in place ("Replace image") that keeps its object id, size and crop is not seen, because its `contentUri` is left out of the pin; whether Docs keeps those fields on a replace is unverified.
 
 ## Rescue
@@ -169,7 +171,7 @@ Menus and table words come in the profile's chat language (`language.chat`, Engl
 | What | Where |
 |---|---|
 | Rules, style samples, project maps, gate switches | Your profile: `TEDY_PROFILE_DIR` or `~/.config/tedy` |
-| Gate log, edit log, draft snapshots, last reply check, approval tickets (`approvals/`) | `TEDY_STATE_DIR` or `~/.local/state/tedy` |
+| Gate log, edit log, draft snapshots, last reply check, approval tickets (`approvals/`), record locks (`locks/`), write ledger (`records/`) | `TEDY_STATE_DIR` or `~/.local/state/tedy` |
 | Release worktree the profile guard watches | `TEDY_RELEASE_DIR` or `~/Documents/workspace/tedy-kit-release` |
 | `permissions.ask` rules git-gate checks a publish against | `TEDY_CLAUDE_SETTINGS` or `~/.claude/settings.json` |
 | Tracker slug map | `~/.config/op/sync/` |
