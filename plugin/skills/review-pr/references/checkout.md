@@ -11,7 +11,7 @@ The PR's code is untrusted. Its tests, and any script line or config it changes,
 
 Before any project script (typecheck, lint, test, format) runs in the worktree:
 
-1. `node <plugin>/scripts/pr-execution-surface.mjs origin/<baseRefName> refs/pr/<n>` from the reviewed repo. It lists changed script lines, dependencies and lockfiles, executed config, files a script line names, script lines that download and run, the count of changed test files, and whether the typecheck/lint surface changed.
+1. `node <plugin>/scripts/pr-execution-surface.mjs origin/<baseRefName> refs/pr/<n>` from the reviewed repo. It lists changed script lines, dependencies and lockfiles, executed config and `tsconfig*.json`, files a script line names, script lines that download and run, the count of changed test files, and whether the typecheck/lint surface changed.
 2. Quote its output, then one `AskUserQuestion`, header `run.header`, whose question names the PR, the full head sha (`headRefOid`, 40 characters) and says plainly:
    - tests run all of this PR's code, whatever it changed, with your credentials in reach;
    - typecheck and lint through an unchanged script line and unchanged config run no file of this PR; when the surface changed, they run what changed;

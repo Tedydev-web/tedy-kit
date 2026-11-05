@@ -56,17 +56,18 @@ test("script lines that download and run a package are listed, in any package.js
   assert.ok(formatSurface(surface).includes("downloads and runs: packages/ui/package.json scripts.lint: npx eslint@9 ."));
 });
 
-test("a changed packageManager, .npmrc, husky hook or Makefile counts as executed surface", () => {
+test("a changed packageManager, .npmrc, husky hook, Makefile or tsconfig counts as typecheck and lint surface", () => {
   const dir = reviewRepo((repo) => {
     commitFile(repo, "package.json", json({ ...PACKAGE, packageManager: "pnpm@9.9.9" }));
     commitFile(repo, ".npmrc", "registry=https://example.com\n");
     commitFile(repo, ".husky/pre-commit", "npm test\n");
     commitFile(repo, "Makefile", "all:\n\techo hi\n");
     commitFile(repo, "eslint.config.mjs", "export default [];\n");
+    commitFile(repo, "tsconfig.app.json", "{\"compilerOptions\":{\"strict\":false}}\n");
   });
   const surface = executionSurface(dir, "main", "pr");
   assert.deepEqual(surface.dependencies, [{ file: "package.json", section: "packageManager", name: "", before: "pnpm@9.0.0", after: "pnpm@9.9.9" }]);
-  assert.deepEqual(surface.config.sort(), [".husky/pre-commit", ".npmrc", "Makefile", "eslint.config.mjs"]);
+  assert.deepEqual(surface.config.sort(), [".husky/pre-commit", ".npmrc", "Makefile", "eslint.config.mjs", "tsconfig.app.json"]);
   assert.equal(surface.lintSurfaceChanged, true);
 });
 

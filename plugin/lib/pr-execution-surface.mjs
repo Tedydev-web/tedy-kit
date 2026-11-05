@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 
 const DEPENDENCY_SECTIONS = ["dependencies", "devDependencies", "optionalDependencies", "peerDependencies"];
 const LOCKFILE = /(^|\/)(?:package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb?)$/;
-const EXECUTED_CONFIG = /(^|\/)(?:[^/]+\.config\.[cm]?[jt]s|\.eslintrc[^/]*|\.prettierrc\.[^/]+|(?:jest|vitest)\.setup[^/]*|setupTests[^/]*|\.npmrc|\.yarnrc[^/]*|Makefile)$|(^|\/)\.husky\//;
+const EXECUTED_CONFIG = /(^|\/)(?:[^/]+\.config\.[cm]?[jt]s|\.eslintrc[^/]*|\.prettierrc\.[^/]+|(?:jest|vitest)\.setup[^/]*|setupTests[^/]*|\.npmrc|\.yarnrc[^/]*|Makefile|tsconfig[^/]*\.json)$|(^|\/)\.husky\//;
 const TEST_FILE = /(^|\/)__tests__\/|\.(?:test|spec)\.[cm]?[jt]sx?$/;
 const DOWNLOADS = /(?:^|[\s;&|(])(?:npx|bunx|pnpx)\s|\b(?:pnpm|yarn)\s+dlx\b/;
 const SCRIPT_FILE = /\/|\.(?:[cm]?[jt]s|sh|py)$/;
