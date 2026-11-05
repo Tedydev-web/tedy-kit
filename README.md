@@ -162,6 +162,8 @@ Three gaps remain. A `path:line@<branch>` cite of the reviewed repo's own integr
 
 The independent review in `/tedy:review-pr`, `/tedy:dev` and `/tedy:reconcile` runs the `tedy:reviewer` agent on `claude-sonnet-5-5` without your `CLAUDE.md` files (ADR 0014). Its standards lens reads the repository's own `AGENTS.md`, `CLAUDE.md` and lint config. A personal rule from your user `CLAUDE.md` reaches it only when the calling skill passes that rule in the prompt.
 
+`/tedy:review-pr` reads a PR in a sparse worktree made by `review-worktree.mjs`, which leaves the head's `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md` and every `.claude/` folder off disk at any depth, so the PR's own agent instructions and nested skills are not loaded while the session reads its code; those files are read as data with `git show`. It needs git 2.35 or newer. Side effect: git sets `extensions.worktreeConfig=true` in the reviewed repo's `.git/config`, and it stays after the worktree is removed; the main checkout's working tree and its own checkout settings do not change.
+
 Menus and table words come in the profile's chat language (`language.chat`, English and Vietnamese today); comments follow the language each project map sets for PR reviews, the tracker, and Doc and Figma.
 
 ## Trackers

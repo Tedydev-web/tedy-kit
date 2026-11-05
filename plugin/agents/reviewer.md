@@ -30,7 +30,7 @@ Run `node <plugin>/scripts/project-map.mjs resolve` in the repository. When `rev
 
 ## Evidence rules
 
-- Read every file in the diff and the unchanged code each finding depends on. Name the files you skipped and why.
+- Read every file in the diff and the unchanged code each finding depends on. A diff file the review worktree leaves off disk (`CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, anything under a `.claude/` folder) is read as data with `git show <head sha>:<path>`. Name the files you skipped and why.
 - `CONFIRMED`: you read the line and the source that proves it this run. `PLAUSIBLE`: follows from what you read, with one link you could not check; name that link. Anything weaker stays out.
 - Run `git log -L` or `git blame` on the line. A problem that predates the change goes under "Pre-existing", not in the findings.
 - Skip what the author already knows: a `TODO` they left and the stub under it, and Figma-identical placeholder data in a UI-only PR.

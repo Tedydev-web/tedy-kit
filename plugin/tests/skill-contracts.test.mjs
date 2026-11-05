@@ -2,6 +2,7 @@ import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
+import { SPARSE_PATTERNS } from "../lib/review-worktree.mjs";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const script = (name) => existsSync(new URL(`../scripts/${name}.mjs`, import.meta.url));
@@ -48,6 +49,17 @@ test("review asks before any script runs PR code, names the execution surface, a
   for (const phrase of ["pr-execution-surface.mjs origin/<baseRefName> refs/pr/<n>", "header `run.header`", "full head sha", "running any project script (tests, typecheck, lint) executes code from this PR", "only what the kit can see, not a complete list", "Recommended unless the review needs a local run", "`run.lint`", "`run.all`", "`run.none`", "gh pr checks <n>", "never `npm install`", "ask again", "verify_gotchas", "verify not run", "<state>/review-runs/", "decision-points.md"]) assert.ok(checkout.includes(phrase), phrase);
   for (const claim of [/run no file/, /Recommended while/, /surface is unchanged/]) assert.doesNotMatch(checkout + step, claim);
   assert.ok(script("pr-execution-surface"));
+});
+
+test("the review worktree leaves the PR head's agent instructions off disk and says how to read them and what it leaves in the repo config", () => {
+  const checkout = read("skills/review-pr/references/checkout.md");
+  for (const phrase of ["review-worktree.mjs <folder>/pr-<n> refs/pr/<n>", "`CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md` and every `.claude/` folder, at any depth", "git show refs/pr/<n>:<path>", "extensions.worktreeConfig=true", "git 2.35"]) assert.ok(checkout.includes(phrase), phrase);
+  assert.ok(checkout.includes(`sparse-checkout set --no-cone ${SPARSE_PATTERNS.map((pattern) => `'${pattern}'`).join(" ")}`));
+  assert.doesNotMatch(checkout, /git worktree add --detach/);
+  const review = read("skills/review-pr/SKILL.md");
+  assert.ok(review.slice(review.indexOf("3. **Checkout and verify.**"), review.indexOf("4. **Read.**")).includes("review-worktree.mjs"));
+  assert.ok(read("agents/reviewer.md").includes("git show <head sha>:<path>"));
+  assert.ok(script("review-worktree"));
 });
 
 test("the standards lens reads the repository's rule files from the PR base, never from the head", () => {
