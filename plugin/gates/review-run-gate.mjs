@@ -81,9 +81,15 @@ function runner(program, args) {
   if (program === "volta" && args[0] === "run") {
     let index = 1;
     while (index < args.length && args[index].startsWith("-")) index += VOLTA_VALUE_FLAGS.has(args[index]) ? 2 : 1;
-    return index < args.length ? runner(basename(args[index]), args.slice(index + 1)) : null;
+    const inner = index < args.length ? runner(basename(args[index]), args.slice(index + 1)) : null;
+    return inner && { word: args[index], ...inner };
   }
   return MANAGERS.has(program) || MAKES.has(program) || NODE.test(program) ? { program, args } : null;
+}
+
+function programDirs(words, prefix, here) {
+  const entries = prefix.filter((token) => token.startsWith("PATH=")).flatMap((token) => token.slice(5).split(":")).filter((entry) => entry && !entry.includes("$"));
+  return [...words.filter((word) => word?.includes("/")), ...entries].map((path) => existingDir(resolve(here, expandHome(path))));
 }
 
 function nodeDirs(args, dirs, here) {
@@ -104,11 +110,13 @@ function targetDirs(text, cwd) {
   const tokens = commandTokens(text, MANAGERS);
   const found = runner(tokens[0], tokens.slice(1));
   if (!found) return [];
-  const moved = chdirs(raw.slice(0, raw.length - tokens.length), cwd);
+  const prefix = raw.slice(0, raw.length - tokens.length);
+  const moved = chdirs(prefix, cwd);
   const here = moved.at(-1) ?? cwd;
-  if (NODE.test(found.program)) return nodeDirs(found.args, [cwd, ...moved], here);
+  const programs = programDirs([raw[prefix.length]?.replace(/^[({!]+/, ""), found.word], prefix, here);
+  if (NODE.test(found.program)) return [...programs, ...nodeDirs(found.args, [cwd, ...moved], here)];
   const makefiles = MAKES.has(found.program) ? flagValues(found.args, (flag) => MAKE_FILE_FLAGS.has(flag), here).map(existingDir) : [];
-  return [cwd, ...moved, ...flagValues(found.args, (flag) => DIR_FLAGS.has(flag), here), ...makefiles];
+  return [cwd, ...moved, ...programs, ...flagValues(found.args, (flag) => DIR_FLAGS.has(flag), here), ...makefiles];
 }
 
 const git = (dir, ...args) => execFileSync("git", ["-C", dir, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 10_000 });

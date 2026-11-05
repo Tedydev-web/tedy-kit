@@ -2,7 +2,7 @@ import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { evaluate } from "../gates/git-gate.mjs";
@@ -107,7 +107,7 @@ test("corepack, volta run, env -C, make and a node run of a checkout file or of 
   }
 });
 
-test("gmake, a makefile, an attached directory and a node preload or test path inside the checkout are refused from outside it", () => {
+test("gmake, a makefile, an attached directory, a node preload or test path inside the checkout, and a runner named by a checkout path or PATH entry are refused", () => {
   const setup = reviewSetup();
   const wt = setup.worktree;
   const outside = join(tempDir("tedy-review-run-outside-"), "probe.mjs");
@@ -130,6 +130,13 @@ test("gmake, a makefile, an attached directory and a node preload or test path i
     [`node --import file://${wt}/src/a.ts ${outside}`, setup.repo],
     [`node --import=file://${wt}/src/a.ts ${outside}`, setup.repo],
     [`node --import FILE://${wt}/src/a.ts ${outside}`, setup.repo],
+    ["./bin/node -v", wt],
+    ["bin/node --version", wt],
+    ["PATH=./bin:$PATH node -v", wt],
+    ["env PATH=./bin node -v", wt],
+    ["volta run ./bin/node -v", wt],
+    [`${wt}/bin/node ${outside}`, setup.repo],
+    [`PATH=${wt}/bin node ${outside}`, setup.repo],
   ]) {
     const result = verdict(setup, bash(command, cwd));
     assert.ok(result, `${command} in ${cwd}`);
@@ -146,7 +153,13 @@ test("a kit script, a file outside the checkout and corepack or volta housekeepi
   writeFileSync(outside, "console.log(1);\n");
   const loop = join(dirname(outside), "loop.js");
   symlinkSync(loop, loop);
+  const locked = join(dirname(outside), "locked");
+  mkdirSync(locked, { mode: 0 });
+  if (process.getuid?.() !== 0) assert.equal(verdict(setup, bash(`node ${locked}/x.js`, setup.worktree)), null);
+  chmodSync(locked, 0o700);
   for (const [command, cwd] of [
+    ["PATH=/usr/bin:$PATH node -v", setup.worktree],
+    [`${process.execPath} ${outside}`, setup.worktree],
     [`node ${GATE} --help`, setup.worktree],
     [`node ${outside}`, setup.worktree],
     [`node ${loop}`, setup.worktree],
