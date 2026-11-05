@@ -5,6 +5,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { ledgerConflicts, ledgerPath, lockPath, withRecords } from "../lib/record-lock.mjs";
+import { world } from "./fake-services-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const MODULE = new URL("../lib/record-lock.mjs", import.meta.url).href;
@@ -190,4 +191,28 @@ test("several keys are taken in sorted order, and a refusal on a later key relea
   assert.equal(existsSync(lockPath("t7:0")), false);
   await withRecords(["t7:0"], {}, async (recorded) => recorded());
   assert.equal(ledger("t7:0").length, 1);
+});
+
+test("two drafts on one Figma file post one after the other, with no job and with one job for both", async () => {
+  for (const job of [[], ["--job", "plans/jobs/one.md"]]) {
+    const w = world({ web: { figma: [] } });
+    const bodies = ["@lam Màn này thiếu trạng thái rỗng.\n", "@lam Màn này thiếu trạng thái lỗi.\n"];
+    const warnings = [];
+    for (const [index, body] of bodies.entries()) {
+      w.file(`f${index}.md`, body);
+      const lint = await w.run("draft-lint", ["figma-comment", `f${index}.md`, "--file", "F"]);
+      assert.equal(lint.code, 0, lint.out);
+      warnings.push(lint.out.split("\n").filter((text) => text.startsWith("warning: ")).map((text) => `${text}\n`).join(""));
+    }
+    for (const [index, body] of bodies.entries()) {
+      const args = ["post", "1:2", "--body-file", `f${index}.md`, "--file", "F", ...job];
+      w.approve(`${body}${warnings[index]}${w.line("figma-comments", args)}`);
+      const posted = await w.run("figma-comments", args);
+      assert.equal(posted.code, 0, posted.out);
+    }
+    assert.equal(w.writes().length, 2);
+    const lines = ledger("figma:F", join(w.dir, "state"));
+    assert.equal(lines.length, 2, JSON.stringify(lines));
+    assert.deepEqual(lines.map((entry) => entry.job), job.length ? ["one.md", "one.md"] : [null, null]);
+  }
 });

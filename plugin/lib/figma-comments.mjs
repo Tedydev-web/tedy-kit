@@ -11,7 +11,8 @@ import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticke
 import { notBefore, sinceTime } from "./since.mjs";
 import { RECHECK } from "./source-pin-git.mjs";
 import { nodeId } from "./source-pin-links.mjs";
-import { pinnedSources, requireFresh, sayNotices, versionCheck } from "./source-pins.mjs";
+import { withRecords } from "./record-lock.mjs";
+import { pinnedSince, pinnedSources, requireFresh, sayNotices, versionCheck } from "./source-pins.mjs";
 
 const API = "https://api.figma.com/v1";
 
@@ -158,6 +159,12 @@ async function main([command, target, ...rest]) {
     }
     return 0;
   }
+  if (["post", "reply", "delete"].includes(command) && target) return withRecords([`figma:${figma.file}`], { job: flags.job, since: command === "delete" ? null : pinnedSince(flags["body-file"]) }, (recorded) => write(figma, command, target, flags, recorded));
+  console.error("usage: figma-comments.mjs list [--since <ISO>] [--file <key>] | post <node-id> --body-file <f> --file <key> | reply <comment-id> --body-file <f> --file <key> | delete <comment-id> --file <key>");
+  return 2;
+}
+
+async function write(figma, command, target, flags, recorded) {
   if (command === "post" && target) {
     const body = readBody(flags);
     const node = nodeId(target);
@@ -172,6 +179,7 @@ async function main([command, target, ...rest]) {
     consumeApproval(process.argv, [body, ...warnings]);
     sayNotices(notices);
     const created = await figma.request(`/files/${figma.file}/comments`, { method: "POST", body: { message: body, client_meta: { node_id: node, node_offset: pinOffset(box) } } });
+    recorded();
     await verify(figma, created.id, body);
     logPostedText("figma-comment", flags["body-file"], created.id, body);
     return 0;
@@ -187,6 +195,7 @@ async function main([command, target, ...rest]) {
     consumeApproval(process.argv, [body, ...warnings]);
     sayNotices(notices);
     const created = await figma.request(`/files/${figma.file}/comments`, { method: "POST", body: { message: body, comment_id: root.id } });
+    recorded();
     await verify(figma, created.id, body);
     logPostedText("figma-reply", flags["body-file"], created.id, body);
     return 0;
@@ -200,11 +209,10 @@ async function main([command, target, ...rest]) {
     console.log(`WRITE → Figma ${figma.file} : delete own comment ${target}`);
     consumeApproval(process.argv, []);
     await figma.request(`/files/${figma.file}/comments/${target}`, { method: "DELETE" });
+    recorded();
     console.log(`deleted ${target}`);
     return 0;
   }
-  console.error("usage: figma-comments.mjs list [--since <ISO>] [--file <key>] | post <node-id> --body-file <f> --file <key> | reply <comment-id> --body-file <f> --file <key> | delete <comment-id> --file <key>");
-  return 2;
 }
 
 export function run() {

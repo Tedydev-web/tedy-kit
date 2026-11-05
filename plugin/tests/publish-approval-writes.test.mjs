@@ -141,11 +141,21 @@ test("figma post and reply write only with a ticket, once", async () => {
   const w = world({ web: { figma: [{ id: "100", message: "Root question", user: { handle: "lam" }, created_at: "2026-10-01T00:00:00Z", client_meta: { node_id: "1:2" } }] } });
   w.file("f.md", "@lam Màn này thiếu trạng thái rỗng.\n");
   const postWarnings = await lint(w, "draft-lint", ["figma-comment", "f.md", "--file", "F"]);
-  await onceOnly(w, "figma-comments", ["post", "1:2", "--body-file", "f.md", "--file", "F"], (line) => `@lam Màn này thiếu trạng thái rỗng.\n${postWarnings}${line}`, () => w.writes().length);
+  await onceOnly(w, "figma-comments", ["post", "1:2", "--body-file", "f.md", "--file", "F"], (line) => `@lam Màn này thiếu trạng thái rỗng.\n${postWarnings}${line}`, () => w.writes().length, ["figma:F"]);
   const reply = world({ web: { figma: [{ id: "100", message: "Root question", user: { handle: "lam" }, created_at: "2026-10-01T00:00:00Z", client_meta: { node_id: "1:2" } }] } });
   reply.file("f.md", "@lam Đã thêm trạng thái rỗng.\n");
   const replyWarnings = await lint(reply, "draft-lint", ["figma-comment", "f.md", "--file", "F"]);
-  await onceOnly(reply, "figma-comments", ["reply", "100", "--body-file", "f.md", "--file", "F"], (line) => `@lam Đã thêm trạng thái rỗng.\n${replyWarnings}${line}`, () => reply.writes().length);
+  await onceOnly(reply, "figma-comments", ["reply", "100", "--body-file", "f.md", "--file", "F"], (line) => `@lam Đã thêm trạng thái rỗng.\n${replyWarnings}${line}`, () => reply.writes().length, ["figma:F"]);
+});
+
+test("figma delete writes only with a ticket, once, and post refuses while another writer holds the file", async () => {
+  const own = { id: "100", message: "Own question", user: { handle: "me" }, created_at: "2026-10-01T00:00:00Z", client_meta: { node_id: "1:2" } };
+  const w = world({ web: { figma: [own] } });
+  await onceOnly(w, "figma-comments", ["delete", "100", "--file", "F"], (line) => line, () => w.writes().length, ["figma:F"]);
+  const held = world({ web: { figma: [] } });
+  held.file("f.md", "@lam Màn này thiếu trạng thái rỗng.\n");
+  const warnings = await lint(held, "draft-lint", ["figma-comment", "f.md", "--file", "F"]);
+  await heldRefuses(held, "figma-comments", ["post", "1:2", "--body-file", "f.md", "--file", "F"], (line) => `@lam Màn này thiếu trạng thái rỗng.\n${warnings}${line}`, "figma:F", () => held.writes().length);
 });
 
 test("gdoc reply, anchor, edit and delete write only with a ticket, once", async () => {
