@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readlinkSync, rmSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { jobFlag, ledgerConflicts, ledgerPath, lockPath, withRecords } from "../lib/record-lock.mjs";
+import { jobFlag, ledgerConflicts, ledgerPath, lockPath, splitJob, withRecords } from "../lib/record-lock.mjs";
 import { world } from "./fake-services-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
@@ -124,6 +124,28 @@ test("--job is read as --job <file> or --job=<file> in any position, and a --job
   for (const args of [["post", "d.md", "--job"], ["post", "--job", "--doc", "D"], ["post", "--job="], ["post", "--job", " "]]) {
     assert.throws(() => jobFlag(args), { message: "--job needs a job file path; nothing was written" }, args.join(" "));
   }
+});
+
+test("splitJob takes --job and its file out of the arguments, so a --job before the positionals is not read as one", () => {
+  assert.deepEqual(splitJob(["post", "--job", "plans/jobs/a.md", "1:2", "--file", "F"]), { job: "plans/jobs/a.md", argv: ["post", "1:2", "--file", "F"] });
+  assert.deepEqual(splitJob(["set", "--job=plans/jobs/a.md", "21", "--apply"]), { job: "plans/jobs/a.md", argv: ["set", "21", "--apply"] });
+  assert.deepEqual(splitJob(["post", "d.md"]), { job: undefined, argv: ["post", "d.md"] });
+  assert.throws(() => splitJob(["post", "--job", "--doc", "D"]), { message: "--job needs a job file path; nothing was written" });
+});
+
+test("a Figma post with --job before its node id posts to that node and records the job", async () => {
+  const w = world({ web: { figma: [] } });
+  const body = "@lam Màn này thiếu trạng thái rỗng.\n";
+  w.file("f.md", body);
+  const lint = await w.run("draft-lint", ["figma-comment", "f.md", "--file", "F"]);
+  assert.equal(lint.code, 0, lint.out);
+  const warnings = lint.out.split("\n").filter((text) => text.startsWith("warning: ")).map((text) => `${text}\n`).join("");
+  const args = ["post", "--job", "plans/jobs/one.md", "1:2", "--body-file", "f.md", "--file", "F"];
+  w.approve(`${body}${warnings}${w.line("figma-comments", args)}`);
+  const posted = await w.run("figma-comments", args);
+  assert.equal(posted.code, 0, posted.out);
+  assert.equal(w.writes().length, 1);
+  assert.deepEqual(ledger("figma:F", join(w.dir, "state")).map((entry) => entry.job), ["one.md"]);
 });
 
 async function captured(fn) {

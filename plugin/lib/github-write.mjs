@@ -9,7 +9,7 @@ import { fetchTab, indexTab, quoteInText, UC_ID } from "./prd-section.mjs";
 import { generatedPrBodyOp } from "./openproject.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
-import { jobFlag, withRecords } from "./record-lock.mjs";
+import { splitJob, withRecords } from "./record-lock.mjs";
 import { pinnedSince, pinnedSources, recheckPinned } from "./source-pins.mjs";
 
 const normalise = (text) => text.replace(/\s+/g, " ").trim();
@@ -365,9 +365,10 @@ const USAGE = `usage:
   github-write.mjs reply <pr> <comment-id> --body-file <file> [--repo <owner/repo>]
   github-write.mjs pr-body <pr> --body-file <file> [--repo <owner/repo>] [--dry-run]`;
 
-async function main([command, ...args]) {
+async function main(input) {
+  const { job, argv: [command, ...args] } = splitJob(input);
   const { positional, flags } = parseFlags(args);
-  flags.job = jobFlag(args);
+  flags.job = job;
   if ("dry-run" in flags && !githubWriteDryRun(command, flags)) {
     console.error(`github-write: --dry-run is a bare flag of ${GITHUB_WRITE_DRY_RUN_VERBS.join(" and ")} only; nothing written`);
     return 2;

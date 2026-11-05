@@ -152,6 +152,11 @@ export function jobFlag(args) {
   return job;
 }
 
+export function splitJob(argv) {
+  const job = jobFlag(argv);
+  return { job, argv: argv.filter((arg, index) => arg !== "--job" && !(typeof arg === "string" && arg.startsWith("--job=")) && argv[index - 1] !== "--job") };
+}
+
 export async function withRecords(keys, { job, since } = {}, fn) {
   if (job !== undefined && job !== null && (typeof job !== "string" || !job.trim())) throw new Error(NO_JOB_FILE);
   const name = job ? basename(job) : null;

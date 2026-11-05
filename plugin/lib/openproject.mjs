@@ -12,7 +12,7 @@ import { approvalLines, renderRollbackItem, renderWorkPackageDraft } from "./pub
 import { snapshotOnce, snapshotPath } from "./draft-lint.mjs";
 import { appendEditLog, frozenOriginal, labelText } from "./edit-log.mjs";
 import { chatLanguage } from "./labels.mjs";
-import { jobFlag, withRecords } from "./record-lock.mjs";
+import { splitJob, withRecords } from "./record-lock.mjs";
 import { describePin, pinnedSince, pinSourcesOf, recheckPinned, recordPins, sayNotices } from "./source-pins.mjs";
 import { countWords, lintDrafts, lintWorkPackage, readiness, readinessLine } from "./task-lint.mjs";
 import { bareWorkPackageRefs, foreignRefsAdvice, foreignWorkPackageRefs } from "./work-package-refs.mjs";
@@ -392,9 +392,10 @@ async function rollback(client, project, flags, recorded) {
   return failed.length ? 1 : 0;
 }
 
-async function main([command, target, ...rest]) {
+async function main(input) {
+  const { job, argv: [command, target, ...rest] } = splitJob(input);
   const args = command === "rollback" || command === "list" ? [target, ...rest].filter((arg) => arg !== undefined) : rest;
-  const flags = { ...Object.fromEntries(args.flatMap((arg, index) => (arg.startsWith("--") ? [[arg.slice(2), args[index + 1] === undefined || args[index + 1].startsWith("--") ? true : args[index + 1]]] : []))), job: jobFlag(args) };
+  const flags = { ...Object.fromEntries(args.flatMap((arg, index) => (arg.startsWith("--") ? [[arg.slice(2), args[index + 1] === undefined || args[index + 1].startsWith("--") ? true : args[index + 1]]] : []))), job };
   if (command === "apply" || (command === "rollback" && flags.apply !== undefined)) requireExplicitTarget("project", flags.project);
   const client = loadConfig();
   if (command === "get" && target) {
