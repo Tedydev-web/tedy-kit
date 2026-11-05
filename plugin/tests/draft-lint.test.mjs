@@ -127,13 +127,16 @@ test("a PR comment refuses a Markdown image, a bare @handle and credential-shape
   ]) assert.deepEqual(lintComment(body, "en"), [], body);
 });
 
-test("a mention, credential-shaped text or non-Latin text inside a code span of any backtick length is not refused, and an unclosed backtick hides nothing", () => {
+test("a mention or non-Latin text inside a code span of any backtick length is not refused, credential-shaped text is refused even there, and an unclosed backtick hides nothing", () => {
   for (const body of [
     "The guard matches `` @a`b `` in the template.",
-    "The fixture keeps `password: \"Password1\"` in plain text.",
-    "The fixture keeps ``token: \"s3cr3t-value-123\"`` in plain text.",
     "The label `` 中`文 `` stays in the header.",
   ]) assert.deepEqual(lintComment(body, "en"), [], body);
+  for (const body of [
+    "The fixture keeps `password: \"Password1\"` in plain text.",
+    "The fixture keeps ``token: \"s3cr3t-value-123\"`` in plain text.",
+    "The call sends `Bearer abcdefghijklmnopqrstuvwxyz012345` in the URL.",
+  ]) assert.ok(lintComment(body, "en").some((problem) => /credential/.test(problem)), body);
   assert.deepEqual(lintChatComment("The label `` 中`文 `` stays in the header.", "doc", "en").filter((problem) => /non-Latin/.test(problem)), []);
   for (const [body, pattern] of [
     ["The `x total ignores refunds, as @minh noted.", /@minh.*backticks/],

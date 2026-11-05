@@ -110,7 +110,7 @@ export function lintComment(body, lang) {
   const code = withoutCodeSpans(text);
   const mention = code.match(MENTION);
   if (mention) problems.push(`"${mention[0]}" notifies that person; drop it or put it in backticks`);
-  if (code.split("\n").some(secretShaped)) problems.push("credential-shaped text in the comment; remove it");
+  if (text.split("\n").some(secretShaped)) problems.push("credential-shaped text in the comment; remove it");
   if (!first.trimEnd().endsWith(rules.ending)) problems.push(`the first line must end with "${rules.ending}"`);
   if (/[.!?]\s+\S/.test(withoutSpans(first.trim()).slice(0, -rules.ending.length))) problems.push("the first line must be one sentence");
   if (rules.fillers.test(text)) problems.push(rules.fillerHint);
