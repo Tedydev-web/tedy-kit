@@ -31,6 +31,15 @@ test("one blast-radius procedure sees every tracked file, reads siblings from th
   assert.match(read("skills/review-pr/SKILL.md"), /Blast radius in source-access\.md/);
 });
 
+test("review asks before any script runs PR code, names the execution surface, and asks again on a new head", () => {
+  const review = read("skills/review-pr/SKILL.md");
+  const step = review.slice(review.indexOf("3. **Checkout and verify.**"), review.indexOf("4. **Read.**"));
+  for (const phrase of ["`references/checkout.md`", "`run.header`", "a new head asks again"]) assert.ok(step.includes(phrase), phrase);
+  const checkout = read("skills/review-pr/references/checkout.md");
+  for (const phrase of ["pr-execution-surface.mjs origin/<baseRefName> refs/pr/<n>", "header `run.header`", "full head sha", "tests run all of this PR's code", "`run.lint`", "`run.all`", "`run.none`", "gh pr checks <n>", "never `npm install`", "ask again", "verify_gotchas", "verify not run", "<state>/review-runs/", "decision-points.md"]) assert.ok(checkout.includes(phrase), phrase);
+  assert.ok(script("pr-execution-surface"));
+});
+
 test("every approval before a github-write post, reply or edit carries the verbatim body in an AskUserQuestion preview", () => {
   const review = read("skills/review-pr/SKILL.md");
   const approval = review.slice(review.indexOf("10. **Approval.**"), review.indexOf("12. **Next step.**"));
