@@ -158,7 +158,7 @@ export async function withRecords(keys, { job, since } = {}, fn) {
   const sorted = [...new Set(keys)].sort();
   const held = [];
   try {
-    for (const key of sorted) held.push(acquire(key));
+    for (const key of sorted) held.push({ key, ...acquire(key) });
     const conflicts = ledgerConflicts(sorted, { job: name, since });
     if (conflicts.length) throw new Error(conflicts.map((entry) => `refused: ${entry.key} got a kit write from job ${entry.job} at ${entry.at}, after this draft's sources were pinned at ${since}; read the record again, update the draft, lint it and ask the user again.`).join("\n"));
     let done = false;
@@ -178,6 +178,17 @@ export async function withRecords(keys, { job, since } = {}, fn) {
     };
     return await fn(recorded);
   } finally {
-    for (const { path, content } of held) unlinkIfSame(path, content);
+    const stuck = held.flatMap(({ key, path, content }) => {
+      try {
+        unlinkIfSame(path, content);
+        return [];
+      } catch (error) {
+        return [{ key, path, error }];
+      }
+    });
+    for (const { key, path, error } of stuck) {
+      process.stderr.write(`warning: the lock for ${key} could not be released (${error.message}); remove ${path} if the next write on ${key} refuses\n`);
+      logGate({ hook: "record-lock", decision: "lock-release-failed", key, path, command: COMMAND, error: error.message });
+    }
   }
 }

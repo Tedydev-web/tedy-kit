@@ -2,7 +2,7 @@ import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, readlinkSync, rmSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { jobFlag, ledgerConflicts, ledgerPath, lockPath, withRecords } from "../lib/record-lock.mjs";
 import { world } from "./fake-services-for-tests.mjs";
@@ -140,6 +140,35 @@ async function captured(fn) {
 }
 
 const gateLog = () => readFileSync(join(process.env.TEDY_STATE_DIR, "gate-log.jsonl"), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
+
+test("a lock that cannot be released still lets the other locks go, keeps the write's own outcome and is reported", async () => {
+  const breakLock = (key) => {
+    unlinkSync(lockPath(key));
+    mkdirSync(lockPath(key));
+  };
+  const failed = await captured(() =>
+    withRecords(["t11:a", "t11:b"], {}, async () => {
+      breakLock("t11:a");
+      throw new Error("the write failed");
+    }),
+  );
+  assert.equal(failed.error?.message, "the write failed");
+  assert.equal(existsSync(lockPath("t11:b")), false);
+  assert.match(failed.stderr, /^warning: the lock for t11:a could not be released \(EISDIR[^\n]*\); remove [^\n]+\.lock if the next write on t11:a refuses$/m);
+  const passed = await captured(() =>
+    withRecords(["t12:a", "t12:b"], {}, async () => {
+      breakLock("t12:a");
+      return 5;
+    }),
+  );
+  assert.equal(passed.error, undefined);
+  assert.equal(passed.value, 5);
+  assert.equal(existsSync(lockPath("t12:b")), false);
+  assert.match(passed.stderr, /warning: the lock for t12:a could not be released/);
+  assert.ok(gateLog().some((entry) => entry.hook === "record-lock" && entry.decision === "lock-release-failed" && entry.key === "t12:a"));
+  rmSync(lockPath("t11:a"), { recursive: true });
+  rmSync(lockPath("t12:a"), { recursive: true });
+});
 
 test("a ledger line that cannot be appended after the write warns on stderr and in the gate log, and the write still succeeds", async () => {
   mkdirSync(ledgerPath("t10:a"), { recursive: true });
