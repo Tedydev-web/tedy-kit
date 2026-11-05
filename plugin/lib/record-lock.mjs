@@ -152,9 +152,9 @@ export function jobFlag(args) {
   return job;
 }
 
-export function splitJob(argv) {
-  const job = jobFlag(argv);
-  return { job, argv: argv.filter((arg, index) => arg !== "--job" && !(typeof arg === "string" && arg.startsWith("--job=")) && argv[index - 1] !== "--job") };
+export function splitJob([verb, ...rest]) {
+  const job = jobFlag(rest);
+  return { job, argv: [verb, ...rest.filter((arg, index) => arg !== "--job" && !(typeof arg === "string" && arg.startsWith("--job=")) && rest[index - 1] !== "--job")] };
 }
 
 export async function withRecords(keys, { job, since } = {}, fn) {

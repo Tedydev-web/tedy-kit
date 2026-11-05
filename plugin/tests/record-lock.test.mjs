@@ -131,6 +131,15 @@ test("splitJob takes --job and its file out of the arguments, so a --job before 
   assert.deepEqual(splitJob(["set", "--job=plans/jobs/a.md", "21", "--apply"]), { job: "plans/jobs/a.md", argv: ["set", "21", "--apply"] });
   assert.deepEqual(splitJob(["post", "d.md"]), { job: undefined, argv: ["post", "d.md"] });
   assert.throws(() => splitJob(["post", "--job", "--doc", "D"]), { message: "--job needs a job file path; nothing was written" });
+  assert.deepEqual(splitJob(["--job", "plans/jobs/a.md", "post", "1:2"]), { job: undefined, argv: ["--job", "plans/jobs/a.md", "post", "1:2"] });
+});
+
+test("a --job before the verb is not a write, since the publish gates read the verb right after the script", async () => {
+  const w = world({ web: { figma: [] } });
+  w.file("f.md", "@lam Màn này thiếu trạng thái rỗng.\n");
+  const posted = await w.run("figma-comments", ["--job", "plans/jobs/one.md", "post", "1:2", "--body-file", "f.md", "--file", "F"]);
+  assert.equal(posted.code, 2, posted.out);
+  assert.deepEqual(w.writes(), []);
 });
 
 test("a Figma post with --job before its node id posts to that node and records the job", async () => {
