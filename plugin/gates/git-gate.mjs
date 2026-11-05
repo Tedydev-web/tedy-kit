@@ -350,6 +350,20 @@ export function pushRisk(args, dir, exempt = []) {
   return null;
 }
 
+const BODY_FLAG = /^(?:--body|-b|--body-file|-F)(?:=[\s\S]*)?$/;
+
+function editsOnlyBody(tokens) {
+  const flags = tokens.slice(tokens.indexOf("edit") + 1);
+  let body = false;
+  for (let index = 0; index < flags.length; index += 1) {
+    if (!flags[index].startsWith("-")) continue;
+    if (!BODY_FLAG.test(flags[index])) return false;
+    body = true;
+    if (!flags[index].includes("=")) index += 1;
+  }
+  return body;
+}
+
 export function prBody(args, dir) {
   for (let index = 0; index < args.length; index += 1) {
     const match = args[index].match(/^(--body|-b|--body-file|-F)(?:=([\s\S]*))?$/);
@@ -443,6 +457,7 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
       else if (tokens.some((token) => token === "-d" || token === "--delete-branch")) askFor("tedy gate: closing this PR also deletes its branch. Allow it only if the user asked for that.");
       continue;
     }
+    if (action.pr && action.verbs.length === 1 && action.verbs[0] === "edit" && editsOnlyBody(tokenize(segment))) continue;
     if (/\bgh\s+(pr|issue)\s+(merge|close|reopen|ready|edit|lock|unlock)\b/.test(shellWords(segment))) {
       return { allow: false, reason: "tedy gate: merging, closing or editing a PR or issue belongs to the user. Tell the user what is ready and let them do it." };
     }

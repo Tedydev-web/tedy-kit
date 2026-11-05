@@ -79,7 +79,8 @@ test("merging or marking a PR ready asks the user, closing a PR passes, editing 
     assert.equal(result.ask, true, command);
     assert.match(result.reason, why, command);
   }
-  for (const command of ["gh pr edit 12 --base dev", "gh issue close 3"]) {
+  for (const command of ["gh pr edit 12 --body x", "gh pr edit 12 --body-file b.md", "gh pr edit 12 -F b.md", "gh pr edit 12 -b x", "gh -R o/r pr edit 12 --body=x", "gh pr edit https://github.com/o/r/pull/12 --body-file=b.md"]) assert.equal(evaluate(command, "/w").allow, true, command);
+  for (const command of ["gh pr edit 12 --base dev", "gh pr edit 12 --body x --base dev", "gh pr edit 12 --title x", "gh pr edit 12", "gh issue edit 3 --body x", "gh issue close 3"]) {
     const result = evaluate(command, "/w");
     assert.equal(result.allow, false, command);
     assert.notEqual(result.ask, true, command);
