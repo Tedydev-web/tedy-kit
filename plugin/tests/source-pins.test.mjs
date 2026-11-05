@@ -405,6 +405,8 @@ test("a version source: unchanged is silent, changed refuses unless the cited pa
   assert.deepEqual(versionCheck("Figma F1 lastModified", "1", "2", { changed: "the draft links the whole file" }), { refusal: `refused: Figma F1 lastModified changed from 1 to 2 since it was pinned and the draft links the whole file; ${RECHECK}` });
 });
 
+const recordAt = (file) => JSON.parse(readFileSync(sourcesPath(file), "utf8")).at;
+
 test("the sources record is required at publish and refuses when missing, corrupt, for another file or stale", async () => {
   const dir = tempDir("tedy-pins-");
   const file = join(dir, "d.md");
@@ -413,7 +415,7 @@ test("the sources record is required at publish and refuses when missing, corrup
   const unknown = `${relint} [--pinned-at <file pin-sources ran for>]`;
   assert.deepEqual(pinnedSources(file, relint), { refusal: `refused: ${file} has no pinned sources; run ${unknown}, then ask the user again` });
   writeSources(file, [{ kind: "figma", file: "F" }], "draft one\n");
-  assert.deepEqual(pinnedSources(file, relint), { sources: [{ kind: "figma", file: "F" }], warnings: [], pinnedAt: undefined });
+  assert.deepEqual(pinnedSources(file, relint), { sources: [{ kind: "figma", file: "F" }], warnings: [], pinnedAt: undefined, at: recordAt(file) });
   writeFileSync(file, "draft two\n");
   assert.deepEqual(pinnedSources(file, relint), { refusal: `refused: ${file} changed after its sources were pinned; run ${unknown}, then ask the user again` });
   writeSources(file, []);
@@ -421,7 +423,7 @@ test("the sources record is required at publish and refuses when missing, corrup
   writeFileSync(sourcesPath(file), "{ not json");
   assert.match(pinnedSources(file, relint).refusal, new RegExp(`^refused: the sources record for ${file} cannot be read \\(.+\\); run ${unknown.replace(/[[\]]/g, "\\$&")}, then ask the user again$`));
   writeSources(file, [], "draft two\n");
-  assert.deepEqual(pinnedSources(file, relint), { sources: [], warnings: [], pinnedAt: undefined });
+  assert.deepEqual(pinnedSources(file, relint), { sources: [], warnings: [], pinnedAt: undefined, at: recordAt(file) });
 });
 
 test("the sources record keeps the lint's warnings and where the read pins came from, and a relint hint names that file", async () => {
@@ -431,7 +433,7 @@ test("the sources record keeps the lint's warnings and where the read pins came 
   writeFileSync(file, "comment\n");
   const warning = "warning: Figma F file was not pinned by draft-lint.mjs pin-sources ledger.md, so it was pinned now, at lint";
   writeSources(file, [], "comment\n", { warnings: [warning], pinnedAt: ledger });
-  assert.deepEqual(pinnedSources(file, "relint"), { sources: [], warnings: [warning], pinnedAt: ledger });
+  assert.deepEqual(pinnedSources(file, "relint"), { sources: [], warnings: [warning], pinnedAt: ledger, at: recordAt(file) });
   writeFileSync(file, "comment, edited\n");
   assert.deepEqual(pinnedSources(file, "relint"), { refusal: `refused: ${file} changed after its sources were pinned; run relint --pinned-at ${ledger}, then ask the user again` });
   writeFileSync(file, "comment\n");
@@ -450,7 +452,7 @@ test("a sources record serves only the file it was written for, even when two pa
   assert.equal(sourcesPath(first), sourcesPath(second));
   writeSources(first, [{ kind: "figma", file: "F" }], "same text\n");
   assert.deepEqual(pinnedSources(second, "relint"), { refusal: `refused: the sources record for ${second} was written for ${first}; run relint [--pinned-at <file pin-sources ran for>], then ask the user again` });
-  assert.deepEqual(pinnedSources(first, "relint"), { sources: [{ kind: "figma", file: "F" }], warnings: [], pinnedAt: undefined });
+  assert.deepEqual(pinnedSources(first, "relint"), { sources: [{ kind: "figma", file: "F" }], warnings: [], pinnedAt: undefined, at: recordAt(first) });
 });
 
 test("nodeId accepts 12-34, 12:34 and 12%3A34, instance paths included, and nothing else", async () => {

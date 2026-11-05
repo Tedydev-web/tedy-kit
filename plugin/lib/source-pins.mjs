@@ -142,7 +142,7 @@ export function pinnedSources(file, relint) {
   if (typeof record.sha256 !== "string") return { refusal: `refused: ${file} has a sources record with no digest of its text; ${again(record.pinnedAt)}` };
   if (record.sha256 !== digest(readFileSync(file, "utf8"))) return { refusal: `refused: ${file} changed after its sources were pinned; ${again(record.pinnedAt)}` };
   if (!Array.isArray(record.warnings) || record.warnings.some((line) => typeof line !== "string")) return { refusal: `refused: the sources record for ${file} has no list of the lint's warnings; ${again(record.pinnedAt)}` };
-  return { sources: record.sources, warnings: record.warnings, pinnedAt: record.pinnedAt };
+  return { sources: record.sources, warnings: record.warnings, pinnedAt: record.pinnedAt, at: record.at };
 }
 
 export async function recheckPinned(file, relint, { texts, covers, what } = {}) {

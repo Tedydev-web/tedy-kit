@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fakeOpenProject, world } from "./fake-services-for-tests.mjs";
+import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const HEAD = "abc1234" + "0".repeat(33);
 const DIFF = "diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -9,2 +10,2 @@\n context line\n+added line\n";
@@ -62,4 +63,15 @@ test("github-write reads no cites out of the draft: a record for another text re
   assert.notEqual(post.code, 0, post.out);
   assert.match(post.out, /^refused: d\.md was linted for no PR, not o\/r#701; run draft-lint\.mjs pr-comment d\.md --repo o\/r from the checkout of o\/r, then ask the user again$/m);
   assert.deepEqual(w.writes(), []);
+});
+
+test("pinnedSources returns the time the sources record was written", async () => {
+  const { pinnedSources, sourcesPath, writeSources } = await import("../lib/source-pins.mjs");
+  const dir = tempDir("tedy-pinned-at-");
+  const file = join(dir, "d.md");
+  writeFileSync(file, "text\n");
+  writeSources(file, [], "text\n");
+  const { at } = JSON.parse(readFileSync(sourcesPath(file), "utf8"));
+  assert.ok(!Number.isNaN(Date.parse(at)), at);
+  assert.equal(pinnedSources(file, "").at, at);
 });
