@@ -72,9 +72,9 @@ test("the toggle is idempotent and ask restores the same rules", () => {
   assert.match(toggle(place).stdout, /publish approval: ask/);
 });
 
-test("answer denies file-tool edits to the approval tickets, the PR body records and the sources records, and ask takes that back, writing only on a change", () => {
+test("answer denies file-tool edits to the approval tickets, the PR body records, the sources records and the review run approvals, and ask takes that back, writing only on a change", () => {
   const state = process.env.TEDY_STATE_DIR;
-  assert.deepEqual(STATE_DENY, [`Edit(/${join(state, "approvals")}/**)`, `Edit(/${join(state, "pr-bodies")}/**)`, `Edit(/${join(state, "drafts")}/**)`]);
+  assert.deepEqual(STATE_DENY, [`Edit(/${join(state, "approvals")}/**)`, `Edit(/${join(state, "pr-bodies")}/**)`, `Edit(/${join(state, "drafts")}/**)`, `Edit(/${join(state, "review-runs")}/**)`]);
   const narrow = `Edit(/${join(state, "drafts")}/*.sources.json)`;
   const swapped = places({ rules: [], deny: [SSH_DENY, STATE_DENY[0], STATE_DENY[1], narrow] });
   toggle(swapped, "answer");

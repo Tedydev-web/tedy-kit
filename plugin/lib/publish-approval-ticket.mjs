@@ -141,7 +141,7 @@ function requireStateDeny(settings, state) {
     throw new Error(`publish approval is in answer mode, but ${error.message}; ${again}`);
   }
   const missing = stateDenyRules(state).filter((rule) => !deny.includes(rule));
-  if (missing.length) throw new Error(`publish approval is in answer mode, but ${settings} lacks ${missing.join(", ")} in permissions.deny, so file tools could write the kit's approvals, PR body records or sources records; ${again}`);
+  if (missing.length) throw new Error(`publish approval is in answer mode, but ${settings} lacks ${missing.join(", ")} in permissions.deny, so file tools could write the kit's approvals, PR body records, sources records or review run approvals; ${again}`);
 }
 
 export function consumeApproval(argv, texts = [], { dir = approvalsDir(), now = Date.now(), mode = gateSwitches().publishApproval, settings = CLAUDE_SETTINGS } = {}) {

@@ -14,7 +14,7 @@ export const KIT_PUBLISH_ASK_RULES = Object.freeze([
   "Bash(*doc-comment-file.mjs*post*--apply*)",
 ]);
 
-export const stateDenyRules = (state = STATE_DIR) => [`Edit(/${resolve(state, "approvals")}/**)`, `Edit(/${resolve(state, "pr-bodies")}/**)`, `Edit(/${resolve(state, "drafts")}/**)`];
+export const stateDenyRules = (state = STATE_DIR) => [`Edit(/${resolve(state, "approvals")}/**)`, `Edit(/${resolve(state, "pr-bodies")}/**)`, `Edit(/${resolve(state, "drafts")}/**)`, `Edit(/${resolve(state, "review-runs")}/**)`];
 
 const retiredDenyRules = (state = STATE_DIR) => [`Edit(/${resolve(state, "drafts")}/*.sources.json)`];
 

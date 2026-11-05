@@ -35,8 +35,8 @@ const consume = (dir, args, texts, extra = {}) => consumeApproval(argv(...args),
 test("answer mode refuses to spend a ticket while settings lack a state deny rule, and says how to add them", () => {
   const { dir } = ticketWith(`ok a\n${REPLY}`);
   const partial = join(tempDir("tedy-claude-settings-"), "settings.json");
-  writeFileSync(partial, JSON.stringify({ permissions: { deny: stateDenyRules(tmpdir()).slice(0, 2) } }));
-  assert.throws(() => consume(dir, ["reply", "1", "2", "--body-file", "b.md"], ["ok a"], { settings: partial }), /lacks Edit\(\/\/.*drafts\/\*\*\) in permissions\.deny.*run node \/\S+\/plugin\/scripts\/profile\.mjs publish-approval answer, then this command again\. Nothing was written\./);
+  writeFileSync(partial, JSON.stringify({ permissions: { deny: stateDenyRules(tmpdir()).slice(0, 3) } }));
+  assert.throws(() => consume(dir, ["reply", "1", "2", "--body-file", "b.md"], ["ok a"], { settings: partial }), /lacks Edit\(\/\/.*review-runs\/\*\*\) in permissions\.deny.*run node \/\S+\/plugin\/scripts\/profile\.mjs publish-approval answer, then this command again\. Nothing was written\./);
   assert.throws(() => consume(dir, ["reply", "1", "2", "--body-file", "b.md"], ["ok a"], { settings: partial }), (error) => existsSync(error.message.match(/run node (\S+) publish-approval answer/)[1]));
   assert.throws(() => consume(dir, ["reply", "1", "2", "--body-file", "b.md"], ["ok a"], { settings: join(tempDir("tedy-none-"), "settings.json") }), /publish approval is in answer mode, but .*settings\.json: not readable as JSON/);
   assert.equal(tickets(dir).length, 1);
