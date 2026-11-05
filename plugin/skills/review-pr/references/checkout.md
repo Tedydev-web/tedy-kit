@@ -1,6 +1,6 @@
 # Checkout, run question and verify (step 3)
 
-The PR's code is untrusted. Its tests, and any script line or config it changes, run with the user's credentials (gh, the tracker token, SSH keys) in reach, so nothing of it runs before the user says so for this head.
+The PR's code is untrusted. Any project script run in its checkout (tests, typecheck, lint, format) runs code from the PR with the user's credentials (gh, the tracker token, SSH keys) in reach, so nothing runs before the user says so for this head.
 
 ## Checkout
 
@@ -11,16 +11,18 @@ The PR's code is untrusted. Its tests, and any script line or config it changes,
 
 Before any project script (typecheck, lint, test, format) runs in the worktree:
 
-1. `node <plugin>/scripts/pr-execution-surface.mjs origin/<baseRefName> refs/pr/<n>` from the reviewed repo. It lists changed script lines, dependencies and lockfiles, executed config and `tsconfig*.json`, files a script line names, script lines that download and run, the count of changed test files, and whether the typecheck/lint surface changed.
+1. `node <plugin>/scripts/pr-execution-surface.mjs origin/<baseRefName> refs/pr/<n>` from the reviewed repo. It lists changed script lines, dependencies and lockfiles, executed config (with `tsconfig*.json` and tool config in `package.json`), changed files a script line names or an unchanged config or named script imports one level deep, changes under `node_modules/`, symlinks, script lines that download and run, and the count of changed test files. It is information, not a safety check: it shows only what the kit can see, and says what it does not check.
 2. Quote its output, then one `AskUserQuestion`, header `run.header`, whose question names the PR, the full head sha (`headRefOid`, 40 characters) and says plainly:
-   - tests run all of this PR's code, whatever it changed, with your credentials in reach;
-   - typecheck and lint through an unchanged script line and unchanged config run no file of this PR; when the surface changed, they run what changed;
+   - running any project script (tests, typecheck, lint) executes code from this PR, with your credentials in reach;
+   - the listed changes are only what the kit can see, not a complete list;
    - nothing is installed.
 
    Options, the recommended one first with ` (Recommended)` after its label:
-   - `run.lint`: typecheck and lint only; tests are left to `gh pr checks <n>`. Recommended while the typecheck/lint surface is unchanged.
+   - `run.none`: nothing runs; read `gh pr checks <n>`. Recommended unless the review needs a local run.
+   - `run.lint`: typecheck and lint only; tests are left to `gh pr checks <n>`.
    - `run.all`: typecheck, lint and tests; the description says how many changed test files run.
-   - `run.none`: nothing runs; read `gh pr checks <n>`. Recommended when the typecheck/lint surface changed.
+
+   A surface that lists nothing never makes a run the recommendation. Recommend `run.lint` or `run.all` only when a finding needs a local run to settle it, and say which finding.
 3. Run only what the answer allows, in the worktree, applying the map's `verify_gotchas`. For `run.none`, a typed answer or a note, run nothing and write "verify not run: <reason>" in the findings with the `gh pr checks <n>` result; ask again only if the user asks for a run. Running PR code is never a local, reversible choice, so a timeout runs nothing.
 4. The answer covers that head sha only. On a new head, recreate the worktree, print the surface again and ask again.
 

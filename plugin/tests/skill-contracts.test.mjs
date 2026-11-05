@@ -45,7 +45,8 @@ test("review asks before any script runs PR code, names the execution surface, a
   const step = review.slice(review.indexOf("3. **Checkout and verify.**"), review.indexOf("4. **Read.**"));
   for (const phrase of ["`references/checkout.md`", "`run.header`", "a new head asks again"]) assert.ok(step.includes(phrase), phrase);
   const checkout = read("skills/review-pr/references/checkout.md");
-  for (const phrase of ["pr-execution-surface.mjs origin/<baseRefName> refs/pr/<n>", "header `run.header`", "full head sha", "tests run all of this PR's code", "`run.lint`", "`run.all`", "`run.none`", "gh pr checks <n>", "never `npm install`", "ask again", "verify_gotchas", "verify not run", "<state>/review-runs/", "decision-points.md"]) assert.ok(checkout.includes(phrase), phrase);
+  for (const phrase of ["pr-execution-surface.mjs origin/<baseRefName> refs/pr/<n>", "header `run.header`", "full head sha", "running any project script (tests, typecheck, lint) executes code from this PR", "only what the kit can see, not a complete list", "Recommended unless the review needs a local run", "`run.lint`", "`run.all`", "`run.none`", "gh pr checks <n>", "never `npm install`", "ask again", "verify_gotchas", "verify not run", "<state>/review-runs/", "decision-points.md"]) assert.ok(checkout.includes(phrase), phrase);
+  for (const claim of [/run no file/, /Recommended while/, /surface is unchanged/]) assert.doesNotMatch(checkout + step, claim);
   assert.ok(script("pr-execution-surface"));
 });
 

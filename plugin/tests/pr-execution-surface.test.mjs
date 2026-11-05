@@ -2,6 +2,8 @@ import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
+import { mkdirSync, symlinkSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { executionSurface, formatSurface } from "../lib/pr-execution-surface.mjs";
 import { commitFile, git } from "./git-sibling-for-tests.mjs";
@@ -40,7 +42,7 @@ test("a changed test script, a new dependency with its lockfile, a changed confi
   assert.equal(surface.tests, 1);
   assert.equal(surface.lintSurfaceChanged, true);
   const text = formatSurface(surface);
-  for (const line of ['scripts: package.json scripts.test: "vitest run" -> "vitest run && node scripts/post.js"', "dependencies: package.json devDependencies.left-pad: (none) -> ^1.3.0", "lockfiles: pnpm-lock.yaml", "config: vitest.config.ts", "named by a script: scripts/build.js (package.json scripts.build)", "changed test files: 1", "typecheck/lint surface: changed (scripts, config, named by a script)"]) assert.ok(text.split("\n").includes(line), `${line}\n---\n${text}`);
+  for (const line of ['scripts: package.json scripts.test: "vitest run" -> "vitest run && node scripts/post.js"', "dependencies: package.json devDependencies.left-pad: (none) -> ^1.3.0", "lockfiles: pnpm-lock.yaml", "config: vitest.config.ts", "named by a script: scripts/build.js (package.json scripts.build)", "changed test files: 1", "typecheck/lint surface: changes seen (scripts, config, named by a script)"]) assert.ok(text.split("\n").includes(line), `${line}\n---\n${text}`);
 });
 
 test("script lines that download and run a package are listed, in any package.json of the head", () => {
@@ -71,18 +73,75 @@ test("a changed packageManager, .npmrc, husky hook, Makefile or tsconfig counts 
   assert.equal(surface.lintSurfaceChanged, true);
 });
 
-test("a source-only change reports the typecheck and lint surface unchanged", () => {
+test("a source-only change lists no change seen and never says a run is safe", () => {
   const dir = reviewRepo((repo) => {
     commitFile(repo, "src/a.ts", "export const a = 2;\n");
     commitFile(repo, "src/__tests__/a.ts", "test('a', () => {});\n");
   });
   const surface = executionSurface(dir, "main", "pr");
-  assert.deepEqual([surface.scripts, surface.dependencies, surface.lockfiles, surface.config, surface.named, surface.downloads], [[], [], [], [], [], []]);
+  assert.deepEqual([surface.scripts, surface.dependencies, surface.lockfiles, surface.config, surface.named, surface.imported, surface.vendored, surface.symlinks, surface.downloads], [[], [], [], [], [], [], [], [], []]);
   assert.equal(surface.tests, 1);
   assert.equal(surface.lintSurfaceChanged, false);
   const text = formatSurface(surface);
-  assert.ok(text.includes("typecheck/lint surface: unchanged"), text);
+  assert.ok(text.includes("typecheck/lint surface: no change seen"), text);
   assert.ok(text.includes("scripts: none"), text);
+  assert.ok(text.includes("running any project script (tests, typecheck, lint) runs code from this PR; this list is only what the kit can see, not a complete list"), text);
+  assert.ok(text.includes("not checked:"), text);
+  assert.doesNotMatch(text, /run no file|unchanged;|safe/i);
+});
+
+const TOOLING = {
+  "package.json": json({ name: "app", scripts: { lint: "eslint --rulesdir rules .", build: "node scripts/", check: "node tools/check.mjs" } }),
+  "eslint.config.js": "import rules from './lint-rules/index.js';\nexport default [rules];\n",
+  "lint-rules/index.js": "export default {};\n",
+  "rules/a.js": "module.exports = {};\n",
+  "scripts/index.js": "console.log(1);\n",
+  "tools/check.mjs": "import './lib/helper.mjs';\n",
+  "tools/lib/helper.mjs": "export {};\n",
+  "src/a.ts": "export const a = 1;\n",
+};
+
+function toolingRepo(change) {
+  const dir = tempDir("tedy-surface-tooling-");
+  git(dir, "init", "-q", "-b", "main");
+  for (const [path, text] of Object.entries(TOOLING)) commitFile(dir, path, text);
+  git(dir, "checkout", "-q", "-b", "pr");
+  change(dir);
+  git(dir, "add", "-A", "-f");
+  git(dir, "commit", "-q", "-m", "pr");
+  return executionSurface(dir, "main", "pr");
+}
+
+const put = (repo, path, text) => {
+  mkdirSync(dirname(join(repo, path)), { recursive: true });
+  writeFileSync(join(repo, path), text);
+};
+
+test("committed node_modules, symlinks, more config names, package.json tool config, named directories and local imports count as surface", () => {
+  for (const [label, change, field, expected] of [
+    ["a committed node_modules binary", (repo) => put(repo, "node_modules/.bin/eslint", "#!/bin/sh\n"), "vendored", "node_modules/.bin/eslint"],
+    ["a node_modules symlink", (repo) => symlinkSync("src", join(repo, "node_modules")), "symlinks", "node_modules"],
+    ["a file an unchanged config imports", (repo) => put(repo, "lint-rules/index.js", "process.exit(9);\n"), "imported", { file: "lint-rules/index.js", by: "eslint.config.js" }],
+    ["a file an unchanged named script imports", (repo) => put(repo, "tools/lib/helper.mjs", "process.exit(9);\n"), "imported", { file: "tools/lib/helper.mjs", by: "tools/check.mjs" }],
+    ["a file in a directory --rulesdir names", (repo) => put(repo, "rules/a.js", "process.exit(9);\n"), "named", { file: "rules/", by: "package.json scripts.lint", changed: 1 }],
+    ["a file in a directory node runs", (repo) => put(repo, "scripts/index.js", "process.exit(9);\n"), "named", { file: "scripts/", by: "package.json scripts.build", changed: 1 }],
+    [".prettierrc without an extension", (repo) => put(repo, ".prettierrc", '{"plugins":["./p.js"]}\n'), "config", ".prettierrc"],
+    [".babelrc.js", (repo) => put(repo, ".babelrc.js", "x\n"), "config", ".babelrc.js"],
+    ["babel.config.json", (repo) => put(repo, "babel.config.json", "{}\n"), "config", "babel.config.json"],
+    [".stylelintrc.json", (repo) => put(repo, "web/.stylelintrc.json", "{}\n"), "config", "web/.stylelintrc.json"],
+    [".pnpmfile.cjs", (repo) => put(repo, ".pnpmfile.cjs", "x\n"), "config", ".pnpmfile.cjs"],
+    ["jest.config.json", (repo) => put(repo, "jest.config.json", "{}\n"), "config", "jest.config.json"],
+    [".mocharc.yml", (repo) => put(repo, ".mocharc.yml", "require: ./x.js\n"), "config", ".mocharc.yml"],
+    ["bunfig.toml", (repo) => put(repo, "bunfig.toml", "preload = ['./x.ts']\n"), "config", "bunfig.toml"],
+    ["package.json eslintConfig", (repo) => put(repo, "package.json", json({ ...JSON.parse(TOOLING["package.json"]), eslintConfig: { extends: "./x.js" } })), "config", "package.json eslintConfig"],
+    ["package.json prettier", (repo) => put(repo, "package.json", json({ ...JSON.parse(TOOLING["package.json"]), prettier: "./p.js" })), "config", "package.json prettier"],
+    ["package.json babel", (repo) => put(repo, "package.json", json({ ...JSON.parse(TOOLING["package.json"]), babel: { plugins: ["./b.js"] } })), "config", "package.json babel"],
+  ]) {
+    const surface = toolingRepo(change);
+    assert.deepEqual(surface[field].filter((item) => JSON.stringify(item) === JSON.stringify(expected)), [expected], `${label}: ${JSON.stringify(surface[field])}`);
+    assert.equal(surface.lintSurfaceChanged, true, label);
+  }
+  assert.equal(toolingRepo((repo) => put(repo, "src/a.ts", "export const a = 2;\n")).lintSurfaceChanged, false);
 });
 
 test("the surface is taken against the merge base, so a base that moved on lists nothing of its own", () => {
