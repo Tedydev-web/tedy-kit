@@ -9,6 +9,7 @@ import { prBodyFrom, sameComment } from "../lib/openproject.mjs";
 import { classifyAction, decide } from "../gates/role-gate.mjs";
 import { check, publishes, reasonFor, unshown } from "../gates/publish-quote-gate.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
+import { ALL_GATES_ON } from "../lib/hook-io.mjs";
 
 const mapFile = (data) => `# Project map\n\n\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\`\n`;
 
@@ -33,6 +34,21 @@ test("a PR in a tracked project must carry OP#<id> in its body", () => {
   assert.equal(create("--body-file body.md").allow, true);
   assert.equal(create("--body-file missing.md").allow, false);
   assert.equal(evaluate('gh pr create --draft --body ""', "/somewhere/else", { projectsDir: dir }).allow, true);
+});
+
+test("a PR body edit in a tracked project must keep OP#<id>, with ghWrites on or off", () => {
+  const { dir, repo } = projects();
+  for (const gates of [ALL_GATES_ON, { ...ALL_GATES_ON, ghWrites: false }]) {
+    const edit = (rest) => evaluate(`gh pr edit 12 ${rest}`, repo, { projectsDir: dir, gates });
+    assert.equal(edit('--body "OP#21453 updated"').allow, true);
+    assert.equal(edit("--body=OP#21453").allow, true);
+    assert.equal(edit('--body "no package"').allow, false);
+    assert.match(edit('--body "no package"').reason, /OP#<id>/);
+    writeFileSync(join(repo, "edit.md"), "OP#21376\n");
+    assert.equal(edit("--body-file edit.md").allow, true);
+    assert.equal(edit("--body-file missing.md").allow, false);
+  }
+  assert.equal(evaluate('gh pr edit 12 --body "no package"', "/somewhere/else", { projectsDir: dir }).allow, true);
 });
 
 const draft = "# PR #735: comment line by line (head abc1234)\n\n## 1. `src/a.ts:10`\nc check lại chỗ này giúp e nha\n\n---\n\n## 2. `src/b.ts:4`\nđoạn này thiếu case rỗng\n";

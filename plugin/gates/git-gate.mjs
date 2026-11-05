@@ -424,19 +424,31 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
       if (risk) askFor(`tedy gate: ${risk}, which belongs to the user. Allow it only if the user asked for this push.`);
       continue;
     }
-    if (action.kind === "pr-create") {
-      if (gates.draftPrOnly && !isDraft(action.args)) return { allow: false, reason: "tedy gate: open the PR as a draft with `--draft`; the user marks it ready." };
+    const workPackageCheck = (args, dir, verb) => {
       let found;
       try {
-        found = projectsDir ? resolveMap(action.dir, projectsDir) : resolveMap(action.dir);
+        found = projectsDir ? resolveMap(dir, projectsDir) : resolveMap(dir);
       } catch {
-        askFor("tedy gate: a project map could not be read, so the work-package check for this PR did not run. Allow it only if this PR needs no work package, then fix the map.");
-        continue;
+        askFor(`tedy gate: a project map could not be read, so the work-package check for this PR ${verb} did not run. Allow it only if this PR needs no work package, then fix the map.`);
+        return null;
       }
-      if (found?.map?.tracker && !/\bOP#\d+\b/.test(prBody(action.args, action.dir) ?? "")) {
-        return { allow: false, reason: "tedy gate: this project tracks work in OpenProject, so every PR carries its work package as `--body \"OP#<id>\"`. No work package yet: stop, hand the task to the PM session (shared/handoff.md), and open the PR once it exists. A body file must already exist when the command runs." };
+      if (found?.map?.tracker && !/\bOP#\d+\b/.test(prBody(args, dir) ?? "")) {
+        return { allow: false, reason: `tedy gate: this project tracks work in OpenProject, so every PR body carries its work package as \`OP#<id>\`, and this ${verb} would leave it out. No work package yet: stop, hand the task to the PM session (shared/handoff.md), and open or edit the PR once it exists. A body file must already exist when the command runs.` };
       }
+      return null;
+    };
+    if (action.kind === "pr-create") {
+      if (gates.draftPrOnly && !isDraft(action.args)) return { allow: false, reason: "tedy gate: open the PR as a draft with `--draft`; the user marks it ready." };
+      const refusal = workPackageCheck(action.args, action.dir, "create");
+      if (refusal) return refusal;
       continue;
+    }
+    if (action.kind === "github-write" && action.pr && action.verbs.length === 1 && action.verbs[0] === "edit") {
+      const tokens = tokenize(segment);
+      if (tokens.some((token) => BODY_FLAG.test(token))) {
+        const refusal = workPackageCheck(tokens, action.dir, "body edit");
+        if (refusal) return refusal;
+      }
     }
     if (action.kind !== "github-write") {
       if (mentionsGhMerge(segment) || (commandTokens(segment)[0] !== "gh" && API_MERGE.test(shellWords(segment)) && /https?:\/\/|graphql/i.test(segment))) askFor(MERGE_REASON);
