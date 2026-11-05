@@ -51,7 +51,7 @@ export function kitTagVersions(repo) {
   return { tags: git(repo, "tag").split("\n").filter(Boolean), manifestAt, headVersion: version(readFileSync(join(repo, MANIFEST), "utf8")) };
 }
 
-export function docReferenceErrors({ files, read, exists }) {
+export function docReferenceErrors({ files, read, exists, ignored = () => false }) {
   const errors = [];
   for (const file of files) {
     let fenced = false;
@@ -65,7 +65,7 @@ export function docReferenceErrors({ files, read, exists }) {
         if (path && !exists(normalize(path.startsWith("/") ? path.slice(1) : join(dirname(file), path)))) errors.push(`${where}: link ${path} does not resolve`);
       }
       for (const [, path, start, end] of line.matchAll(PATH_SPAN)) {
-        if (path.includes("...")) continue;
+        if (path.includes("...") || ignored(path)) continue;
         if (!exists(path)) {
           errors.push(`${where}: ${path} does not exist`);
           continue;
@@ -84,7 +84,15 @@ export function kitDocFiles(repo) {
   const files = git(repo, "ls-files", "README.md", "docs", "plugin").split("\n")
     .filter((file) => file.endsWith(".md") && !file.startsWith("docs/adr/") && !file.startsWith("docs/prior-art/sweeps/") && !card(file));
   const isFile = (path) => existsSync(join(repo, path)) && statSync(join(repo, path)).isFile();
-  return { files, read: (path) => readFileSync(join(repo, path), "utf8"), exists: (path) => existsSync(join(repo, path)) && (isFile(path) || !/\.\w+$/.test(path)) };
+  const ignored = (path) => {
+    try {
+      git(repo, "check-ignore", "-q", path);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  return { files, read: (path) => readFileSync(join(repo, path), "utf8"), exists: (path) => existsSync(join(repo, path)) && (isFile(path) || !/\.\w+$/.test(path)), ignored };
 }
 
 export function retiredReferenceErrors({ retired, scanned }) {

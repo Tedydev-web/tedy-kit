@@ -29,6 +29,12 @@ test("a dead relative link, a missing repository path or a line past the end of 
   assert.deepEqual(errors, ["README.md:1: link docs/gone.md does not resolve", "README.md:1: plugin/lib/a.mjs has 3 lines, not line 40", "README.md:1: plugin/lib/none.mjs does not exist"]);
 });
 
+test("a path git ignores, such as the machine-local private knowledge base, is not required to exist", () => {
+  const files = { "docs/p.md": "It writes `docs/prior-art/private/index.md` and `docs/prior-art/private/index.md:9`, not `docs/gone.md`.\n" };
+  const ignored = (path) => path.startsWith("docs/prior-art/private/");
+  assert.deepEqual(docReferenceErrors({ files: ["docs/p.md"], read: (f) => files[f], exists: (f) => f in files, ignored }), ["docs/p.md:1: docs/gone.md does not exist"]);
+});
+
 test("a published file that still names a retired file fails", () => {
   const errors = retiredReferenceErrors({ retired: ["old-gate.mjs"], scanned: [{ file: "plugin/hooks/hooks.json", text: '"command": "old-gate.mjs"' }, { file: "README.md", text: "clean" }] });
   assert.deepEqual(errors, ["plugin/hooks/hooks.json names the retired old-gate.mjs"]);
