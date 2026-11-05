@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { realpathSync } from "node:fs";
+import { realpathSync, statSync } from "node:fs";
 import { basename, dirname, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { bashInputs, commandTokens } from "./git-gate.mjs";
@@ -11,6 +11,10 @@ import { expandHome, tokenize, walkCommands } from "../lib/shell-segments.mjs";
 const MANAGERS = new Set(["npm", "pnpm", "yarn", "bun", "npx", "bunx", "pnpx"]);
 const DIR_FLAGS = new Set(["-C", "--prefix", "--dir", "--cwd", "--directory"]);
 const CHDIR_FLAGS = new Map([["env", ["-C", "--chdir"]], ["sudo", ["-D", "--chdir"]]]);
+const MAKES = new Set(["make", "gmake"]);
+const MAKE_FILE_FLAGS = new Set(["-f", "--file", "--makefile"]);
+const NODE_PRELOAD_FLAGS = new Set(["-r", "--require", "--import", "--loader", "--experimental-loader"]);
+const GLOB_CHAR = /[*?[{]/;
 const NODE = /^node(?:js)?[\d.]*$/;
 const MANAGER_FILE = /\/node_modules\/(?:npm|pnpm|yarn|corepack|bun)\//;
 const VOLTA_VALUE_FLAGS = new Set(["--node", "--npm", "--pnpm", "--yarn", "--env"]);
@@ -27,11 +31,26 @@ function realPath(path) {
   }
 }
 
+function existingDir(path) {
+  let dir = resolve(path.split(GLOB_CHAR)[0]);
+  while (dirname(dir) !== dir) {
+    try {
+      if (statSync(dir).isDirectory()) return dir;
+    } catch (error) {
+      if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error;
+    }
+    dir = dirname(dir);
+  }
+  return dir;
+}
+
 function flagValues(tokens, flags, dir) {
   const dirs = [];
   for (let index = 0; index < tokens.length && tokens[index] !== "--"; index += 1) {
-    const equals = tokens[index].indexOf("=");
-    const [flag, value] = equals > 0 ? [tokens[index].slice(0, equals), tokens[index].slice(equals + 1)] : [tokens[index], tokens[index + 1]];
+    const token = tokens[index];
+    const equals = token.indexOf("=");
+    let [flag, value] = equals > 0 ? [token.slice(0, equals), token.slice(equals + 1)] : [token, tokens[index + 1]];
+    if (/^-[^-]./.test(token) && !flags(flag) && flags(token.slice(0, 2))) [flag, value] = [token.slice(0, 2), token.slice(2)];
     if (flags(flag) && value) dirs.push(resolve(dir, expandHome(value)));
   }
   return dirs;
@@ -52,15 +71,19 @@ function runner(program, args) {
     while (index < args.length && args[index].startsWith("-")) index += VOLTA_VALUE_FLAGS.has(args[index]) ? 2 : 1;
     return index < args.length ? runner(basename(args[index]), args.slice(index + 1)) : null;
   }
-  return MANAGERS.has(program) || program === "make" || NODE.test(program) ? { program, args } : null;
+  return MANAGERS.has(program) || MAKES.has(program) || NODE.test(program) ? { program, args } : null;
 }
 
 function nodeDirs(args, dirs, here) {
+  const preloads = flagValues(args, (flag) => NODE_PRELOAD_FLAGS.has(flag), here).map(existingDir);
   const { script, inline } = scriptOperand("node", args);
-  if (inline || script === undefined || script === "-") return dirs;
+  if (inline || script === undefined || script === "-") {
+    const tested = args.includes("--test") ? args.filter((arg) => !arg.startsWith("-")).map((arg) => existingDir(resolve(here, expandHome(arg)))) : [];
+    return [...dirs, ...preloads, ...tested];
+  }
   const file = realPath(resolve(here, expandHome(script)));
-  if (MANAGER_FILE.test(file)) return [...dirs, dirname(file)];
-  return file.startsWith(`${PLUGIN_ROOT}${sep}`) ? [] : [dirname(file)];
+  if (MANAGER_FILE.test(file)) return [...dirs, dirname(file), ...preloads];
+  return file.startsWith(`${PLUGIN_ROOT}${sep}`) ? preloads : [dirname(file), ...preloads];
 }
 
 function targetDirs(text, cwd) {
@@ -71,7 +94,8 @@ function targetDirs(text, cwd) {
   const moved = chdirs(raw.slice(0, raw.length - tokens.length), cwd);
   const here = moved.at(-1) ?? cwd;
   if (NODE.test(found.program)) return nodeDirs(found.args, [cwd, ...moved], here);
-  return [cwd, ...moved, ...flagValues(found.args, (flag) => DIR_FLAGS.has(flag), here)];
+  const makefiles = MAKES.has(found.program) ? flagValues(found.args, (flag) => MAKE_FILE_FLAGS.has(flag), here).map(existingDir) : [];
+  return [cwd, ...moved, ...flagValues(found.args, (flag) => DIR_FLAGS.has(flag), here), ...makefiles];
 }
 
 const git = (dir, ...args) => execFileSync("git", ["-C", dir, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 10_000 });

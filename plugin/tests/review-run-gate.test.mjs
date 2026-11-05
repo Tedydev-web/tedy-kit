@@ -102,6 +102,36 @@ test("corepack, volta run, env -C, make and a node run of a checkout file or of 
   }
 });
 
+test("gmake, a makefile, an attached directory and a node preload or test path inside the checkout are refused from outside it", () => {
+  const setup = reviewSetup();
+  const wt = setup.worktree;
+  const outside = join(tempDir("tedy-review-run-outside-"), "probe.mjs");
+  writeFileSync(outside, "console.log(1);\n");
+  for (const [command, cwd] of [
+    ["gmake test", wt],
+    [`make -f ${wt}/Makefile test`, setup.repo],
+    [`make --file=${wt}/Makefile test`, setup.repo],
+    [`make --makefile ${wt}/Makefile test`, setup.repo],
+    [`make -f${wt}/Makefile test`, setup.repo],
+    [`make -C${wt} lint`, setup.repo],
+    [`env -C${wt} npm test`, setup.repo],
+    [`sudo -D${wt} npm test`, setup.repo],
+    [`node --test ${wt}/src/`, setup.repo],
+    [`node --test ${wt}/src/**/*.test.ts`, setup.repo],
+    [`node -r ${wt}/src/a.ts -e 1`, setup.repo],
+    [`node --require=${wt}/src/a.ts -e 1`, setup.repo],
+    [`node --import ${wt}/src/a.ts ${outside}`, setup.repo],
+    [`node --import tsx ${outside}`, wt],
+  ]) {
+    const result = verdict(setup, bash(command, cwd));
+    assert.ok(result, `${command} in ${cwd}`);
+    assert.ok(result.reason.includes("step 3 of /tedy:review-pr"), command);
+  }
+  for (const command of [`make -f ${setup.repo}/Makefile test`, `node --test ${setup.repo}/src/`, `node --import tsx ${outside}`, `node -r ${outside} -e 1`]) {
+    assert.equal(verdict(setup, bash(command, setup.repo)), null, command);
+  }
+});
+
 test("a kit script, a file outside the checkout and corepack or volta housekeeping pass in a review checkout", () => {
   const setup = reviewSetup();
   const outside = join(tempDir("tedy-review-run-outside-"), "probe.mjs");
