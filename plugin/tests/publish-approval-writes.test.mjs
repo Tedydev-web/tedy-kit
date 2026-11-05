@@ -37,6 +37,18 @@ async function onceOnly(w, script, args, preview, count, keys = []) {
   assert.deepEqual(lines(), before.map((length) => length + 1), `${script} ${args.join(" ")} appended to the ledger without writing`);
 }
 
+async function heldRefuses(w, script, args, preview, key, count) {
+  w.approve(preview(w.line(script, args)));
+  w.holdRecord(key);
+  const before = count();
+  const refused = await w.run(script, args);
+  assert.equal(refused.code, 1, refused.out);
+  assert.ok(refused.out.includes(`refused: ${key} is being written by pid ${process.pid} (held by the test) since 2026-11-05T01:00:00.000Z; nothing was written and the approval is unused.`), refused.out);
+  assert.equal(count(), before, `${script} ${args.join(" ")} wrote through a held lock`);
+  assert.equal(w.tickets(), 1);
+  assert.deepEqual(w.ledger(key), []);
+}
+
 function prWorld(gh) {
   const w = world({ pr: 701, gh });
   const head = w.checkout.pr(701);
@@ -80,32 +92,46 @@ test("openproject apply, set, relation, relation-delete, comment, comment-edit a
   const op = await fakeOpenProject();
   try {
     const w = world({ opUrl: op.url });
+    const key = (kind, id) => `op:${new URL(op.url).host.replace(/:/g, "_")}:${kind}:${id}`;
     const count = () => op.calls.length;
     const reset = () => (op.calls.length = 0);
     w.file("drafts.json", JSON.stringify([TASK]));
     await w.run("openproject", ["preview", "drafts.json", "--project", "183"]);
     reset();
-    await onceOnly(w, "openproject", ["apply", "drafts.json", "--project", "183"], (line) => `${renderWorkPackageDraft(TASK, CREATE)}\n${line}`, count);
+    await onceOnly(w, "openproject", ["apply", "drafts.json", "--project", "183"], (line) => `${renderWorkPackageDraft(TASK, CREATE)}\n${line}`, count, [key("project", 183)]);
     reset();
-    await onceOnly(w, "openproject", ["rollback", "--project", "183", "--apply"], (line) => `${renderRollbackItem({ id: 30000, subject: TASK.subject })}\n${line}`, count);
+    await onceOnly(w, "openproject", ["rollback", "--project", "183", "--apply"], (line) => `${renderRollbackItem({ id: 30000, subject: TASK.subject })}\n${line}`, count, [key("project", 183), key("wp", 30000)]);
     reset();
-    await onceOnly(w, "openproject", ["set", "21298", "--status", "In progress", "--apply", "--lock", "0"], (line) => line, count);
+    await onceOnly(w, "openproject", ["set", "21298", "--status", "In progress", "--apply", "--lock", "0"], (line) => line, count, [key("wp", 21298)]);
     reset();
     w.file("c.md", "The pop-up needs the Pro price.\n");
     await lint(w, "openproject", ["comment", "21298", "--body-file", "c.md"]);
     reset();
-    await onceOnly(w, "openproject", ["comment", "21298", "--apply", "--body-file", "c.md"], (line) => `The pop-up needs the Pro price.\n${line}`, count);
+    await onceOnly(w, "openproject", ["comment", "21298", "--apply", "--body-file", "c.md"], (line) => `The pop-up needs the Pro price.\n${line}`, count, [key("wp", 21298)]);
     reset();
     w.file("e.md", "The pop-up needs the Pro price, monthly.\n");
     await lint(w, "openproject", ["comment-edit", "9", "--body-file", "e.md"]);
     reset();
-    await onceOnly(w, "openproject", ["comment-edit", "9", "--apply", "--body-file", "e.md"], (line) => `The pop-up needs the Pro price, monthly.\n${line}`, count);
+    await onceOnly(w, "openproject", ["comment-edit", "9", "--apply", "--body-file", "e.md"], (line) => `The pop-up needs the Pro price, monthly.\n${line}`, count, [key("activity", 9)]);
     reset();
-    await onceOnly(w, "openproject", ["relation", "21298", "21300", "--type", "blocks", "--apply"], (line) => line, count);
+    await onceOnly(w, "openproject", ["relation", "21298", "21300", "--type", "blocks", "--apply"], (line) => line, count, [key("wp", 21298), key("wp", 21300)]);
     reset();
     const created = op.calls.length;
     const relation = world({ opUrl: op.url });
-    await onceOnly(relation, "openproject", ["relation-delete", "2000", "--apply"], (line) => line, () => op.calls.length - created);
+    await onceOnly(relation, "openproject", ["relation-delete", "2000", "--apply"], (line) => line, () => op.calls.length - created, [key("relation", 2000)]);
+  } finally {
+    op.server.close();
+  }
+});
+
+test("openproject comment --apply refuses while another writer holds its work package, and spends nothing", async () => {
+  const op = await fakeOpenProject();
+  try {
+    const w = world({ opUrl: op.url });
+    w.file("c.md", "The pop-up needs the Pro price.\n");
+    await lint(w, "openproject", ["comment", "21298", "--body-file", "c.md"]);
+    op.calls.length = 0;
+    await heldRefuses(w, "openproject", ["comment", "21298", "--apply", "--body-file", "c.md"], (line) => `The pop-up needs the Pro price.\n${line}`, `op:${new URL(op.url).host.replace(/:/g, "_")}:wp:21298`, () => op.calls.length);
   } finally {
     op.server.close();
   }

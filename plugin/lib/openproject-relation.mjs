@@ -21,7 +21,7 @@ async function printRelations(client, ids) {
   }
 }
 
-export async function setRelation(client, from, to, flags) {
+export async function setRelation(client, from, to, flags, recorded) {
   if (typeof flags.type !== "string") throw new Error("relation needs --type <relates|blocks|precedes|follows|duplicates|includes|requires>");
   if (from === to) throw new Error("relation needs two different work packages");
   const old = pairRelation(await relationsOf(client, from), from, to);
@@ -35,7 +35,10 @@ export async function setRelation(client, from, to, flags) {
     return 0;
   }
   consumeApproval(process.argv, []);
-  if (old) await client.request(`/api/v3/relations/${old.id}`, { method: "DELETE" });
+  if (old) {
+    await client.request(`/api/v3/relations/${old.id}`, { method: "DELETE" });
+    recorded();
+  }
   try {
     await create(client, from, flags.type, to);
   } catch (error) {
@@ -50,13 +53,14 @@ export async function setRelation(client, from, to, flags) {
     await printRelations(client, [from, to]);
     return 1;
   }
+  recorded();
   const read = pairRelation(await relationsOf(client, from), from, to);
   const ok = Boolean(read && says(read, from, flags.type));
   console.log(ok ? `set ${relationLine(read)}` : `created but the read-back shows ${read ? relationLine(read) : "no relation"}; open #${from} and check`);
   return ok ? 0 : 1;
 }
 
-export async function deleteRelation(client, id, flags) {
+export async function deleteRelation(client, id, flags, recorded) {
   const relation = await client.request(`/api/v3/relations/${id}`);
   console.log(relationLine(relation));
   if (flags.apply === undefined) {
@@ -65,6 +69,7 @@ export async function deleteRelation(client, id, flags) {
   }
   consumeApproval(process.argv, []);
   await client.request(`/api/v3/relations/${id}`, { method: "DELETE" });
+  recorded();
   const left = (await relationsOf(client, ends(relation)[0])).some((other) => other.id === relation.id);
   console.log(left ? `relation ${id} is still there on read-back; open #${ends(relation)[0]} and check` : `deleted relation ${id}`);
   return left ? 1 : 0;

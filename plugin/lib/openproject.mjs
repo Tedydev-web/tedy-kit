@@ -12,7 +12,8 @@ import { approvalLines, renderRollbackItem, renderWorkPackageDraft } from "./pub
 import { snapshotOnce, snapshotPath } from "./draft-lint.mjs";
 import { appendEditLog, frozenOriginal, labelText } from "./edit-log.mjs";
 import { chatLanguage } from "./labels.mjs";
-import { describePin, pinSourcesOf, recheckPinned, recordPins, sayNotices } from "./source-pins.mjs";
+import { withRecords } from "./record-lock.mjs";
+import { describePin, pinnedSince, pinSourcesOf, recheckPinned, recordPins, sayNotices } from "./source-pins.mjs";
 import { countWords, lintDrafts, lintWorkPackage, readiness, readinessLine } from "./task-lint.mjs";
 import { bareWorkPackageRefs, foreignRefsAdvice, foreignWorkPackageRefs } from "./work-package-refs.mjs";
 
@@ -105,7 +106,7 @@ async function pinComment(file, text, posted, pinnedAt) {
   return pins;
 }
 
-async function apply(client, project, drafts, file) {
+async function apply(client, project, drafts, file, recorded) {
   const { failed, plan, refs, mapping, locks } = await check(client, project, drafts);
   if (failed) {
     console.log("refused: fix the lint and form findings above, then preview again");
@@ -138,22 +139,25 @@ async function apply(client, project, drafts, file) {
     let saved;
     if (step.action === "create") {
       saved = await client.request(`/api/v3/projects/${project}/work_packages`, { method: "POST", body: buildPayload({ ...draft, parent }, refs) });
+      recorded();
       created[draft.slug] = saved.id;
       writeSidecar(path, recordLastApply(addSlugs(readSidecar(path), { [draft.slug]: saved.id }), appliedAt, Object.values(created)));
     } else if (step.action === "merge") {
       const current = await client.request(`/api/v3/work_packages/${step.id}`);
       const payload = mergePayload(current, draft, today());
       saved = Object.keys(payload).length > 1 ? await client.request(`/api/v3/work_packages/${step.id}`, { method: "PATCH", body: payload }) : current;
+      if (saved !== current) recorded();
       expected[draft.slug] = { subject: current.subject, description: payload.description?.raw ?? current.description?.raw ?? "" };
       writeSidecar(path, addSlugs(readSidecar(path), { [draft.slug]: step.id }));
     } else {
       const current = await client.request(`/api/v3/work_packages/${step.id}`);
       saved = await client.request(`/api/v3/work_packages/${step.id}`, { method: "PATCH", body: buildPayload({ ...draft, parent }, refs, current.lockVersion) });
+      recorded();
       if (step.adopt) writeSidecar(path, addSlugs(readSidecar(path), { [draft.slug]: step.id }));
     }
     for (const [type, targets] of [["relates", draft.relates ?? []], ["blocks", draft.blocks ?? []]]) {
       for (const target of targets) {
-        await client.request(`/api/v3/work_packages/${saved.id}/relations`, { method: "POST", body: { type, _links: { from: { href: `/api/v3/work_packages/${saved.id}` }, to: { href: `/api/v3/work_packages/${mapping[target] ?? created[target] ?? target}` } } } }).catch((error) => relationFailures.push(`${draft.slug} ${type} ${target}: ${error.message}`));
+        await client.request(`/api/v3/work_packages/${saved.id}/relations`, { method: "POST", body: { type, _links: { from: { href: `/api/v3/work_packages/${saved.id}` }, to: { href: `/api/v3/work_packages/${mapping[target] ?? created[target] ?? target}` } } } }).then(recorded, (error) => relationFailures.push(`${draft.slug} ${type} ${target}: ${error.message}`));
       }
     }
     if (draft.status) {
@@ -161,6 +165,7 @@ async function apply(client, project, drafts, file) {
       if (!status) throw new Error(`status "${draft.status}" does not exist`);
       const current = await client.request(`/api/v3/work_packages/${saved.id}`);
       await client.request(`/api/v3/work_packages/${saved.id}`, { method: "PATCH", body: { lockVersion: current.lockVersion, _links: { status: { href: status._links.self.href } } } });
+      recorded();
     }
   }
   let verified = 0;
@@ -179,7 +184,7 @@ async function apply(client, project, drafts, file) {
 
 const describe = (workPackage) => `#${workPackage.id} "${workPackage.subject}" [${workPackage._links.status.title}]`;
 
-async function quickSet(client, id, flags) {
+async function quickSet(client, id, flags, recorded) {
   const current = await client.request(`/api/v3/work_packages/${id}`);
   const project = current._links.project.href.split("/").pop();
   const refs = {
@@ -204,6 +209,7 @@ async function quickSet(client, id, flags) {
   }
   consumeApproval(process.argv, []);
   await client.request(`/api/v3/work_packages/${id}`, { method: "PATCH", body: payload });
+  recorded();
   const read = await client.request(`/api/v3/work_packages/${id}`);
   console.log(`set ${describe(read)} assignee ${read._links.assignee?.title ?? "none"} priority ${read._links.priority?.title} estimate ${read.estimatedTime ?? "none"} dates ${read.startDate ?? "none"}..${read.dueDate ?? "none"}`);
   return 0;
@@ -226,7 +232,7 @@ export const generatedPrBodyOp = (body) => {
 
 export const sameComment = (activities, body) => activities.find((activity) => (activity.comment?.raw ?? "").trim() === body.trim()) ?? null;
 
-async function comment(client, id, flags) {
+async function comment(client, id, flags, recorded) {
   const file = flags["body-file"];
   if (typeof file !== "string") throw new Error("comment needs --body-file <file>");
   const text = readFileSync(file, "utf8");
@@ -255,12 +261,13 @@ async function comment(client, id, flags) {
   consumeApproval(process.argv, [body, ...fresh.warnings]);
   sayNotices(fresh.notices);
   await client.request(`/api/v3/work_packages/${id}/activities`, { method: "POST", body: { comment: { raw: body } } });
+  recorded();
   const read = sameComment((await client.request(`/api/v3/work_packages/${id}/activities`))._embedded.elements, body);
   console.log(read ? `commented #${id} activity ${read.id}` : `posted but not found on read-back; open #${id} and check`);
   return read ? 0 : 1;
 }
 
-async function commentEdit(client, id, flags) {
+async function commentEdit(client, id, flags, recorded) {
   const file = flags["body-file"];
   if (typeof file !== "string") throw new Error("comment-edit needs --body-file <file>");
   const text = readFileSync(file, "utf8");
@@ -304,6 +311,7 @@ async function commentEdit(client, id, flags) {
   consumeApproval(process.argv, [body, ...fresh.warnings]);
   sayNotices(fresh.notices);
   await client.request(`/api/v3/activities/${id}`, { method: "PATCH", body: { comment: { raw: body } } });
+  recorded();
   const read = (await client.request(`/api/v3/activities/${id}`)).comment?.raw?.trim() === body;
   console.log(read ? `edited #${current.id} activity ${id}` : `sent but the read-back differs; open #${current.id} and check activity ${id}`);
   return read ? 0 : 1;
@@ -340,7 +348,7 @@ async function list(client, flags) {
   }
 }
 
-async function rollback(client, project, flags) {
+async function rollback(client, project, flags, recorded) {
   const path = sidecarPath(client.host, project);
   const last = JSON.parse(readSidecar(path))._last_apply;
   if (!last?.created?.length) {
@@ -378,6 +386,7 @@ async function rollback(client, project, flags) {
       failed.push(item.id);
     }
   }
+  if (done.length) recorded();
   writeSidecar(path, forgetSlugs(readSidecar(path), action === "delete" ? done : [], failed));
   console.log(`${action} ${done.length}/${items.length}${failed.length ? "; the failed ones stay recorded, run rollback again to retry them" : ""}`);
   return failed.length ? 1 : 0;
@@ -393,18 +402,24 @@ async function main([command, target, ...rest]) {
     return 0;
   }
   if (command === "list") return list(client, flags);
-  if (command === "set" && /^\d+$/.test(target ?? "")) return quickSet(client, Number(target), flags);
-  if (command === "comment" && /^\d+$/.test(target ?? "")) return comment(client, Number(target), flags);
-  if (command === "comment-edit" && /^\d+$/.test(target ?? "")) return commentEdit(client, Number(target), flags);
-  if (command === "relation" && /^\d+$/.test(target ?? "") && /^\d+$/.test(rest[0] ?? "")) return setRelation(client, Number(target), Number(rest[0]), flags);
-  if (command === "relation-delete" && /^\d+$/.test(target ?? "")) return deleteRelation(client, Number(target), flags);
+  const record = (kind, id) => `op:${client.host}:${kind}:${id}`;
+  const writing = (keys, since, write) => withRecords(flags.apply === undefined ? [] : keys, { job: flags.job, since }, write);
+  if (command === "set" && /^\d+$/.test(target ?? "")) return writing([record("wp", target)], null, (recorded) => quickSet(client, Number(target), flags, recorded));
+  if (command === "comment" && /^\d+$/.test(target ?? "")) return writing([record("wp", target)], pinnedSince(flags["body-file"]), (recorded) => comment(client, Number(target), flags, recorded));
+  if (command === "comment-edit" && /^\d+$/.test(target ?? "")) return writing([record("activity", target)], pinnedSince(flags["body-file"]), (recorded) => commentEdit(client, Number(target), flags, recorded));
+  if (command === "relation" && /^\d+$/.test(target ?? "") && /^\d+$/.test(rest[0] ?? "")) return writing([record("wp", target), record("wp", rest[0])], null, (recorded) => setRelation(client, Number(target), Number(rest[0]), flags, recorded));
+  if (command === "relation-delete" && /^\d+$/.test(target ?? "")) return writing([record("relation", target)], null, (recorded) => deleteRelation(client, Number(target), flags, recorded));
   if (command === "pr-body" && /^\d+$/.test(target ?? "")) {
     const body = prBodyFrom(await client.request(`/api/v3/work_packages/${target}`));
     recordPrBody(body);
     process.stdout.write(body);
     return 0;
   }
-  if (command === "rollback") return rollback(client, projectOf(flags), flags);
+  if (command === "rollback") {
+    const project = projectOf(flags);
+    const created = JSON.parse(readSidecar(sidecarPath(client.host, project)))._last_apply?.created ?? [];
+    return writing([record("project", project), ...created.map((id) => record("wp", id))], null, (recorded) => rollback(client, project, flags, recorded));
+  }
   if ((command === "preview" || command === "apply") && target) {
     const drafts = JSON.parse(readFileSync(target, "utf8"));
     const project = projectOf(flags);
@@ -422,7 +437,8 @@ async function main([command, target, ...rest]) {
     }
     const original = frozenOriginal(target);
     const originals = original ? Object.fromEntries(JSON.parse(original).map((draft) => [draft.slug, draft])) : {};
-    const code = await apply(client, project, drafts, target);
+    const updated = planWrites(drafts, JSON.parse(readSidecar(sidecarPath(client.host, project)))).flatMap((step) => (step.id ? [record("wp", step.id)] : []));
+    const code = await withRecords([record("project", project), ...updated], { job: flags.job, since: pinnedSince(target) }, (recorded) => apply(client, project, drafts, target, recorded));
     if (code !== 0) return code;
     const text = (item) => `${item.subject}\n${item.description}`;
     const kept = new Set(drafts.map((draft) => draft.slug));
