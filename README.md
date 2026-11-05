@@ -61,6 +61,7 @@ The gates keep an honest but careless agent from publishing, merging, rewriting 
 | Tracker token | always on | Refuses any tool call that reads the tracker token file or writes to the tracker host around `openproject.mjs` |
 | Profile guard | always on | Asks before a write to the profile's `config.json` or `rules.md`, and before a checkout, reset or pull in the release worktree |
 | Read-only reviewer | always on | In the `tedy:reviewer` subagent, refuses every Bash command except reads (git log, show, diff, blame and grep; rg, grep, cat, `sed -n 'N,Mp'`; `gh pr view` and `diff`, `gh api` GET; the kit's read scripts), and asks before `curl` or `git fetch`, because the reviewer reads untrusted PR text |
+| PR code run in review | always on | Refuses `npm`, `pnpm`, `yarn`, `bun`, `npx`, `bunx` and `pnpx`, in Bash or context-mode shell, run in (or pointed by `--prefix`, `-C`, `--dir` or `--cwd` at) a PR review checkout whose head has no recorded run approval, and names step 3 of `/tedy:review-pr`. A review checkout is a detached HEAD that a `refs/pr/<n>` ref points at, or a detached worktree under `.claude/worktrees/` or `.worktrees/`. An approving answer to the review's `run.header` question is recorded for its head sha under `<state>/review-runs/` in every `gates.publishApproval` mode, so a new head is refused until the user is asked again |
 | `gates.noComments` | off | Blocks edits that add code comments and reports comments a push carries |
 | `gates.draftPrOnly` | off | Refuses a pull request that is not a draft |
 | `gates.ghWrites` | off | Refuses direct `gh` writes so that everything posted to GitHub goes through `github-write.mjs` after an approved draft. `gh pr close <pr>` passes; with `--comment` or `--delete-branch` it asks first |
@@ -68,7 +69,7 @@ The gates keep an honest but careless agent from publishing, merging, rewriting 
 | `gates.publishQuote` | off | Refuses a `github-write.mjs` post, reply or edit until the exact body was quoted to the user after its last change |
 | `gates.publishApproval` | `"ask"` | `"answer"` lets each kit script write only with a one-use ticket from an approving AskUserQuestion answer, so Claude Code shows no second prompt; see [Approval prompts](#approval-prompts) |
 
-A broken `config.json`, or a profile with `rules.md` and no `config.json`, turns every personal gate on and is reported at session start until `profile.mjs doctor` reports it ok. The six PreToolUse gates run with `onFailure: "block"`: a gate that cannot start, crashes or times out stops the tool call. A gate that catches its own error does not pass the call silently, except the no-comments gate, which allows: tracker-token-gate and the reviewer gate refuse, role-gate and the profile guard ask, and git-gate refuses a command it cannot read and asks on any other error; in `gates.publishApproval: "answer"` git-gate refuses a publish instead of asking.
+A broken `config.json`, or a profile with `rules.md` and no `config.json`, turns every personal gate on and is reported at session start until `profile.mjs doctor` reports it ok. The seven PreToolUse gates run with `onFailure: "block"`: a gate that cannot start, crashes or times out stops the tool call. A gate that catches its own error does not pass the call silently, except the no-comments gate, which allows: tracker-token-gate, the reviewer gate and the review-run gate refuse, role-gate and the profile guard ask, and git-gate refuses a command it cannot read and asks on any other error; in `gates.publishApproval: "answer"` git-gate refuses a publish instead of asking.
 
 Known limitations, by design or left out by the threat model:
 
@@ -81,6 +82,7 @@ Known limitations, by design or left out by the threat model:
 - role-gate still counts a search whose text names a kit script and a write verb as that write.
 - A function defined as `f () { … }`, with a space before `()`, is not refused the way `f() { … }` is.
 - The profile guard reads a plain `git` command word only, not one behind a wrapper or an absolute path.
+- The review-run gate sees only the package managers it names: `node`, `make`, a tool under `node_modules/.bin` or a script file run in a review checkout passes. It holds the approval per head, not per option, so a "typecheck and lint only" answer does not stop `npm test` at that head; the skill step does. A run-approval file written by hand or by a file tool counts as an approval.
 - Value-taking flags are known for the shells, python and node only; another interpreter's flag that takes a separate value can hide a `-` after it.
 - `env -S` strings are not unwrapped.
 - Whether Claude Code's own `permissions.ask` matching sees a quoted subcommand was not tested; the gate asks when the raw text matches no rule.

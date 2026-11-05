@@ -114,18 +114,18 @@ function classifyGitHubApi(args) {
   return effective === "GET" ? null : "github-write";
 }
 
-function commandTokens(segment) {
-  const tokens = strippedTokens(segment);
+export function commandTokens(segment, keep) {
+  const tokens = strippedTokens(segment, keep);
   return tokens.length && tokens[0].includes("/") ? [basename(tokens[0]), ...tokens.slice(1)] : tokens;
 }
 
-function strippedTokens(segment) {
+function strippedTokens(segment, keep = new Set()) {
   const all = tokenize(segment);
   let at = 0;
   for (;;) {
     while (at < all.length && (ENV_ASSIGNMENT.test(all[at]) || /^[({!]+$/.test(all[at]))) at += 1;
     if (at < all.length) all[at] = all[at].replace(/^[({!]+/, "");
-    const flags = WRAPPERS.get(basename(all[at] ?? ""));
+    const flags = keep.has(basename(all[at] ?? "")) ? undefined : WRAPPERS.get(basename(all[at] ?? ""));
     if (!flags) break;
     let positionals = WRAPPER_ARGUMENTS.get(basename(all[at])) ?? 0;
     at += 1;

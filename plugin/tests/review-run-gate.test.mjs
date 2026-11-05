@@ -1,0 +1,130 @@
+import "./test-isolation.mjs";
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { reviewRunVerdict } from "../gates/review-run-gate.mjs";
+import { commitFile, git } from "./git-sibling-for-tests.mjs";
+import { tempDir } from "./temp-dir-for-tests.mjs";
+
+const GATE = fileURLToPath(new URL("../scripts/review-run-gate.mjs", import.meta.url));
+
+function reviewSetup() {
+  const repo = tempDir("tedy-review-run-");
+  git(repo, "init", "-q", "-b", "main");
+  commitFile(repo, "package.json", '{"scripts":{"test":"vitest"}}\n');
+  git(repo, "checkout", "-q", "-b", "teammate");
+  const head = commitFile(repo, "src/a.ts", "export const a = 1;\n");
+  git(repo, "checkout", "-q", "main");
+  git(repo, "update-ref", "refs/pr/12", head);
+  const worktree = join(repo, ".claude", "worktrees", "pr-12");
+  git(repo, "worktree", "add", "-q", "--detach", worktree, "refs/pr/12");
+  const approvals = tempDir("tedy-review-run-approvals-");
+  return { repo, head, worktree, approvals };
+}
+
+const bash = (command, cwd) => ({ tool_name: "Bash", cwd, tool_input: { command } });
+const verdict = (setup, input) => reviewRunVerdict(input, { dir: setup.approvals });
+const approve = (setup, sha = setup.head) => writeFileSync(join(setup.approvals, `${sha}.json`), '{"scope":"all"}\n');
+
+test("a package-manager command in a review worktree without an approval for its head is refused, naming the step", () => {
+  const setup = reviewSetup();
+  for (const [command, cwd] of [
+    ["npm test", setup.worktree],
+    ["npm run lint", setup.worktree],
+    ["pnpm test", setup.worktree],
+    ["yarn test", setup.worktree],
+    ["bun test", setup.worktree],
+    ["npx vitest run", setup.worktree],
+    ["bunx vitest", setup.worktree],
+    ["timeout 120 npm test", setup.worktree],
+    ["env CI=1 npm test 2>&1 | tail -20", setup.worktree],
+    [`cd ${setup.worktree} && npm test`, setup.repo],
+    [`npm --prefix ${setup.worktree} test`, setup.repo],
+    [`npm --prefix=${setup.worktree} test`, setup.repo],
+    [`pnpm -C ${setup.worktree} lint`, setup.repo],
+    [`pnpm --dir ${setup.worktree} typecheck`, setup.repo],
+    [`yarn --cwd ${setup.worktree} test`, setup.repo],
+    [`git status && /usr/bin/npm test`, setup.worktree],
+  ]) {
+    const result = verdict(setup, bash(command, cwd));
+    assert.ok(result, command);
+    assert.match(result.reason, /^tedy review-run gate: /, command);
+    assert.ok(result.reason.includes(setup.head), command);
+    assert.ok(result.reason.includes("step 3 of /tedy:review-pr"), command);
+    assert.ok(result.reason.includes("pr-execution-surface.mjs"), command);
+    assert.ok(result.reason.includes("`run.header`"), command);
+  }
+});
+
+test("reads in a review worktree and package-manager commands elsewhere pass", () => {
+  const setup = reviewSetup();
+  const branch = join(setup.repo, ".claude", "worktrees", "feature");
+  git(setup.repo, "worktree", "add", "-q", "-b", "feat/x", branch, "main");
+  const release = join(tempDir("tedy-release-"), "release");
+  git(setup.repo, "worktree", "add", "-q", "--detach", release, "main");
+  const notRepo = tempDir("tedy-not-a-repo-");
+  for (const [command, cwd] of [
+    ["rg -n npm package.json", setup.worktree],
+    ["cat package.json && git log --oneline -3", setup.worktree],
+    ["echo npm test", setup.worktree],
+    ["git commit -m 'npm test'", setup.worktree],
+    ["npm test", setup.repo],
+    ["npm test", branch],
+    ["npm test", release],
+    ["npm test", notRepo],
+    ["npm test", join(notRepo, "missing")],
+  ]) assert.equal(verdict(setup, bash(command, cwd)), null, `${command} in ${cwd}`);
+});
+
+test("an approval recorded for the worktree's head lets its scripts run; one for another head does not", () => {
+  const setup = reviewSetup();
+  approve(setup, "f".repeat(40));
+  assert.ok(verdict(setup, bash("npm test", setup.worktree)));
+  approve(setup);
+  assert.equal(verdict(setup, bash("npm test", setup.worktree)), null);
+  const next = commitFile(setup.worktree, "src/b.ts", "export const b = 1;\n");
+  assert.notEqual(next, setup.head);
+  assert.ok(verdict(setup, bash("npm test", setup.worktree)).reason.includes(next));
+});
+
+test("a review worktree stays one after its refs/pr ref moves or is deleted, and a detached checkout at a refs/pr head is one anywhere", () => {
+  const setup = reviewSetup();
+  git(setup.repo, "update-ref", "-d", "refs/pr/12");
+  assert.ok(verdict(setup, bash("npm test", setup.worktree)));
+  git(setup.repo, "update-ref", "refs/pr/12", setup.head);
+  const outside = join(tempDir("tedy-review-outside-"), "pr-12");
+  git(setup.repo, "worktree", "add", "-q", "--detach", outside, "refs/pr/12");
+  assert.ok(verdict(setup, bash("npm test", outside)).reason.includes("refs/pr/12"));
+});
+
+test("context-mode shell code is checked where context-mode runs it", () => {
+  const setup = reviewSetup();
+  const input = { tool_name: "mcp__plugin_context-mode_context-mode__ctx_execute", cwd: setup.repo, tool_input: { language: "shell", code: "npm test", cwd: setup.worktree } };
+  assert.ok(verdict(setup, input));
+  const batch = { tool_name: "mcp__context-mode__ctx_batch_execute", cwd: setup.worktree, tool_input: { commands: [{ label: "t", command: "npm test" }] } };
+  const previous = process.env.CLAUDE_PROJECT_DIR;
+  process.env.CLAUDE_PROJECT_DIR = setup.worktree;
+  try {
+    assert.ok(verdict(setup, batch));
+  } finally {
+    if (previous === undefined) delete process.env.CLAUDE_PROJECT_DIR;
+    else process.env.CLAUDE_PROJECT_DIR = previous;
+  }
+});
+
+test("the hook denies through its shim with the state folder's approvals, and passes once the head is approved", () => {
+  const setup = reviewSetup();
+  const state = tempDir("tedy-review-run-state-");
+  const hook = () => spawnSync("node", [GATE], { input: JSON.stringify(bash("npm test", setup.worktree)), encoding: "utf8", env: { ...process.env, TEDY_STATE_DIR: state } });
+  const denied = hook();
+  assert.equal(denied.status, 0, denied.stderr);
+  const output = JSON.parse(denied.stdout).hookSpecificOutput;
+  assert.equal(output.permissionDecision, "deny");
+  assert.ok(output.permissionDecisionReason.includes(setup.head));
+  mkdirSync(join(state, "review-runs"), { recursive: true });
+  writeFileSync(join(state, "review-runs", `${setup.head}.json`), '{"scope":"lint"}\n');
+  assert.equal(hook().stdout, "");
+});

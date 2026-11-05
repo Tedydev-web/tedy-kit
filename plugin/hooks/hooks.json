@@ -36,6 +36,12 @@
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/reviewer-gate.mjs\"", "timeout": 15, "onFailure": "block" }
         ]
+      },
+      {
+        "matcher": "^Bash$|^mcp__.*__ctx_(execute|execute_file|batch_execute)$",
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/review-run-gate.mjs\"", "timeout": 30, "onFailure": "block" }
+        ]
       }
     ],
     "PostToolUse": [

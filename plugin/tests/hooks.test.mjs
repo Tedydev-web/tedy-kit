@@ -3,16 +3,16 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-const GATES = ["no-comments-gate", "role-gate", "git-gate", "tracker-token-gate", "profile-guard-gate", "reviewer-gate"];
+const GATES = ["no-comments-gate", "role-gate", "git-gate", "tracker-token-gate", "profile-guard-gate", "reviewer-gate", "review-run-gate"];
 
-test("the six PreToolUse gates block the tool call when their hook fails", () => {
+test("the seven PreToolUse gates block the tool call when their hook fails", () => {
   const hooks = JSON.parse(readFileSync(new URL("../hooks/hooks.json", import.meta.url), "utf8")).hooks.PreToolUse.flatMap((entry) => entry.hooks);
   const gates = hooks.filter((hook) => GATES.some((gate) => hook.command.includes(`/${gate}.mjs`)));
   assert.deepEqual(gates.map((hook) => GATES.find((gate) => hook.command.includes(`/${gate}.mjs`))).sort(), [...GATES].sort());
   for (const hook of gates) assert.equal(hook.onFailure, "block", hook.command);
 });
 
-for (const [gate, tools] of [["git-gate", ["Bash"]], ["push-report", ["Bash"]], ["role-gate", ["Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"]], ["profile-guard-gate", ["Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"]]]) {
+for (const [gate, tools] of [["git-gate", ["Bash"]], ["review-run-gate", ["Bash"]], ["push-report", ["Bash"]], ["role-gate", ["Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"]], ["profile-guard-gate", ["Edit", "Write", "MultiEdit", "NotebookEdit", "Bash"]]]) {
   test(`${gate} runs on its tools and on context-mode shell tools under any install name`, () => {
     const { PreToolUse, PostToolUse } = JSON.parse(readFileSync(new URL("../hooks/hooks.json", import.meta.url), "utf8")).hooks;
     const entry = [...PreToolUse, ...PostToolUse].find((item) => item.hooks.some((hook) => hook.command.includes(`/${gate}.mjs`)));

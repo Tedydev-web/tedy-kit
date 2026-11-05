@@ -24,7 +24,7 @@ Before any project script (typecheck, lint, test, format) runs in the worktree:
 3. Run only what the answer allows, in the worktree, applying the map's `verify_gotchas`. For `run.none`, a typed answer or a note, run nothing and write "verify not run: <reason>" in the findings with the `gh pr checks <n>` result; ask again only if the user asks for a run. Running PR code is never a local, reversible choice, so a timeout runs nothing.
 4. The answer covers that head sha only. On a new head, recreate the worktree, print the surface again and ask again.
 
-The hook after AskUserQuestion records an approving answer (`run.lint` or `run.all`, no note) for its head sha under `<state>/review-runs/`. Nothing but this step keeps a `run.lint` answer to typecheck and lint.
+The hook after AskUserQuestion records an approving answer (`run.lint` or `run.all`, no note) for its head sha under `<state>/review-runs/`. The review-run gate refuses npm, pnpm, yarn, bun and npx in a review checkout whose head has no recorded approval. It does not know which option was picked: nothing but this step keeps a `run.lint` answer to typecheck and lint.
 
 In a background session (`--bg`) the question would wait for the user. Write it as a draft under `plans/drafts/` (`shared/decision-points.md`), put "verify not run: awaiting the run question" in the findings, and go on with steps 4 to 9.
 
