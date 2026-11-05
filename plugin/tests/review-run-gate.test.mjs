@@ -122,6 +122,8 @@ test("gmake, a makefile, an attached directory and a node preload or test path i
     [`node --require=${wt}/src/a.ts -e 1`, setup.repo],
     [`node --import ${wt}/src/a.ts ${outside}`, setup.repo],
     [`node --import tsx ${outside}`, wt],
+    [`node --import file://${wt}/src/a.ts ${outside}`, setup.repo],
+    [`node --import=file://${wt}/src/a.ts ${outside}`, setup.repo],
   ]) {
     const result = verdict(setup, bash(command, cwd));
     assert.ok(result, `${command} in ${cwd}`);

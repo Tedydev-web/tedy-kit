@@ -15,6 +15,7 @@ const MAKES = new Set(["make", "gmake"]);
 const MAKE_FILE_FLAGS = new Set(["-f", "--file", "--makefile"]);
 const NODE_PRELOAD_FLAGS = new Set(["-r", "--require", "--import", "--loader", "--experimental-loader"]);
 const GLOB_CHAR = /[*?[{]/;
+const STAT_MISSES = new Set(["ENOENT", "ENOTDIR", "EACCES", "ENAMETOOLONG", "ELOOP"]);
 const NODE = /^node(?:js)?[\d.]*$/;
 const MANAGER_FILE = /\/node_modules\/(?:npm|pnpm|yarn|corepack|bun)\//;
 const VOLTA_VALUE_FLAGS = new Set(["--node", "--npm", "--pnpm", "--yarn", "--env"]);
@@ -37,7 +38,7 @@ function existingDir(path) {
     try {
       if (statSync(dir).isDirectory()) return dir;
     } catch (error) {
-      if (error.code !== "ENOENT" && error.code !== "ENOTDIR") throw error;
+      if (!STAT_MISSES.has(error.code)) throw error;
     }
     dir = dirname(dir);
   }
@@ -51,9 +52,18 @@ function flagValues(tokens, flags, dir) {
     const equals = token.indexOf("=");
     let [flag, value] = equals > 0 ? [token.slice(0, equals), token.slice(equals + 1)] : [token, tokens[index + 1]];
     if (/^-[^-]./.test(token) && !flags(flag) && flags(token.slice(0, 2))) [flag, value] = [token.slice(0, 2), token.slice(2)];
-    if (flags(flag) && value) dirs.push(resolve(dir, expandHome(value)));
+    if (flags(flag) && value) dirs.push(resolve(dir, expandHome(fileUrlPath(value))));
   }
   return dirs;
+}
+
+function fileUrlPath(value) {
+  if (!value.startsWith("file:")) return value;
+  try {
+    return fileURLToPath(value);
+  } catch {
+    return value;
+  }
 }
 
 function chdirs(prefix, dir) {
