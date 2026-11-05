@@ -2,6 +2,7 @@ import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { checkItems, commentLink, pendingItems, renderFile } from "../lib/doc-comment-file.mjs";
+import { anchorComment, insertAnchored } from "../lib/gdoc-comments.mjs";
 import { quoteCount } from "../lib/prd-section.mjs";
 
 const TAB = "UC_SW_13 Pay\nCrypto takes the price in USDT and the fee in GRAM from the payer[a]\nThe fee is shown once.\nthe FEE is shown once.\nSplit across\nlines here.\n[a]A reviewer comment mentioning Crypto takes the price in USDT\n";
@@ -65,4 +66,14 @@ test("a posted item is skipped on the next post and its card shows a ticked box 
   const html = renderFile({ title: "t", doc: "DOC", checkedAt: "15/10 12:30", items: [posted, open], lang: "vi" });
   assert.match(html, /<input type=checkbox checked disabled> Đã comment lúc 2026-10-15T05:30:00\.000Z · <a href="https:\/\/docs\.google\.com\/document\/d\/DOC\/edit\?disco=AAAB1">mở comment AAAB1<\/a>/);
   assert.equal((html.match(/<input type=checkbox>/g) ?? []).length, 1);
+});
+
+test("an anchored Doc comment refuses before any request or approval when the caller passes no ledger callback", async () => {
+  const requests = [];
+  const google = { doc: "D", request: async (url) => (requests.push(url), {}) };
+  let approved = false;
+  await assert.rejects(insertAnchored(google, { tabId: "t.1", startIndex: 1, endIndex: 5 }, "Ví nào trả a?"), /afterWrite/);
+  await assert.rejects(anchorComment(google, "t.1", "Crypto", "Ví nào trả a?", () => (approved = true)), /afterWrite/);
+  assert.deepEqual(requests, []);
+  assert.equal(approved, false);
 });

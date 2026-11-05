@@ -246,13 +246,19 @@ export const readDocument = (google) => google.request(`${DOCS}/documents/${goog
 
 export const docKey = (doc) => `gdoc:${doc}`;
 
-export async function anchorComment(google, tab, quote, body, beforeWrite = () => {}, afterWrite = () => {}) {
+function requireAfterWrite(afterWrite) {
+  if (typeof afterWrite !== "function") throw new TypeError("an anchored Doc comment needs an afterWrite callback that records the write; nothing was written");
+}
+
+export async function anchorComment(google, tab, quote, body, beforeWrite = () => {}, afterWrite) {
+  requireAfterWrite(afterWrite);
   const range = findQuoteRange(await readDocument(google), tab, quote);
   beforeWrite();
   return insertAnchored(google, range, body, afterWrite);
 }
 
-export async function insertAnchored(google, range, body, afterWrite = () => {}) {
+export async function insertAnchored(google, range, body, afterWrite) {
+  requireAfterWrite(afterWrite);
   console.log(`WRITE → Google Doc ${google.doc} tab ${range.tabId} : 1 comment anchored at ${range.startIndex}–${range.endIndex}`);
   await google.request(`${DOCS}/documents/${google.doc}:batchUpdate`, { method: "POST", body: { requests: [{ insertComment: { content: body, range } }] } });
   afterWrite();
