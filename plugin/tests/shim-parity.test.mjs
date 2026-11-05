@@ -10,7 +10,7 @@ import { tempDir } from "./temp-dir-for-tests.mjs";
 const PLUGIN = fileURLToPath(new URL("../", import.meta.url));
 const GATES = ["git-gate", "role-gate", "no-comments-gate", "tracker-token-gate", "profile-guard-gate", "reviewer-gate"];
 const HOOKS = ["push-report", "publish-approval-ticket", "session-hooks"];
-const CLIS = ["doc-comment-file", "draft-lint", "edit-rate", "figma-comments", "figma-read", "gdoc-comments", "github-write", "handoff", "labels", "memory-stats", "merged-sweep", "op-status", "openproject", "pending", "prd-section", "prior-art-index", "prior-art-verify", "profile", "project-map", "project-state", "public-scan", "task-lint"];
+const CLIS = ["doc-comment-file", "draft-lint", "edit-rate", "figma-comments", "figma-read", "gdoc-comments", "github-write", "handoff", "labels", "memory-stats", "merged-sweep", "op-status", "openproject", "pending", "prd-section", "prior-art-index", "pr-execution-surface", "prior-art-verify", "profile", "project-map", "project-state", "public-scan", "task-lint"];
 
 const NO_FAILURE_PATH = ["edit-rate", "labels"];
 
