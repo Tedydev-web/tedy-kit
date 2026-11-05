@@ -145,6 +145,13 @@ export function pinnedSources(file, relint) {
   return { sources: record.sources, warnings: record.warnings, pinnedAt: record.pinnedAt, at: record.at };
 }
 
+export function pinnedSince(file) {
+  if (typeof file !== "string") return null;
+  const { at, sources } = pinnedSources(file, "");
+  if (typeof at !== "string") return null;
+  return sources.filter((pin) => pin?.stage === "read" && typeof pin.at === "string").reduce((earliest, pin) => (Date.parse(pin.at) < Date.parse(earliest) ? pin.at : earliest), at);
+}
+
 export async function recheckPinned(file, relint, { texts, covers, what } = {}) {
   const { sources, warnings, pinnedAt, refusal } = pinnedSources(file, relint);
   if (refusal) return { refusals: [refusal], notices: [], warnings: [] };

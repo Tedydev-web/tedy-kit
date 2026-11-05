@@ -1,10 +1,11 @@
 import { execFile, execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, readlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { LABELS } from "../lib/labels.mjs";
 import { recordApprovals } from "../lib/publish-approval-ticket.mjs";
+import { ledgerPath, lockPath } from "../lib/record-lock.mjs";
 import { stateDenyRules } from "../lib/publish-approval-settings.mjs";
 import { pullRequestCheckout } from "./git-sibling-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
@@ -256,5 +257,11 @@ export function world({ mode = "answer", gh = {}, web = {}, map = { name: "w" },
     }
   };
   const reads = () => readFileSync(readsLog, "utf8").split("\n").filter(Boolean);
-  return { dir, env, checkout, approve, run, writes, reads, settings, file, tickets, line: (script, args) => `node ${join(SCRIPTS, `${script}.mjs`)} ${args.map(quote).join(" ")}` };
+  const ledger = (key) => (existsSync(ledgerPath(key, state)) ? readFileSync(ledgerPath(key, state), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)) : []);
+  const holdRecord = (key) => {
+    mkdirSync(dirname(lockPath(key, state)), { recursive: true });
+    writeFileSync(lockPath(key, state), JSON.stringify({ key, pid: process.pid, ns: readlinkSync("/proc/self/ns/pid"), at: "2026-11-05T01:00:00.000Z", command: "held by the test" }));
+    return lockPath(key, state);
+  };
+  return { dir, env, checkout, approve, run, writes, reads, settings, file, tickets, ledger, holdRecord, line: (script, args) => `node ${join(SCRIPTS, `${script}.mjs`)} ${args.map(quote).join(" ")}` };
 }

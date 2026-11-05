@@ -9,7 +9,8 @@ import { fetchTab, indexTab, quoteInText, UC_ID } from "./prd-section.mjs";
 import { generatedPrBodyOp } from "./openproject.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
-import { pinnedSources, recheckPinned } from "./source-pins.mjs";
+import { withRecords } from "./record-lock.mjs";
+import { pinnedSince, pinnedSources, recheckPinned } from "./source-pins.mjs";
 
 const normalise = (text) => text.replace(/\s+/g, " ").trim();
 
@@ -150,10 +151,20 @@ function logEdits(entries) {
   appendEditLog(entries.map((entry) => ({ channel: "pr-comment", ...entry })));
 }
 
+const prKey = (repo, pr) => `github:${repo.toLowerCase()}#${pr}`;
+
+const nodeKey = (id) => `github:node:${id}`;
+
+const writing = (flags, keys, file, write) => withRecords(flags["dry-run"] ? [] : keys, { job: flags.job, since: pinnedSince(file) }, write);
+
 async function post(file, flags) {
+  const repo = currentRepo(flags);
+  return writing(flags, [prKey(repo, parseDraft(readFileSync(file, "utf8")).pr)], file, (recorded) => postDraft(file, flags, repo, recorded));
+}
+
+async function postDraft(file, flags, repo, recorded) {
   const finalText = readFileSync(file, "utf8");
   const original = existsSync(snapshotPath(file)) ? readFileSync(snapshotPath(file), "utf8") : finalText;
-  const repo = currentRepo(flags);
   const draft = parseDraft(original);
   const final = lintDraft(finalText, readDiff(parseDraft(finalText).pr, repo), mapLanguage("pr_review"));
   if (final.pr !== draft.pr || final.sha !== draft.sha) throw new Error(`the draft now names a different PR or head than the frozen original at ${snapshotPath(file)}`);
@@ -196,6 +207,7 @@ async function post(file, flags) {
   consumeApproval(process.argv, [finalText, ...fresh.warnings]);
   say(fresh.notices);
   const review = JSON.parse(gh(["api", "-X", "POST", `repos/${repo}/pulls/${final.pr}/reviews`, "--input", "-"], JSON.stringify(payload)));
+  recorded();
   const posted = JSON.parse(gh(["api", "--paginate", "--slurp", `repos/${repo}/pulls/${final.pr}/reviews/${review.id}/comments`])).flat();
   for (const comment of posted) console.log(`${comment.id} ${comment.path}:${comment.line ?? comment.original_line} ${comment.side ?? "RIGHT"} ${comment.commit_id.slice(0, 8)}`);
   logEdits(labelEdits(draft.comments, final.comments).map((entry) => ({ repo, pr: final.pr, sha: final.sha, review: review.id, ...entry })));
@@ -222,32 +234,38 @@ async function edit(id, flags) {
     console.log(`refused: review comment ${id} in ${repo} names no pull request; nothing edited`);
     return 1;
   }
-  const relint = `draft-lint.mjs pr-reply ${flags["body-file"]} --pr ${pr} --repo ${repo}`;
-  const fresh = await recheckSources(flags["body-file"], relint, [body]);
-  if (!fresh) return 1;
-  const refusal = pullTargetRefusal(flags["body-file"], repo, pr, relint);
-  if (refusal) {
-    console.log(refusal);
-    return 1;
-  }
-  console.log(`WRITE → ${repo} : edit review comment ${id}`);
-  consumeApproval(process.argv, [body, ...fresh.warnings]);
-  say(fresh.notices);
-  const updated = JSON.parse(gh(["api", "-X", "PATCH", `repos/${repo}/pulls/comments/${id}`, "--input", "-"], JSON.stringify({ body })));
-  logEdits([{ repo, key: String(id), label: "post-edit", draft: null, posted: body }]);
-  if (normalise(updated.body) !== normalise(body)) throw new Error(`comment ${id} body differs after PATCH`);
-  console.log(`edited ${id}: ${updated.html_url}`);
-  return 0;
+  return writing(flags, [prKey(repo, pr)], flags["body-file"], async (recorded) => {
+    const relint = `draft-lint.mjs pr-reply ${flags["body-file"]} --pr ${pr} --repo ${repo}`;
+    const fresh = await recheckSources(flags["body-file"], relint, [body]);
+    if (!fresh) return 1;
+    const refusal = pullTargetRefusal(flags["body-file"], repo, pr, relint);
+    if (refusal) {
+      console.log(refusal);
+      return 1;
+    }
+    console.log(`WRITE → ${repo} : edit review comment ${id}`);
+    consumeApproval(process.argv, [body, ...fresh.warnings]);
+    say(fresh.notices);
+    const updated = JSON.parse(gh(["api", "-X", "PATCH", `repos/${repo}/pulls/comments/${id}`, "--input", "-"], JSON.stringify({ body })));
+    recorded();
+    logEdits([{ repo, key: String(id), label: "post-edit", draft: null, posted: body }]);
+    if (normalise(updated.body) !== normalise(body)) throw new Error(`comment ${id} body differs after PATCH`);
+    console.log(`edited ${id}: ${updated.html_url}`);
+    return 0;
+  });
 }
 
-function minimize(nodeId) {
-  console.log(`WRITE → minimize ${nodeId} as OUTDATED`);
-  consumeApproval(process.argv, []);
-  const query = "mutation($id: ID!) { minimizeComment(input: {subjectId: $id, classifier: OUTDATED}) { minimizedComment { isMinimized } } }";
-  const result = JSON.parse(gh(["api", "graphql", "-f", `query=${query}`, "-f", `id=${nodeId}`]));
-  if (result.data?.minimizeComment?.minimizedComment?.isMinimized !== true) throw new Error(`${nodeId} is not minimized: ${JSON.stringify(result.errors ?? result)}`);
-  console.log(`minimized ${nodeId}`);
-  return 0;
+function minimize(nodeId, flags) {
+  return writing(flags, [nodeKey(nodeId)], undefined, async (recorded) => {
+    console.log(`WRITE → minimize ${nodeId} as OUTDATED`);
+    consumeApproval(process.argv, []);
+    const query = "mutation($id: ID!) { minimizeComment(input: {subjectId: $id, classifier: OUTDATED}) { minimizedComment { isMinimized } } }";
+    const result = JSON.parse(gh(["api", "graphql", "-f", `query=${query}`, "-f", `id=${nodeId}`]));
+    recorded();
+    if (result.data?.minimizeComment?.minimizedComment?.isMinimized !== true) throw new Error(`${nodeId} is not minimized: ${JSON.stringify(result.errors ?? result)}`);
+    console.log(`minimized ${nodeId}`);
+    return 0;
+  });
 }
 
 export function threadMutation(resolved) {
@@ -255,41 +273,47 @@ export function threadMutation(resolved) {
   return { name, verb: resolved ? "resolve" : "unresolve", query: `mutation($id: ID!) { ${name}(input: {threadId: $id}) { thread { isResolved } } }` };
 }
 
-function setThreadsResolved(threadIds, resolved) {
+function setThreadsResolved(threadIds, resolved, flags) {
   const { name, verb, query } = threadMutation(resolved);
-  consumeApproval(process.argv, []);
-  for (const threadId of threadIds) {
-    console.log(`WRITE → ${verb} review thread ${threadId}`);
-    const result = JSON.parse(gh(["api", "graphql", "-f", `query=${query}`, "-f", `id=${threadId}`]));
-    if (result.data?.[name]?.thread?.isResolved !== resolved) throw new Error(`${threadId} is not ${verb}d: ${JSON.stringify(result.errors ?? result)}`);
-    console.log(`${verb}d ${threadId}`);
-  }
-  return 0;
+  return writing(flags, threadIds.map(nodeKey), undefined, async (recorded) => {
+    consumeApproval(process.argv, []);
+    for (const threadId of threadIds) {
+      console.log(`WRITE → ${verb} review thread ${threadId}`);
+      const result = JSON.parse(gh(["api", "graphql", "-f", `query=${query}`, "-f", `id=${threadId}`]));
+      recorded();
+      if (result.data?.[name]?.thread?.isResolved !== resolved) throw new Error(`${threadId} is not ${verb}d: ${JSON.stringify(result.errors ?? result)}`);
+      console.log(`${verb}d ${threadId}`);
+    }
+    return 0;
+  });
 }
 
 async function reply(pr, id, flags) {
   const repo = currentRepo(flags);
   const body = readBody(flags);
-  const twin = replyExists(prComments(repo, pr), id, body);
-  if (twin) {
-    console.log(`refused: reply ${twin} under ${id} already says this; nothing posted`);
-    return 1;
-  }
-  const relint = `draft-lint.mjs pr-reply ${flags["body-file"]} --pr ${pr} --repo ${repo}`;
-  const fresh = await recheckSources(flags["body-file"], relint, [body]);
-  if (!fresh) return 1;
-  const refusal = pullTargetRefusal(flags["body-file"], repo, pr, relint);
-  if (refusal) {
-    console.log(refusal);
-    return 1;
-  }
-  console.log(`WRITE → ${repo}#${pr} : reply to ${id}`);
-  consumeApproval(process.argv, [body, ...fresh.warnings]);
-  say(fresh.notices);
-  const created = JSON.parse(gh(["api", "-X", "POST", `repos/${repo}/pulls/${pr}/comments/${id}/replies`, "--input", "-"], JSON.stringify({ body })));
-  logEdits([{ repo, pr: Number(pr), key: String(id), label: "reply", draft: null, posted: body }]);
-  console.log(`replied ${created.id}: ${created.html_url}`);
-  return 0;
+  return writing(flags, [prKey(repo, pr)], flags["body-file"], async (recorded) => {
+    const twin = replyExists(prComments(repo, pr), id, body);
+    if (twin) {
+      console.log(`refused: reply ${twin} under ${id} already says this; nothing posted`);
+      return 1;
+    }
+    const relint = `draft-lint.mjs pr-reply ${flags["body-file"]} --pr ${pr} --repo ${repo}`;
+    const fresh = await recheckSources(flags["body-file"], relint, [body]);
+    if (!fresh) return 1;
+    const refusal = pullTargetRefusal(flags["body-file"], repo, pr, relint);
+    if (refusal) {
+      console.log(refusal);
+      return 1;
+    }
+    console.log(`WRITE → ${repo}#${pr} : reply to ${id}`);
+    consumeApproval(process.argv, [body, ...fresh.warnings]);
+    say(fresh.notices);
+    const created = JSON.parse(gh(["api", "-X", "POST", `repos/${repo}/pulls/${pr}/comments/${id}/replies`, "--input", "-"], JSON.stringify({ body })));
+    recorded();
+    logEdits([{ repo, pr: Number(pr), key: String(id), label: "reply", draft: null, posted: body }]);
+    console.log(`replied ${created.id}: ${created.html_url}`);
+    return 0;
+  });
 }
 
 const opOf = (text) => text?.match(/\bOP#(\d+)\b/)?.[1];
@@ -310,23 +334,26 @@ function prBody(number, flags) {
   const repo = currentRepo(flags);
   const body = readFileSync(flags["body-file"], "utf8").trim();
   const view = () => JSON.parse(gh(["pr", "view", String(number), "--repo", repo, "--json", "number,isDraft,author,body"]));
-  const pr = view();
-  const refusal = prBodyRefusal(pr, gh(["api", "user", "-q", ".login"]).trim(), body, generatedPrBodyOp(body));
-  if (refusal) {
-    console.log(`refused: ${refusal}`);
-    return 1;
-  }
-  if (pr.body.trim() === body) {
-    console.log(`#${number} already has this body; nothing written`);
-    return 0;
-  }
-  console.log(`WRITE → ${repo}#${number} : PR body`);
-  if (flags["dry-run"]) return 0;
-  consumeApproval(process.argv, [body]);
-  gh(["api", "-X", "PATCH", `repos/${repo}/pulls/${number}`, "--input", "-"], JSON.stringify({ body }));
-  const same = view().body.trim() === body;
-  console.log(same ? `updated #${number} body` : `written, but the read-back differs; open #${number} and check`);
-  return same ? 0 : 1;
+  return writing(flags, [prKey(repo, number)], undefined, async (recorded) => {
+    const pr = view();
+    const refusal = prBodyRefusal(pr, gh(["api", "user", "-q", ".login"]).trim(), body, generatedPrBodyOp(body));
+    if (refusal) {
+      console.log(`refused: ${refusal}`);
+      return 1;
+    }
+    if (pr.body.trim() === body) {
+      console.log(`#${number} already has this body; nothing written`);
+      return 0;
+    }
+    console.log(`WRITE → ${repo}#${number} : PR body`);
+    if (flags["dry-run"]) return 0;
+    consumeApproval(process.argv, [body]);
+    gh(["api", "-X", "PATCH", `repos/${repo}/pulls/${number}`, "--input", "-"], JSON.stringify({ body }));
+    recorded();
+    const same = view().body.trim() === body;
+    console.log(same ? `updated #${number} body` : `written, but the read-back differs; open #${number} and check`);
+    return same ? 0 : 1;
+  });
 }
 
 const USAGE = `usage:
@@ -346,9 +373,9 @@ async function main([command, ...args]) {
   }
   if (command === "post" && positional[0]) return post(positional[0], flags);
   if (command === "edit" && positional[0]) return edit(positional[0], flags);
-  if (command === "minimize" && positional[0]) return minimize(positional[0]);
-  if (command === "resolve" && positional.length) return setThreadsResolved(positional, true);
-  if (command === "unresolve" && positional.length) return setThreadsResolved(positional, false);
+  if (command === "minimize" && positional[0]) return minimize(positional[0], flags);
+  if (command === "resolve" && positional.length) return setThreadsResolved(positional, true, flags);
+  if (command === "unresolve" && positional.length) return setThreadsResolved(positional, false, flags);
   if (command === "reply" && positional[1]) return reply(positional[0], positional[1], flags);
   if (command === "pr-body" && positional[0]) return prBody(positional[0], flags);
   console.error(USAGE);

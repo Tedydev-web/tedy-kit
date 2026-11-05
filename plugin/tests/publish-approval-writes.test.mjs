@@ -20,7 +20,9 @@ async function lint(w, script, args) {
   return result.out.split("\n").filter((line) => line.startsWith("warning: ")).map((line) => `${line}\n`).join("");
 }
 
-async function onceOnly(w, script, args, preview, count) {
+async function onceOnly(w, script, args, preview, count, keys = []) {
+  const lines = () => keys.map((key) => w.ledger(key).length);
+  const before = lines();
   const refused = await w.run(script, args);
   assert.notEqual(refused.code, 0, refused.out);
   assert.match(refused.out, /no unused approval matches this write/, refused.out);
@@ -29,8 +31,10 @@ async function onceOnly(w, script, args, preview, count) {
   const first = await w.run(script, args);
   assert.ok(count() > 0, `${script} ${args.join(" ")} did not write with a ticket: ${first.out}`);
   const written = count();
+  assert.deepEqual(lines(), before.map((length) => length + 1), `${script} ${args.join(" ")} did not append one ledger line per record: ${keys.join(", ")}`);
   await w.run(script, args);
   assert.equal(count(), written, `${script} ${args.join(" ")} wrote twice on one ticket`);
+  assert.deepEqual(lines(), before.map((length) => length + 1), `${script} ${args.join(" ")} appended to the ledger without writing`);
 }
 
 function prWorld(gh) {
@@ -43,25 +47,33 @@ test("github-write post, edit and minimize write only with a ticket, once", asyn
   const { w: post, draft } = prWorld({ diff: DIFF, reviewComments: [{ id: 1, path: "src/a.ts", line: 10, side: "RIGHT", commit_id: HEAD }] });
   post.file("d.md", draft);
   const postWarnings = await lint(post, "draft-lint", ["pr-comment", "d.md", "--repo", "o/r"]);
-  await onceOnly(post, "github-write", ["post", "d.md", "--repo", "o/r"], (line) => `${draft}\n${postWarnings}${line}`, () => post.writes().length);
+  await onceOnly(post, "github-write", ["post", "d.md", "--repo", "o/r"], (line) => `${draft}\n${postWarnings}${line}`, () => post.writes().length, ["github:o/r#701"]);
   const edit = world({ pr: 1, gh: { write: { id: 5, html_url: "u", body: "Fixed it." } } });
   edit.file("b.md", "Fixed it.\n");
   const editWarnings = await lint(edit, "draft-lint", ["pr-reply", "b.md", "--pr", "1", "--repo", "o/r"]);
-  await onceOnly(edit, "github-write", ["edit", "5", "--body-file", "b.md", "--repo", "o/r"], (line) => `Fixed it.\n${editWarnings}${line}`, () => edit.writes().length);
+  await onceOnly(edit, "github-write", ["edit", "5", "--body-file", "b.md", "--repo", "o/r"], (line) => `Fixed it.\n${editWarnings}${line}`, () => edit.writes().length, ["github:o/r#1"]);
   const minimize = world({ gh: { graphql: { data: { minimizeComment: { minimizedComment: { isMinimized: true } } } } } });
-  await onceOnly(minimize, "github-write", ["minimize", "IC_x"], (line) => line, () => minimize.writes().length);
+  await onceOnly(minimize, "github-write", ["minimize", "IC_x"], (line) => line, () => minimize.writes().length, ["github:node:IC_x"]);
 });
 
 test("github-write pr-body, resolve and unresolve write only with a ticket, once", async () => {
   const prBody = world({ gh: { write: { id: 5, html_url: "u", body: "Fixed it." }, prView: { number: 3, isDraft: true, author: { login: "me" }, body: "old" } } });
   prBody.file("p.md", "OP#21298\n\nTask read now\n");
-  await onceOnly(prBody, "github-write", ["pr-body", "3", "--body-file", "p.md", "--repo", "X/Y"], (line) => `OP#21298\nTask read now\n${line}`, () => prBody.writes().length);
+  await onceOnly(prBody, "github-write", ["pr-body", "3", "--body-file", "p.md", "--repo", "X/Y"], (line) => `OP#21298\nTask read now\n${line}`, () => prBody.writes().length, ["github:x/y#3"]);
   assert.ok(prBody.writes().every((line) => line.includes("repos/X/Y/pulls/3")), prBody.writes().join("\n"));
   const threads = world({ gh: { graphql: { data: { resolveReviewThread: { thread: { isResolved: true } }, unresolveReviewThread: { thread: { isResolved: false } } } } } });
-  await onceOnly(threads, "github-write", ["resolve", "PRRT_a", "PRRT_b"], (line) => line, () => threads.writes().length);
+  await onceOnly(threads, "github-write", ["resolve", "PRRT_a", "PRRT_b"], (line) => line, () => threads.writes().length, ["github:node:PRRT_a", "github:node:PRRT_b"]);
   assert.equal(threads.writes().length, 2);
   const unresolve = world({ gh: { graphql: { data: { unresolveReviewThread: { thread: { isResolved: false } } } } } });
-  await onceOnly(unresolve, "github-write", ["unresolve", "PRRT_a"], (line) => line, () => unresolve.writes().length);
+  await onceOnly(unresolve, "github-write", ["unresolve", "PRRT_a"], (line) => line, () => unresolve.writes().length, ["github:node:PRRT_a"]);
+});
+
+test("github-write reply writes only with a ticket, once, and records the job it names by its file name", async () => {
+  const w = world({ pr: 1, gh: { write: { id: 5, html_url: "u" } } });
+  w.file("b.md", "Fixed it.\n");
+  const warnings = await lint(w, "draft-lint", ["pr-reply", "b.md", "--pr", "1", "--repo", "o/r"]);
+  await onceOnly(w, "github-write", ["reply", "1", "123", "--body-file", "b.md", "--repo", "o/r", "--job", "plans/jobs/reply.md"], (line) => `Fixed it.\n${warnings}${line}`, () => w.writes().length, ["github:o/r#1"]);
+  assert.equal(w.ledger("github:o/r#1")[0].job, "reply.md");
 });
 
 test("openproject apply, set, relation, relation-delete, comment, comment-edit and rollback write only with a ticket, once", async () => {

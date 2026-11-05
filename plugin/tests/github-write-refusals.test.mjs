@@ -5,6 +5,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { mappedProfile, tempDir } from "./temp-dir-for-tests.mjs";
 import { runWithFakeGh } from "./fake-gh-for-tests.mjs";
+import { world } from "./fake-services-for-tests.mjs";
 import { pullRequestCheckout } from "./git-sibling-for-tests.mjs";
 
 const SCRIPT = new URL("../lib/github-write.mjs", import.meta.url).pathname;
@@ -172,4 +173,22 @@ test("pr-body refreshes a ready PR only with the recorded pr-body output for the
   assert.equal(generated.status, 0, generated.out);
   assert.match(generated.out, /^WRITE → o\/r#744 : PR body$/m);
   assert.equal(generated.writes.length, 0);
+});
+
+test("post refuses while another writer holds the PR's record, writes nothing and leaves the ticket unused", async () => {
+  const w = world({ pr: 701, gh: { diff: CLEAN_DIFF, reviewComments: [{ id: 1, path: "src/a.ts", line: 10, side: "RIGHT", commit_id: HEAD_MATCH }] } });
+  const text = draft("The label is wrong.", 701, w.checkout.pr(701).slice(0, 7));
+  w.file("d.md", text);
+  const lint = await w.run("draft-lint", ["pr-comment", "d.md", "--repo", "o/r"]);
+  assert.equal(lint.code, 0, lint.out);
+  const warnings = lint.out.split("\n").filter((line) => line.startsWith("warning: ")).map((line) => `${line}\n`).join("");
+  const args = ["post", "d.md", "--repo", "o/r"];
+  w.approve(`${text}\n${warnings}${w.line("github-write", args)}`);
+  w.holdRecord("github:o/r#701");
+  const refused = await w.run("github-write", args);
+  assert.equal(refused.code, 1, refused.out);
+  assert.match(refused.out, /^github-write: refused: github:o\/r#701 is being written by pid \d+ \(held by the test\) since 2026-11-05T01:00:00\.000Z; nothing was written and the approval is unused\. Run this command again when it finishes\.$/m);
+  assert.deepEqual(w.writes(), []);
+  assert.equal(w.tickets(), 1);
+  assert.deepEqual(w.ledger("github:o/r#701"), []);
 });
