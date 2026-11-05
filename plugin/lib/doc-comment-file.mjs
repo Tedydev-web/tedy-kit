@@ -3,14 +3,15 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { lintChatComment } from "./draft-lint.mjs";
 import { logPostedText } from "./edit-log.mjs";
-import { findQuoteRange, insertAnchored, readDocument, recheckDocTarget, session } from "./gdoc-comments.mjs";
+import { docKey, findQuoteRange, insertAnchored, readDocument, recheckDocTarget, session } from "./gdoc-comments.mjs";
 import { chatLanguage, fill, labels } from "./labels.mjs";
 import { slugOf, stamp } from "./handoff.mjs";
 import { fetchTab, quoteCount } from "./prd-section.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { approvalLines, renderDocComment } from "./publish-approval-render.mjs";
-import { describePin, pinnedSources, pinSourcesOf, recordPins, sayNotices } from "./source-pins.mjs";
+import { withRecords } from "./record-lock.mjs";
+import { describePin, pinnedSince, pinnedSources, pinSourcesOf, recordPins, sayNotices } from "./source-pins.mjs";
 
 const GROUPS = ["A", "B"];
 
@@ -102,34 +103,36 @@ async function post(itemsFile, flags) {
     return 0;
   }
   requireExplicitTarget("doc", flags.doc, { expected: map.prd.doc });
-  const google = await session({ doc: map.prd.doc }, true);
-  const { notices, warnings } = await recheckDocTarget(map.prd.doc, itemsFile, `doc-comment-file.mjs ${itemsFile}`, { texts: todo.map((item) => item.comment) });
-  const document = await readDocument(google);
-  const ranges = todo.map((item) => findQuoteRange(document, tabOf(item.epic), item.quote));
-  consumeApproval(process.argv, [...todo.map((item) => renderDocComment(item, tabOf(item.epic))), ...warnings]);
-  sayNotices(notices);
-  const save = () => {
-    writeFileSync(itemsFile, `${JSON.stringify(data, null, 2)}\n`);
-    const lang = chatLanguage();
-    const checkedAt = new Date().toLocaleString(labels(lang)["doc.locale"], { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-    writeFileSync(flags.html, renderFile({ title: data.title, doc: map.prd.doc, items: data.items, checkedAt, lang }));
-  };
-  for (const [index, item] of todo.entries()) {
-    const body = item.comment.trim();
-    const id = await insertAnchored(google, ranges[index], body);
-    item.posted = { id, at: new Date().toISOString() };
-    logPostedText("doc-comment", itemsFile, id, body);
-    save();
-    console.log(`posted ${id} · EPIC ${item.epic} · ${item.where}`);
-  }
-  console.log(`posted and read back ${todo.length}/${todo.length}; ${flags.html} updated`);
-  return 0;
+  return withRecords([docKey(map.prd.doc)], { job: flags.job, since: pinnedSince(itemsFile) }, async (recorded) => {
+    const google = await session({ doc: map.prd.doc }, true);
+    const { notices, warnings } = await recheckDocTarget(map.prd.doc, itemsFile, `doc-comment-file.mjs ${itemsFile}`, { texts: todo.map((item) => item.comment) });
+    const document = await readDocument(google);
+    const ranges = todo.map((item) => findQuoteRange(document, tabOf(item.epic), item.quote));
+    consumeApproval(process.argv, [...todo.map((item) => renderDocComment(item, tabOf(item.epic))), ...warnings]);
+    sayNotices(notices);
+    const save = () => {
+      writeFileSync(itemsFile, `${JSON.stringify(data, null, 2)}\n`);
+      const lang = chatLanguage();
+      const checkedAt = new Date().toLocaleString(labels(lang)["doc.locale"], { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+      writeFileSync(flags.html, renderFile({ title: data.title, doc: map.prd.doc, items: data.items, checkedAt, lang }));
+    };
+    for (const [index, item] of todo.entries()) {
+      const body = item.comment.trim();
+      const id = await insertAnchored(google, ranges[index], body, recorded);
+      item.posted = { id, at: new Date().toISOString() };
+      logPostedText("doc-comment", itemsFile, id, body);
+      save();
+      console.log(`posted ${id} · EPIC ${item.epic} · ${item.where}`);
+    }
+    console.log(`posted and read back ${todo.length}/${todo.length}; ${flags.html} updated`);
+    return 0;
+  });
 }
 
 const flagValue = (args, name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
 
 async function main([itemsFile, ...rest]) {
-  if (itemsFile === "post") return post(rest[0]?.startsWith("--") ? undefined : rest[0], { html: flagValue(rest, "--html"), doc: flagValue(rest, "--doc"), apply: rest.includes("--apply") });
+  if (itemsFile === "post") return post(rest[0]?.startsWith("--") ? undefined : rest[0], { html: flagValue(rest, "--html"), doc: flagValue(rest, "--doc"), apply: rest.includes("--apply"), job: flagValue(rest, "--job") });
   if (!itemsFile) {
     console.error('usage: doc-comment-file.mjs <items.json>   items.json = { "title": "...", "items": [{ "group": "A|B", "epic": "09", "where": "UC_SW_13 BR1", "quote": "...", "comment": "...", "note": "..." }] }');
     return 2;

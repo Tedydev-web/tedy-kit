@@ -80,6 +80,7 @@ globalThis.fetch = async (input, options = {}) => {
   if (url.host === "docs.google.com") return new Response(web.tabs[url.searchParams.get("tab")] ?? "", { status: 200 });
   if (url.host === "docs.googleapis.com") {
     if (method === "POST") {
+      if (web.docsInsertLimit !== undefined && web.docsInsertLimit-- <= 0) return json({ error: { message: "backend error" } }, 500);
       for (const request of body.requests) web.drive.push({ id: String(next++), content: request.insertComment.content, resolved: false, author: { me: true, displayName: "me" }, replies: [], createdTime: "2026-10-22T00:00:00Z" });
       return json({});
     }

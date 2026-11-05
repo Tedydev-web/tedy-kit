@@ -1,6 +1,8 @@
 import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fakeOpenProject, world } from "./fake-services-for-tests.mjs";
 import { renderDocComment, renderRollbackItem, renderWorkPackageDraft } from "../lib/publish-approval-render.mjs";
 
@@ -187,7 +189,28 @@ test("doc-comment-file post --apply writes only with a ticket, once", async () =
   const w = world({ web: { tabs: { "t.1": TAB }, document: DOCUMENT }, map: { name: "p", repos: [{ path: ".", role: "FE" }], language: { pr_review: "en", doc_figma: "en" }, prd: { doc: "D", tabs: { "09": { tab: "t.1" } } } } });
   w.file("items.json", JSON.stringify({ title: "PRD", items: [ITEM] }));
   const warnings = await lint(w, "doc-comment-file", ["items.json"]);
-  await onceOnly(w, "doc-comment-file", ["post", "items.json", "--html", "out.html", "--apply", "--doc", "D"], (line) => `${renderDocComment(ITEM, "t.1")}\n${warnings}${line}`, () => w.writes().length);
+  await onceOnly(w, "doc-comment-file", ["post", "items.json", "--html", "out.html", "--apply", "--doc", "D"], (line) => `${renderDocComment(ITEM, "t.1")}\n${warnings}${line}`, () => w.writes().length, ["gdoc:D"]);
+});
+
+test("doc-comment-file post --apply refuses while gdoc-comments holds the same Doc, and a batch that fails at item 2 keeps item 1 and its ledger line", async () => {
+  const map = { name: "p", repos: [{ path: ".", role: "FE" }], language: { pr_review: "en", doc_figma: "en" }, prd: { doc: "D", tabs: { "09": { tab: "t.1" } } } };
+  const args = ["post", "items.json", "--html", "out.html", "--apply", "--doc", "D"];
+  const held = world({ web: { tabs: { "t.1": TAB }, document: DOCUMENT }, map });
+  held.file("items.json", JSON.stringify({ title: "PRD", items: [ITEM] }));
+  const heldWarnings = await lint(held, "doc-comment-file", ["items.json"]);
+  await heldRefuses(held, "doc-comment-file", args, (line) => `${renderDocComment(ITEM, "t.1")}\n${heldWarnings}${line}`, "gdoc:D", () => held.writes().length);
+  const second = { ...ITEM, where: "UC_SW_13 BR2", quote: "the fee in GRAM from the payer", comment: "Who pays the GRAM fee?" };
+  const w = world({ web: { tabs: { "t.1": TAB }, document: DOCUMENT, docsInsertLimit: 1 }, map });
+  w.file("items.json", JSON.stringify({ title: "PRD", items: [ITEM, second] }));
+  const warnings = await lint(w, "doc-comment-file", ["items.json"]);
+  w.approve(`${renderDocComment(ITEM, "t.1")}\n${renderDocComment(second, "t.1")}\n${warnings}${w.line("doc-comment-file", args)}`);
+  const failed = await w.run("doc-comment-file", args);
+  assert.notEqual(failed.code, 0, failed.out);
+  assert.match(failed.out, /returned HTTP 500/);
+  const items = JSON.parse(readFileSync(join(w.dir, "items.json"), "utf8")).items;
+  assert.equal(typeof items[0].posted?.id, "string", JSON.stringify(items));
+  assert.equal(items[1].posted, undefined);
+  assert.equal(w.ledger("gdoc:D").length, 1);
 });
 
 test("a post ticket binds the PR, head, path and line, not only the comment text", async () => {
