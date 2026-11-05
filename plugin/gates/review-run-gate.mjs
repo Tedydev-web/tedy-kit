@@ -8,7 +8,7 @@ import { expandHome, walkCommands } from "../lib/shell-segments.mjs";
 
 const MANAGERS = new Set(["npm", "pnpm", "yarn", "bun", "npx", "bunx", "pnpx"]);
 const DIR_FLAGS = new Set(["-C", "--prefix", "--dir", "--cwd"]);
-const REVIEW_FOLDER = /\/(?:\.claude\/worktrees|\.worktrees)\/[^/]+$/;
+const REVIEW_FOLDER = /\/(?:\.claude\/worktrees|\.worktrees)\/pr-\d+$/;
 const CHECKOUT = fileURLToPath(new URL("../skills/review-pr/references/checkout.md", import.meta.url));
 
 function targetDir(args, dir) {
@@ -31,8 +31,8 @@ function reviewCheckout(dir) {
     throw error;
   }
   const [top, sha, symbolic] = lines;
-  if (symbolic !== "HEAD" || !/^[0-9a-f]{40}$/.test(sha ?? "")) return null;
-  const refs = git(dir, "for-each-ref", "--points-at", sha, "--format=%(refname)", "refs/pr/").split("\n").filter(Boolean);
+  if (!/^[0-9a-f]{40}$/.test(sha ?? "")) return null;
+  const refs = symbolic === "HEAD" ? git(dir, "for-each-ref", "--points-at", sha, "--format=%(refname)", "refs/pr/").split("\n").filter(Boolean) : [];
   return refs.length || REVIEW_FOLDER.test(top) ? { top, sha, refs } : null;
 }
 

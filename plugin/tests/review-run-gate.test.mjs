@@ -98,6 +98,21 @@ test("a review worktree stays one after its refs/pr ref moves or is deleted, and
   const outside = join(tempDir("tedy-review-outside-"), "pr-12");
   git(setup.repo, "worktree", "add", "-q", "--detach", outside, "refs/pr/12");
   assert.ok(verdict(setup, bash("npm test", outside)).reason.includes("refs/pr/12"));
+  git(setup.worktree, "checkout", "-q", "-b", "local");
+  assert.ok(verdict(setup, bash("npm test", setup.worktree)));
+});
+
+test("a dev branch worktree stopped mid-rebase and a detached worktree not named pr-<n> are not review checkouts", () => {
+  const setup = reviewSetup();
+  const dev = join(setup.repo, ".claude", "worktrees", "feat-x");
+  git(setup.repo, "worktree", "add", "-q", "-b", "feat/x", dev, "main");
+  commitFile(dev, "package.json", '{"scripts":{"test":"vitest --run"}}\n');
+  commitFile(setup.repo, "package.json", '{"scripts":{"test":"jest"}}\n');
+  assert.throws(() => git(dev, "rebase", "main"));
+  assert.match(git(dev, "status", "--short", "--branch").split("\n")[0], /no branch/);
+  const scratch = join(setup.repo, ".worktrees", "scratch");
+  git(setup.repo, "worktree", "add", "-q", "--detach", scratch, "main");
+  for (const cwd of [dev, scratch]) assert.equal(verdict(setup, bash("npm test", cwd)), null, cwd);
 });
 
 test("context-mode shell code is checked where context-mode runs it", () => {
