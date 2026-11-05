@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { redirectLength } from "./shell-program-arguments.mjs";
 
 const SHELL_WRAPPER = /^(?:bash|sh|zsh|dash|ksh)\s+(?:--login\s+)?-[a-zA-Z]*c[a-zA-Z]*\s+(?:--\s+)?(['"])([\s\S]*)\1$/;
 const HEREDOC = /(?<!<)<<(?!<)(-?)\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/g;
@@ -153,6 +154,7 @@ export function* walkParts(command, cwd, unwrap = true) {
     let at = 0;
     for (;;) {
       if (at < tokens.length && (ASSIGNMENT.test(tokens[at]) || LEADING_WORDS.has(tokens[at]))) at += 1;
+      else if (redirectLength(tokens, at)) at += redirectLength(tokens, at);
       else if (tokens[at] === "time") {
         at += 1;
         while (tokens[at]?.startsWith("-")) at += 1;

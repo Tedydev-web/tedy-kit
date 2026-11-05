@@ -4,8 +4,8 @@ export const INTERPRETER = /^(?:python|node|perl|ruby|deno|bun|php|tsx|ts-node)[
 const STDIN_SCRIPT = /^(?:-|\/dev\/stdin|\/dev\/fd\/\d+|\/proc\/[^/]+\/fd\/\d+)$|^<\(/;
 const GLOB = /[*?[]/;
 const EXPANSION = /[$`]/;
-export const REDIRECT = /^\d*(?:[<>](?!\()|&>)/;
-export const BARE_REDIRECT = /^\d*(?:[<>][<>&|-]*|&>>?)$/;
+const REDIRECT = /^\d*(?:[<>](?!\()|&>)/;
+const BARE_REDIRECT = /^\d*(?:[<>][<>&|-]*|&>>?)$/;
 const STDIN_FEED = /^0?<(?!\()/;
 const NODE_VALUE_FLAGS = new Set(["-r", "-C", "--require", "--import", "--loader", "--experimental-loader", "--input-type", "--conditions", "--env-file", "--title"]);
 const FAMILIES = {
@@ -20,6 +20,26 @@ function family(program) {
   if (/^python/.test(program)) return "python";
   if (/^node/.test(program)) return "node";
   return "other";
+}
+
+export function redirectLength(tokens, at, glued = false) {
+  const token = tokens[at] ?? "";
+  if (/^\d*<<(?!<)/.test(token)) return 0;
+  if (glued && /^\d+$/.test(token) && /^[<>]/.test(tokens[at + 1] ?? "")) return 1 + redirectLength(tokens, at + 1);
+  if (/^\d*[<>]&-$/.test(token)) return 1;
+  if (BARE_REDIRECT.test(token)) return 2;
+  return REDIRECT.test(token) ? 1 : 0;
+}
+
+export function withoutRedirects(tokens) {
+  const kept = [];
+  let at = 0;
+  while (at < tokens.length) {
+    const skip = redirectLength(tokens, at);
+    if (skip) at += skip;
+    else kept.push(tokens[at++]);
+  }
+  return kept;
 }
 
 export function scriptOperand(program, args) {

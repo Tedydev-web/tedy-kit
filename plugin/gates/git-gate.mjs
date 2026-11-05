@@ -7,7 +7,7 @@ import { ALL_GATES_ON, ask, deny, gateSwitches, logGate, readHookInput } from ".
 import { CLAUDE_SETTINGS } from "../lib/publish-approval-settings.mjs";
 import { resolveMap } from "../lib/project-map.mjs";
 import { shellWords, splitSegments, substitutions, tokenize, walkCommands } from "../lib/shell-segments.mjs";
-import { BARE_REDIRECT, INTERPRETER, REDIRECT, SHELLS, readsUnreadableCode, scriptOperand, variableScriptArguments } from "../lib/shell-program-arguments.mjs";
+import { INTERPRETER, SHELLS, readsUnreadableCode, redirectLength, scriptOperand, variableScriptArguments, withoutRedirects } from "../lib/shell-program-arguments.mjs";
 import { check as checkQuoted } from "./publish-quote-gate.mjs";
 import { evaluate as trackerToken, trackerHost } from "./tracker-token-gate.mjs";
 
@@ -119,22 +119,15 @@ export function commandTokens(segment, keep) {
   return tokens.length && tokens[0].includes("/") ? [basename(tokens[0]), ...tokens.slice(1)] : tokens;
 }
 
-function redirectLength(tokens, at) {
-  const token = tokens[at] ?? "";
-  if (/^\d*<<(?!<)/.test(token)) return 0;
-  if (/^\d+$/.test(token) && /^[<>]/.test(tokens[at + 1] ?? "")) return 1 + redirectLength(tokens, at + 1);
-  if (BARE_REDIRECT.test(token)) return 2;
-  return REDIRECT.test(token) ? 1 : 0;
-}
-
 function strippedTokens(segment, keep = new Set()) {
   const all = tokenize(segment);
   let at = 0;
   for (;;) {
     for (let skip = 1; skip; at += skip) {
       while (at < all.length && (ENV_ASSIGNMENT.test(all[at]) || /^[({!]+$/.test(all[at]))) at += 1;
+      const before = all[at];
       if (at < all.length) all[at] = all[at].replace(/^[({!]+/, "");
-      skip = redirectLength(all, at);
+      skip = redirectLength(all, at, before !== all[at]);
     }
     const flags = keep.has(basename(all[at] ?? "")) ? undefined : WRAPPERS.get(basename(all[at] ?? ""));
     if (!flags) break;
@@ -282,7 +275,8 @@ function withoutRepoFlags(args) {
 }
 
 export function classify(segment, cwd) {
-  const [program, ...args] = commandTokens(segment);
+  const [program, ...rest] = commandTokens(segment);
+  const args = withoutRedirects(rest);
   if (program === "cd") return { kind: "cd", dir: resolve(cwd, (args[0] ?? "~").replace(/^~(?=\/|$)/, homedir())) };
   if (program === "git") {
     let dir = cwd;
