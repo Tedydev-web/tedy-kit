@@ -381,12 +381,12 @@ async function rollback(client, project, flags, recorded) {
       if (action === "delete") await client.request(`/api/v3/work_packages/${item.id}`, { method: "DELETE" });
       else await client.request(`/api/v3/work_packages/${item.id}`, { method: "PATCH", body: { lockVersion: item.lockVersion, _links: { status: { href: closedStatus._links.self.href } } } });
       done.push(item.id);
+      recorded();
     } catch (error) {
       console.log(`  ! #${item.id} ${action} failed: ${error.message}`);
       failed.push(item.id);
     }
   }
-  if (done.length) recorded();
   writeSidecar(path, forgetSlugs(readSidecar(path), action === "delete" ? done : [], failed));
   console.log(`${action} ${done.length}/${items.length}${failed.length ? "; the failed ones stay recorded, run rollback again to retry them" : ""}`);
   return failed.length ? 1 : 0;

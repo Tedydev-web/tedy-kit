@@ -2,7 +2,7 @@ import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -17,7 +17,7 @@ const STATUSES = [
   { name: "Closed", isClosed: true, _links: { self: { href: "/api/v3/statuses/12" } } },
 ];
 
-function fakeOpenProject() {
+function fakeOpenProject({ onWrite = () => {} } = {}) {
   const workPackages = {};
   const calls = [];
   let nextId = 30000;
@@ -29,7 +29,10 @@ function fakeOpenProject() {
     request.on("end", () => {
       const url = new URL(request.url, "http://x");
       const send = (data) => response.end(JSON.stringify(data));
-      if (request.method !== "GET" && !url.pathname.endsWith("/form")) calls.push(`${request.method} ${url.pathname}`);
+      if (request.method !== "GET" && !url.pathname.endsWith("/form")) {
+        calls.push(`${request.method} ${url.pathname}`);
+        onWrite(`${request.method} ${url.pathname}`);
+      }
       if (url.pathname === "/api/v3/statuses") return send({ _embedded: { elements: STATUSES } });
       if (url.pathname === "/api/v3/priorities") return send({ _embedded: { elements: [{ name: "High", _links: { self: { href: "/api/v3/priorities/9" } } }] } });
       if (url.pathname.endsWith("/types")) return send({ _embedded: { elements: [{ name: "Task", _links: { self: { href: "/api/v3/types/1" } } }] } });
@@ -140,6 +143,33 @@ test("rollback lists what the last apply created, closes by default, and deletes
     assert.equal(workPackages[30001], undefined);
     assert.equal(sidecar()["task-fe-c"], undefined);
     assert.equal(sidecar()["task-fe-a"], 30000);
+  } finally {
+    server.close();
+  }
+});
+
+test("rollback appends its ledger lines as soon as its first close returns, before the next one", async () => {
+  let rolling = false;
+  let records;
+  const seen = [];
+  const { server, url } = await fakeOpenProject({ onWrite: (call) => rolling && call.startsWith("PATCH") && seen.push(records()) });
+  const { home, op, sidecar } = workspace(url);
+  records = () => readdirSync(join(home, "state", "records")).length;
+  const file = join(home, "drafts.json");
+  try {
+    writeFileSync(file, JSON.stringify([
+      { slug: "task-fe-a", type: "Task", subject: "[FE] Vault limit pop-up on Pro", description: DESCRIPTION, estimate: 1 },
+      { slug: "task-fe-b", type: "Task", subject: "[FE] Vault limit banner", description: DESCRIPTION, estimate: 1 },
+    ]));
+    await op("preview", file, "--project", "183");
+    await op("apply", file, "--project", "183");
+    assert.deepEqual(sidecar()._last_apply.created, [30000, 30001]);
+    const before = records();
+    rolling = true;
+    assert.match(await op("rollback", "--project", "183", "--apply"), /close 2\/2/);
+    assert.equal(seen.length, 2);
+    assert.equal(seen[0], before);
+    assert.equal(seen[1], before + 2, `ledger files at the second close: ${seen[1]}, before rollback: ${before}`);
   } finally {
     server.close();
   }
