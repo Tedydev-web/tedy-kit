@@ -45,22 +45,23 @@ function existingDir(path) {
   return dir;
 }
 
-function flagValues(tokens, flags, dir) {
+function flagValues(tokens, flags, dir, read = (value) => value) {
   const dirs = [];
   for (let index = 0; index < tokens.length && tokens[index] !== "--"; index += 1) {
     const token = tokens[index];
     const equals = token.indexOf("=");
     let [flag, value] = equals > 0 ? [token.slice(0, equals), token.slice(equals + 1)] : [token, tokens[index + 1]];
     if (/^-[^-]./.test(token) && !flags(flag) && flags(token.slice(0, 2))) [flag, value] = [token.slice(0, 2), token.slice(2)];
-    if (flags(flag) && value) dirs.push(resolve(dir, expandHome(fileUrlPath(value))));
+    if (flags(flag) && value) dirs.push(resolve(dir, expandHome(read(value))));
   }
   return dirs;
 }
 
 function fileUrlPath(value) {
-  if (!value.startsWith("file:")) return value;
+  if (!/^file:/i.test(value)) return value;
   try {
-    return fileURLToPath(value);
+    const path = fileURLToPath(value);
+    return path.includes("\0") ? value : path;
   } catch {
     return value;
   }
@@ -85,7 +86,7 @@ function runner(program, args) {
 }
 
 function nodeDirs(args, dirs, here) {
-  const preloads = flagValues(args, (flag) => NODE_PRELOAD_FLAGS.has(flag), here).map(existingDir);
+  const preloads = flagValues(args, (flag) => NODE_PRELOAD_FLAGS.has(flag), here, fileUrlPath).map(existingDir);
   const { script, inline } = scriptOperand("node", args);
   if (inline || script === undefined || script === "-") {
     const tested = args.includes("--test") ? args.filter((arg) => !arg.startsWith("-")).map((arg) => existingDir(resolve(here, expandHome(arg)))) : [];

@@ -124,12 +124,13 @@ test("gmake, a makefile, an attached directory and a node preload or test path i
     [`node --import tsx ${outside}`, wt],
     [`node --import file://${wt}/src/a.ts ${outside}`, setup.repo],
     [`node --import=file://${wt}/src/a.ts ${outside}`, setup.repo],
+    [`node --import FILE://${wt}/src/a.ts ${outside}`, setup.repo],
   ]) {
     const result = verdict(setup, bash(command, cwd));
     assert.ok(result, `${command} in ${cwd}`);
     assert.ok(result.reason.includes("step 3 of /tedy:review-pr"), command);
   }
-  for (const command of [`make -f ${setup.repo}/Makefile test`, `node --test ${setup.repo}/src/`, `node --import tsx ${outside}`, `node -r ${outside} -e 1`]) {
+  for (const command of [`node --import file:///tmp/a%00b -e 1`, `make -f file:///tmp/a%00b test`, `make -f ${setup.repo}/Makefile test`, `node --test ${setup.repo}/src/`, `node --import tsx ${outside}`, `node -r ${outside} -e 1`]) {
     assert.equal(verdict(setup, bash(command, setup.repo)), null, command);
   }
 });
