@@ -54,6 +54,14 @@ For every exported symbol, route, event, file path or config key a change rename
 3. In TypeScript, run the repository's own typecheck before reading search results; it is the cheapest reference check.
 4. Mark each hit touched (changed in this diff), safe (checked, unaffected) or broken (a finding).
 
+## Sibling sweep
+
+For a bug fix, before the first source edit:
+
+1. Find the root: the first place the code does something it should not, or fails to handle a state it should. A guard where the symptom shows is the fix only when that state is legitimate; otherwise fix what produced it.
+2. Search for the same defect beyond the reported spot: the same helper, check, constant or copy, the other branch of the same condition, sibling screens and the shared packages, with the commands in Blast radius step 1. Keep the commands you ran.
+3. Mark each hit same defect, intentional (PRD, Figma or a deliberate choice, quoted) or out of scope (another product app). Fix the same-defect hits that fall under the task, list the rest with the reason, and put the commands and the list in the report. A same-defect hit outside the work package's checklist is listed and never fixed silently: one AskUserQuestion asks the user whether to fix it in the same PR, because widening the PR is their call. A fix whose siblings cannot be listed is not finished.
+
 ## PM demo (HTML)
 
 When the map lists a demo URL: `curl -s <url> -o /tmp/<project>-demo.html`, then `rg -n --no-ignore-global` the function or copy. The demo is a third reference: Figma for visuals, PRD for logic; a demo that disagrees with either is a mismatch to raise.

@@ -31,6 +31,15 @@ test("one blast-radius procedure sees every tracked file, reads siblings from th
   assert.match(read("skills/review-pr/SKILL.md"), /Blast radius in source-access\.md/);
 });
 
+test("a bug fix sweeps for siblings of the same defect, and a sibling outside the package goes to the user", () => {
+  const access = read("shared/source-access.md");
+  const section = access.slice(access.indexOf("## Sibling sweep"), access.indexOf("## PM demo"));
+  for (const phrase of ["before the first source edit", "same defect", "intentional", "out of scope", "Blast radius step 1", "not finished", "outside the work package's checklist", "AskUserQuestion", "never fixed silently"]) assert.ok(section.includes(phrase), phrase);
+  const dev = read("skills/dev/SKILL.md");
+  assert.match(dev, /^4\. \*\*Build\.\*\* A bug fix is made where the code first goes wrong and covers its siblings \(Sibling sweep in `\$\{CLAUDE_PLUGIN_ROOT\}\/shared\/source-access\.md`\)\. Red first:/m);
+  assert.ok(dev.includes("the red run, the sibling sweep, verify output"));
+});
+
 test("review asks before any script runs PR code, names the execution surface, and asks again on a new head", () => {
   const review = read("skills/review-pr/SKILL.md");
   const step = review.slice(review.indexOf("3. **Checkout and verify.**"), review.indexOf("4. **Read.**"));
