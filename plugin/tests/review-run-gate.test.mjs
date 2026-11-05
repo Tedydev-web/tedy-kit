@@ -59,6 +59,18 @@ test("a package-manager command in a review worktree without an approval for its
   }
 });
 
+test("both the current directory and every directory flag before -- are checked", () => {
+  const setup = reviewSetup();
+  for (const [command, cwd] of [
+    ["npm test -- -C /tmp", setup.worktree],
+    ["npx eslint --cwd=/tmp .", setup.worktree],
+    ["pnpm vitest --dir /tmp", setup.worktree],
+    [`npm --prefix /tmp --prefix ${setup.worktree} test`, setup.repo],
+    [`npm --prefix ${setup.worktree} --prefix /tmp test`, setup.repo],
+  ]) assert.ok(verdict(setup, bash(command, cwd)), `${command} in ${cwd}`);
+  assert.equal(verdict(setup, bash(`npm test -- --prefix ${setup.worktree}`, setup.repo)), null);
+});
+
 test("reads in a review worktree and package-manager commands elsewhere pass", () => {
   const setup = reviewSetup();
   const branch = join(setup.repo, ".claude", "worktrees", "feature");

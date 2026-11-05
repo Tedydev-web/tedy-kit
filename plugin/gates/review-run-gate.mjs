@@ -11,13 +11,14 @@ const DIR_FLAGS = new Set(["-C", "--prefix", "--dir", "--cwd"]);
 const REVIEW_FOLDER = /\/(?:\.claude\/worktrees|\.worktrees)\/pr-\d+$/;
 const CHECKOUT = fileURLToPath(new URL("../skills/review-pr/references/checkout.md", import.meta.url));
 
-function targetDir(args, dir) {
-  for (let index = 0; index < args.length; index += 1) {
+function targetDirs(args, dir) {
+  const dirs = [dir];
+  for (let index = 0; index < args.length && args[index] !== "--"; index += 1) {
     const equals = args[index].indexOf("=");
     const [flag, value] = equals > 0 ? [args[index].slice(0, equals), args[index].slice(equals + 1)] : [args[index], args[index + 1]];
-    if (DIR_FLAGS.has(flag) && value) return resolve(dir, expandHome(value));
+    if (DIR_FLAGS.has(flag) && value) dirs.push(resolve(dir, expandHome(value)));
   }
-  return dir;
+  return dirs;
 }
 
 const git = (dir, ...args) => execFileSync("git", ["-C", dir, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 10_000 });
@@ -45,10 +46,11 @@ export function reviewRunVerdict(input, { dir = runApprovalsDir() } = {}) {
     for (const { text, dir: cwd } of walkCommands(item.tool_input?.command ?? "", item.cwd ?? process.cwd()).parts) {
       const [program, ...args] = commandTokens(text, MANAGERS);
       if (!MANAGERS.has(program)) continue;
-      const target = targetDir(args, cwd);
-      if (!checked.has(target)) checked.set(target, reviewCheckout(target));
-      const checkout = checked.get(target);
-      if (checkout && !hasRunApproval(checkout.sha, dir)) return { ...checkout, reason: refusal(checkout) };
+      for (const target of targetDirs(args, cwd)) {
+        if (!checked.has(target)) checked.set(target, reviewCheckout(target));
+        const checkout = checked.get(target);
+        if (checkout && !hasRunApproval(checkout.sha, dir)) return { ...checkout, reason: refusal(checkout) };
+      }
     }
   }
   return null;
