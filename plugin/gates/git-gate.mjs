@@ -350,35 +350,48 @@ export function pushRisk(args, dir, exempt = []) {
   return null;
 }
 
-const BODY_FLAG = /^(?:--body|-b|--body-file|-F)(?:=[\s\S]*)?$/;
+const BODY_FLAG = /^(?:(--body|--body-file)(?:=([\s\S]*))?|(-b|-F)=?([\s\S]*))$/;
+
+const bodyFlag = (token) => {
+  const match = token.match(BODY_FLAG);
+  if (!match) return null;
+  const name = match[1] ?? match[3];
+  const value = match[1] ? match[2] : match[4] || undefined;
+  return { file: name === "--body-file" || name === "-F", value };
+};
 
 function editsOnlyBody(tokens) {
   const flags = tokens.slice(tokens.indexOf("edit") + 1);
   let body = false;
   for (let index = 0; index < flags.length; index += 1) {
     if (!flags[index].startsWith("-")) continue;
-    if (!BODY_FLAG.test(flags[index])) return false;
+    const flag = bodyFlag(flags[index]);
+    if (!flag) return false;
     body = true;
-    if (!flags[index].includes("=")) index += 1;
+    if (flag.value === undefined) index += 1;
   }
   return body;
 }
 
 export function prBody(args, dir) {
+  let body = null;
   for (let index = 0; index < args.length; index += 1) {
-    const match = args[index].match(/^(--body|-b|--body-file|-F)(?:=([\s\S]*))?$/);
-    if (!match) continue;
-    const value = match[2] ?? args[index + 1];
-    if (value === undefined) return null;
-    if (match[1] === "--body" || match[1] === "-b") return value;
-    if (value === "-") return null;
-    try {
-      return readFileSync(resolve(dir, value), "utf8");
-    } catch {
-      return null;
+    const flag = bodyFlag(args[index]);
+    if (!flag) continue;
+    const value = flag.value ?? args[index + 1];
+    if (flag.value === undefined) index += 1;
+    if (value === undefined) body = null;
+    else if (!flag.file) body = value;
+    else if (value === "-") body = null;
+    else {
+      try {
+        body = readFileSync(resolve(dir, value), "utf8");
+      } catch {
+        body = null;
+      }
     }
   }
-  return null;
+  return body;
 }
 
 export function isDraft(args) {

@@ -51,6 +51,25 @@ test("a PR body edit in a tracked project must keep OP#<id>, with ghWrites on or
   assert.equal(evaluate('gh pr edit 12 --body "no package"', "/somewhere/else", { projectsDir: dir }).allow, true);
 });
 
+test("attached short body flags and the last of several body flags decide the work-package check", () => {
+  const { dir, repo } = projects();
+  writeFileSync(join(repo, "ok.md"), "OP#21376\n");
+  writeFileSync(join(repo, "no.md"), "no package\n");
+  for (const gates of [ALL_GATES_ON, { ...ALL_GATES_ON, ghWrites: false }]) {
+    const edit = (rest) => evaluate(`gh pr edit 12 ${rest}`, repo, { projectsDir: dir, gates }).allow;
+    assert.equal(edit('-b"no package"'), false);
+    assert.equal(edit("-bno"), false);
+    assert.equal(edit("-Fno.md"), false);
+    assert.equal(edit("-Fok.md"), true);
+    assert.equal(edit('-b"OP#21453"'), true);
+    assert.equal(edit('--body "OP#1" --body "no package"'), false);
+    assert.equal(edit('--body "no package" --body "OP#1"'), true);
+  }
+  const create = (rest) => evaluate(`gh pr create --draft --base dev --title "fix: x" ${rest}`, repo, { projectsDir: dir }).allow;
+  assert.equal(create('-b"OP#21453"'), true);
+  assert.equal(create('--body "OP#1" --body "no package"'), false);
+});
+
 const draft = "# PR #735: comment line by line (head abc1234)\n\n## 1. `src/a.ts:10`\nc check lại chỗ này giúp e nha\n\n---\n\n## 2. `src/b.ts:4`\nđoạn này thiếu case rỗng\n";
 const at = (ms) => new Date(ms).toISOString();
 const say = (ms, text) => ({ type: "assistant", timestamp: at(ms), message: { content: [{ type: "text", text }] } });
