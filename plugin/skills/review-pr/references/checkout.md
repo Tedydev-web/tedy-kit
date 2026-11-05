@@ -4,7 +4,7 @@ The PR's code is untrusted. Its tests, and any script line or config it changes,
 
 ## Checkout
 
-1. From the reviewed repo, before any read: `node <plugin>/scripts/draft-lint.mjs pin-sources <draft> --pr <n> --repo <owner/repo>` (`draft-format.md`, Pinned sources). It sets `refs/pr/<n>`; check it equals `headRefOid`.
+1. From the reviewed repo, before any read: `node <plugin>/scripts/draft-lint.mjs pin-sources <draft> --pr <n> --repo <owner/repo> --branch <repo path>:<baseRefName>` (`draft-format.md`, Pinned sources), with the reviewed repo's path in the map as `<repo path>`. It sets `refs/pr/<n>`; check it equals `headRefOid`. Its `pinned: <repo> origin/<baseRefName>@<sha>` line is the base sha: read the rule files at it (`source-access.md`, GitHub) and pass it to the reviewer lenses. The verify run below still uses the head's lint and TS config; the execution surface names them when they changed.
 2. `git worktree add --detach <folder>/pr-<n> refs/pr/<n>` in the folder `git worktree list` already uses (`.claude/worktrees/` or `.worktrees/`). Never switch the main checkout's branch, and never `npm install` (or any other install) in the worktree: packages resolve from the main checkout's `node_modules`, so a new dependency fails instead of installing.
 
 ## Ask before running anything

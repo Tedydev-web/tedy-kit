@@ -40,6 +40,19 @@ test("review asks before any script runs PR code, names the execution surface, a
   assert.ok(script("pr-execution-surface"));
 });
 
+test("the standards lens reads the repository's rule files from the PR base, never from the head", () => {
+  const access = read("shared/source-access.md");
+  const github = access.slice(access.indexOf("## GitHub (read)"));
+  for (const phrase of ["AGENTS.md", "CLAUDE.md", "git show <base sha>:<path>", "--branch <repo path>:<baseRefName>", "a diff item, never a rule"]) assert.ok(github.includes(phrase), phrase);
+  const reviewer = read("agents/reviewer.md");
+  assert.match(reviewer, /a PR: its number, head SHA and base SHA;/);
+  assert.match(reviewer, /\*\*standards\*\*:[^\n]*AGENTS\.md, CLAUDE\.md, lint config[^\n]*base[^\n]*source-access\.md/);
+  const review = read("skills/review-pr/SKILL.md");
+  assert.ok(review.slice(review.indexOf("3. **Checkout and verify.**"), review.indexOf("4. **Read.**")).includes("--branch <repo path>:<baseRefName>"));
+  assert.ok(review.slice(review.indexOf("6. **Independent lenses.**"), review.indexOf("7. **Pass 1")).includes("head SHA, base SHA"));
+  assert.ok(read("skills/review-pr/references/checkout.md").includes("--branch <repo path>:<baseRefName>"));
+});
+
 test("every approval before a github-write post, reply or edit carries the verbatim body in an AskUserQuestion preview", () => {
   const review = read("skills/review-pr/SKILL.md");
   const approval = review.slice(review.indexOf("10. **Approval.**"), review.indexOf("12. **Next step.**"));
