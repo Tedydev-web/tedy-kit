@@ -139,8 +139,21 @@ export function ledgerConflicts(keys, { job, since } = {}) {
   });
 }
 
+const NO_JOB_FILE = "--job needs a job file path; nothing was written";
+
+export function jobFlag(args) {
+  let job;
+  for (const [index, arg] of args.entries()) {
+    if (arg === "--job") job = args[index + 1];
+    else if (typeof arg === "string" && arg.startsWith("--job=")) job = arg.slice("--job=".length);
+    else continue;
+    if (typeof job !== "string" || !job.trim() || job.startsWith("--")) throw new Error(NO_JOB_FILE);
+  }
+  return job;
+}
+
 export async function withRecords(keys, { job, since } = {}, fn) {
-  if (job !== undefined && job !== null && (typeof job !== "string" || !job.trim())) throw new Error("--job needs a job file path; nothing was written");
+  if (job !== undefined && job !== null && (typeof job !== "string" || !job.trim())) throw new Error(NO_JOB_FILE);
   const name = job ? basename(job) : null;
   const sorted = [...new Set(keys)].sort();
   const held = [];

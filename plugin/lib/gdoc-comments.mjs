@@ -9,7 +9,7 @@ import { canonicalJson } from "./figma-comments.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { notBefore, sinceTime } from "./since.mjs";
-import { withRecords } from "./record-lock.mjs";
+import { jobFlag, withRecords } from "./record-lock.mjs";
 import { pinnedSince, requireFresh, sayNotices, versionCheck } from "./source-pins.mjs";
 
 const DRIVE = "https://www.googleapis.com/drive/v3";
@@ -274,7 +274,7 @@ export async function listComments(google) {
 
 async function main([command, target, ...rest]) {
   const args = target?.startsWith("--") ? [target, ...rest] : rest;
-  const flags = Object.fromEntries(args.flatMap((arg, index) => (arg.startsWith("--") ? [[arg.slice(2), args[index + 1]]] : [])));
+  const flags = { ...Object.fromEntries(args.flatMap((arg, index) => (arg.startsWith("--") ? [[arg.slice(2), args[index + 1]]] : []))), job: jobFlag(args) };
   if (flags.since !== undefined) sinceTime(flags.since);
   if (["reply", "anchor", "edit", "delete"].includes(command)) requireExplicitTarget("doc", flags.doc);
   if (command === "list") {

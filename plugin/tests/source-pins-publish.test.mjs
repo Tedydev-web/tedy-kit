@@ -503,6 +503,12 @@ test("a Doc reply naming a job refuses when another job wrote the Doc after the 
   assert.ok(refused.out.includes(`refused: gdoc:D got a kit write from job b.md at ${otherAt}, after this draft's sources were pinned at ${readAt}; read the record again, update the draft, lint it and ask the user again.`), refused.out);
   assert.deepEqual(w.writes(), []);
   assert.equal(w.tickets(), 1);
+  const joined = ["reply", "c1", "--body-file", "g.md", "--doc", "D", "--job=plans/jobs/a.md"];
+  w.approve(`Which wallet pays the fee?\n${warnings}${w.line("gdoc-comments", joined)}`, "Q3?");
+  const refusedJoined = await w.run("gdoc-comments", joined);
+  assert.equal(refusedJoined.code, 1, refusedJoined.out);
+  assert.ok(refusedJoined.out.includes(`refused: gdoc:D got a kit write from job b.md at ${otherAt}`), refusedJoined.out);
+  assert.deepEqual(w.writes(), []);
   const plain = ["reply", "c1", "--body-file", "g.md", "--doc", "D"];
   w.approve(`Which wallet pays the fee?\n${warnings}${w.line("gdoc-comments", plain)}`, "Q2?");
   const posted = await w.run("gdoc-comments", plain);

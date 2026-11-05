@@ -11,7 +11,7 @@ import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticke
 import { notBefore, sinceTime } from "./since.mjs";
 import { RECHECK } from "./source-pin-git.mjs";
 import { nodeId } from "./source-pin-links.mjs";
-import { withRecords } from "./record-lock.mjs";
+import { jobFlag, withRecords } from "./record-lock.mjs";
 import { pinnedSince, pinnedSources, requireFresh, sayNotices, versionCheck } from "./source-pins.mjs";
 
 const API = "https://api.figma.com/v1";
@@ -146,7 +146,7 @@ async function verify(figma, id, body) {
 
 async function main([command, target, ...rest]) {
   const args = target?.startsWith("--") ? [target, ...rest] : rest;
-  const flags = Object.fromEntries(args.flatMap((arg, index) => (arg.startsWith("--") ? [[arg.slice(2), args[index + 1]]] : [])));
+  const flags = { ...Object.fromEntries(args.flatMap((arg, index) => (arg.startsWith("--") ? [[arg.slice(2), args[index + 1]]] : []))), job: jobFlag(args) };
   if (flags.since !== undefined) sinceTime(flags.since);
   if (["post", "reply", "delete"].includes(command)) requireExplicitTarget("file", flags.file);
   const figma = client(flags);

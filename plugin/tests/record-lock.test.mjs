@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { ledgerConflicts, ledgerPath, lockPath, withRecords } from "../lib/record-lock.mjs";
+import { jobFlag, ledgerConflicts, ledgerPath, lockPath, withRecords } from "../lib/record-lock.mjs";
 import { world } from "./fake-services-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
@@ -114,6 +114,16 @@ test("a write that fails releases its locks, and keeps its ledger line only when
   );
   assert.equal(existsSync(lockPath("t4:after")), false);
   assert.equal(ledger("t4:after").length, 1);
+});
+
+test("--job is read as --job <file> or --job=<file> in any position, and a --job with no file refuses", () => {
+  assert.equal(jobFlag(["post", "d.md"]), undefined);
+  assert.equal(jobFlag(["post", undefined]), undefined);
+  assert.equal(jobFlag(["post", "--job", "plans/jobs/a.md", "d.md"]), "plans/jobs/a.md");
+  assert.equal(jobFlag(["post", "d.md", "--job=plans/jobs/a.md"]), "plans/jobs/a.md");
+  for (const args of [["post", "d.md", "--job"], ["post", "--job", "--doc", "D"], ["post", "--job="], ["post", "--job", " "]]) {
+    assert.throws(() => jobFlag(args), { message: "--job needs a job file path; nothing was written" }, args.join(" "));
+  }
 });
 
 async function captured(fn) {

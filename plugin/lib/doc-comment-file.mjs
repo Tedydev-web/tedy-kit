@@ -10,7 +10,7 @@ import { fetchTab, quoteCount } from "./prd-section.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { approvalLines, renderDocComment } from "./publish-approval-render.mjs";
-import { withRecords } from "./record-lock.mjs";
+import { jobFlag, withRecords } from "./record-lock.mjs";
 import { describePin, pinnedSince, pinnedSources, pinSourcesOf, recordPins, sayNotices } from "./source-pins.mjs";
 
 const GROUPS = ["A", "B"];
@@ -132,7 +132,7 @@ async function post(itemsFile, flags) {
 const flagValue = (args, name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
 
 async function main([itemsFile, ...rest]) {
-  if (itemsFile === "post") return post(rest[0]?.startsWith("--") ? undefined : rest[0], { html: flagValue(rest, "--html"), doc: flagValue(rest, "--doc"), apply: rest.includes("--apply"), job: flagValue(rest, "--job") });
+  if (itemsFile === "post") return post(rest[0]?.startsWith("--") ? undefined : rest[0], { html: flagValue(rest, "--html"), doc: flagValue(rest, "--doc"), apply: rest.includes("--apply"), job: jobFlag(rest) });
   if (!itemsFile) {
     console.error('usage: doc-comment-file.mjs <items.json>   items.json = { "title": "...", "items": [{ "group": "A|B", "epic": "09", "where": "UC_SW_13 BR1", "quote": "...", "comment": "...", "note": "..." }] }');
     return 2;
