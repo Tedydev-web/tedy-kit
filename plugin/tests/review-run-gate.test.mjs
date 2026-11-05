@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { evaluate } from "../gates/git-gate.mjs";
 import { reviewRunVerdict } from "../gates/review-run-gate.mjs";
 import { commitFile, git } from "./git-sibling-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
@@ -69,6 +70,61 @@ test("both the current directory and every directory flag before -- are checked"
     [`npm --prefix ${setup.worktree} --prefix /tmp test`, setup.repo],
   ]) assert.ok(verdict(setup, bash(command, cwd)), `${command} in ${cwd}`);
   assert.equal(verdict(setup, bash(`npm test -- --prefix ${setup.worktree}`, setup.repo)), null);
+});
+
+test("corepack, volta run, env -C, make and a node run of a checkout file or of no file are refused in a review checkout", () => {
+  const setup = reviewSetup();
+  for (const [command, cwd] of [
+    ["corepack pnpm test", setup.worktree],
+    ["corepack npm test", setup.worktree],
+    ["corepack yarn@4.1.0 test", setup.worktree],
+    ["volta run npm test", setup.worktree],
+    ["volta run --node 20 --env CI=1 pnpm test", setup.worktree],
+    [`env -C ${setup.worktree} npm test`, setup.repo],
+    [`env --chdir=${setup.worktree} make test`, setup.repo],
+    [`sudo -D ${setup.worktree} npm test`, setup.repo],
+    ["make test", setup.worktree],
+    ["make", setup.worktree],
+    [`make -C ${setup.worktree} lint`, setup.repo],
+    [`make --directory=${setup.worktree} lint`, setup.repo],
+    ["node a.ts", setup.worktree],
+    ["node --import tsx ./src/a.ts", setup.worktree],
+    [`node ${join(setup.worktree, "src", "a.ts")}`, setup.repo],
+    [`env -C ${setup.worktree} node src/a.ts`, setup.repo],
+    ["node --test", setup.worktree],
+    ["node --run test", setup.worktree],
+    ["node -e \"require('./src/a.ts')\"", setup.worktree],
+    ["node /usr/lib/node_modules/npm/bin/npm-cli.js test", setup.worktree],
+  ]) {
+    const result = verdict(setup, bash(command, cwd));
+    assert.ok(result, `${command} in ${cwd}`);
+    assert.ok(result.reason.includes("step 3 of /tedy:review-pr"), command);
+  }
+});
+
+test("a kit script, a file outside the checkout and corepack or volta housekeeping pass in a review checkout", () => {
+  const setup = reviewSetup();
+  const outside = join(tempDir("tedy-review-run-outside-"), "probe.mjs");
+  writeFileSync(outside, "console.log(1);\n");
+  for (const [command, cwd] of [
+    [`node ${GATE} --help`, setup.worktree],
+    [`node ${outside}`, setup.worktree],
+    [`env -C ${setup.repo} node src/a.ts`, setup.repo],
+    ["corepack enable", setup.worktree],
+    ["volta list", setup.worktree],
+    ["make test", setup.repo],
+    ["node a.ts", setup.repo],
+  ]) assert.equal(verdict(setup, bash(command, cwd)), null, `${command} in ${cwd}`);
+});
+
+test("eval, heredoc and variable forms of a package-manager run in a review checkout are refused by git-gate, and bash -c by this gate", () => {
+  const setup = reviewSetup();
+  for (const command of ["eval npm test", "eval 'npm test'", "bash <<'E'\nnpm test\nE", "NPM=npm; $NPM test"]) {
+    const result = evaluate(command, setup.worktree);
+    assert.equal(result.allow, false, command);
+    assert.match(result.reason, /runs code the gate cannot read/, command);
+  }
+  assert.ok(verdict(setup, bash("bash -c 'npm test'", setup.worktree)));
 });
 
 test("reads in a review worktree and package-manager commands elsewhere pass", () => {
