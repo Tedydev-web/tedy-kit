@@ -437,6 +437,12 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
       else if (action.unknown) askFor("tedy gate: this `gh` command is not one the gate knows, so it may be an alias that merges or publishes. Allow it only if the user asked for it.");
       continue;
     }
+    if (action.pr && action.verbs.length === 1 && action.verbs[0] === "close") {
+      const tokens = tokenize(segment);
+      if (tokens.some((token) => token === "-c" || /^-c./.test(token) || token.startsWith("--comment"))) askFor("tedy gate: closing this PR also posts a comment under the user's name. Allow it only if the user approved that text.");
+      else if (tokens.some((token) => token === "-d" || token === "--delete-branch")) askFor("tedy gate: closing this PR also deletes its branch. Allow it only if the user asked for that.");
+      continue;
+    }
     if (/\bgh\s+(pr|issue)\s+(merge|close|reopen|ready|edit|lock|unlock)\b/.test(shellWords(segment))) {
       return { allow: false, reason: "tedy gate: merging, closing or editing a PR or issue belongs to the user. Tell the user what is ready and let them do it." };
     }

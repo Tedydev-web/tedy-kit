@@ -66,14 +66,20 @@ test("direct GitHub writes are denied with the approved path in the reason", () 
   assert.match(result.reason, /github-write\.mjs/);
 });
 
-test("merging or marking a PR ready asks the user, closing or editing stays denied", () => {
+test("merging or marking a PR ready asks the user, closing a PR passes, editing or closing an issue stays denied", () => {
   for (const command of ["cd x && gh pr merge 12 --squash", "gh pr ready 12"]) {
     const result = evaluate(command, "/w");
     assert.equal(result.allow, false, command);
     assert.equal(result.ask, true, command);
     assert.match(result.reason, /belongs to the user/, command);
   }
-  for (const command of ["gh pr close 12", "gh pr edit 12 --base dev", "gh issue close 3"]) {
+  for (const command of ["gh pr close 12", "gh pr close https://github.com/o/r/pull/12", "gh -R o/r pr close 12"]) assert.equal(evaluate(command, "/w").allow, true, command);
+  for (const [command, why] of [["gh pr close 12 --comment done", /comment/], ["gh pr close 12 -c done", /comment/], ["gh pr close 12 --comment=done", /comment/], ["gh pr close 12 -d", /branch/], ["gh pr close 12 --delete-branch", /branch/]]) {
+    const result = evaluate(command, "/w");
+    assert.equal(result.ask, true, command);
+    assert.match(result.reason, why, command);
+  }
+  for (const command of ["gh pr edit 12 --base dev", "gh issue close 3"]) {
     const result = evaluate(command, "/w");
     assert.equal(result.allow, false, command);
     assert.notEqual(result.ask, true, command);
