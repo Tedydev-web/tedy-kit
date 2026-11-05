@@ -116,6 +116,40 @@ test("a write that fails releases its locks, and keeps its ledger line only when
   assert.equal(ledger("t4:after").length, 1);
 });
 
+async function captured(fn) {
+  const write = process.stderr.write;
+  let stderr = "";
+  process.stderr.write = (chunk) => ((stderr += chunk), true);
+  try {
+    return { value: await fn(), stderr };
+  } catch (error) {
+    return { error, stderr };
+  } finally {
+    process.stderr.write = write;
+  }
+}
+
+const gateLog = () => readFileSync(join(process.env.TEDY_STATE_DIR, "gate-log.jsonl"), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line));
+
+test("a ledger line that cannot be appended after the write warns on stderr and in the gate log, and the write still succeeds", async () => {
+  mkdirSync(ledgerPath("t10:a"), { recursive: true });
+  const { value, error, stderr } = await captured(() =>
+    withRecords(["t10:a", "t10:b"], {}, async (recorded) => {
+      recorded();
+      recorded();
+      return 3;
+    }),
+  );
+  assert.equal(error, undefined);
+  assert.equal(value, 3);
+  assert.equal(existsSync(lockPath("t10:a")), false);
+  assert.equal(existsSync(lockPath("t10:b")), false);
+  assert.equal(ledger("t10:b").length, 1);
+  assert.equal(stderr.split("\n").filter((line) => line.includes("t10:a")).length, 1, stderr);
+  assert.match(stderr, /^warning: written, but the ledger line for t10:a could not be appended \(EISDIR[^\n]*\); a later job's conflict check will not see this write$/m);
+  assert.ok(gateLog().some((entry) => entry.hook === "record-lock" && entry.decision === "ledger-append-failed" && entry.key === "t10:a"));
+});
+
 test("two processes racing on one record: one writes, the other refuses with the lock-held text", async () => {
   const state = tempDir("tedy-race-");
   const barrier = join(state, "barrier");

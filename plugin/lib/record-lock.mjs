@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync, readlinkSync, statSync, unlinkSync, writeSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
+import { logGate } from "./hook-io.mjs";
 import { STATE_DIR } from "./state-dir.mjs";
 
 const FOREIGN_LOCK_MS = 30 * 60 * 1000;
@@ -153,8 +154,13 @@ export async function withRecords(keys, { job, since } = {}, fn) {
       done = true;
       const at = new Date().toISOString();
       for (const key of sorted) {
-        mkdirSync(dirname(ledgerPath(key)), { recursive: true });
-        appendFileSync(ledgerPath(key), `${JSON.stringify({ at, key, job: name, command: COMMAND, pid: process.pid })}\n`);
+        try {
+          mkdirSync(dirname(ledgerPath(key)), { recursive: true });
+          appendFileSync(ledgerPath(key), `${JSON.stringify({ at, key, job: name, command: COMMAND, pid: process.pid })}\n`);
+        } catch (error) {
+          process.stderr.write(`warning: written, but the ledger line for ${key} could not be appended (${error.message}); a later job's conflict check will not see this write\n`);
+          logGate({ hook: "record-lock", decision: "ledger-append-failed", key, command: COMMAND, error: error.message });
+        }
       }
     };
     return await fn(recorded);

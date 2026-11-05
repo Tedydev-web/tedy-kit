@@ -1,10 +1,11 @@
 import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fakeOpenProject, world } from "./fake-services-for-tests.mjs";
 import { renderDocComment, renderRollbackItem, renderWorkPackageDraft } from "../lib/publish-approval-render.mjs";
+import { ledgerPath } from "../lib/record-lock.mjs";
 
 const HEAD = "abc1234" + "0".repeat(33);
 const DIFF = "diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -9,2 +10,2 @@\n context line\n+added line\n";
@@ -88,6 +89,17 @@ test("github-write reply writes only with a ticket, once, and records the job it
   const warnings = await lint(w, "draft-lint", ["pr-reply", "b.md", "--pr", "1", "--repo", "o/r"]);
   await onceOnly(w, "github-write", ["reply", "1", "123", "--body-file", "b.md", "--repo", "o/r", "--job", "plans/jobs/reply.md"], (line) => `Fixed it.\n${warnings}${line}`, () => w.writes().length, ["github:o/r#1"]);
   assert.equal(w.ledger("github:o/r#1")[0].job, "reply.md");
+});
+
+test("a write whose ledger line cannot be appended still reads back and exits 0, with a warning", async () => {
+  const w = world({ gh: { graphql: { data: { minimizeComment: { minimizedComment: { isMinimized: true } } } } } });
+  mkdirSync(ledgerPath("github:node:IC_x", join(w.dir, "state")), { recursive: true });
+  const args = ["minimize", "IC_x"];
+  w.approve(w.line("github-write", args));
+  const result = await w.run("github-write", args);
+  assert.equal(result.code, 0, result.out);
+  assert.equal(w.writes().length, 1);
+  assert.match(result.out, /warning: written, but the ledger line for github:node:IC_x could not be appended/);
 });
 
 test("openproject apply, set, relation, relation-delete, comment, comment-edit and rollback write only with a ticket, once", async () => {
