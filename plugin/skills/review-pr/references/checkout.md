@@ -12,7 +12,7 @@ The PR's code is untrusted. Any project script run in its checkout (tests, typec
 Before any project script (typecheck, lint, test, format) runs in the worktree:
 
 1. `node <plugin>/scripts/pr-execution-surface.mjs origin/<baseRefName> refs/pr/<n>` from the reviewed repo. It lists changed script lines, dependencies and lockfiles, executed config (with `tsconfig*.json` and tool config in `package.json`), changed files a script line names or an unchanged config or named script imports one level deep, changes under `node_modules/`, symlinks, script lines that download and run, and the count of changed test files. It is information, not a safety check: it shows only what the kit can see, and says what it does not check.
-2. Quote its output, then one `AskUserQuestion`, header `run.header`, whose question names the PR, the full head sha (`headRefOid`, 40 characters) and says plainly:
+2. Quote its output, then one `AskUserQuestion`, header `run.header`, whose question names the PR and the full head sha (`headRefOid`, 40 characters) and no other sha, since a question naming two shas records nothing, and says plainly:
    - running any project script (tests, typecheck, lint) executes code from this PR, with your credentials in reach;
    - the listed changes are only what the kit can see, not a complete list;
    - nothing is installed.
