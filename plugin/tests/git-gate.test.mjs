@@ -29,6 +29,13 @@ test("classify recognises git and gh actions through env vars and -C", () => {
     assert.ok(classify(command, "/w").args.includes(flag), command);
   }
   assert.deepEqual(classify("git push >'out' origin x", "/w").args, ["origin", "x"]);
+  for (const command of [">'-x' git push origin x", ">\\&x git push origin x", "2>'|x' git push origin x", "git >'-x' push origin x", "2>- git push origin x"]) {
+    assert.equal(classify(command, "/w").kind, "push", command);
+  }
+  assert.ok(classify("git push 2>- --force origin feat", "/w").args.includes("--force"));
+  for (const command of ["gh api -iX PUT repos/o/r/pulls/1/merge", "gh api -iXPUT repos/o/r/pulls/1/merge"]) {
+    assert.deepEqual(classify(command, "/w"), { kind: "github-write", dir: "/w", pr: true, verbs: ["merge"] }, command);
+  }
   for (const command of ["gh api --template '>' -X PUT repos/o/r/pulls/1/merge", "gh api -H \"2>\" --method PUT repos/o/r/pulls/1/merge", "gh api -H 'Accept: application/vnd.github+json' -X PUT repos/o/r/pulls/1/merge", "gh api --hostname github.com -q .sha -X PUT repos/o/r/pulls/1/merge"]) {
     assert.deepEqual(classify(command, "/w"), { kind: "github-write", dir: "/w", pr: true, verbs: ["merge"] }, command);
   }

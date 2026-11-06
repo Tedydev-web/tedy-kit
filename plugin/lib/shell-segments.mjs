@@ -200,7 +200,7 @@ export function tokenize(segment, quoted = []) {
   let literal = Infinity;
   const push = () => {
     tokens.push(current);
-    quoted.push(literal < (current.match(OPERATOR)?.[0].length ?? 0));
+    quoted.push(OPERATOR.test(current) && !OPERATOR.test(current.slice(0, literal)));
     current = "";
     literal = Infinity;
   };

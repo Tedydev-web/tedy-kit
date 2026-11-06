@@ -86,7 +86,7 @@ function classifyGitHubApi(args) {
   let hasFields = false;
   let endpoint = null;
   for (let index = 0; index < args.length; index += 1) {
-    const token = args[index];
+    const token = args[index].replace(/^-i+(?=[A-Za-z])/, "-");
     if (token === "-X" || token === "--method") {
       method = (args[index + 1] ?? "").toUpperCase();
       index += 1;
