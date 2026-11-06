@@ -26,6 +26,14 @@ for (const [gate, tools] of [["git-gate", ["Bash"]], ["review-run-gate", ["Bash"
   });
 }
 
+test("role-gate also runs before a subagent spawn, so a forked job records its role before the subagent's first call", () => {
+  const { PreToolUse } = JSON.parse(readFileSync(new URL("../hooks/hooks.json", import.meta.url), "utf8")).hooks;
+  const entry = PreToolUse.find((item) => item.hooks.some((hook) => hook.command.includes("/role-gate.mjs")));
+  const matcher = new RegExp(entry.matcher);
+  assert.ok(matcher.test("Agent"));
+  for (const tool of ["AgentX", "SubAgent", "mcp__x__Agent", "Read"]) assert.ok(!matcher.test(tool), tool);
+});
+
 test("the publish-approval ticket hook runs after AskUserQuestion only", () => {
   const { PostToolUse } = JSON.parse(readFileSync(new URL("../hooks/hooks.json", import.meta.url), "utf8")).hooks;
   const entry = PostToolUse.find((item) => item.hooks.some((hook) => hook.command.includes("/publish-approval-ticket.mjs")));

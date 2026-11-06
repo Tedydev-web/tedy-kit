@@ -270,6 +270,13 @@ test("a reviewer subagent of a legacy session gets its parent session's result",
   assert.equal(list.calls, 1);
 });
 
+test("a subagent spawn on a job's main thread judges nothing and records the role, so a forked session's first subagent is gated", () => {
+  const id = randomUUID();
+  assert.equal(gate.judge({ tool_name: "Agent", cwd: "/w/acme", tool_input: { subagent_type: "Explore", prompt: "look" }, ...job("tedy:dev", id) }, noSessions, counted()), null);
+  assert.equal(readFileSync(roleFile(id), "utf8"), "dev");
+  assert.match(gate.judge({ ...postReview, agent_type: "Explore", agent_id: "a-6", session_id: id }, noSessions, counted()).reason, /this is a dev job \(Explore\)/);
+});
+
 test("recording a session's role prunes role files older than a week", () => {
   mkdirSync(join(process.env.TEDY_STATE_DIR, "session-roles"), { recursive: true });
   const old = randomUUID();
