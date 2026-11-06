@@ -590,7 +590,7 @@ test("close refuses a running job without a reason, stops and removes the sessio
   assert.match(w3.run(["close", gone]).stderr, /is already closed/);
 });
 
-test("list shows every job that is not closed with its age, a running job whose session waits or is idle with its attach command, a done job with an idle session as done, and one whose session is gone or ended as lost", () => {
+test("list shows every job that is not closed with its age, a running job whose session waits, or ended its turn without done, with its attach command, a done job with an idle session as done, and one whose session is gone, stopped or failed as lost", () => {
   const w = world();
   jobFile(w, { name: "alive", session: row("aaaa1111").sessionId });
   jobFile(w, { name: "failed", session: row("bbbb2222").sessionId });
@@ -603,7 +603,7 @@ test("list shows every job that is not closed with its age, a running job whose 
   jobFile(w, { name: "no-id", session: null });
   jobFile(w, { name: "finished", status: "done", session: row("2222bbbb").sessionId, created: new Date(Date.now() - 26 * 3_600_000).toISOString() });
   jobFile(w, { name: "old", status: "closed" });
-  const rows = [row("1111aaaa", "working", { status: "idle", waitingFor: "" }), row("2222bbbb", "done", { status: "idle", waitingFor: "" }), row("3333cccc", "working", { status: "waiting", waitingFor: "" }), row("aaaa1111", "busy"), row("bbbb2222", "failed"), row("dddd4444", "stopped"), row("eeee5555", "done"), row("ffff6666", "waiting", { waitingFor: "permission prompt" })];
+  const rows = [row("1111aaaa", "working", { status: "idle", waitingFor: "" }), row("2222bbbb", "done", { status: "idle", waitingFor: "" }), row("3333cccc", "working", { status: "waiting", waitingFor: "" }), row("aaaa1111", "busy"), row("bbbb2222", "failed"), row("dddd4444", "stopped"), row("eeee5555", "done", { status: "idle", waitingFor: "" }), row("ffff6666", "waiting", { waitingFor: "permission prompt" })];
   const out = w.run(["list"], { fx: { agents: [rows] } });
   assert.equal(out.status, 0, out.stderr);
   const lines = out.stdout.trim().split("\n");
@@ -612,7 +612,7 @@ test("list shows every job that is not closed with its age, a running job whose 
     "dev · asking · waiting: permission prompt, claude attach ffff6666 · 3h 5m",
     "dev · quiet · idle, claude attach 1111aaaa · 3h 5m",
     "dev · pending · waiting, claude attach 3333cccc · 3h 5m",
-    "dev · ended · lost · 3h 5m",
+    "dev · ended · idle, claude attach eeee5555 · 3h 5m",
     "dev · failed · lost · 3h 5m",
     "dev · finished · done · 1d 2h",
     "dev · gone · lost · 3h 5m",
