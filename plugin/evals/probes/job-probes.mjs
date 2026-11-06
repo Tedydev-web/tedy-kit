@@ -371,6 +371,7 @@ async function main(mode) {
   process.on("exit", cleanup);
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(130));
   prepare();
+  if (mode === "9") return blockNine();
   if (mode !== "10" && !trusted()) {
     fact("[gate] workspace not trusted; open claude once in /tmp/tedy-probes-bg/work and rerun");
     return;
