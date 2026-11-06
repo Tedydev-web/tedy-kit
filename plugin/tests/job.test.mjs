@@ -201,3 +201,118 @@ test("each role's allowlist lets routine work run and leaves publishing, deploys
   assert.ok(allows("review", "npm test") && allows("review", "git worktree add /tmp/rv -b rv origin/dev") && !allows("review", "git worktree remove /tmp/rv"));
   assert.ok(!allows("pm", "npm test") && !allows("pm", "git worktree add x"));
 });
+
+function jobFile(w, { role = "dev", status = "running", session = row("aaaa1111").sessionId, mode, created = new Date(Date.now() - (3 * 60 + 5) * 60_000).toISOString(), name = "add-hello" } = {}) {
+  mkdirSync(join(w.root, "plans", "jobs"), { recursive: true });
+  const file = join(w.root, "plans", "jobs", `261106-0900-${role}-${name}.md`);
+  const header = [`to: tedy:${role}`, "from: cockpit", `status: ${status}`, `created: ${created}`, `title: ${name.replaceAll("-", " ")}`, `cwd: ${w.root}`, ...(mode ? [`permission_mode: ${mode}`] : []), ...(session ? [`session_id: ${session}`] : [])];
+  writeFileSync(file, `${header.join("\n")}\n\n${BODY}`);
+  return file;
+}
+
+test("done refuses an empty outcome and otherwise appends it, stop records the reason, and neither touches the session", () => {
+  const w = world();
+  const file = jobFile(w);
+  const outcome = join(w.root, "outcome.md");
+  writeFileSync(outcome, "  \n");
+  const empty = w.run(["done", file, "--outcome-file", outcome]);
+  assert.equal(empty.status, 1);
+  assert.match(empty.stderr, /the outcome is empty/);
+  assert.equal(parse(readFileSync(file, "utf8")).status, "running");
+  writeFileSync(outcome, "Branch feat/hello pushed; drafts: none.\n");
+  assert.equal(w.run(["done", file, "--outcome-file", outcome]).status, 0);
+  const text = readFileSync(file, "utf8");
+  assert.equal(parse(text).status, "done");
+  assert.match(text, /## Sources\nthe user's request\n\n## Outcome\n\nBranch feat\/hello pushed; drafts: none\.\n$/);
+  const other = jobFile(w, { name: "other" });
+  assert.equal(w.run(["stop", other, "--reason", "the PRD tab is gone"]).status, 0);
+  assert.equal(parse(readFileSync(other, "utf8")).status, "stopped");
+  assert.match(readFileSync(other, "utf8"), /\n## Outcome\n\nStopped: the PRD tab is gone\n$/);
+  assert.match(w.run(["done", join(w.root, "body.md"), "--outcome-file", outcome]).stderr, /is not a job file/);
+  assert.deepEqual(w.calls(), []);
+});
+
+test("resume stops the session, waits for the stop, then resumes it by its full id with the same settings, and records the new id and the note", () => {
+  const w = world();
+  const file = jobFile(w, { status: "done", mode: "default" });
+  const note = join(w.root, "note.md");
+  writeFileSync(note, "Also add the line world.\n");
+  const fx = { launches: ["dddd4444"], agents: [[row("aaaa1111", "idle")], [row("aaaa1111", "running")], [row("aaaa1111", "stopped")], [row("aaaa1111", "stopped"), row("dddd4444", "running")]] };
+  const out = w.run(["resume", file, "--note-file", note], { fx });
+  assert.equal(out.status, 0, out.stderr);
+  const calls = w.calls();
+  assert.deepEqual(calls.map((call) => call.args[0]), ["agents", "stop", "agents", "agents", "--resume", "agents"]);
+  assert.deepEqual(calls[1].args, ["stop", "aaaa1111"]);
+  const resumed = calls[4];
+  assert.deepEqual(resumed.args.slice(0, 5), ["--resume", row("aaaa1111").sessionId, "--bg", "--agent", "tedy:dev"]);
+  assert.equal(resumed.cwd, w.root);
+  const dry = tokenize(w.run(["start", "dev", "--title", "x", "--body-file", w.body, "--dry-run"]).stdout.trim());
+  assert.deepEqual(settingsOf(resumed.args), settingsOf(dry));
+  assert.deepEqual(resumed.args.slice(resumed.args.indexOf("--permission-mode"), resumed.args.indexOf("--permission-mode") + 2), ["--permission-mode", "default"]);
+  assert.match(resumed.args.at(-1), /^Also add the line world\.\n\n/);
+  assert.equal(parse(resumed.job).status, "running");
+  const text = readFileSync(file, "utf8");
+  assert.equal(parse(text, JOB_KEYS).session_id, row("dddd4444").sessionId);
+  assert.match(text, /\n## Note \d{4}-\d{2}-\d{2}T[\d:.]+Z\n\nAlso add the line world\.\n$/);
+});
+
+test("resume refuses a closed job and a job whose session does not stop in time, and changes nothing", async () => {
+  const w = world();
+  const note = join(w.root, "note.md");
+  writeFileSync(note, "again\n");
+  const closed = jobFile(w, { status: "closed" });
+  assert.match(w.run(["resume", closed, "--note-file", note]).stderr, /is closed; start a new job instead/);
+  assert.deepEqual(w.calls(), []);
+  const { resume } = await import("../lib/job.mjs");
+  const file = jobFile(w, { status: "done", name: "slow" });
+  const before = readFileSync(file, "utf8");
+  const seen = [];
+  const claude = (args) => {
+    seen.push(args[0]);
+    return { status: 0, stdout: args[0] === "agents" ? JSON.stringify([row("aaaa1111", "running")]) : "", stderr: "" };
+  };
+  const map = { name: "acme-shop", paths: [w.root], jobs: true };
+  assert.throws(() => resume(map, file, "again", { claude, waitMs: 50 }), /the session aaaa1111 did not stop within 0\.05 s; nothing was resumed/);
+  assert.equal(readFileSync(file, "utf8"), before);
+  assert.ok(!seen.includes("--resume"));
+});
+
+test("close refuses a running job without a reason, stops and removes the session of a done one, and marks the job closed", () => {
+  const w = world();
+  const running = jobFile(w);
+  const refused = w.run(["close", running]);
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /is still running; give --reason to stop it/);
+  assert.deepEqual(w.calls(), []);
+  const out = w.run(["close", running, "--reason", "timeout"], { fx: { agents: [[row("aaaa1111", "running")], [row("aaaa1111", "stopped")]] } });
+  assert.equal(out.status, 0, out.stderr);
+  assert.deepEqual(w.calls().map((call) => call.args.slice(0, 2)), [["agents", "--json"], ["stop", "aaaa1111"], ["agents", "--json"], ["rm", "aaaa1111"]]);
+  const text = readFileSync(running, "utf8");
+  assert.equal(parse(text).status, "closed");
+  assert.match(text, /\n## Outcome\n\nStopped: timeout\n$/);
+  const w2 = world();
+  const done = jobFile(w2, { status: "done" });
+  assert.equal(w2.run(["close", done], { fx: { agents: [[row("aaaa1111", "idle")], [row("aaaa1111", "stopped")]] } }).status, 0);
+  assert.deepEqual(w2.calls().map((call) => call.args[0]), ["agents", "stop", "agents", "rm"]);
+  assert.equal(parse(readFileSync(done, "utf8")).status, "closed");
+  const w3 = world();
+  const gone = jobFile(w3, { status: "stopped" });
+  assert.equal(w3.run(["close", gone], { fx: { agents: [[]] } }).status, 0);
+  assert.deepEqual(w3.calls().map((call) => call.args[0]), ["agents"]);
+  assert.match(w3.run(["close", gone]).stderr, /is already closed/);
+});
+
+test("list shows every job that is not closed with its age, and a running job whose session is gone, failed or stopped as lost", () => {
+  const w = world();
+  jobFile(w, { name: "alive", session: row("aaaa1111").sessionId });
+  jobFile(w, { name: "failed", session: row("bbbb2222").sessionId });
+  jobFile(w, { name: "gone", session: row("cccc3333").sessionId });
+  jobFile(w, { name: "no-id", session: null });
+  jobFile(w, { name: "finished", status: "done", created: new Date(Date.now() - 26 * 3_600_000).toISOString() });
+  jobFile(w, { name: "old", status: "closed" });
+  const out = w.run(["list"], { fx: { agents: [[row("aaaa1111", "running"), row("bbbb2222", "failed")]] } });
+  assert.equal(out.status, 0, out.stderr);
+  const lines = out.stdout.trim().split("\n");
+  assert.deepEqual(lines.map((line) => line.replace(/ · \/.*$/, "")).sort(), ["dev · alive · running · 3h 5m", "dev · failed · lost · 3h 5m", "dev · finished · done · 1d 2h", "dev · gone · lost · 3h 5m", "dev · no id · lost · 3h 5m"].sort());
+  assert.equal(w.calls().length, 1);
+});
