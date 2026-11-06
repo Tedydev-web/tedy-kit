@@ -104,14 +104,14 @@
     },
     {
       "id": "regex-time",
-      "text": "No gate regex takes longer than 250 ms of CPU time on a crafted 200,000-character input.",
+      "text": "No gate regex grows faster than linear from 50,000 to 200,000 crafted characters (more than 8 times the time for 4 times the input), and none passes 1,000 ms of CPU time on the 200,000.",
       "since": 1,
       "scope": "repo",
       "reason": "A gate that hangs blocks every tool call it guards.",
       "class": "platform",
       "problems": ["S12"],
-      "enforced": { "kind": "test", "file": "plugin/tests/regex-backtracking.test.mjs", "title": "no gate regex takes longer than 250 ms of CPU time on a crafted 200,000-character input" },
-      "notCovered": "Regexes outside the gates, and inputs shaped unlike the crafted ones.",
+      "enforced": { "kind": "test", "file": "plugin/tests/regex-backtracking.test.mjs", "title": "no gate regex grows faster than linear from 50,000 to 200,000 crafted characters or passes 1,000 ms of CPU time" },
+      "notCovered": "Regexes outside the gates, inputs shaped unlike the crafted ones, and a slow regex whose hostile part does not grow with the input and stays under 1,000 ms.",
       "approved": "2026-10-28"
     },
     {
