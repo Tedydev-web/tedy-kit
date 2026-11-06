@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { bashInputs, classify } from "./git-gate.mjs";
@@ -47,15 +47,18 @@ function storedRole(file) {
   }
 }
 
-function rememberRole(file, role) {
+function rememberRole(file, role, replace) {
   try {
-    if (storedRole(file) === role) {
+    const stored = storedRole(file);
+    if (stored === role || (stored && !replace)) {
       const now = new Date();
       utimesSync(file, now, now);
       return;
     }
     mkdirSync(SESSION_ROLES, { recursive: true });
-    writeFileSync(file, role);
+    const temporary = `${file}.${process.pid}.tmp`;
+    writeFileSync(temporary, role);
+    renameSync(temporary, file);
     const now = Date.now();
     for (const name of readdirSync(SESSION_ROLES)) {
       const at = statSync(join(SESSION_ROLES, name), { throwIfNoEntry: false })?.mtimeMs;
@@ -71,11 +74,17 @@ export function agentRole(input) {
   if (!input.agent_id) {
     if (!Object.hasOwn(AGENT_ROLES, input.agent_type)) return null;
     const role = AGENT_ROLES[input.agent_type];
-    if (file) rememberRole(file, role);
+    if (file) rememberRole(file, role, input.source !== "compact");
     else logGate({ hook: "role-gate", decision: "session-role-unsafe-id", agent_type: input.agent_type, session: String(input.session_id).slice(0, 80) });
     return { role, label: input.agent_type };
   }
-  const parent = file && storedRole(file);
+  let parent;
+  try {
+    parent = file && storedRole(file);
+  } catch (error) {
+    logGate({ hook: "role-gate", decision: "session-role-unreadable", agent_type: input.agent_type, error: error.message });
+    return { role: "reader", label: input.agent_type ?? "subagent" };
+  }
   if (!JOB_ROLES.has(parent)) return null;
   return input.agent_type === "tedy:reviewer" ? { role: "reader", label: input.agent_type } : { role: parent, label: input.agent_type ?? "subagent" };
 }

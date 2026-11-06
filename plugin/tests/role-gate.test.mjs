@@ -3,8 +3,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { chmodSync, existsSync, linkSync, mkdirSync, readdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { classifyAction, decide, roleCard, roleOf, sessionName } from "../gates/role-gate.mjs";
 import * as gate from "../gates/role-gate.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
@@ -213,6 +213,34 @@ test("a role file that names no job role gives a subagent no role", () => {
     writeFileSync(roleFile(id), content);
     assert.equal(gate.agentRole({ agent_type: "Explore", agent_id: "a-7", session_id: id }), null, content);
   }
+});
+
+test("a subagent whose role file cannot be read is a reader: reads pass, writes ask, and the failure is logged", () => {
+  const id = randomUUID();
+  mkdirSync(roleFile(id), { recursive: true });
+  const sub = { agent_type: "Explore", agent_id: "a-9", session_id: id };
+  assert.deepEqual(gate.agentRole(sub), { role: "reader", label: "Explore" });
+  assert.equal(gate.judge({ ...shell("git status --short"), ...sub }, noSessions, counted()), null);
+  assert.match(gate.judge({ ...editCode, ...sub }, noSessions, counted()).reason, /this is a reader job/);
+  assert.match(readFileSync(join(process.env.TEDY_STATE_DIR, "gate-log.jsonl"), "utf8"), /"decision":"session-role-unreadable"/);
+});
+
+test("a role change replaces the role file by rename, so a reader never sees it half written", () => {
+  const id = randomUUID();
+  gate.agentRole(job("tedy:dev", id));
+  const before = `${roleFile(id)}.before`;
+  linkSync(roleFile(id), before);
+  gate.agentRole(job("tedy:pm", id));
+  assert.equal(readFileSync(roleFile(id), "utf8"), "pm");
+  assert.equal(readFileSync(before, "utf8"), "dev");
+  assert.deepEqual(readdirSync(dirname(roleFile(id))).filter((name) => name.startsWith(id) && name.endsWith(".tmp")), []);
+});
+
+test("a compact SessionStart without agent_id keeps the job's recorded role", () => {
+  const id = randomUUID();
+  gate.agentRole(job("tedy:dev", id));
+  gate.agentRole({ ...job("tedy:pm", id), hook_event_name: "SessionStart", source: "compact" });
+  assert.equal(readFileSync(roleFile(id), "utf8"), "dev");
 });
 
 test("a running job's main-thread calls keep its role file fresh, so another job's prune keeps it", () => {
