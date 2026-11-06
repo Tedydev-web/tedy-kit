@@ -226,13 +226,66 @@ test("each role's allowlist lets routine work run and leaves publishing, deploys
   assert.ok(!allows("pm", "npm test") && !allows("pm", "git worktree add x"));
 });
 
-function jobFile(w, { role = "dev", status = "running", session = row("aaaa1111").sessionId, mode, created = new Date(Date.now() - (3 * 60 + 5) * 60_000).toISOString(), name = "add-hello" } = {}) {
+const { recordLaunch } = await import("../lib/job.mjs");
+
+function jobFile(w, { role = "dev", status = "running", session = row("aaaa1111").sessionId, mode, created = new Date(Date.now() - (3 * 60 + 5) * 60_000).toISOString(), name = "add-hello", record = true } = {}) {
   mkdirSync(join(w.root, "plans", "jobs"), { recursive: true });
   const file = join(w.root, "plans", "jobs", `261106-0900-${role}-${name}.md`);
   const header = [`to: tedy:${role}`, "from: cockpit", `status: ${status}`, `created: ${created}`, `title: ${name.replaceAll("-", " ")}`, `cwd: ${w.root}`, ...(mode ? [`permission_mode: ${mode}`] : []), ...(session ? [`session_id: ${session}`] : [])];
   writeFileSync(file, `${header.join("\n")}\n\n${BODY}`);
+  if (record) for (const dir of [w.state, process.env.TEDY_STATE_DIR]) recordLaunch(file, { role, cwd: w.root, permission_mode: mode, session_id: session ?? undefined }, dir);
   return file;
 }
+
+const forge = (file, from, to) => writeFileSync(file, readFileSync(file, "utf8").replace(from, to));
+
+test("resume and close act only on what start recorded outside the job file, so a job cannot redirect its own resume or another job's session", () => {
+  const note = (w) => {
+    writeFileSync(join(w.root, "note.md"), "again\n");
+    return join(w.root, "note.md");
+  };
+  const fx = { launches: ["ffff6666"], agents: [[row("aaaa1111", "stopped"), row("bbbb2222", "busy")]] };
+  const cases = [
+    [(file) => forge(file, "to: tedy:review", "to: tedy:dev"), { role: "review" }, /its to: tedy:dev does not match the role review in its file name/],
+    [(file) => forge(file, /cwd: .*/, "cwd: /"), {}, /its cwd: \/ differs from the launch record/],
+    [(file) => forge(file, "status: done", "status: done\npermission_mode: bypassPermissions"), {}, /its permission_mode: bypassPermissions differs from the launch record/],
+    [(file) => forge(file, row("aaaa1111").sessionId, row("bbbb2222").sessionId), {}, /its session_id: bbbb2222-0000-4000-8000-000000000000 differs from the launch record/],
+    [(file) => forge(file, "status: done", "status: done\npermission_mode: default; x"), {}, /permission_mode: default; x is not a mode name/],
+  ];
+  for (const [tamper, options, message] of cases) {
+    const w = world();
+    const file = jobFile(w, { status: "done", ...options });
+    tamper(file);
+    const resumed = w.run(["resume", file, "--note-file", note(w)], { fx });
+    assert.equal(resumed.status, 1, resumed.stdout);
+    assert.match(resumed.stderr, message);
+    const closed = w.run(["close", file], { fx });
+    assert.equal(closed.status, 1);
+    assert.match(closed.stderr, message);
+    assert.deepEqual(w.calls(), []);
+  }
+  const w = world();
+  const outside = join(w.root, "plans", "other.md");
+  mkdirSync(join(w.root, "plans"), { recursive: true });
+  writeFileSync(outside, readFileSync(jobFile(w, { status: "done" }), "utf8"));
+  assert.match(w.run(["resume", outside, "--note-file", note(w)], { fx }).stderr, /is not under .*plans\/jobs of this project/);
+  const unrecorded = jobFile(w, { status: "done", name: "by-hand", record: false });
+  assert.match(w.run(["resume", unrecorded, "--note-file", note(w)], { fx }).stderr, /has no launch record/);
+  const out = w.run(["close", unrecorded], { fx });
+  assert.equal(out.status, 0, out.stderr);
+  assert.match(out.stdout, /warning: .* has no launch record, so no session was stopped or removed/);
+  assert.equal(parse(readFileSync(unrecorded, "utf8")).status, "closed");
+  assert.deepEqual(w.calls(), []);
+});
+
+test("stop and rm get the fleet row's short id, never the full session id", () => {
+  const w = world();
+  const file = jobFile(w, { status: "done" });
+  assert.equal(w.run(["close", file], { fx: { agents: [[row("aaaa1111", "busy")], [row("aaaa1111", "stopped")]] } }).status, 0);
+  const sessionCalls = w.calls().filter((call) => call.args[0] === "stop" || call.args[0] === "rm");
+  assert.deepEqual(sessionCalls.map((call) => call.args), [["stop", "aaaa1111"], ["rm", "aaaa1111"]]);
+  assert.ok(w.calls().every((call) => call.args[0] === "agents" || !call.args.includes(row("aaaa1111").sessionId)));
+});
 
 test("done refuses an empty outcome and otherwise appends it, stop records the reason, and neither touches the session", () => {
   const w = world();

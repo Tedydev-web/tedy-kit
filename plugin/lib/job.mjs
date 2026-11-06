@@ -1,10 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { missingSections, render, setStatus, slugOf, stamp } from "./handoff.mjs";
 import { age, createAtomic, JOB_ROLES, jobsDir, listJobs, readJob, setKey, withoutKey, withSection, writeAtomic } from "./job-files.mjs";
 import { profileDir } from "./profile.mjs";
+import { STATE_DIR } from "./state-dir.mjs";
 import { resolveMap } from "./project-map.mjs";
 
 const SKILLS = { pm: "pm", dev: "dev", review: "review-pr" };
@@ -98,7 +100,42 @@ function spawned(claude, args, cwd) {
   }
 }
 
-function launched(file, claude, args, cwd, name, previous) {
+const recordFile = (file, dir) => join(dir, "jobs", `${createHash("sha256").update(realpathSync(file)).digest("hex").slice(0, 32)}.json`);
+
+export function recordLaunch(file, launch, dir = STATE_DIR) {
+  mkdirSync(join(dir, "jobs"), { recursive: true });
+  writeAtomic(recordFile(file, dir), `${JSON.stringify({ file: realpathSync(file), ...launch })}\n`);
+}
+
+function launchRecord(file) {
+  try {
+    return JSON.parse(readFileSync(recordFile(file, STATE_DIR), "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+const NAMED_ROLE = /^\d{6}-\d{4}-(pm|devops|dev|review)-/;
+const MODE = /^[A-Za-z]+$/;
+
+function trusted(map, file) {
+  const job = readJob(file);
+  const real = realpathSync(job.path);
+  if (!existsSync(jobsDir(map)) || dirname(real) !== realpathSync(jobsDir(map))) throw new Error(`${file} is not under ${jobsDir(map)} of this project`);
+  const named = basename(real).match(NAMED_ROLE)?.[1];
+  if (named !== job.role) throw new Error(`${file}: its to: ${job.to} does not match the role ${named ?? "(none)"} in its file name`);
+  if (job.permission_mode !== undefined && !MODE.test(job.permission_mode)) throw new Error(`${file}: its permission_mode: ${job.permission_mode} is not a mode name`);
+  const record = launchRecord(real);
+  if (!record) return { ...job, record: null };
+  for (const key of ["role", "cwd", "permission_mode", "session_id"]) {
+    if (job[key] !== record[key]) throw new Error(`${file}: its ${key}: ${job[key] ?? "(none)"} differs from the launch record (${record[key] ?? "none"}); a job file may not change it`);
+  }
+  if (record.cwd !== map.paths[0]) writableRepo(map, record.cwd);
+  return { ...job, record };
+}
+
+function launched(file, claude, args, cwd, name, previous, launch) {
   const { status, stdout, stderr } = spawned(claude, args, cwd);
   if (status !== 0) {
     const text = `${(stderr || stdout).trim()}${trustHint(stderr || stdout, cwd)}`;
@@ -109,6 +146,7 @@ function launched(file, claude, args, cwd, name, previous) {
   const { found, problem } = launchedRow(claude, `${stdout}\n${stderr}`, name, previous);
   const text = readFileSync(file, "utf8");
   writeAtomic(file, found ? setKey(text, "session_id", found.sessionId) : withoutKey(text, "session_id"));
+  recordLaunch(file, { ...launch, session_id: found?.sessionId });
   return found ? null : `warning: ${name} was started, but its session id could not be read (${problem}); the job file has no session_id, so job.mjs list shows it lost; find the session by name in claude agents`;
 }
 
@@ -133,7 +171,7 @@ export function start(map, role, { title, body, repo, mode, dryRun = false, clau
   if (!slug) throw new Error(`the title has no words: ${title}`);
   const missing = missingSections(body);
   if (missing.length) throw new Error(`the body lacks ${missing.join(", ")}; see ${JOBS_DOC}`);
-  if (mode !== undefined && !/^[A-Za-z]+$/.test(mode)) throw new Error(`--permission-mode ${mode} is not a mode name`);
+  if (mode !== undefined && !MODE.test(mode)) throw new Error(`--permission-mode ${mode} is not a mode name`);
   const cwd = repo ? writableRepo(map, repo) : map.paths[0];
   const base = join(jobsDir(map), `${stamp()}-${role}-${slug}`);
   const argv = (file) => ["--agent", `tedy:${role}`, "--bg", "--name", jobName(map, role, file), ...launchArgs(role, map, mode), startPrompt(role, file)];
@@ -145,7 +183,9 @@ export function start(map, role, { title, body, repo, mode, dryRun = false, clau
   const created = new Date().toISOString();
   const header = [["cwd", cwd], ["permission_mode", mode]].filter(([, value]) => value).reduce((text, [key, value]) => setKey(text, key, value), setStatus(render({ to: `tedy:${role}`, from: "cockpit", title: line, body, created }), "running", created));
   const file = createJob(jobsDir(map), basename(base), () => header);
-  const warning = launched(file, claude, argv(file), cwd, jobName(map, role, file));
+  const launch = { role, cwd, permission_mode: mode };
+  recordLaunch(file, launch);
+  const warning = launched(file, claude, argv(file), cwd, jobName(map, role, file), undefined, launch);
   return [`started: ${jobName(map, role, file)} ${file}`, warning].filter(Boolean).join("\n");
 }
 
@@ -183,9 +223,10 @@ function stopSession(job, claude, waitMs) {
 }
 
 export function resume(map, file, note, { claude = claudeCli, waitMs = 30_000 } = {}) {
-  const job = readJob(file);
+  const job = trusted(map, file);
   if (job.status === "closed") throw new Error(`${file} is closed; start a new job instead`);
   if (!String(note ?? "").trim()) throw new Error("the note is empty");
+  if (!job.record) throw new Error(`${file} has no launch record, so it was not started by job.mjs start here; close it and start a new job`);
   if (!job.session_id) throw new Error(`${file} has no session_id, so its session cannot be resumed; close it with --reason and start a new job`);
   stopSession(job, claude, waitMs);
   const at = new Date().toISOString();
@@ -193,19 +234,20 @@ export function resume(map, file, note, { claude = claudeCli, waitMs = 30_000 } 
   if (fresh.status === "closed") throw new Error(`${file} was closed while its session stopped; nothing was resumed`);
   writeAtomic(job.path, withSection(setStatus(fresh.text, "running", at), `Note ${at}`, note));
   const prompt = `${note.trim()}\n\nThis is the latest ## Note of your job ${job.path}. Go on per ${JOBS_DOC}, section "Job", and end with job.mjs done or stop.`;
-  const cwd = job.cwd ?? map.paths[0];
-  const warning = launched(job.path, claude, ["--resume", job.session_id, "--bg", "--agent", `tedy:${job.role}`, ...launchArgs(job.role, map, job.permission_mode), prompt], cwd, jobName(map, job.role, job.path), job.session_id);
+  const { role, cwd, permission_mode: mode } = job.record;
+  const warning = launched(job.path, claude, ["--resume", job.session_id, "--bg", "--agent", `tedy:${role}`, ...launchArgs(role, map, mode), prompt], cwd, jobName(map, role, job.path), job.session_id, { role, cwd, permission_mode: mode });
   return [`resumed: ${job.path}`, warning].filter(Boolean).join("\n");
 }
 
-export function close(file, reason, { claude = claudeCli, waitMs = 30_000 } = {}) {
-  const job = open(file);
+export function close(map, file, reason, { claude = claudeCli, waitMs = 30_000 } = {}) {
+  const job = trusted(map, file);
+  if (job.status === "closed") throw new Error(`${file} is already closed`);
   if (job.status === "running" && !reason) throw new Error(`${file} is still running; give --reason to stop it, or wait for job.mjs done`);
   if (job.status === "running") stop(file, reason);
-  const row = job.session_id ? stopSession(job, claude, waitMs) : null;
+  const row = job.record?.session_id ? stopSession(job, claude, waitMs) : null;
   if (row) call(claude, ["rm", row.id]);
   writeAtomic(job.path, setStatus(readFileSync(job.path, "utf8"), "closed", new Date().toISOString()));
-  return job.path;
+  return [`closed: ${job.path}`, job.record ? null : `warning: ${file} has no launch record, so no session was stopped or removed; check claude agents by name`].filter(Boolean).join("\n");
 }
 
 export function list(map, { claude = claudeCli } = {}) {
@@ -255,7 +297,7 @@ function main([command, target, ...rest]) {
     return 0;
   }
   if (command === "close" && target) {
-    console.log(`closed: ${close(target, text(given.reason))}`);
+    console.log(close(project(), target, text(given.reason)));
     return 0;
   }
   if (command === "list") {
