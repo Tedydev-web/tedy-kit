@@ -13,7 +13,6 @@ const SKILLS = { pm: "pm", dev: "dev", review: "review-pr" };
 const PLUGIN = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
 const JOBS_DOC = join(PLUGIN, "shared", "jobs.md");
 const ENDED = new Set(["stopped", "done", "failed"]);
-const LOST = new Set(["stopped", "failed"]);
 
 const KIT_READERS = ["draft-lint.mjs", "project-map.mjs", "project-state.mjs get", "profile.mjs path", "labels.mjs", "prd-section.mjs", "figma-read.mjs", "task-lint.mjs", "op-status.mjs", "openproject.mjs get", "openproject.mjs list", "openproject.mjs preview", "openproject.mjs pr-body", "gdoc-comments.mjs list", "figma-comments.mjs list", "merged-sweep.mjs", "pending.mjs card publish", "pending.mjs card question", "pending.mjs card notify", "job.mjs done", "job.mjs stop"];
 const READ_GIT = ["status*", "diff*", "log*", "show*", "fetch -q origin"];
@@ -257,7 +256,7 @@ export function list(map, { claude = claudeCli } = {}) {
   const rows = jobs.some((job) => job.status === "running") ? fleet(claude) : [];
   return jobs.map((job) => {
     const row = job.session_id && rows.find((item) => item.sessionId === job.session_id);
-    const status = job.status === "running" && (!row || LOST.has(row.state)) ? "lost" : job.status;
+    const status = job.status !== "running" ? job.status : !row || ENDED.has(row.state) ? "lost" : row.waitingFor ? `waiting: ${row.waitingFor}, claude attach ${row.id}` : job.status;
     return `${job.role} · ${job.title} · ${status} · ${age(job.created)} · ${job.path}`;
   });
 }

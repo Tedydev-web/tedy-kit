@@ -117,7 +117,7 @@ test("start refuses a map without jobs, an unknown role, a body without its sect
 test("start writes the running job file before it spawns, reads the session id back from the launch line and the fleet list, and passes the dry-run argv", () => {
   const w = world();
   const dry = tokenize(w.run(["start", "dev", "--title", "Add hello", "--body-file", w.body, "--repo", "fe", "--permission-mode", "default", "--dry-run"]).stdout.trim());
-  const out = w.run(["start", "dev", "--title", "Add hello", "--body-file", w.body, "--repo", "fe", "--permission-mode", "default"], { fx: { launches: ["aaaa1111"], agents: [[row("zzzz9999", "running"), row("aaaa1111", "running")]] } });
+  const out = w.run(["start", "dev", "--title", "Add hello", "--body-file", w.body, "--repo", "fe", "--permission-mode", "default"], { fx: { launches: ["aaaa1111"], agents: [[row("zzzz9999", "busy"), row("aaaa1111", "busy")]] } });
   assert.equal(out.status, 0, out.stderr);
   const [file] = w.jobs();
   assert.match(file, /plans\/jobs\/\d{6}-\d{4}-dev-add-hello\.md$/);
@@ -137,7 +137,7 @@ test("start writes the running job file before it spawns, reads the session id b
 
 test("two concurrent identical starts write two job files", async () => {
   const w = world();
-  writeFileSync(join(w.root, "fixture.json"), JSON.stringify({ launches: ["aaaa1111", "bbbb2222"], agents: [[row("aaaa1111", "running"), row("bbbb2222", "running")]] }));
+  writeFileSync(join(w.root, "fixture.json"), JSON.stringify({ launches: ["aaaa1111", "bbbb2222"], agents: [[row("aaaa1111", "busy"), row("bbbb2222", "busy")]] }));
   const args = ["start", "pm", "--title", "Gaps in epic 3", "--body-file", w.body];
   const outs = await Promise.all([w.runAsync(args), w.runAsync(args)]);
   const files = w.jobs();
@@ -338,7 +338,7 @@ test("resume stops the session, waits for the stop, then resumes it by its full 
   const file = jobFile(w, { status: "done", mode: "default" });
   const note = join(w.root, "note.md");
   writeFileSync(note, "Also add the line world.\n");
-  const fx = { launches: ["dddd4444"], agents: [[row("aaaa1111", "idle")], [row("aaaa1111", "running")], [row("aaaa1111", "stopped")], [row("aaaa1111", "stopped"), row("dddd4444", "running")]] };
+  const fx = { launches: ["dddd4444"], agents: [[row("aaaa1111", "waiting")], [row("aaaa1111", "busy")], [row("aaaa1111", "stopped")], [row("aaaa1111", "stopped"), row("dddd4444", "busy")]] };
   const out = w.run(["resume", file, "--note-file", note], { fx });
   assert.equal(out.status, 0, out.stderr);
   const calls = w.calls();
@@ -397,7 +397,7 @@ test("resume refuses a closed job and a job whose session does not stop in time,
   const seen = [];
   const claude = (args) => {
     seen.push(args[0]);
-    return { status: 0, stdout: args[0] === "agents" ? JSON.stringify([row("aaaa1111", "running")]) : "", stderr: "" };
+    return { status: 0, stdout: args[0] === "agents" ? JSON.stringify([row("aaaa1111", "busy")]) : "", stderr: "" };
   };
   const map = { name: "acme-shop", paths: [w.root], jobs: true };
   assert.throws(() => resume(map, file, "again", { claude, waitMs: 50 }), /the session aaaa1111 did not stop within 0\.05 s; nothing was resumed/);
@@ -412,7 +412,7 @@ test("close refuses a running job without a reason, stops and removes the sessio
   assert.equal(refused.status, 1);
   assert.match(refused.stderr, /is still running; give --reason to stop it/);
   assert.deepEqual(w.calls(), []);
-  const out = w.run(["close", running, "--reason", "timeout"], { fx: { agents: [[row("aaaa1111", "running")], [row("aaaa1111", "stopped")]] } });
+  const out = w.run(["close", running, "--reason", "timeout"], { fx: { agents: [[row("aaaa1111", "busy")], [row("aaaa1111", "stopped")]] } });
   assert.equal(out.status, 0, out.stderr);
   assert.deepEqual(w.calls().map((call) => call.args.slice(0, 2)), [["agents", "--json"], ["stop", "aaaa1111"], ["agents", "--json"], ["rm", "aaaa1111"]]);
   const text = readFileSync(running, "utf8");
@@ -420,7 +420,7 @@ test("close refuses a running job without a reason, stops and removes the sessio
   assert.match(text, /\n## Outcome\n\nStopped: timeout\n$/);
   const w2 = world();
   const done = jobFile(w2, { status: "done" });
-  assert.equal(w2.run(["close", done], { fx: { agents: [[row("aaaa1111", "idle")], [row("aaaa1111", "stopped")]] } }).status, 0);
+  assert.equal(w2.run(["close", done], { fx: { agents: [[row("aaaa1111", "waiting")], [row("aaaa1111", "stopped")]] } }).status, 0);
   assert.deepEqual(w2.calls().map((call) => call.args[0]), ["agents", "stop", "agents", "rm"]);
   assert.equal(parse(readFileSync(done, "utf8")).status, "closed");
   const w3 = world();
@@ -430,17 +430,30 @@ test("close refuses a running job without a reason, stops and removes the sessio
   assert.match(w3.run(["close", gone]).stderr, /is already closed/);
 });
 
-test("list shows every job that is not closed with its age, and a running job whose session is gone, failed or stopped as lost", () => {
+test("list shows every job that is not closed with its age, a running job whose session waits as waiting with its attach command, and one whose session is gone or ended as lost", () => {
   const w = world();
   jobFile(w, { name: "alive", session: row("aaaa1111").sessionId });
   jobFile(w, { name: "failed", session: row("bbbb2222").sessionId });
   jobFile(w, { name: "gone", session: row("cccc3333").sessionId });
+  jobFile(w, { name: "stopped", session: row("dddd4444").sessionId });
+  jobFile(w, { name: "ended", session: row("eeee5555").sessionId });
+  jobFile(w, { name: "asking", session: row("ffff6666").sessionId });
   jobFile(w, { name: "no-id", session: null });
   jobFile(w, { name: "finished", status: "done", created: new Date(Date.now() - 26 * 3_600_000).toISOString() });
   jobFile(w, { name: "old", status: "closed" });
-  const out = w.run(["list"], { fx: { agents: [[row("aaaa1111", "running"), row("bbbb2222", "failed")]] } });
+  const rows = [row("aaaa1111", "busy"), row("bbbb2222", "failed"), row("dddd4444", "stopped"), row("eeee5555", "done"), row("ffff6666", "waiting", { waitingFor: "permission prompt" })];
+  const out = w.run(["list"], { fx: { agents: [rows] } });
   assert.equal(out.status, 0, out.stderr);
   const lines = out.stdout.trim().split("\n");
-  assert.deepEqual(lines.map((line) => line.replace(/ · \/.*$/, "")).sort(), ["dev · alive · running · 3h 5m", "dev · failed · lost · 3h 5m", "dev · finished · done · 1d 2h", "dev · gone · lost · 3h 5m", "dev · no id · lost · 3h 5m"].sort());
+  assert.deepEqual(lines.map((line) => line.replace(/ · \/.*$/, "")).sort(), [
+    "dev · alive · running · 3h 5m",
+    "dev · asking · waiting: permission prompt, claude attach ffff6666 · 3h 5m",
+    "dev · ended · lost · 3h 5m",
+    "dev · failed · lost · 3h 5m",
+    "dev · finished · done · 1d 2h",
+    "dev · gone · lost · 3h 5m",
+    "dev · no id · lost · 3h 5m",
+    "dev · stopped · lost · 3h 5m",
+  ].sort());
   assert.equal(w.calls().length, 1);
 });
