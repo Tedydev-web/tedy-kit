@@ -1,7 +1,7 @@
 ---
 name: pending
-description: Show what waits on the user in this project - hand-offs not taken, drafts waiting for approval, unpushed branches and open draft PRs - and archive a draft once it is posted, sent, applied or dropped
-argument-hint: "[done <file> | stub <action>]"
+description: Show what waits on the user (inbox cards, jobs, drafts, unpushed branches, draft PRs), approve cards in one batch, archive a finished draft
+argument-hint: "[approve | done <file> | stub <action>]"
 disable-model-invocation: true
 ---
 

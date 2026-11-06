@@ -1,6 +1,6 @@
 ---
 name: reconcile
-description: Cross-check one scope (an epic, a use case, a rule in words, or a PR) across the PRD, Figma, backend, contract, frontend and PM demo, and produce a mismatch table with a raise list. Use when the user asks, in any language, to reconcile or cross-check the PRD against code, or to check that FE, BE, contract, PRD and Figma agree.
+description: Cross-check one scope (an epic, a use case, a rule in words, or a PR) across the PRD, Figma, backend, contract, frontend and PM demo into a mismatch table with a raise list. Use when the user asks to reconcile or cross-check the PRD against code.
 argument-hint: "<epic | UC_XX_nn | rule in words | PR number>"
 disable-model-invocation: true
 ---
