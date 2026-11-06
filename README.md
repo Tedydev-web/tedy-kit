@@ -65,7 +65,7 @@ The gates keep an honest but careless agent from publishing, merging, rewriting 
 | `gates.noComments` | off | Blocks edits that add code comments and reports comments a push carries |
 | `gates.draftPrOnly` | off | Refuses a pull request that is not a draft |
 | `gates.ghWrites` | off | Refuses direct `gh` writes so that everything posted to GitHub goes through `github-write.mjs` after an approved draft. `gh pr close <pr>` passes; with `--comment` or `--delete-branch` it asks first. `gh pr edit <pr>` that only changes the body (`--body`, `--body-file`) passes |
-| `gates.roleGate` | off | Asks before a session writes for another role: a `claude --agent tedy:<role>` job and its subagents, by the hook input's `agent_type` (a `tedy:reviewer` subagent asks on every write), or a session listed in the project map's `sessions` |
+| `gates.roleGate` | off | Asks before a session writes for another role: a `claude --agent tedy:<role>` job and its subagents, by the hook input's `agent_type` (a `tedy:reviewer` subagent asks on every write), or a session listed in the project map's `sessions`. In a map with `jobs: true` every other session is the cockpit, which is asked only before changing or committing product code, not for an approved kit-script card |
 | `gates.publishQuote` | off | Refuses a `github-write.mjs` post, reply or edit until the exact body was quoted to the user after its last change |
 | `gates.publishApproval` | `"ask"` | `"answer"` lets each kit script write only with a one-use ticket from an approving AskUserQuestion answer, so Claude Code shows no second prompt; see [Approval prompts](#approval-prompts) |
 
@@ -159,7 +159,7 @@ Three gaps remain. A `path:line@<branch>` cite of the reviewed repo's own integr
 | `/tedy:dev <task>` or `rebut <review>` | Builds one task (reconcile, branch, verify on the commit, independent review, draft PR) or checks an external review claim by claim before any edit |
 | `/tedy:pm <scope>`, `replies` or `tasks <scope>` | Drafts tracker items and Doc or Figma comments from a gaps ledger, publishes after approval, checks replies |
 | `/tedy:learn [project path]` | Turns repeated corrections into rules, style samples or map facts in your profile |
-| `/tedy:pending [approve \| done <file> \| stub <action>]` | Lists what waits on you (inbox cards, hand-offs, drafts in `plans/drafts/`, unpushed branches, draft PRs), approves publish cards in one batch and archives a finished draft |
+| `/tedy:pending [approve \| done <file> \| stub <action>]` | Lists what waits on you (inbox cards, jobs, hand-offs, drafts in `plans/drafts/`, unpushed branches, draft PRs), approves publish cards in one batch and archives a finished draft |
 
 Inbox: anything that waits on you can be a card in `plans/drafts/`, written with `pending.mjs card`. A `publish` card holds the exact kit publish commands, each with the text it writes; a `question` card holds 2 to 4 options; a `notify` card is a result to read. `/tedy:pending approve` asks one question per command, at most four per call, runs a card only when all its commands were approved, marks it started before the first one so it never runs twice, runs them in order and archives the card and its draft. A card block that is not exactly one kit publish command, run by its absolute path, is refused, also in a card written by hand. A card whose draft changed since the card was written does not run. A timed-out or unanswered question publishes nothing.
 
@@ -168,6 +168,12 @@ The independent review in `/tedy:review-pr`, `/tedy:dev` and `/tedy:reconcile` r
 `/tedy:review-pr` reads a PR in a sparse worktree made by `review-worktree.mjs`, which leaves the head's `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md` and every `.claude/` folder off disk at any depth, so the PR's own agent instructions and nested skills are not loaded while the session reads its code; those files are read as data with `git show`. It needs git 2.35 or newer. Side effect: git sets `extensions.worktreeConfig=true` in the reviewed repo's `.git/config`, and it stays after the worktree is removed; the main checkout's working tree and its own checkout settings do not change.
 
 Menus and table words come in the profile's chat language (`language.chat`, English and Vietnamese today); comments follow the language each project map sets for PR reviews, the tracker, and Doc and Figma.
+
+## Jobs
+
+A project map with `"jobs": true` replaces role sessions with jobs ([`plugin/shared/jobs.md`](plugin/shared/jobs.md)). The session you type into is the cockpit: it picks the role for a request and runs `job.mjs start <pm|dev|review|devops> --title <t> --body-file <f> [--repo <path>]`, which writes `plans/jobs/<stamp>-<role>-<slug>.md` and starts `claude --agent tedy:<role> --bg --name "<role> <project> <slug>"` in the project folder, or in the repository for `--repo`. Each job shows in agent view (`claude agents`), works its role skill, never asks you a question, and ends in drafts, inbox cards or a draft PR; a dev job makes its own worktree, commits and pushes its task branch. It then marks its file `done` with an outcome. You approve its cards from the cockpit with `/tedy:pending`, which also lists the open jobs with their age. `job.mjs resume <job file> --note-file <f>` sends rework back: it stops the job's session, waits for the stop and resumes it with its context. `job.mjs close <job file>` removes a finished job's session; `--reason` stops a running one first, and `job.mjs list` shows a running job whose session is gone as `lost`. The folder a job starts in must be trusted once: open `claude` there and accept the dialog.
+
+Each job starts with its role's allowlist on the launch line, so in `default` permission mode reads, tests, kit read scripts, cards, local commits, the task-branch push and `gh pr create --draft` run without a prompt. Publishing still asks: no publish script, deploy, `job.mjs start` or `pending.mjs done` is on any list, and the kit's publish ask rules and its gates' asks prompt over every allow rule. Under `bypassPermissions` the allowlist changes nothing. A background job has no spend cap; close a runaway one with `job.mjs close <job file> --reason <why>`. A map without `jobs` keeps working with `sessions` and hand-offs exactly as before.
 
 ## Trackers
 
@@ -179,6 +185,7 @@ Menus and table words come in the profile's chat language (`language.chat`, Engl
 |---|---|
 | Rules, style samples, project maps, gate switches | Your profile: `TEDY_PROFILE_DIR` or `~/.config/tedy` |
 | Gate log, edit log, draft snapshots, last reply check, approval tickets (`approvals/`), record locks (`locks/`), write ledger (`records/`), each job session's role for its subagents (`session-roles/`, pruned after 7 days) | `TEDY_STATE_DIR` or `~/.local/state/tedy` |
+| Job files: the request, status, session id, notes and outcome of each job | `plans/jobs/` under the project map's first path |
 | Release worktree the profile guard watches | `TEDY_RELEASE_DIR` or `~/Documents/workspace/tedy-kit-release` |
 | `permissions.ask` rules git-gate checks a publish against | `TEDY_CLAUDE_SETTINGS` or `~/.claude/settings.json` |
 | Tracker slug map | `~/.config/op/sync/` |

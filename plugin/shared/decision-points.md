@@ -4,6 +4,7 @@ How every `/tedy:*` skill hands a decision to the user. The user's rules say whe
 
 ## Asking
 
+- In a job (`shared/jobs.md`), never call `AskUserQuestion`. Every question, including the next-step menu, becomes a `question` card.
 - Write the short analysis in the reply first: what you found, the options, and which one you recommend and why. The question then refers to analysis the user has already seen.
 - One `AskUserQuestion` call per topic, 1–4 questions per call, 2–4 options per question, header at most 12 characters.
 - The recommended option comes first with `(Recommended)` in its label. Every option description states its consequence: what happens next and what it costs.

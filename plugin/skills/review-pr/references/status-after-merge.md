@@ -12,6 +12,8 @@ Mention the hand-off in one line of the reply; it never blocks the review.
 
 With `--inbox`, or when the map has no pm session, the sweep writes one inbox card instead and prints `card: <path>`; mention that path in one line of the reply, and `/tedy:pending approve` applies the batch.
 
+In a `jobs` map run `node <plugin>/scripts/merged-sweep.mjs --inbox --job <this job file>` instead: the card and each of its `set` commands name the job, so the cockpit applies the batch only after the job is done and does not close the job while the card is open.
+
 ## Merge step (step 12)
 
 When a re-review of a teammate's PR leaves no finding, every review thread is resolved, `gh pr checks <n>` passes and the PR is not a draft:

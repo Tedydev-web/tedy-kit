@@ -2,11 +2,17 @@
 
 The user runs one session per role and project (PM, Dev, Review PR), named `<Role> - <Project>`; the map's `sessions` lists them. Each session works only in its own role, so the tracker, Doc and Figma keep one writer and each ledger stays the single record. `<plugin>` is the plugin root; the script is `node <plugin>/scripts/handoff.mjs`.
 
-## This session's role
+## Jobs (map has `jobs: true`)
+
+The map routes every request through jobs, not role sessions: follow `<plugin>/shared/jobs.md`. A cockpit starts a job with `job.mjs start` instead of `handoff.mjs write`, and a job turns work for another role into a `question` card. A session the map still lists in `sessions` keeps its role in the role gate until the switch, but nothing is routed to it. Pending hand-offs still list in `/tedy:pending` until each is closed with `handoff.mjs done`.
+
+## Role sessions (map has `sessions`; removed after the switch)
+
+### This session's role
 
 `ListAgents` prints "This session is <name>". Match that name against the map's `sessions`. A map without `sessions` has no roles: the skill works here, and publishing still waits for its `AskUserQuestion`. When the map lists sessions and this name is not among them, or the session builds or tests this plugin, it has no role: it hands every role task over and publishes nothing. The role gate does not catch this case, since it asks only when a listed session writes for another role and only with `gates.roleGate` on, so each skill checks it before publishing.
 
-## Sending: the request belongs to another role
+### Sending: the request belongs to another role
 
 1. Do none of it here, not even a first step that writes.
 2. Find the target: `handoff.mjs route <pm|dev|review|devops> [--repo <path>]`. Two sessions of one role are told apart by the repository the task touches; when the task touches both, ask.
@@ -15,7 +21,7 @@ The user runs one session per role and project (PM, Dev, Review PR), named `<Rol
 5. `SendMessage` to the session name with that message line exactly. When `ListAgents` does not list the target, skip the message: the file waits, and the target session lists it at its next start.
 6. Report the file path and whether the message was delivered.
 
-## Dispatch: this session's role is `dispatch`
+### Dispatch: this session's role is `dispatch`
 
 The user types every request into this one session and reads the answers here. Typing a request here is the user's approval to transfer it, so the dispatch session skips the `handoff.header` question.
 
@@ -26,7 +32,7 @@ The user types every request into this one session and reads the answers here. T
 5. Reply one line: which session took it and the hand-off path. Do not wait for the result and do not subscribe with `notify_when_idle`.
 6. When a role session's reply arrives, relay it to the user in one or two lines with its report path. Never answer an `approve.header`, permission or question on a role session's behalf; tell the user which session is waiting in agent view's Needs input.
 
-## Receiving: a hand-off arrives
+### Receiving: a hand-off arrives
 
 A hand-off arrives as a `<cross-session-message>` that starts with `Hand-off`, or in the session-start list of pending hand-offs.
 

@@ -183,6 +183,16 @@ test("a launch that cannot run claude at all leaves the job stopped with the err
   assert.match(text, /\n## Outcome\n\nThe launch failed: claude --agent: spawnSync claude ENOENT\n$/);
 });
 
+test("jobs.md has the Job section every prompt and job card names, and the skills point a jobs map at it", () => {
+  const headings = readFileSync(JOBS_DOC, "utf8").split("\n").filter((line) => line.startsWith("## "));
+  assert.deepEqual(headings, ["## Which session this is", "## Cockpit", "## Job", "## Permissions"]);
+  for (const skill of ["pm", "dev", "review-pr"]) {
+    const text = readFileSync(join(PLUGIN, "skills", skill, "SKILL.md"), "utf8");
+    assert.match(text, /When the map sets `jobs` or `sessions`, follow `\$\{CLAUDE_PLUGIN_ROOT\}\/shared\/jobs\.md` or `handoff\.md` instead of switching skills here\./, skill);
+    assert.match(text, /When the map lists `sessions` without this one and sets no `jobs`, hand/, skill);
+  }
+});
+
 test("each role's prompt names its skill, and devops, which has none, names jobs.md without a slash command", () => {
   const w = world();
   const prompt = (role) => tokenize(w.run(["start", role, "--title", "t", "--body-file", w.body, "--dry-run"]).stdout.trim()).at(-1);
