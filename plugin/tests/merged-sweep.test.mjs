@@ -126,6 +126,114 @@ test("a repo that cannot be listed keeps the stored mark so its merged PRs are s
   assert.equal(mark, null);
 });
 
+test("the card body holds one set block per work package, by the absolute plugin path, with its row under it, and passes the card check", async () => {
+  const { cardBlocks } = await import("../lib/merged-sweep.mjs");
+  const { cardRefusal, readCard } = await import("../lib/pending-cards.mjs");
+  const { updates } = sweepPlan({ gathered: [entry(wp(1, "Task", "Merged/Code Review"), [pr(1, "merged")]), entry(wp(2, "Bug", "In progress"), [pr(2, "merged")], ["Tester"])], meId: 140, tracker: TRACKER });
+  const scripts = new URL("../scripts/", import.meta.url).pathname;
+  const body = cardBlocks(updates);
+  assert.equal(body, `### 1\nnode ${scripts}openproject.mjs set 1 --status "Closed"\n- #1 Task 1 (Task, Merged/Code Review → Closed) · merged: shop-fe#1 https://github.com/o/shop-fe/pull/1\n\n### 2\nnode ${scripts}openproject.mjs set 2 --status "Fixed (Dev Done)" --assignee "Tess Ter"\n- #2 Bug 2 (Bug, In progress → Fixed (Dev Done), assign Tess Ter) · merged: shop-fe#2 https://github.com/o/shop-fe/pull/2\n`);
+  assert.equal(cardRefusal(readCard(`kind: publish\ntitle: Status\njob: none\npreview: run\n\n${body}`)), null);
+});
+
+async function inboxWorld({ sessions }) {
+  const { execFile } = await import("node:child_process");
+  const { chmodSync, mkdirSync, writeFileSync } = await import("node:fs");
+  const { createServer } = await import("node:http");
+  const { promisify } = await import("node:util");
+  const root = tempDir("tedy-sweep-inbox-");
+  const repo = join(root, "repo");
+  const profile = join(root, "profile");
+  const state = join(root, "state");
+  const bin = join(root, "bin");
+  for (const dir of [repo, join(profile, "projects"), bin, join(root, ".config", "op")]) mkdirSync(dir, { recursive: true });
+  const mergedAt = new Date(Date.now() - 3_600_000).toISOString();
+  const merged = { number: 5, title: "fix: cart", body: "OP#21 OP#22", mergedAt, createdAt: mergedAt, url: "https://github.com/o/shop-fe/pull/5" };
+  writeFileSync(join(root, "gh.json"), JSON.stringify({ merged: [merged], all: [{ ...merged, state: "MERGED", baseRefName: "dev" }] }));
+  writeFileSync(join(bin, "gh"), `#!/usr/bin/env node\nconst fx = JSON.parse(require("node:fs").readFileSync(process.env.GH_FIXTURE, "utf8"));\nconst args = process.argv.slice(2);\nconst state = args[args.indexOf("--state") + 1];\nprocess.stdout.write(JSON.stringify(state === "merged" ? fx.merged : state === "all" ? fx.all : []));\n`);
+  chmodSync(join(bin, "gh"), 0o755);
+  const work = (id, status) => ({ id, subject: `Task ${id}`, lockVersion: 1, _links: { type: { title: "Task" }, status: { title: status }, assignee: { href: "/api/v3/users/140" }, author: { href: "/api/v3/users/9", title: "Tess Ter" } } });
+  const packages = { 21: work(21, "Merged/Code Review"), 22: work(22, "In progress") };
+  const server = createServer((request, response) => {
+    const path = new URL(request.url, "http://x").pathname;
+    const send = (data, status = 200) => response.writeHead(status, { "content-type": "application/json" }).end(JSON.stringify(data));
+    if (path === "/api/v3/users/me") return send({ id: 140 });
+    if (path === "/api/v3/memberships") return send({ _embedded: { elements: [{ _links: { roles: [{ title: "Developer" }] } }] } });
+    const id = path.match(/^\/api\/v3\/work_packages\/(\d+)$/)?.[1];
+    return packages[id] ? send(packages[id]) : send({}, 404);
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = server.address().port;
+  writeFileSync(join(root, ".config", "op", "config.json"), JSON.stringify({ url: `http://127.0.0.1:${port}`, token: "test-" + "token-value" }));
+  const tracker = { project: 183, not_started: ["New"], flow: { Task: { start: "In progress", review: "Merged/Code Review", merged: "Closed", revert: "In progress" } } };
+  writeFileSync(join(profile, "projects", "shop.md"), `# map\n\n\`\`\`json\n${JSON.stringify({ name: "shop", paths: [repo], repos: [{ path: ".", role: "FE", branch: "dev" }], tracker, sessions })}\n\`\`\`\n`);
+  const env = { ...process.env, HOME: root, PATH: `${bin}:${process.env.PATH}`, GH_FIXTURE: join(root, "gh.json"), TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: state };
+  const run = (args) => promisify(execFile)("node", [new URL("../scripts/merged-sweep.mjs", import.meta.url).pathname, ...args], { cwd: repo, env }).then(({ stdout }) => stdout, (error) => assert.fail(`${error.stdout}${error.stderr}`));
+  const files = async (sub) => {
+    const { existsSync, readdirSync } = await import("node:fs");
+    return existsSync(join(repo, "plans", sub)) ? readdirSync(join(repo, "plans", sub)).map((name) => join(repo, "plans", sub, name)) : [];
+  };
+  return { run, files, state, host: `127.0.0.1_${port}`, close: () => server.close() };
+}
+
+test("--inbox writes one run card with a block per update and no hand-off, moves the mark, and a sweep with nothing new writes no card", async () => {
+  const { parse } = await import("../lib/handoff.mjs");
+  const { CARD_KEYS, readCard } = await import("../lib/pending-cards.mjs");
+  const world = await inboxWorld({ sessions: [{ name: "PM - Shop", role: "pm" }] });
+  try {
+    const out = await world.run(["--inbox"]);
+    const cards = await world.files("drafts");
+    assert.equal(cards.length, 1, out);
+    assert.match(out, new RegExp(`^card: ${cards[0]}$`, "m"));
+    const text = readFileSync(cards[0], "utf8");
+    const fields = parse(text, CARD_KEYS);
+    assert.deepEqual([fields.kind, fields.preview, fields.job, fields.records, fields.title], ["publish", "run", "none", `op:${world.host}:wp:21,op:${world.host}:wp:22`, "Status from PRs: 2 work package(s)"]);
+    assert.deepEqual(readCard(text).blocks.map((block) => block.command.replace(/^node \S+\/openproject\.mjs /, "")), ['set 21 --status "Closed"', 'set 22 --status "Closed"']);
+    assert.deepEqual(await world.files("reports"), []);
+    const mark = readSince("shop", world.state);
+    assert.notEqual(mark, null);
+    const again = await world.run(["--inbox"]);
+    assert.equal((await world.files("drafts")).length, 1, again);
+    assert.doesNotMatch(again, /^card: /m);
+    assert.notEqual(readSince("shop", world.state), null);
+  } finally {
+    world.close();
+  }
+});
+
+test("--handoff on a map without a pm session sends the batch to the inbox with a notice, and with one writes the hand-off as before", async () => {
+  const none = await inboxWorld({ sessions: [{ name: "Review - Shop", role: "review" }] });
+  try {
+    const out = await none.run(["--handoff", "--from", "Review - Shop"]);
+    assert.match(out, /^notice: no pm session in the map; the batch went to the inbox$/m);
+    assert.equal((await none.files("drafts")).length, 1);
+    assert.deepEqual(await none.files("reports"), []);
+    assert.notEqual(readSince("shop", none.state), null);
+  } finally {
+    none.close();
+  }
+  const pm = await inboxWorld({ sessions: [{ name: "PM - Shop", role: "pm" }] });
+  try {
+    const out = await pm.run(["--handoff", "--from", "Review - Shop"]);
+    const [handoff] = await pm.files("reports");
+    assert.match(handoff, /handoff-\d{6}-\d{4}-to-pm-shop-status-from-prs-2-work-package-s\.md$/);
+    assert.match(out, /^message: /m);
+    assert.match(readFileSync(handoff, "utf8"), /^to: PM - Shop\nfrom: Review - Shop\nstatus: pending\n/);
+    assert.deepEqual(await pm.files("drafts"), []);
+  } finally {
+    pm.close();
+  }
+});
+
+test("--inbox needs no --from, and --from is still required with --handoff", async () => {
+  const { out } = await sweepRun(["--handoff"], false);
+  assert.equal(out.status, 2);
+  assert.match(out.stderr, /--inbox/);
+  const inbox = await sweepRun(["--since", "2026-10-01T00:00:00Z", "--inbox"], false);
+  assert.equal(inbox.out.status, 0, inbox.out.stderr);
+  assert.notEqual(inbox.mark, null);
+});
+
 test("a clean sweep moves the stored mark", async () => {
   const { out, mark } = await sweepRun(["--since", "2026-10-01T00:00:00Z", "--handoff", "--from", "Review - Shop"], false);
   assert.equal(out.status, 0, out.stderr);

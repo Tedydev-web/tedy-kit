@@ -10,6 +10,8 @@ When it prints a `message:` line, `SendMessage` the PM session with that line ex
 
 Mention the hand-off in one line of the reply; it never blocks the review.
 
+With `--inbox`, or when the map has no pm session, the sweep writes one inbox card instead and prints `card: <path>`; mention that path in one line of the reply, and `/tedy:pending approve` applies the batch.
+
 ## Merge step (step 12)
 
 When a re-review of a teammate's PR leaves no finding, every review thread is resolved, `gh pr checks <n>` passes and the PR is not a draft:
