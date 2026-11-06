@@ -8,7 +8,7 @@ import { currentTurn, gateSwitches, logGate, readHookInput, readTranscriptTail, 
 import { loadConfig, profileDir } from "./profile.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { readState, writeState } from "./project-state.mjs";
-import { agentRole, jobCard, listSessions, roleCard, sessionName } from "../gates/role-gate.mjs";
+import { AGENT_ROLES, agentRole, cockpitCard, jobCard, listSessions, roleCard, sessionName } from "../gates/role-gate.mjs";
 
 export const PROSE_QUESTION = /(\?\s*$)|(anh (muốn|chọn|có muốn|thấy sao|quyết)|em (làm|tiếp tục|tiến hành)[^.]{0,40}(không|ko)\b|được không|nhé\?)/i;
 
@@ -32,8 +32,9 @@ function lastAssistantText(turn) {
   return "";
 }
 
-export function decideNudge(entries, stopHookActive, lastMessage) {
+export function decideNudge(entries, stopHookActive, lastMessage, agentType) {
   if (stopHookActive) return { nudge: false, why: "stop-hook-active" };
+  if (Object.hasOwn(AGENT_ROLES, agentType)) return { nudge: false, why: "job" };
   const turn = currentTurn(entries);
   const entrypoint = [...turn].reverse().find((entry) => entry.entrypoint)?.entrypoint;
   if (entrypoint && entrypoint !== "cli") return { nudge: false, why: `entrypoint-${entrypoint}` };
@@ -53,7 +54,7 @@ export function activeRole(entries) {
 function runDecisionNudge() {
   const input = readHookInput();
   try {
-    const decision = decideNudge(readTranscriptTail(input.transcript_path), input.stop_hook_active === true, input.last_assistant_message);
+    const decision = decideNudge(readTranscriptTail(input.transcript_path), input.stop_hook_active === true, input.last_assistant_message, input.agent_type);
     logGate({ hook: "decision-nudge", decision: decision.nudge ? "nudge" : "pass", why: decision.why, tail: decision.tail, session: input.session_id });
     if (decision.nudge) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "Stop", additionalContext: NUDGE } }));
   } catch (error) {
@@ -65,8 +66,11 @@ function sessionRoleCard(input) {
   try {
     const resolved = resolveMap(input.cwd ?? process.cwd());
     if (!resolved) return "";
+    const { map } = resolved;
     const who = agentRole(input);
-    return who ? jobCard(resolved.map, who, gateSwitches().roleGate) : roleCard(resolved.map, sessionName(input.session_id, listSessions()), gateSwitches().roleGate);
+    if (who) return jobCard(map, who, gateSwitches().roleGate);
+    if (map.jobs && !map.sessions?.length) return cockpitCard(map);
+    return roleCard(map, sessionName(input.session_id, listSessions()), gateSwitches().roleGate) || (map.jobs ? cockpitCard(map) : "");
   } catch (error) {
     logGate({ hook: "role-card", decision: "skip-on-error", error: error.message });
     return "";
@@ -160,7 +164,7 @@ export function pendingNotice(pending, procedure) {
 export function waitingNotice(map) {
   let text;
   try {
-    text = waitingText(map, { offline: true, handoffs: false, limit: 10, budgetMs: 8000 });
+    text = waitingText(map, { offline: true, handoffs: map.jobs === true, limit: 10, budgetMs: 8000 });
   } catch (error) {
     logGate({ hook: "pending-handoffs", decision: "waiting-list-skipped", error: error.message });
     return "";
@@ -201,8 +205,14 @@ function runPendingHandoffs() {
   const input = readHookInput();
   try {
     const resolved = resolveMap(input.cwd ?? process.cwd());
+    const jobs = resolved?.map.jobs === true;
+    if (jobs && !input.agent_id && Object.hasOwn(AGENT_ROLES, input.agent_type)) {
+      const card = sessionRoleCard(input);
+      if (card) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: card } }));
+      return;
+    }
     const learn = resolved ? learnLine(input, resolved.map) : "";
-    const notice = [configWarning(), resolved && sessionRoleCard(input), resolved && pendingNotice(listPending(reportsDir(resolved.map)), fileURLToPath(new URL("../shared/handoff.md", import.meta.url))), resolved && waitingNotice(resolved.map), learn].filter(Boolean).join("\n\n");
+    const notice = [configWarning(), resolved && sessionRoleCard(input), resolved && !jobs && pendingNotice(listPending(reportsDir(resolved.map)), fileURLToPath(new URL("../shared/handoff.md", import.meta.url))), resolved && waitingNotice(resolved.map), learn].filter(Boolean).join("\n\n");
     if (notice) process.stdout.write(JSON.stringify({ ...(learn && { systemMessage: learn }), hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: notice } }));
     if (learn) writeState(resolved.map.name, "learn_nudged", localDate());
   } catch (error) {
