@@ -5,7 +5,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-export const WORKSPACE = "/tmp/tedy-probes-bg/work";
+export const WORKSPACE = process.env.TEDY_PROBE_WORKSPACE ?? "/tmp/tedy-probes-bg/work";
 const BASE = dirname(WORKSPACE);
 const LAUNCHED = join(BASE, "launched");
 const FACTS = join(BASE, "facts.txt");
@@ -367,6 +367,11 @@ async function blockTwelve() {
 }
 
 async function main(mode) {
+  if (!/^\/tmp\/tedy-[\w-]+\/work$/.test(WORKSPACE)) {
+    console.error(`job probes: TEDY_PROBE_WORKSPACE must be /tmp/tedy-<name>/work, got ${WORKSPACE}`);
+    process.exitCode = 2;
+    return;
+  }
   if (mode === "cleanup") return cleanup();
   process.on("exit", cleanup);
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(130));
