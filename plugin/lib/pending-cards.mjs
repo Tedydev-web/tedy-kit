@@ -6,7 +6,7 @@ import { KIT_PUBLISH_APPLY_VERBS, KIT_PUBLISH_WRITE_VERBS } from "./publish-appr
 import { jobFlag } from "./record-lock.mjs";
 import { tokenize } from "./shell-segments.mjs";
 
-const PLAIN_WORD = String.raw`(?!=)(?:[\p{L}\p{N}\p{M}_@%+=:,./-]|'[^']*'|"[^"$\x60\\]*")+`;
+const PLAIN_WORD = String.raw`(?!(?:''|"")*=)(?:[\p{L}\p{N}\p{M}_@%+=:,./-]|'[^']*'|"[^"$\x60\\]*")+`;
 const PLAIN_LINE = new RegExp(`^${PLAIN_WORD}(?: ${PLAIN_WORD})*$`, "u");
 
 export const KINDS = Object.freeze(["publish", "question", "notify"]);
@@ -95,6 +95,8 @@ const FILE_OPERANDS = Object.freeze({
 
 const OTHER_FILE_FLAGS = Object.freeze({ "doc-comment-file.mjs": ["--html"] });
 
+const GLUED_FLAGS = new Set(["github-write.mjs"]);
+
 function draftRefusal(tokens, name, draft) {
   const verb = tokens[2];
   const operand = FILE_OPERANDS[name]?.[verb];
@@ -103,8 +105,9 @@ function draftRefusal(tokens, name, draft) {
     const owner = glued ? token.split("=")[0] : tokens[index - 1]?.startsWith("--") && !tokens[index - 1].includes("=") ? tokens[index - 1] : null;
     return { index, owner, value: glued ? token.slice(token.indexOf("=") + 1) : token };
   }).slice(3);
-  const read = operand === AFTER_VERB ? words.find((word) => word.index === 3 && !word.value.startsWith("--")) : words.find((word) => word.owner === operand);
+  const read = operand === AFTER_VERB ? words.find((word) => word.index === 3 && !tokens[3].startsWith("-")) : words.find((word) => word.owner === operand);
   if (!operand) return `does not read its draft ${draft.path}: ${name} ${verb} reads no file`;
+  if (read && operand !== AFTER_VERB && !GLUED_FLAGS.has(name) && tokens[read.index].startsWith(`${operand}=`)) return `glues ${operand}=, which ${name} does not read; write ${operand} and the file as two words`;
   if (!read || !isAbsolute(read.value) || realOrNull(read.value) !== draft.real) return `does not read its draft ${draft.path}: ${name} ${verb} reads ${operand === AFTER_VERB ? operand : `the file named by ${operand}`}, which must be the draft by its absolute path`;
   const skipped = ["--job", ...(OTHER_FILE_FLAGS[name] ?? [])];
   const second = words.find((word) => word !== read && !skipped.includes(word.owner) && isAbsolute(word.value) && realOrNull(word.value));

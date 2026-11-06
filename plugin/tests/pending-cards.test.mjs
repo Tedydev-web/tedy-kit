@@ -66,7 +66,7 @@ test("card refuses an unknown kind, a question with too few or too many options,
     ["ready", `node ${SCRIPTS}/github-write.mjs post $(cat d.md)`, /block 1 is not plain words and quoted text/],
   ];
   const set = `node ${SCRIPTS}/openproject.mjs set 1 --status X`;
-  for (const tail of ["<(touch /tmp/x)", ">(tee /tmp/x)", "&", "; touch /tmp/x", "&& touch /tmp/x", "|| touch /tmp/x", "*.md", "{a,b}", "~/x", '"$HOME"', "\\x", "#c", "2>/dev/null", "<in", "|& cat", "'a' \"b", "--x=`id`", "=node", "--assignee =node", "==x"]) refused.push(["run", `${set} ${tail}`, /block 1 is not plain words and quoted text/]);
+  for (const tail of ["<(touch /tmp/x)", ">(tee /tmp/x)", "&", "; touch /tmp/x", "&& touch /tmp/x", "|| touch /tmp/x", "*.md", "{a,b}", "~/x", '"$HOME"', "\\x", "#c", "2>/dev/null", "<in", "|& cat", "'a' \"b", "--x=`id`", "=node", "--assignee =node", "==x", "''=node", '""=node', "--assignee ''\"\"=node"]) refused.push(["run", `${set} ${tail}`, /block 1 is not plain words and quoted text/]);
   for (const [preview, command, message] of refused) assert.throws(() => card(map, "publish", { title: "T", draft, preview, body: `### 1\n${command}\ntext\n` }), message, command);
   for (const tail of ['--status "Fixed (Dev Done)"', "--assignee 'Hoàng & Lâm'", '--status "Won\'t fix"', "--assignee Hoàng", "--x=a,b:c@d%e+f", "--assignee '=node'", "--x==y", "--assignee \"=n\""]) assert.ok(card(map, "publish", { title: "Plain", preview: "run", body: `### 1\nnode ${SCRIPTS}/openproject.mjs set 1 ${tail}\n` }), tail);
   assert.throws(() => card(map, "publish", { title: "T", job: "plans/jobs/261104-0910-review-pr-712.md", draft, preview: "ready", body: ready(draft) }), /block 1 lacks --job 261104-0910-review-pr-712\.md/);
@@ -108,6 +108,10 @@ test("a ready block reads its draft through the verb's own file operand, once, a
     [`${gw} reply 712 99 --body-file ${draft} --title ${draft}`, /block 1 names a second file/],
     [`${gw} resolve PRRT_1`, /block 1 does not read its draft .*: github-write\.mjs resolve reads no file/],
     [`node ${SCRIPTS}/openproject.mjs set 1 --status X --status Y`, /block 1 repeats --status/],
+    [`${gw} post --x=${draft} ${relative(process.cwd(), other)} --repo o/r`, /block 1 does not read its draft .*: github-write\.mjs post reads the file named right after the verb/],
+    [`node ${SCRIPTS}/openproject.mjs comment 12 --body-file=${draft} --apply`, /block 1 glues --body-file=, which openproject\.mjs does not read; write --body-file and the file as two words/],
+    [`node ${SCRIPTS}/figma-comments.mjs reply 9 --body-file=${draft} --file KEY`, /block 1 glues --body-file=, which figma-comments\.mjs does not read/],
+    [`node ${SCRIPTS}/gdoc-comments.mjs reply 9 --body-file=${draft} --doc D`, /block 1 glues --body-file=, which gdoc-comments\.mjs does not read/],
   ]) assert.throws(make(command), message, command);
   for (const command of [
     `${gw} post ${draft} --repo o/r`,
@@ -212,6 +216,20 @@ test("card-note writes answers and refusals into the header, a refused card is n
   assert.throws(() => done(first, map), /is not a file/);
   assert.throws(() => cardNote(first, "late"), /not a card file|no such file|ENOENT/);
   assert.throws(() => cardNote(join(root, "plans", "drafts", "review-712.md"), "x"), /not a card file/);
+});
+
+test("a refused card stays refused when a start marker is left beside it, and an empty marker lists as an unknown time", () => {
+  const { draft, map } = project();
+  const refusedCard = card(map, "publish", { title: "Refused one", draft, preview: "ready", body: ready(draft) });
+  cardNote(refusedCard, "not now", { refuse: true });
+  writeFileSync(join(dirname(refusedCard), `.${basename(refusedCard)}.started`), "2026-11-06T00:00:00Z\n");
+  const crashed = card(map, "publish", { title: "Crashed one", draft, preview: "ready", body: ready(draft) });
+  writeFileSync(join(dirname(crashed), `.${basename(crashed)}.started`), "");
+  const text = waitingText(map, { offline: true });
+  assert.match(text, /^Refused cards:\n- Refused one: refused: not now /m);
+  assert.doesNotMatch(text, /Refused one \(started/);
+  assert.match(text, /^- Crashed one \(started an unknown time\) /m);
+  assert.doesNotMatch(text, /started undefined/);
 });
 
 test("card-start runs only a fully approved card, marks it started, and a started card is never offered or checked again", () => {

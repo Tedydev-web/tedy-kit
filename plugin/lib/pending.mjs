@@ -265,7 +265,7 @@ export function waitingText(map, { offline = false, handoffs = true, limit = Inf
     ["To publish", open.filter((item) => item.kind === "publish").map((item) => `${item.title} (${item.preview}, ${plural(item.blocks.length, "command")}${item.running ? ", job running" : ""}) ${item.path}`)],
     ["Questions", open.filter((item) => item.kind === "question").map((item) => `${item.title}${item.answer ? ` (answered: ${item.answer})` : ""} ${item.path}`)],
     ["For your information", open.filter((item) => item.kind === "notify").map((item) => `${item.title} ${item.path}`)],
-    ["Started, not closed", found.filter((item) => item.status === "started").map((item) => `${item.title} (started ${item.started}) ${item.path}`)],
+    ["Started, not closed", found.filter((item) => item.status === "started").map((item) => `${item.title} (started ${item.started ?? "an unknown time"}) ${item.path}`)],
     ["Refused cards", found.filter((item) => item.refusal && item.status !== "started").map((item) => `${item.title ?? "untitled"}: ${item.refusal} ${item.path}`)],
     ["Drafts waiting on the user", drafts.filter((path) => !typed.has(path))],
     ["Unpushed work", unpushed],
