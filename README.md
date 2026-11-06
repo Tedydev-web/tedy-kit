@@ -65,7 +65,7 @@ The gates keep an honest but careless agent from publishing, merging, rewriting 
 | `gates.noComments` | off | Blocks edits that add code comments and reports comments a push carries |
 | `gates.draftPrOnly` | off | Refuses a pull request that is not a draft |
 | `gates.ghWrites` | off | Refuses direct `gh` writes so that everything posted to GitHub goes through `github-write.mjs` after an approved draft. `gh pr close <pr>` passes; with `--comment` or `--delete-branch` it asks first. `gh pr edit <pr>` that only changes the body (`--body`, `--body-file`) passes |
-| `gates.roleGate` | off | Asks before a session writes for another role listed in the project map's `sessions` |
+| `gates.roleGate` | off | Asks before a session writes for another role: a `claude --agent tedy:<role>` job and its subagents, by the hook input's `agent_type` (a `tedy:reviewer` subagent writes nothing), or a session listed in the project map's `sessions` |
 | `gates.publishQuote` | off | Refuses a `github-write.mjs` post, reply or edit until the exact body was quoted to the user after its last change |
 | `gates.publishApproval` | `"ask"` | `"answer"` lets each kit script write only with a one-use ticket from an approving AskUserQuestion answer, so Claude Code shows no second prompt; see [Approval prompts](#approval-prompts) |
 
@@ -178,7 +178,7 @@ Menus and table words come in the profile's chat language (`language.chat`, Engl
 | What | Where |
 |---|---|
 | Rules, style samples, project maps, gate switches | Your profile: `TEDY_PROFILE_DIR` or `~/.config/tedy` |
-| Gate log, edit log, draft snapshots, last reply check, approval tickets (`approvals/`), record locks (`locks/`), write ledger (`records/`) | `TEDY_STATE_DIR` or `~/.local/state/tedy` |
+| Gate log, edit log, draft snapshots, last reply check, approval tickets (`approvals/`), record locks (`locks/`), write ledger (`records/`), each job session's role for its subagents (`session-roles/`, pruned after 7 days) | `TEDY_STATE_DIR` or `~/.local/state/tedy` |
 | Release worktree the profile guard watches | `TEDY_RELEASE_DIR` or `~/Documents/workspace/tedy-kit-release` |
 | `permissions.ask` rules git-gate checks a publish against | `TEDY_CLAUDE_SETTINGS` or `~/.claude/settings.json` |
 | Tracker slug map | `~/.config/op/sync/` |

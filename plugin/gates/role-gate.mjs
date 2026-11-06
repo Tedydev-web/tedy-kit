@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { bashInputs, classify } from "./git-gate.mjs";
 import { route } from "../lib/handoff.mjs";
-import { ask, gateSwitches, logGate, readHookInput } from "../lib/hook-io.mjs";
+import { ask, gateSwitches, logGate, readHookInput, STATE_DIR } from "../lib/hook-io.mjs";
 import { resolveMap } from "../lib/project-map.mjs";
 import { shellWords, walkCommands } from "../lib/shell-segments.mjs";
 
@@ -29,7 +30,40 @@ const FORBIDDEN = {
   review: new Set(["code", "tracker", "doc-figma"]),
   pm: new Set(["code", "pr-review"]),
   dispatch: new Set(["code", "tracker", "tracker-status", "doc-figma", "pr-review"]),
+  reader: new Set(["code", "tracker", "tracker-status", "doc-figma", "pr-review"]),
 };
+const AGENT_ROLES = { "tedy:pm": "pm", "tedy:dev": "dev", "tedy:review": "review", "tedy:devops": "devops" };
+const JOB_ROLES = new Set(Object.values(AGENT_ROLES));
+const SESSION_ROLES = join(STATE_DIR, "session-roles");
+const SAFE_ID = /^[\w-]+$/;
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+function rememberRole(file, role) {
+  try {
+    mkdirSync(SESSION_ROLES, { recursive: true });
+    writeFileSync(file, role);
+    const now = Date.now();
+    for (const name of readdirSync(SESSION_ROLES)) {
+      const at = statSync(join(SESSION_ROLES, name), { throwIfNoEntry: false })?.mtimeMs;
+      if (at !== undefined && now - at > WEEK_MS) rmSync(join(SESSION_ROLES, name), { force: true });
+    }
+  } catch (error) {
+    logGate({ hook: "role-gate", decision: "session-role-unwritten", error: error.message });
+  }
+}
+
+export function agentRole(input) {
+  const file = typeof input.session_id === "string" && SAFE_ID.test(input.session_id) ? join(SESSION_ROLES, input.session_id) : null;
+  if (!input.agent_id) {
+    const role = AGENT_ROLES[input.agent_type];
+    if (!role) return null;
+    if (file && !existsSync(file)) rememberRole(file, role);
+    return { role, label: input.agent_type };
+  }
+  const parent = file && existsSync(file) ? readFileSync(file, "utf8").trim() : null;
+  if (!JOB_ROLES.has(parent)) return null;
+  return input.agent_type === "tedy:reviewer" ? { role: "reader", label: input.agent_type } : { role: parent, label: input.agent_type ?? "subagent" };
+}
 
 function repoOf(map, path) {
   const root = map.paths[0];
@@ -44,8 +78,8 @@ function repoOf(map, path) {
 
 const isCode = (hit) => hit && !hit.inside.split("/").includes("plans") && !hit.inside.endsWith(".md");
 
-export function classifyAction(input, map) {
-  if (!map.sessions?.length) return null;
+export function classifyAction(input, map, role) {
+  if (!role && !map.sessions?.length) return null;
   const cwd = input.cwd ?? process.cwd();
   if (EDIT_TOOLS.has(input.tool_name)) {
     const path = resolve(cwd, input.tool_input?.file_path ?? input.tool_input?.notebook_path ?? "");
@@ -90,6 +124,15 @@ export function decide(map, name, action) {
   return `tedy role gate: this is "${name}", the ${role} session; ${WHAT[action.kind]} belongs to the ${owner} session${target ? ` "${target}"` : ""}. Hand it over with what you found and where, per ${fileURLToPath(new URL("../shared/handoff.md", import.meta.url))}, unless the user allows this one here.`;
 }
 
+export function agentReason(who, action) {
+  if (!FORBIDDEN[who.role]?.has(action.kind)) return null;
+  return `tedy role gate: this is a ${who.role} job (${who.label}); ${WHAT[action.kind]} belongs to the ${OWNER[action.kind]} role. Leave a draft under plans/drafts for it, unless the user allows this one here.`;
+}
+
+export function jobCard(map, who, gateOn = true) {
+  return `Role: this session is a ${who.role} job (${who.label}) of ${map.name}. When work for another role turns up (a PRD or Figma question, a tracker task, a PR review, code another role owns), stop looking into it, write what you saw and where (file:line, PRD locator, frame) into a draft under plans/drafts, and return to this job's task; the owning role does the research.${gateOn ? " A write that belongs to another role asks the user first." : ""}`;
+}
+
 export function roleCard(map, name, gateOn = true) {
   const role = roleOf(map, name);
   if (!role) return "";
@@ -103,16 +146,23 @@ export function listSessions() {
   return JSON.parse(execFileSync("claude", ["agents", "--json", "--all"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 10_000 }));
 }
 
+export function judge(input, map, list = listSessions) {
+  const who = agentRole(input);
+  const action = classifyAction(input, map, who?.role);
+  if (!action) return null;
+  if (who) return { kind: action.kind, role: who.role, session: null, reason: agentReason(who, action) };
+  const name = sessionName(input.session_id, list());
+  return { kind: action.kind, role: name && roleOf(map, name), session: name, reason: (name && decide(map, name, action)) || null };
+}
+
 export function run() {
   const input = readHookInput({ askOnFailure: true });
   try {
     const resolved = gateSwitches().roleGate && resolveMap(input.cwd ?? process.cwd());
-    const action = resolved && classifyAction(input, resolved.map);
-    if (action) {
-      const name = sessionName(input.session_id, listSessions());
-      const reason = name && decide(resolved.map, name, action);
-      logGate({ hook: "role-gate", decision: reason ? "ask" : "allow", session: name, kind: action.kind, tool: input.tool_name });
-      if (reason) ask(reason);
+    const verdict = resolved && judge(input, resolved.map);
+    if (verdict) {
+      logGate({ hook: "role-gate", decision: verdict.reason ? "ask" : "allow", session: verdict.session, agent_type: input.agent_type, role: verdict.role, kind: verdict.kind, tool: input.tool_name });
+      if (verdict.reason) ask(verdict.reason);
     }
   } catch (error) {
     logGate({ hook: "role-gate", decision: "ask-on-error", error: error.message });

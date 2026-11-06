@@ -157,14 +157,15 @@ async function learnHookFixture({ memories = 5, type = "feedback" } = {}) {
   for (let index = 0; index < memories; index += 1) writeFileSync(join(memory, `f${index}.md`), type ? `---\nname: f\nmetadata:\n  type: ${type}\n---\n\nx\n` : "no frontmatter\n");
   writeFileSync(join(bin, "claude"), "#!/bin/sh\necho '[]'\n");
   chmodSync(join(bin, "claude"), 0o755);
-  const hook = (source, env = {}) => spawnSync("node", [new URL("../scripts/session-hooks.mjs", import.meta.url).pathname, "pending-handoffs"], {
-    input: JSON.stringify({ cwd: work, source, session_id: "s-1" }),
+  const hook = (source, env = {}, extra = {}) => spawnSync("node", [new URL("../scripts/session-hooks.mjs", import.meta.url).pathname, "pending-handoffs"], {
+    input: JSON.stringify({ cwd: work, source, session_id: "s-1", ...extra }),
     encoding: "utf8",
     env: { ...process.env, HOME: home, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: state, PATH: `${bin}:${process.env.PATH}`, CLAUDE_CODE_ENTRYPOINT: "cli", CLAUDE_CODE_PROJECT_DIR_NAME: "", ...env },
   });
   const stateFile = join(state, "projects", "shop.json");
   return {
     work,
+    state,
     stateFile,
     hook,
     nudged: () => (existsSync(stateFile) ? JSON.parse(readFileSync(stateFile, "utf8")).learn_nudged : undefined),
@@ -203,6 +204,20 @@ test("a broken learn state is logged and the other notices still print", async (
   assert.match(output.hookSpecificOutput.additionalContext, /Waiting on the user in this project/);
   assert.equal(output.systemMessage, undefined);
   assert.match(fixture.log(), /"decision":"learn-notice-skipped"/);
+});
+
+test("a job's session start prints its role card from agent_type, records the role for its subagents, and reads no fleet list", async () => {
+  const { chmodSync, existsSync, readFileSync } = await import("node:fs");
+  const fixture = await learnHookFixture({ memories: 0 });
+  const bin = tempDir("tedy-no-fleet-");
+  const called = join(bin, "called");
+  writeFileSync(join(bin, "claude"), `#!/bin/sh\ntouch "${called}"\nexit 1\n`);
+  chmodSync(join(bin, "claude"), 0o755);
+  const output = JSON.parse(fixture.hook("startup", { PATH: `${bin}:${process.env.PATH}` }, { agent_type: "tedy:pm" }).stdout);
+  assert.match(output.hookSpecificOutput.additionalContext, /^Role: this session is a pm job \(tedy:pm\) of shop\. .*stop looking into it, write what you saw and where .* into a draft under plans\/drafts/m);
+  assert.equal(existsSync(called), false);
+  assert.equal(readFileSync(join(fixture.state, "session-roles", "s-1"), "utf8"), "pm");
+  assert.doesNotMatch(fixture.log(), /role-card/);
 });
 
 test("memories with no recognised type are logged as format drift, project-only memories are not, and a moved memory folder is reported", async () => {

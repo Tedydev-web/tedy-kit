@@ -8,7 +8,7 @@ import { currentTurn, gateSwitches, logGate, readHookInput, readTranscriptTail, 
 import { loadConfig, profileDir } from "./profile.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { readState, writeState } from "./project-state.mjs";
-import { listSessions, roleCard, sessionName } from "../gates/role-gate.mjs";
+import { agentRole, jobCard, listSessions, roleCard, sessionName } from "../gates/role-gate.mjs";
 
 export const PROSE_QUESTION = /(\?\s*$)|(anh (muốn|chọn|có muốn|thấy sao|quyết)|em (làm|tiếp tục|tiến hành)[^.]{0,40}(không|ko)\b|được không|nhé\?)/i;
 
@@ -64,7 +64,9 @@ function runDecisionNudge() {
 function sessionRoleCard(input) {
   try {
     const resolved = resolveMap(input.cwd ?? process.cwd());
-    return resolved ? roleCard(resolved.map, sessionName(input.session_id, listSessions()), gateSwitches().roleGate) : "";
+    if (!resolved) return "";
+    const who = agentRole(input);
+    return who ? jobCard(resolved.map, who, gateSwitches().roleGate) : roleCard(resolved.map, sessionName(input.session_id, listSessions()), gateSwitches().roleGate);
   } catch (error) {
     logGate({ hook: "role-card", decision: "skip-on-error", error: error.message });
     return "";
