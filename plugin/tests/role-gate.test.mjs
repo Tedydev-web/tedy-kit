@@ -221,6 +221,16 @@ test("any other subagent of a job takes the job's role", () => {
   assert.equal(gate.agentRole({ agent_type: "Explore", agent_id: "a-3", session_id: randomUUID() }), null);
 });
 
+test("a subagent named after another job role keeps its parent job's role, and only a reviewer narrows it", () => {
+  const id = randomUUID();
+  gate.agentRole(job("tedy:dev", id));
+  const sub = (agent_type) => ({ agent_type, agent_id: "a-5", session_id: id });
+  assert.match(gate.judge({ ...comment, ...sub("tedy:pm") }, noSessions, counted()).reason, /^tedy role gate: this is a dev job \(tedy:pm\); writing to the tracker belongs to the pm role/);
+  assert.match(gate.judge({ ...postReview, ...sub("tedy:review") }, noSessions, counted()).reason, /^tedy role gate: this is a dev job \(tedy:review\); posting or resolving PR review comments belongs to the review role/);
+  assert.equal(gate.judge({ ...editCode, ...sub("tedy:review") }, noSessions, counted()).reason, null);
+  assert.match(gate.judge({ ...editCode, ...sub("tedy:reviewer") }, noSessions, counted()).reason, /^tedy role gate: this is a reader job \(tedy:reviewer\); changing or committing product code/);
+});
+
 test("another plugin's agent on the main thread has no tedy role, so a map without sessions judges nothing", () => {
   const id = randomUUID();
   assert.equal(gate.agentRole(job("other:dev", id)), null);
