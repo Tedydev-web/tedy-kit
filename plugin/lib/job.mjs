@@ -311,7 +311,7 @@ export function list(map, { claude = claudeCli } = {}) {
   const rows = jobs.some((job) => job.status === "running") ? fleet(claude) : [];
   return jobs.map((job) => {
     const row = job.session_id && rows.find((item) => item.sessionId === job.session_id);
-    const status = job.status !== "running" ? job.status : !row || ENDED.has(row.state) ? "lost" : row.waitingFor ? `waiting: ${row.waitingFor}, claude attach ${row.id}` : row.state === "idle" ? `idle, claude attach ${row.id}` : job.status;
+    const status = job.status !== "running" ? job.status : !row || ENDED.has(row.state) ? "lost" : row.waitingFor ? `waiting: ${row.waitingFor}, claude attach ${row.id}` : [row.state, row.status].includes("waiting") ? `waiting, claude attach ${row.id}` : [row.state, row.status].includes("idle") ? `idle, claude attach ${row.id}` : job.status;
     return `${job.role} · ${job.title} · ${status} · ${age(job.created)} · ${job.path}`;
   });
 }
