@@ -238,6 +238,18 @@ test("another plugin's agent on the main thread has no tedy role, so a map witho
   assert.equal(existsSync(roleFile(id)), false);
 });
 
+test("an agent_type named after an Object prototype member is no tedy role, so a legacy session is still judged", () => {
+  const id = randomUUID();
+  const legacy = decide(map, "PM - Shop", { kind: "code", repo: "acme-shop-fe" });
+  for (const agent_type of ["constructor", "toString", "__proto__", "hasOwnProperty", "valueOf"]) {
+    const list = counted([{ sessionId: id, name: "PM - Shop" }]);
+    assert.equal(gate.agentRole(job(agent_type, id)), null, agent_type);
+    assert.equal(gate.judge({ ...editCode, ...job(agent_type, id) }, map, list).reason, legacy, agent_type);
+    assert.equal(list.calls, 1, agent_type);
+  }
+  assert.equal(existsSync(roleFile(id)), false);
+});
+
 test("a call without agent_type in a map with sessions gets today's result through one fleet read, and an unclassified one reads nothing", () => {
   const id = randomUUID();
   const list = counted([{ sessionId: id, name: "Dev TMA - Shop" }]);

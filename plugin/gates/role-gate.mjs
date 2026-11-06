@@ -55,8 +55,8 @@ function rememberRole(file, role) {
 export function agentRole(input) {
   const file = typeof input.session_id === "string" && SAFE_ID.test(input.session_id) ? join(SESSION_ROLES, input.session_id) : null;
   if (!input.agent_id) {
+    if (!Object.hasOwn(AGENT_ROLES, input.agent_type)) return null;
     const role = AGENT_ROLES[input.agent_type];
-    if (!role) return null;
     if (file && !existsSync(file)) rememberRole(file, role);
     return { role, label: input.agent_type };
   }
