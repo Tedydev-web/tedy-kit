@@ -200,9 +200,35 @@ test("the first main-thread call of a job records its role even when it classifi
   assert.equal(gate.judge({ tool_name: "Read", cwd: "/w/acme", tool_input: { file_path: "/w/acme/a.ts" }, ...job("tedy:dev", id) }, noSessions, counted()), null);
   assert.equal(readFileSync(roleFile(id), "utf8"), "dev");
   assert.deepEqual(gate.agentRole(job("tedy:pm", id)), { role: "pm", label: "tedy:pm" });
-  assert.equal(readFileSync(roleFile(id), "utf8"), "dev");
+  assert.equal(readFileSync(roleFile(id), "utf8"), "pm");
   assert.deepEqual(gate.agentRole(job("tedy:dev", "../escape")), { role: "dev", label: "tedy:dev" });
   assert.equal(existsSync(join(process.env.TEDY_STATE_DIR, "escape")), false);
+  assert.match(readFileSync(join(process.env.TEDY_STATE_DIR, "gate-log.jsonl"), "utf8"), /"decision":"session-role-unsafe-id","agent_type":"tedy:dev","session":"\.\.\/escape"/);
+});
+
+test("a role file that names no job role gives a subagent no role", () => {
+  for (const content of ["x", "dispatch", "reader", ""]) {
+    const id = randomUUID();
+    mkdirSync(join(process.env.TEDY_STATE_DIR, "session-roles"), { recursive: true });
+    writeFileSync(roleFile(id), content);
+    assert.equal(gate.agentRole({ agent_type: "Explore", agent_id: "a-7", session_id: id }), null, content);
+  }
+});
+
+test("a running job's main-thread calls keep its role file fresh, so another job's prune keeps it", () => {
+  const id = randomUUID();
+  gate.agentRole(job("tedy:dev", id));
+  const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+  utimesSync(roleFile(id), eightDaysAgo, eightDaysAgo);
+  gate.agentRole(job("tedy:dev", id));
+  gate.agentRole(job("tedy:pm"));
+  assert.equal(readFileSync(roleFile(id), "utf8"), "dev");
+});
+
+test("the job card promises a prompt only when the role gate is on", () => {
+  const who = { role: "pm", label: "tedy:pm" };
+  assert.match(gate.jobCard(map, who), /asks the user first/);
+  assert.doesNotMatch(gate.jobCard(map, who, false), /asks the user first/);
 });
 
 test("a reviewer subagent of a job is a reader, and every write kind asks", () => {
@@ -311,6 +337,24 @@ test("the gate entry asks a job from its agent_type without a fleet lookup and l
   assert.match(decision.permissionDecisionReason, /this is a review job \(tedy:review\); changing or committing product code belongs to the dev role/);
   const logged = readFileSync(join(stateDir, "gate-log.jsonl"), "utf8").trim().split("\n").map((line) => JSON.parse(line));
   assert.deepEqual(logged.map(({ hook, decision: verdict, agent_type, role, kind }) => ({ hook, verdict, agent_type, role, kind })), [{ hook: "role-gate", verdict: "ask", agent_type: "tedy:review", role: "review", kind: "code" }]);
+});
+
+test("a job whose role file cannot be written is still judged from agent_type, and the failure is logged", () => {
+  const root = tempDir("tedy-role-root-");
+  const profile = tempDir("tedy-role-profile-");
+  writeFileSync(join(profile, "config.json"), JSON.stringify({ gates: { roleGate: true } }));
+  mkdirSync(join(profile, "projects"));
+  writeFileSync(join(profile, "projects", "shop.md"), `# map\n\n\`\`\`json\n${JSON.stringify({ name: "shop", paths: [root], repos: [{ path: "fe", role: "FE" }] })}\n\`\`\`\n`);
+  const stateDir = tempDir("tedy-role-state-");
+  writeFileSync(join(stateDir, "session-roles"), "not a folder");
+  const input = JSON.stringify({ tool_name: "Bash", tool_input: { command: "node /k/scripts/openproject.mjs comment 1 --body-file b --apply" }, cwd: root, session_id: "sess-10", agent_type: "tedy:dev" });
+  const out = execFileSync("node", [new URL("../gates/role-gate.mjs", import.meta.url).pathname], { input, encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: stateDir } });
+  const decision = JSON.parse(out).hookSpecificOutput;
+  assert.equal(decision.permissionDecision, "ask");
+  assert.match(decision.permissionDecisionReason, /this is a dev job \(tedy:dev\); writing to the tracker belongs to the pm role/);
+  const log = readFileSync(join(stateDir, "gate-log.jsonl"), "utf8");
+  assert.match(log, /"decision":"session-role-unwritten"/);
+  assert.match(log, /"hook":"role-gate","decision":"ask"/);
 });
 
 test("role-gate asks when it cannot read the project maps", () => {

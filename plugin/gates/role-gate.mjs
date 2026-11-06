@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { bashInputs, classify } from "./git-gate.mjs";
@@ -38,8 +38,22 @@ const SESSION_ROLES = join(STATE_DIR, "session-roles");
 const SAFE_ID = /^[\w-]+$/;
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
+function storedRole(file) {
+  try {
+    return readFileSync(file, "utf8").trim();
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
 function rememberRole(file, role) {
   try {
+    if (storedRole(file) === role) {
+      const now = new Date();
+      utimesSync(file, now, now);
+      return;
+    }
     mkdirSync(SESSION_ROLES, { recursive: true });
     writeFileSync(file, role);
     const now = Date.now();
@@ -57,10 +71,11 @@ export function agentRole(input) {
   if (!input.agent_id) {
     if (!Object.hasOwn(AGENT_ROLES, input.agent_type)) return null;
     const role = AGENT_ROLES[input.agent_type];
-    if (file && !existsSync(file)) rememberRole(file, role);
+    if (file) rememberRole(file, role);
+    else logGate({ hook: "role-gate", decision: "session-role-unsafe-id", agent_type: input.agent_type, session: String(input.session_id).slice(0, 80) });
     return { role, label: input.agent_type };
   }
-  const parent = file && existsSync(file) ? readFileSync(file, "utf8").trim() : null;
+  const parent = file && storedRole(file);
   if (!JOB_ROLES.has(parent)) return null;
   return input.agent_type === "tedy:reviewer" ? { role: "reader", label: input.agent_type } : { role: parent, label: input.agent_type ?? "subagent" };
 }
