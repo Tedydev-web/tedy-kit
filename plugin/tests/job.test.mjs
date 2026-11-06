@@ -27,7 +27,11 @@ if (args.includes("--bg")) {
     process.exit(1);
   }
   const n = prior.filter((call) => call.args.includes("--bg")).length;
+  if (fx.lockDir) require("node:fs").chmodSync(fx.lockDir, 0o555);
   process.stderr.write("backgrounded \\u00b7 " + (fx.launches ?? [])[n] + " \\u00b7 a name\\n");
+} else if (args[0] === "stop" && fx.stopFail) {
+  process.stderr.write(fx.stopFail);
+  process.exit(1);
 } else if (args[0] === "agents") {
   const n = prior.filter((call) => call.args[0] === "agents").length;
   const lists = fx.agents ?? [[]];
@@ -300,10 +304,12 @@ test("resume and close act only on what start recorded outside the job file, so 
     const resumed = w.run(["resume", file, "--note-file", note(w)], { fx });
     assert.equal(resumed.status, 1, resumed.stdout);
     assert.match(resumed.stderr, message);
-    const closed = w.run(["close", file], { fx });
-    assert.equal(closed.status, 1);
-    assert.match(closed.stderr, message);
     assert.deepEqual(w.calls(), []);
+    const closed = w.run(["close", file], { fx });
+    assert.equal(closed.status, 0, closed.stderr);
+    assert.match(closed.stdout, /^warning: .* differs from the launch record \([^)]*\); acting on the record$/m);
+    assert.deepEqual(w.calls().filter((call) => call.args[0] === "stop" || call.args[0] === "rm").map((call) => call.args), [["rm", "aaaa1111"]]);
+    assert.equal(parse(readFileSync(file, "utf8")).status, "closed");
   }
   const w = world();
   const outside = join(w.root, "plans", "other.md");
@@ -314,9 +320,100 @@ test("resume and close act only on what start recorded outside the job file, so 
   assert.match(w.run(["resume", unrecorded, "--note-file", note(w)], { fx }).stderr, /has no launch record/);
   const out = w.run(["close", unrecorded], { fx });
   assert.equal(out.status, 0, out.stderr);
-  assert.match(out.stdout, /warning: .* has no launch record, so no session was stopped or removed/);
+  assert.match(out.stdout, /warning: .* has no launch record, and the fleet row of its session_id aaaa1111-\S+ does not run inside the project, so nothing was stopped or removed; check claude agents by name dev acme-shop by-hand/);
   assert.equal(parse(readFileSync(unrecorded, "utf8")).status, "closed");
-  assert.deepEqual(w.calls(), []);
+  assert.deepEqual(w.calls().map((call) => call.args[0]), ["agents"]);
+});
+
+test("close is the kill switch: it stops the recorded session even when the job file or the map changed after the launch", async () => {
+  const { chmodSync } = await import("node:fs");
+  const { launchRecordPath } = await import("../lib/job.mjs");
+  const stops = (w) => w.calls().filter((call) => call.args[0] === "stop" || call.args[0] === "rm").map((call) => call.args);
+  const tampered = world();
+  const running = jobFile(tampered);
+  forge(running, /session_id: .*\n/, "");
+  const out = tampered.run(["close", running, "--reason", "runaway"], { fx: { agents: [[row("aaaa1111", "busy")], [row("aaaa1111", "stopped")]] } });
+  assert.equal(out.status, 0, out.stderr);
+  assert.match(out.stdout, /warning: .*its session_id: \(none\) differs from the launch record \(aaaa1111-\S+\); acting on the record/);
+  assert.deepEqual(stops(tampered), [["stop", "aaaa1111"], ["rm", "aaaa1111"]]);
+  assert.match(readFileSync(running, "utf8"), /^status: closed$/m);
+  assert.equal(existsSync(launchRecordPath(running, tampered.state)), false);
+
+  const halfWritten = world();
+  const resumed = jobFile(halfWritten, { status: "done" });
+  writeFileSync(join(halfWritten.root, "note.md"), "again\n");
+  const jobs = join(halfWritten.root, "plans", "jobs");
+  const failed = halfWritten.run(["resume", resumed, "--note-file", join(halfWritten.root, "note.md")], { fx: { lockDir: jobs, launches: ["gggg7777"], agents: [[row("aaaa1111", "stopped")], [row("aaaa1111", "stopped")], [row("aaaa1111", "stopped"), row("gggg7777", "busy")]] } });
+  chmodSync(jobs, 0o755);
+  assert.equal(failed.status, 1);
+  assert.equal(JSON.parse(readFileSync(launchRecordPath(resumed, halfWritten.state), "utf8")).session_id, row("gggg7777").sessionId);
+  writeFileSync(join(halfWritten.root, "claude.log"), "");
+  const closeNew = halfWritten.run(["close", resumed, "--reason", "half written"], { fx: { agents: [[row("aaaa1111", "stopped"), row("gggg7777", "busy")], [row("aaaa1111", "stopped"), row("gggg7777", "stopped")]] } });
+  assert.equal(closeNew.status, 0, closeNew.stderr);
+  assert.match(closeNew.stdout, /acting on the record/);
+  assert.deepEqual(stops(halfWritten), [["stop", "gggg7777"], ["rm", "gggg7777"]]);
+
+  const noState = world();
+  const lost = jobFile(noState, { status: "done" });
+  writeFileSync(join(noState.root, "note.md"), "again\n");
+  const records = join(noState.state, "jobs");
+  const refused = noState.run(["resume", lost, "--note-file", join(noState.root, "note.md")], { fx: { lockDir: records, launches: ["hhhh8888"], agents: [[row("aaaa1111", "stopped")], [row("aaaa1111", "stopped")], [row("aaaa1111", "stopped"), row("hhhh8888", "busy")]] } });
+  chmodSync(records, 0o755);
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /the launch record for .* could not be written \(.*\), but its session hhhh8888 is running; stop it with claude stop hhhh8888, then close the job/);
+  assert.equal(parse(readFileSync(lost, "utf8"), JOB_KEYS).session_id, row("hhhh8888").sessionId);
+
+  const repo = world();
+  mkdirSync(join(repo.root, "plans", "jobs"), { recursive: true });
+  const file = join(repo.root, "plans", "jobs", "261106-0900-dev-in-fe.md");
+  writeFileSync(file, `to: tedy:dev\nfrom: cockpit\nstatus: running\ncreated: 2026-11-06T02:00:00.000Z\ntitle: in fe\ncwd: ${join(repo.root, "fe")}\nsession_id: ${row("aaaa1111").sessionId}\n\n${BODY}`);
+  recordLaunch(file, { role: "dev", cwd: join(repo.root, "fe"), session_id: row("aaaa1111").sessionId }, repo.state);
+  writeFileSync(join(repo.profile, "projects", "shop.md"), `\`\`\`json\n${JSON.stringify({ name: "acme-shop", paths: [repo.root], repos: [{ path: "fe", role: "FE", readonly: true }], jobs: true })}\n\`\`\`\n`);
+  const readonly = repo.run(["close", file, "--reason", "repo frozen"], { fx: { agents: [[row("aaaa1111", "busy")], [row("aaaa1111", "stopped")]] } });
+  assert.equal(readonly.status, 0, readonly.stderr);
+  assert.deepEqual(stops(repo), [["stop", "aaaa1111"], ["rm", "aaaa1111"]]);
+});
+
+test("close without a usable record stops the file's session only when its fleet row runs inside the project, and says when it stopped nothing", async () => {
+  const { launchRecordPath } = await import("../lib/job.mjs");
+  const inside = world();
+  const file = jobFile(inside, { record: false });
+  const out = inside.run(["close", file, "--reason", "no record"], { fx: { agents: [[row("aaaa1111", "busy", { cwd: join(inside.root, "fe") })], [row("aaaa1111", "stopped", { cwd: join(inside.root, "fe") })]] } });
+  assert.equal(out.status, 0, out.stderr);
+  assert.match(out.stdout, /warning: .* has no launch record; stopped the session aaaa1111 its session_id names, whose fleet row runs in .*\/fe/);
+  assert.deepEqual(inside.calls().filter((call) => call.args[0] === "stop" || call.args[0] === "rm").map((call) => call.args), [["stop", "aaaa1111"], ["rm", "aaaa1111"]]);
+
+  const corrupt = world();
+  const broken = jobFile(corrupt, { status: "done" });
+  writeFileSync(launchRecordPath(broken, corrupt.state), "{ trunc");
+  writeFileSync(join(corrupt.root, "note.md"), "again\n");
+  const resumeOut = corrupt.run(["resume", broken, "--note-file", join(corrupt.root, "note.md")]);
+  assert.equal(resumeOut.status, 1);
+  assert.match(resumeOut.stderr, new RegExp(`the launch record ${launchRecordPath(broken, corrupt.state).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} cannot be read \\(.+\\); resume refuses it, and job\\.mjs close still stops the job's session`));
+  const closeOut = corrupt.run(["close", broken], { fx: { agents: [[row("aaaa1111", "stopped", { cwd: corrupt.root })]] } });
+  assert.equal(closeOut.status, 0, closeOut.stderr);
+  assert.match(closeOut.stdout, /warning: the launch record .* cannot be read/);
+  assert.deepEqual(corrupt.calls().filter((call) => call.args[0] === "rm").map((call) => call.args), [["rm", "aaaa1111"]]);
+
+  const unbound = world();
+  const noId = jobFile(unbound, { session: null });
+  const quiet = unbound.run(["close", noId, "--reason", "never bound"], { fx: { agents: [[]] } });
+  assert.equal(quiet.status, 0, quiet.stderr);
+  assert.match(quiet.stdout, /^closed: .*\nwarning: no session id was recorded for .*, so nothing was stopped or removed; check claude agents by name dev acme-shop add-hello\n$/);
+
+  const vanished = world();
+  const gone = jobFile(vanished);
+  const goneOut = vanished.run(["close", gone, "--reason", "gone"], { fx: { stopFail: "No session aaaa1111\n", agents: [[row("aaaa1111", "busy")], []] } });
+  assert.equal(goneOut.status, 0, goneOut.stderr);
+  assert.match(goneOut.stdout, /warning: claude stop aaaa1111 failed \(No session aaaa1111\), and the session is no longer listed, so it is taken as gone/);
+  assert.deepEqual(vanished.calls().filter((call) => call.args[0] === "rm"), []);
+  assert.equal(parse(readFileSync(gone, "utf8")).status, "closed");
+  const stuck = world();
+  const alive = jobFile(stuck);
+  const stuckOut = stuck.run(["close", alive, "--reason", "stuck"], { fx: { stopFail: "boom\n", agents: [[row("aaaa1111", "busy")], [row("aaaa1111", "busy")]] } });
+  assert.equal(stuckOut.status, 1);
+  assert.match(stuckOut.stderr, /claude stop aaaa1111 failed: boom/);
+  assert.equal(parse(readFileSync(alive, "utf8")).status, "running");
 });
 
 test("close --reason on a running job whose session does not stop in time changes nothing in the job file", async () => {
