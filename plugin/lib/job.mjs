@@ -29,7 +29,7 @@ export function allowRules(role, { plugin, root, profile }) {
   return common;
 }
 
-export const askRules = (role, { profile }) => ["Bash(git *--output*)", ...(role === "dev" || role === "devops" ? [`Edit(/${profile}/**)`] : [])];
+export const askRules = ({ profile }) => ["Bash(git *--output*)", `Edit(/${profile}/**)`];
 
 export function claudeCli(args, cwd) {
   const result = spawnSync("claude", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30_000 });
@@ -84,7 +84,7 @@ function writableRepo(map, given) {
 function settings(role, map) {
   const env = Object.fromEntries(["TEDY_STATE_DIR", "TEDY_PROFILE_DIR"].filter((key) => process.env[key]).map((key) => [key, process.env[key]]));
   const at = { plugin: PLUGIN, root: map.paths[0], profile: profileDir() };
-  return JSON.stringify({ permissions: { allow: allowRules(role, at), ask: askRules(role, at) }, worktree: { bgIsolation: "none" }, ...(Object.keys(env).length && { env }) });
+  return JSON.stringify({ permissions: { allow: allowRules(role, at), ask: askRules(at) }, worktree: { bgIsolation: "none" }, ...(Object.keys(env).length && { env }) });
 }
 
 const launchArgs = (role, map, mode) => ["--settings", settings(role, map), ...(mode ? ["--permission-mode", mode] : []), ...(process.env.TEDY_JOB_PLUGIN_DIR ? ["--plugin-dir", process.env.TEDY_JOB_PLUGIN_DIR] : [])];
