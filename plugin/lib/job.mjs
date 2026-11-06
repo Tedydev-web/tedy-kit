@@ -29,7 +29,7 @@ export function allowRules(role, { plugin, root, profile }) {
   return common;
 }
 
-export const askRules = ({ profile }) => ["Bash(git *--output*)", `Edit(/${profile}/**)`];
+export const askRules = ({ profile, state }) => ["Bash(git *--output*)", `Edit(/${profile}/**)`, ...(state ? [`Edit(/${state}/**)`] : [])];
 
 export function claudeCli(args, cwd) {
   const result = spawnSync("claude", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 30_000 });
@@ -83,7 +83,7 @@ function writableRepo(map, given) {
 
 function settings(role, map) {
   const env = Object.fromEntries(["TEDY_STATE_DIR", "TEDY_PROFILE_DIR"].filter((key) => process.env[key]).map((key) => [key, process.env[key]]));
-  const at = { plugin: PLUGIN, root: map.paths[0], profile: profileDir() };
+  const at = { plugin: PLUGIN, root: map.paths[0], profile: profileDir(), state: STATE_DIR };
   return JSON.stringify({ permissions: { allow: allowRules(role, at), ask: askRules(at) }, worktree: { bgIsolation: "none" }, ...(Object.keys(env).length && { env }) });
 }
 
