@@ -544,7 +544,7 @@ test("close refuses a running job without a reason, stops and removes the sessio
   assert.match(text, /\n## Outcome\n\nStopped: timeout\n$/);
   const w2 = world();
   const done = jobFile(w2, { status: "done" });
-  assert.equal(w2.run(["close", done], { fx: { agents: [[row("aaaa1111", "waiting")], [row("aaaa1111", "stopped")]] } }).status, 0);
+  assert.equal(w2.run(["close", done], { fx: { agents: [[row("aaaa1111", "idle")], [row("aaaa1111", "stopped")]] } }).status, 0);
   assert.deepEqual(w2.calls().map((call) => call.args[0]), ["agents", "stop", "agents", "rm"]);
   assert.equal(parse(readFileSync(done, "utf8")).status, "closed");
   const w3 = world();
@@ -554,7 +554,7 @@ test("close refuses a running job without a reason, stops and removes the sessio
   assert.match(w3.run(["close", gone]).stderr, /is already closed/);
 });
 
-test("list shows every job that is not closed with its age, a running job whose session waits as waiting with its attach command, and one whose session is gone or ended as lost", () => {
+test("list shows every job that is not closed with its age, a running job whose session waits or is idle with its attach command, a done job with an idle session as done, and one whose session is gone or ended as lost", () => {
   const w = world();
   jobFile(w, { name: "alive", session: row("aaaa1111").sessionId });
   jobFile(w, { name: "failed", session: row("bbbb2222").sessionId });
@@ -562,16 +562,18 @@ test("list shows every job that is not closed with its age, a running job whose 
   jobFile(w, { name: "stopped", session: row("dddd4444").sessionId });
   jobFile(w, { name: "ended", session: row("eeee5555").sessionId });
   jobFile(w, { name: "asking", session: row("ffff6666").sessionId });
+  jobFile(w, { name: "quiet", session: row("1111aaaa").sessionId });
   jobFile(w, { name: "no-id", session: null });
-  jobFile(w, { name: "finished", status: "done", created: new Date(Date.now() - 26 * 3_600_000).toISOString() });
+  jobFile(w, { name: "finished", status: "done", session: row("2222bbbb").sessionId, created: new Date(Date.now() - 26 * 3_600_000).toISOString() });
   jobFile(w, { name: "old", status: "closed" });
-  const rows = [row("aaaa1111", "busy"), row("bbbb2222", "failed"), row("dddd4444", "stopped"), row("eeee5555", "done"), row("ffff6666", "waiting", { waitingFor: "permission prompt" })];
+  const rows = [row("1111aaaa", "idle", { waitingFor: "" }), row("2222bbbb", "idle", { waitingFor: "" }), row("aaaa1111", "busy"), row("bbbb2222", "failed"), row("dddd4444", "stopped"), row("eeee5555", "done"), row("ffff6666", "waiting", { waitingFor: "permission prompt" })];
   const out = w.run(["list"], { fx: { agents: [rows] } });
   assert.equal(out.status, 0, out.stderr);
   const lines = out.stdout.trim().split("\n");
   assert.deepEqual(lines.map((line) => line.replace(/ · \/.*$/, "")).sort(), [
     "dev · alive · running · 3h 5m",
     "dev · asking · waiting: permission prompt, claude attach ffff6666 · 3h 5m",
+    "dev · quiet · idle, claude attach 1111aaaa · 3h 5m",
     "dev · ended · lost · 3h 5m",
     "dev · failed · lost · 3h 5m",
     "dev · finished · done · 1d 2h",
