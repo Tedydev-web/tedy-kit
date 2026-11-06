@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
+case "${1:-}" in cleanup|jobs|10) exec node "$HERE/job-probes.mjs" "$1" ;; esac
 W="$(mktemp -d /tmp/tedy-probes-XXXX)"
 D="$HOME/.claude/projects/$(echo "$W" | sed 's#[/.]#-#g')"
 trap 'rm -rf "$D" "$W"' EXIT
