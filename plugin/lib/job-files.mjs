@@ -1,6 +1,24 @@
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { existsSync, linkSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { HANDOFF_KEYS, parse } from "./handoff.mjs";
+
+const temporary = (file) => join(dirname(file), `.${basename(file)}.${process.pid}.tmp`);
+
+export function writeAtomic(file, text) {
+  const tmp = temporary(file);
+  writeFileSync(tmp, text);
+  renameSync(tmp, file);
+}
+
+export function createAtomic(file, text) {
+  const tmp = temporary(file);
+  writeFileSync(tmp, text);
+  try {
+    linkSync(tmp, file);
+  } finally {
+    rmSync(tmp, { force: true });
+  }
+}
 
 export const JOB_KEYS = Object.freeze([...HANDOFF_KEYS, "cwd", "permission_mode", "session_id"]);
 export const JOB_ROLES = Object.freeze(["pm", "dev", "review", "devops"]);

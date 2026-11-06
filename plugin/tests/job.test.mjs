@@ -280,6 +280,33 @@ test("resume stops the session, waits for the stop, then resumes it by its full 
   assert.match(text, /\n## Note \d{4}-\d{2}-\d{2}T[\d:.]+Z\n\nAlso add the line world\.\n$/);
 });
 
+test("resume keeps what the job wrote while its stop was awaited, and every job-file write replaces the file instead of truncating it", async () => {
+  const { done, resume } = await import("../lib/job.mjs");
+  const { linkSync } = await import("node:fs");
+  const w = world();
+  const file = jobFile(w);
+  let polls = 0;
+  const claude = (args) => {
+    if (args[0] === "agents") {
+      polls += 1;
+      if (polls === 2) done(file, "PR https://x/1 opened");
+      const state = polls === 1 ? "busy" : polls === 2 ? "busy" : "stopped";
+      return { status: 0, stdout: JSON.stringify(polls < 4 ? [row("aaaa1111", state)] : [row("aaaa1111", "stopped"), row("eeee5555", "busy")]), stderr: "" };
+    }
+    if (args.includes("--bg")) return { status: 0, stdout: "", stderr: "backgrounded · eeee5555 · x\n" };
+    return { status: 0, stdout: "", stderr: "" };
+  };
+  resume({ name: "acme-shop", paths: [w.root], repos: [], jobs: true }, file, "also add world", { claude, waitMs: 5000 });
+  const text = readFileSync(file, "utf8");
+  assert.match(text, /\n## Outcome\n\nPR https:\/\/x\/1 opened\n\n## Note [^\n]+\n\nalso add world\n$/);
+  assert.equal(parse(text).status, "running");
+  const linked = join(w.root, "linked.md");
+  linkSync(file, linked);
+  done(file, "second outcome");
+  assert.equal(readFileSync(linked, "utf8"), text);
+  assert.ok(readdirSync(join(w.root, "plans", "jobs")).every((name) => name.endsWith(".md")));
+});
+
 test("resume refuses a closed job and a job whose session does not stop in time, and changes nothing", async () => {
   const w = world();
   const note = join(w.root, "note.md");

@@ -1,9 +1,9 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { missingSections, render, setStatus, slugOf, stamp } from "./handoff.mjs";
-import { age, JOB_ROLES, jobsDir, listJobs, readJob, setKey, withoutKey, withSection } from "./job-files.mjs";
+import { age, createAtomic, JOB_ROLES, jobsDir, listJobs, readJob, setKey, withoutKey, withSection, writeAtomic } from "./job-files.mjs";
 import { profileDir } from "./profile.mjs";
 import { resolveMap } from "./project-map.mjs";
 
@@ -102,13 +102,13 @@ function launched(file, claude, args, cwd, name, previous) {
   const { status, stdout, stderr } = spawned(claude, args, cwd);
   if (status !== 0) {
     const text = `${(stderr || stdout).trim()}${trustHint(stderr || stdout, cwd)}`;
-    writeFileSync(file, withSection(setStatus(readFileSync(file, "utf8"), "stopped", new Date().toISOString()), "Outcome", `The launch failed: ${text}`));
+    writeAtomic(file, withSection(setStatus(readFileSync(file, "utf8"), "stopped", new Date().toISOString()), "Outcome", `The launch failed: ${text}`));
     console.error(text);
     throw new Error(`the launch failed, so the job is stopped: ${file}`);
   }
   const { found, problem } = launchedRow(claude, `${stdout}\n${stderr}`, name, previous);
   const text = readFileSync(file, "utf8");
-  writeFileSync(file, found ? setKey(text, "session_id", found.sessionId) : withoutKey(text, "session_id"));
+  writeAtomic(file, found ? setKey(text, "session_id", found.sessionId) : withoutKey(text, "session_id"));
   return found ? null : `warning: ${name} was started, but its session id could not be read (${problem}); the job file has no session_id, so job.mjs list shows it lost; find the session by name in claude agents`;
 }
 
@@ -117,7 +117,7 @@ function createJob(dir, base, text) {
   for (let n = 1; ; n += 1) {
     const file = join(dir, `${n === 1 ? base : `${base}-${n}`}.md`);
     try {
-      writeFileSync(file, text(file), { flag: "wx" });
+      createAtomic(file, text(file));
       return file;
     } catch (error) {
       if (error.code !== "EEXIST") throw error;
@@ -157,7 +157,7 @@ function open(file) {
 
 function finish(file, status, outcome) {
   const job = open(file);
-  writeFileSync(job.path, withSection(setStatus(job.text, status, new Date().toISOString()), "Outcome", outcome));
+  writeAtomic(job.path, withSection(setStatus(job.text, status, new Date().toISOString()), "Outcome", outcome));
   return job.path;
 }
 
@@ -189,7 +189,9 @@ export function resume(map, file, note, { claude = claudeCli, waitMs = 30_000 } 
   if (!job.session_id) throw new Error(`${file} has no session_id, so its session cannot be resumed; close it with --reason and start a new job`);
   stopSession(job, claude, waitMs);
   const at = new Date().toISOString();
-  writeFileSync(job.path, withSection(setStatus(job.text, "running", at), `Note ${at}`, note));
+  const fresh = readJob(job.path);
+  if (fresh.status === "closed") throw new Error(`${file} was closed while its session stopped; nothing was resumed`);
+  writeAtomic(job.path, withSection(setStatus(fresh.text, "running", at), `Note ${at}`, note));
   const prompt = `${note.trim()}\n\nThis is the latest ## Note of your job ${job.path}. Go on per ${JOBS_DOC}, section "Job", and end with job.mjs done or stop.`;
   const cwd = job.cwd ?? map.paths[0];
   const warning = launched(job.path, claude, ["--resume", job.session_id, "--bg", "--agent", `tedy:${job.role}`, ...launchArgs(job.role, map, job.permission_mode), prompt], cwd, jobName(map, job.role, job.path), job.session_id);
@@ -202,7 +204,7 @@ export function close(file, reason, { claude = claudeCli, waitMs = 30_000 } = {}
   if (job.status === "running") stop(file, reason);
   const row = job.session_id ? stopSession(job, claude, waitMs) : null;
   if (row) call(claude, ["rm", row.id]);
-  writeFileSync(job.path, setStatus(readFileSync(job.path, "utf8"), "closed", new Date().toISOString()));
+  writeAtomic(job.path, setStatus(readFileSync(job.path, "utf8"), "closed", new Date().toISOString()));
   return job.path;
 }
 
