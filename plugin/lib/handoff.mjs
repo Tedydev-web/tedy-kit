@@ -4,7 +4,7 @@ import { pathToFileURL } from "node:url";
 import { chatLanguage, fill, labels } from "./labels.mjs";
 import { resolveMap } from "./project-map.mjs";
 
-const HEADER = /^(to|from|status|created|title|updated): (.*)$/;
+export const HANDOFF_KEYS = Object.freeze(["to", "from", "status", "created", "title", "updated"]);
 const SECTIONS = ["## User decisions", "## First safe step", "## Sources"];
 
 const outsideFences = (body) => {
@@ -31,10 +31,11 @@ export function render({ to, from, title, body, created }) {
   return `to: ${to}\nfrom: ${from}\nstatus: pending\ncreated: ${created}\ntitle: ${title}\n\n${body.trim()}\n`;
 }
 
-export function parse(text) {
+export function parse(text, keys = HANDOFF_KEYS) {
+  const header = new RegExp(`^(${keys.join("|")}): (.*)$`);
   const fields = {};
   for (const line of text.split("\n")) {
-    const match = line.match(HEADER);
+    const match = line.match(header);
     if (!match) break;
     fields[match[1]] = match[2].trim();
   }

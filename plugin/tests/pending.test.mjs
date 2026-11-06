@@ -260,6 +260,22 @@ test("unpushed work counts commits that sit on no remote, even when the branch t
   assert.ok(gitWaiting(fe).includes("main: 1 commit on no remote"), gitWaiting(fe).join("; "));
 });
 
+test("the publish verbs are exported and the ask rules built from them stay as they were", async () => {
+  const { KIT_PUBLISH_APPLY_VERBS, KIT_PUBLISH_ASK_RULES, KIT_PUBLISH_WRITE_VERBS } = await import("../lib/publish-approval-settings.mjs");
+  assert.deepEqual(KIT_PUBLISH_ASK_RULES, [
+    "Bash(*github-write.mjs*post*)", "Bash(*github-write.mjs*reply*)", "Bash(*github-write.mjs*edit*)", "Bash(*github-write.mjs*minimize*)", "Bash(*github-write.mjs*resolve*)", "Bash(*github-write.mjs*unresolve*)", "Bash(*github-write.mjs*pr-body*)",
+    "Bash(*openproject.mjs*apply*)",
+    "Bash(*openproject.mjs*set*--apply*)", "Bash(*openproject.mjs*comment*--apply*)", "Bash(*openproject.mjs*comment-edit*--apply*)", "Bash(*openproject.mjs*relation*--apply*)", "Bash(*openproject.mjs*relation-delete*--apply*)", "Bash(*openproject.mjs*rollback*--apply*)",
+    "Bash(*figma-comments.mjs*post*)", "Bash(*figma-comments.mjs*reply*)", "Bash(*figma-comments.mjs*delete*)",
+    "Bash(*gdoc-comments.mjs*reply*)", "Bash(*gdoc-comments.mjs*anchor*)", "Bash(*gdoc-comments.mjs*edit*)", "Bash(*gdoc-comments.mjs*delete*)",
+    "Bash(*doc-comment-file.mjs*post*--apply*)",
+  ]);
+  assert.deepEqual(Object.keys(KIT_PUBLISH_WRITE_VERBS), ["github-write.mjs", "openproject.mjs", "figma-comments.mjs", "gdoc-comments.mjs"]);
+  assert.deepEqual(KIT_PUBLISH_WRITE_VERBS["openproject.mjs"], ["apply"]);
+  assert.deepEqual(KIT_PUBLISH_APPLY_VERBS, { "openproject.mjs": ["set", "comment", "comment-edit", "relation", "relation-delete", "rollback"], "doc-comment-file.mjs": ["post"] });
+  assert.ok(Object.isFrozen(KIT_PUBLISH_WRITE_VERBS["github-write.mjs"]) && Object.isFrozen(KIT_PUBLISH_APPLY_VERBS));
+});
+
 test("the same folder reached two ways is listed once", async () => {
   const { symlinkSync } = await import("node:fs");
   const { root, map } = project();

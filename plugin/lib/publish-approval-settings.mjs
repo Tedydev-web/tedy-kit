@@ -5,13 +5,28 @@ import { STATE_DIR } from "./state-dir.mjs";
 
 export const CLAUDE_SETTINGS = process.env.TEDY_CLAUDE_SETTINGS ?? join(homedir(), ".claude", "settings.json");
 
+export const KIT_PUBLISH_WRITE_VERBS = Object.freeze({
+  "github-write.mjs": Object.freeze(["post", "reply", "edit", "minimize", "resolve", "unresolve", "pr-body"]),
+  "openproject.mjs": Object.freeze(["apply"]),
+  "figma-comments.mjs": Object.freeze(["post", "reply", "delete"]),
+  "gdoc-comments.mjs": Object.freeze(["reply", "anchor", "edit", "delete"]),
+});
+
+export const KIT_PUBLISH_APPLY_VERBS = Object.freeze({
+  "openproject.mjs": Object.freeze(["set", "comment", "comment-edit", "relation", "relation-delete", "rollback"]),
+  "doc-comment-file.mjs": Object.freeze(["post"]),
+});
+
+const writeRules = (script) => KIT_PUBLISH_WRITE_VERBS[script].map((verb) => `Bash(*${script}*${verb}*)`);
+const applyRules = (script) => KIT_PUBLISH_APPLY_VERBS[script].map((verb) => `Bash(*${script}*${verb}*--apply*)`);
+
 export const KIT_PUBLISH_ASK_RULES = Object.freeze([
-  ...["post", "reply", "edit", "minimize", "resolve", "unresolve", "pr-body"].map((verb) => `Bash(*github-write.mjs*${verb}*)`),
-  "Bash(*openproject.mjs*apply*)",
-  ...["set", "comment", "comment-edit", "relation", "relation-delete", "rollback"].map((verb) => `Bash(*openproject.mjs*${verb}*--apply*)`),
-  ...["post", "reply", "delete"].map((verb) => `Bash(*figma-comments.mjs*${verb}*)`),
-  ...["reply", "anchor", "edit", "delete"].map((verb) => `Bash(*gdoc-comments.mjs*${verb}*)`),
-  "Bash(*doc-comment-file.mjs*post*--apply*)",
+  ...writeRules("github-write.mjs"),
+  ...writeRules("openproject.mjs"),
+  ...applyRules("openproject.mjs"),
+  ...writeRules("figma-comments.mjs"),
+  ...writeRules("gdoc-comments.mjs"),
+  ...applyRules("doc-comment-file.mjs"),
 ]);
 
 export const stateDenyRules = (state = STATE_DIR) => [`Edit(/${resolve(state, "approvals")}/**)`, `Edit(/${resolve(state, "pr-bodies")}/**)`, `Edit(/${resolve(state, "drafts")}/**)`, `Edit(/${resolve(state, "review-runs")}/**)`];

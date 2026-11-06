@@ -30,6 +30,13 @@ test("a hand-off renders as a pending header plus body, and parses back", () => 
   assert.match(text, /\n\nSave shows a toast without calling the API\.\n$/);
 });
 
+test("parse reads the hand-off keys by default and another header when given its key list", () => {
+  const text = "to: a\nfrom: b\nstatus: pending\ncreated: c\ntitle: t\nupdated: u\n\nbody: x\n";
+  assert.deepEqual(parse(text), { to: "a", from: "b", status: "pending", created: "c", title: "t", updated: "u" });
+  assert.deepEqual(parse("to: a\ndraft-sha: x\ntitle: t\n"), { to: "a" });
+  assert.deepEqual(parse("kind: publish\ndraft-sha: x\ntitle: t\n\nkind: notify\n", ["kind", "draft-sha", "title"]), { kind: "publish", "draft-sha": "x", title: "t" });
+});
+
 test("status moves from pending to accepted to done, keeping one updated line", () => {
   const base = render({ to: "a", from: "b", title: "t", body: "x", created: "c" });
   const accepted = setStatus(base, "accepted", "t1");
