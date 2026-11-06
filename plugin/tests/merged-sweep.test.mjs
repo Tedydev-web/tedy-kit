@@ -145,14 +145,16 @@ test("card blocks quote a plugin path with a space and names with quotes, and st
   const copied = await import(pathToFileURL(join(plugin, "lib", "merged-sweep.mjs")).href);
   const { cardRefusal, readCard } = await import(pathToFileURL(join(plugin, "lib", "pending-cards.mjs")).href);
   const update = (id, to, assign = null) => ({ id, subject: "s", type: "Task", from: "a", to, assign, event: "merged", prs: [] });
-  const card = readCard(`kind: publish\ntitle: S\njob: none\npreview: run\n\n${copied.cardBlocks([update(1, "Won't fix"), update(2, 'Say "done"', "O'Neil")])}`);
+  const odd = `He said "hi" and it's $5 \\ ok`;
+  const card = readCard(`kind: publish\ntitle: S\njob: none\npreview: run\n\n${copied.cardBlocks([update(1, "Won't fix"), update(2, 'Say "done"', "O'Neil"), update(3, odd, "D'Arcy \"DJ\"")])}`);
   assert.equal(cardRefusal(card), null);
   const script = join(plugin, "scripts", "openproject.mjs");
   assert.deepEqual(card.blocks.map((block) => tokenize(block.command)), [
     ["node", script, "set", "1", "--status", "Won't fix"],
     ["node", script, "set", "2", "--status", 'Say "done"', "--assignee", "O'Neil"],
+    ["node", script, "set", "3", "--status", odd, "--assignee", "D'Arcy \"DJ\""],
   ]);
-  assert.throws(() => copied.cardBlocks([update(3, `It's "odd"`)]), /#3: It's "odd" holds both ' and ", so no card command can quote it/);
+  assert.throws(() => copied.cardBlocks([update(4, "Two\nlines")]), /#4: the name holds a line break, so no card command can carry it/);
 });
 
 async function inboxWorld({ sessions }) {

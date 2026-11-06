@@ -50,9 +50,9 @@ const setCommand = (update, script) => `node ${script} set ${update.id} --status
 const OPENPROJECT_SCRIPT = fileURLToPath(new URL("../scripts/openproject.mjs", import.meta.url));
 
 const quoted = (value, id) => {
+  if (/[\r\n]/.test(value)) throw new Error(`#${id}: the name holds a line break, so no card command can carry it; rename it in the tracker or set this work package by hand`);
   if (!/["$`\\]/.test(value)) return `"${value}"`;
-  if (!value.includes("'")) return `'${value}'`;
-  throw new Error(`#${id}: ${value} holds both ' and ", so no card command can quote it; rename it in the tracker or set this work package by hand`);
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
 };
 
 const cardCommand = (update) => `node ${quoted(OPENPROJECT_SCRIPT, update.id)} set ${update.id} --status ${quoted(update.to, update.id)}${update.assign ? ` --assignee ${quoted(update.assign, update.id)}` : ""}`;
