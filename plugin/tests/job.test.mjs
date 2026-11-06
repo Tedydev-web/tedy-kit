@@ -169,6 +169,20 @@ test("a started job whose session the fleet list does not show is reported start
   assert.equal(parse(readFileSync(file, "utf8")).status, "running");
 });
 
+test("a launch that cannot run claude at all leaves the job stopped with the error, like a refused launch", async () => {
+  const { start } = await import("../lib/job.mjs");
+  const w = world();
+  const map = { name: "acme-shop", paths: [w.root], jobs: true };
+  const claude = () => {
+    throw new Error("claude --agent: spawnSync claude ENOENT");
+  };
+  assert.throws(() => start(map, "pm", { title: "Gaps", body: BODY, claude }), /the launch failed, so the job is stopped/);
+  const [file] = w.jobs();
+  const text = readFileSync(file, "utf8");
+  assert.equal(parse(text).status, "stopped");
+  assert.match(text, /\n## Outcome\n\nThe launch failed: claude --agent: spawnSync claude ENOENT\n$/);
+});
+
 test("each role's prompt names its skill, and devops, which has none, names jobs.md without a slash command", () => {
   const w = world();
   const prompt = (role) => tokenize(w.run(["start", role, "--title", "t", "--body-file", w.body, "--dry-run"]).stdout.trim()).at(-1);

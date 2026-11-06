@@ -90,8 +90,16 @@ const jobName = (map, role, file) => `${role} ${map.name} ${basename(file, ".md"
 
 const trustHint = (text, cwd) => (/Workspace not trusted/i.test(text) ? `\nopen \`claude\` once in ${cwd} and accept the trust dialog` : "");
 
+function spawned(claude, args, cwd) {
+  try {
+    return claude(args, cwd);
+  } catch (error) {
+    return { status: 1, stdout: "", stderr: error.message };
+  }
+}
+
 function launched(file, claude, args, cwd, name, previous) {
-  const { status, stdout, stderr } = claude(args, cwd);
+  const { status, stdout, stderr } = spawned(claude, args, cwd);
   if (status !== 0) {
     const text = `${(stderr || stdout).trim()}${trustHint(stderr || stdout, cwd)}`;
     writeFileSync(file, withSection(setStatus(readFileSync(file, "utf8"), "stopped", new Date().toISOString()), "Outcome", `The launch failed: ${text}`));
