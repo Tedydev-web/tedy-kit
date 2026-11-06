@@ -47,11 +47,6 @@ function fleet(claude) {
   return rows;
 }
 
-function call(claude, args, cwd) {
-  const { status, stdout, stderr } = claude(args, cwd);
-  if (status !== 0) throw new Error(`claude ${args.join(" ")} failed: ${(stderr || stdout).trim()}`);
-}
-
 function launchedRow(claude, output, name, previous, since) {
   const short = output.match(/backgrounded\s+·\s+(\S+)\s+·/)?.[1];
   let problem = "its session is not in the list";
@@ -299,9 +294,13 @@ export function close(map, file, reason, { claude = claudeCli, waitMs = 30_000 }
   const row = target.id ? stopSession({ session_id: target.id }, claude, waitMs, target.row, notes) : null;
   if (!target.id && !target.warned) notes.push(`warning: no session id was recorded for ${file}, so nothing was stopped or removed; check claude agents by name ${jobName(map, job.role, job.path)}`);
   if (job.status === "running") stop(file, reason);
-  if (row) call(claude, ["rm", row.id]);
+  const remove = (id) => {
+    const { status, stdout, stderr } = spawned(claude, ["rm", id]);
+    if (status !== 0) notes.push(`warning: claude rm ${id} failed (${(stderr || stdout).trim()}); the session is stopped, so retry with: claude rm ${id}`);
+  };
+  if (row) remove(row.id);
   const listed = target.earlier?.length ? new Set(fleet(claude).map((item) => item.id)) : new Set();
-  for (const id of (target.earlier ?? []).filter((each) => listed.has(each))) call(claude, ["rm", id]);
+  for (const id of (target.earlier ?? []).filter((each) => listed.has(each))) remove(id);
   writeAtomic(job.path, setStatus(readFileSync(job.path, "utf8"), "closed", new Date().toISOString()));
   rmSync(launchRecordPath(job.real), { force: true });
   return [`closed: ${job.path}`, ...notes].join("\n");
