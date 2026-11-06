@@ -21,6 +21,10 @@ test("the Vietnamese pack keeps the labels the menus use today", () => {
   assert.equal(vi["readiness.missing"], "thiếu nặng");
 });
 
+test("every pack has the drop option of the approval inbox", () => {
+  for (const [code, pack] of Object.entries(LABELS)) assert.ok(pack["approve.drop"]?.trim(), code);
+});
+
 test("an unknown language falls back to English, and placeholders are filled", () => {
   assert.equal(labels("fr")["next.header"], "Next step");
   assert.equal(fill(labels("en")["handoff.message"], { from: "PM", title: "Fix toast", path: "/p/h.md" }), "Hand-off from PM: Fix toast. File: /p/h.md. The user approved this hand-off.");

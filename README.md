@@ -159,7 +159,9 @@ Three gaps remain. A `path:line@<branch>` cite of the reviewed repo's own integr
 | `/tedy:dev <task>` or `rebut <review>` | Builds one task (reconcile, branch, verify on the commit, independent review, draft PR) or checks an external review claim by claim before any edit |
 | `/tedy:pm <scope>`, `replies` or `tasks <scope>` | Drafts tracker items and Doc or Figma comments from a gaps ledger, publishes after approval, checks replies |
 | `/tedy:learn [project path]` | Turns repeated corrections into rules, style samples or map facts in your profile |
-| `/tedy:pending [done <file> \| stub <action>]` | Lists what waits on you (hand-offs, drafts in `plans/drafts/`, unpushed branches, draft PRs) and archives a finished draft |
+| `/tedy:pending [approve \| done <file> \| stub <action>]` | Lists what waits on you (inbox cards, hand-offs, drafts in `plans/drafts/`, unpushed branches, draft PRs), approves publish cards in one batch and archives a finished draft |
+
+Inbox: anything that waits on you can be a card in `plans/drafts/`, written with `pending.mjs card`. A `publish` card holds the exact kit publish commands, each with the text it writes; a `question` card holds 2 to 4 options; a `notify` card is a result to read. `/tedy:pending approve` asks one question per command, at most four per call, runs the approved commands in order and archives the card and its draft. A card block that is not exactly one kit publish command, run by its absolute path, is refused, also in a card written by hand. A card whose draft changed since the card was written does not run. A timed-out or unanswered question publishes nothing.
 
 The independent review in `/tedy:review-pr`, `/tedy:dev` and `/tedy:reconcile` runs the `tedy:reviewer` agent on `claude-sonnet-5-5` without your `CLAUDE.md` files (ADR 0014). Its standards lens reads the repository's own `AGENTS.md`, `CLAUDE.md` and lint config. A personal rule from your user `CLAUDE.md` reaches it only when the calling skill passes that rule in the prompt.
 

@@ -31,4 +31,4 @@ Skip the menu only when the user's request already named the next step.
 - Local, reversible choice: take the recommended option and open the next reply by naming the choice taken while the user was away (the user's rules may give the exact words).
 - Publishing under the user's name, push, PR, merge, a scope cut: do nothing; list it as pending at the top of the next reply.
 - Next-step menu: stop with the 80-character summary.
-- In a background session (agent view, `--bg`) or under Remote Control a question never times out and the session waits for the user. Do not ask there for a decision that should not wait: write it as a draft under `plans/drafts/` so `/tedy:pending` lists it, and go on with the work that does not depend on it.
+- In a background session (agent view, `--bg`) or under Remote Control a question never times out and the session waits for the user. Do not ask there for a decision that should not wait: write it as a card (`pending.mjs card question …`, or `card publish …` for a write) so `/tedy:pending` lists it, and go on with the work that does not depend on it.
