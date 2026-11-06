@@ -103,29 +103,32 @@ function repoOf(map, path) {
 
 const isCode = (hit) => hit && !hit.inside.split("/").includes("plans") && !hit.inside.endsWith(".md");
 
-export function classifyAction(input, map, role) {
-  if (!role && !map.sessions?.length && !map.jobs) return null;
+export function classifyActions(input, map, role) {
+  if (!role && !map.sessions?.length && !map.jobs) return [];
   const cwd = input.cwd ?? process.cwd();
   if (EDIT_TOOLS.has(input.tool_name)) {
     const path = resolve(cwd, input.tool_input?.file_path ?? input.tool_input?.notebook_path ?? "");
     const hit = repoOf(map, path);
-    return isCode(hit) ? { kind: "code", repo: hit.repo } : null;
+    return isCode(hit) ? [{ kind: "code", repo: hit.repo }] : [];
   }
+  const actions = [];
   for (const item of bashInputs(input).inputs ?? []) {
     if (item.tool_name !== "Bash") continue;
     for (const { text: segment, dir } of walkCommands(item.tool_input?.command ?? "", item.cwd ?? cwd).parts) {
       const action = classify(segment, dir);
       if (action.kind === "cd") continue;
       const script = SCRIPT_WRITES.find((write) => write.pattern.test(shellWords(segment)));
-      if (script) return { kind: script.kind, repo: null, script: true };
-      if (action.kind === "commit" || action.kind === "push") {
+      if (script) actions.push({ kind: script.kind, repo: null, script: true });
+      else if (action.kind === "commit" || action.kind === "push") {
         const hit = repoOf(map, action.dir);
-        if (hit) return { kind: "code", repo: hit.repo };
+        if (hit) actions.push({ kind: "code", repo: hit.repo });
       }
     }
   }
-  return null;
+  return actions;
 }
+
+export const classifyAction = (input, map, role) => classifyActions(input, map, role)[0] ?? null;
 
 export const roleOf = (map, name) => (map.sessions ?? []).find((session) => session.name === name)?.role ?? null;
 
@@ -181,12 +184,26 @@ export function listSessions() {
 
 export function judge(input, map, list = listSessions) {
   const who = agentRole(input);
-  const action = classifyAction(input, map, who?.role);
-  if (!action) return null;
-  if (who) return { kind: action.kind, role: who.role, session: null, reason: agentReason(who, action, map) };
+  const actions = classifyActions(input, map, who?.role);
+  if (!actions.length) return null;
+  const first = (reasonOf) => {
+    for (const action of actions) {
+      const reason = reasonOf(action);
+      if (reason) return { action, reason };
+    }
+    return { action: actions[0], reason: null };
+  };
+  if (who) {
+    const { action, reason } = first((each) => agentReason(who, each, map));
+    return { kind: action.kind, role: who.role, session: null, reason };
+  }
   const name = map.jobs && !map.sessions?.length ? null : sessionName(input.session_id, list());
-  if (map.jobs && !roleOf(map, name)) return { kind: action.kind, role: "cockpit", session: null, reason: action.script ? null : agentReason({ role: "cockpit" }, action, map) };
-  return { kind: action.kind, role: name && roleOf(map, name), session: name, reason: (name && decide(map, name, action)) || null };
+  if (map.jobs && !roleOf(map, name)) {
+    const { action, reason } = first((each) => (each.script ? null : agentReason({ role: "cockpit" }, each, map)));
+    return { kind: action.kind, role: "cockpit", session: null, reason };
+  }
+  const { action, reason } = first((each) => (name && decide(map, name, each)) || null);
+  return { kind: action.kind, role: name && roleOf(map, name), session: name, reason };
 }
 
 export function run() {

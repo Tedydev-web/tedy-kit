@@ -424,6 +424,25 @@ test("in a map with both jobs and sessions a listed session keeps its legacy res
   assert.equal(list.calls, 2);
 });
 
+test("every segment of a command is judged, so a commit or a forbidden script after an allowed kit write still asks", () => {
+  const chained = shell("node /k/scripts/openproject.mjs comment 1 --body-file b --apply && git -C /w/acme/acme-shop-fe commit -am x");
+  const cockpit = gate.judge({ ...chained, session_id: randomUUID() }, jobsMap, counted());
+  assert.equal(cockpit.kind, "code");
+  assert.match(cockpit.reason, /this is the cockpit of acme-shop; changing or committing product code/);
+  const card = gate.judge({ ...shell("node /k/scripts/github-write.mjs pr-body 3 --body-file b && git -C /w/acme/acme-shop-fe commit -am x"), session_id: randomUUID() }, jobsMap, counted());
+  assert.match(card.reason ?? "", /cockpit of acme-shop/);
+  const pm = gate.judge({ ...chained, ...job("tedy:pm") }, noSessions, counted());
+  assert.equal(pm.kind, "code");
+  assert.match(pm.reason, /this is a pm job \(tedy:pm\); changing or committing product code belongs to the dev role/);
+  const second = gate.judge({ ...shell("git -C /w/acme/acme-shop-fe commit -m x && node /k/scripts/gdoc-comments.mjs reply AAA --body-file b.txt"), ...job("tedy:dev") }, noSessions, counted());
+  assert.equal(second.kind, "doc-figma");
+  assert.match(second.reason, /this is a dev job \(tedy:dev\); Doc or Figma comments belongs to the pm role/);
+  const id = randomUUID();
+  const legacy = gate.judge({ ...shell("node /k/scripts/github-write.mjs post r.md && node /k/scripts/openproject.mjs apply d.json"), session_id: id }, map, counted([{ sessionId: id, name: "Review PR - Shop" }]));
+  assert.equal(legacy.reason, decide(map, "Review PR - Shop", { kind: "tracker", repo: null }));
+  assert.equal(gate.judge({ ...shell("node /k/scripts/github-write.mjs post r.md && git status"), session_id: id }, map, counted([{ sessionId: id, name: "Review PR - Shop" }])).reason, null);
+});
+
 test("only kit script writes are marked as scripts", () => {
   assert.equal(bash("node /k/scripts/github-write.mjs pr-body 744 --body-file b.md").script, true);
   assert.equal(bash("cd acme-shop-fe && git commit -m x").script, undefined);
