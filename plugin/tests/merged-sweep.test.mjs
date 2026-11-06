@@ -194,7 +194,7 @@ async function inboxWorld({ sessions }) {
     const { existsSync, readdirSync } = await import("node:fs");
     return existsSync(join(repo, "plans", sub)) ? readdirSync(join(repo, "plans", sub)).map((name) => join(repo, "plans", sub, name)) : [];
   };
-  return { run, files, state, host: `127.0.0.1_${port}`, close: () => server.close() };
+  return { run, files, repo, state, host: `127.0.0.1_${port}`, close: () => server.close() };
 }
 
 test("--inbox writes one run card with a block per update and no hand-off, moves the mark, and a sweep with nothing new writes no card", async () => {
@@ -220,6 +220,39 @@ test("--inbox writes one run card with a block per update and no hand-off, moves
   } finally {
     world.close();
   }
+});
+
+test("--inbox --job names the job in the card and on every set command, and the card passes the card check", async () => {
+  const { mkdirSync, writeFileSync } = await import("node:fs");
+  const { parse } = await import("../lib/handoff.mjs");
+  const { CARD_KEYS, cardRefusal, readCard } = await import("../lib/pending-cards.mjs");
+  const { tokenize } = await import("../lib/shell-segments.mjs");
+  const world = await inboxWorld({ sessions: [] });
+  try {
+    const { repo } = world;
+    const job = join(repo, "plans", "jobs", "261106-0900-review-sweep.md");
+    mkdirSync(join(repo, "plans", "jobs"), { recursive: true });
+    writeFileSync(job, "to: tedy:review\nfrom: cockpit\nstatus: running\ncreated: 2026-11-06T02:00:00.000Z\ntitle: sweep\n\nbody\n");
+    const out = await world.run(["--inbox", "--job", job]);
+    const [card] = await world.files("drafts");
+    assert.ok(card, out);
+    const text = readFileSync(card, "utf8");
+    assert.equal(parse(text, CARD_KEYS).job, job);
+    const blocks = readCard(text).blocks.map((block) => tokenize(block.command));
+    assert.equal(blocks.length, 2);
+    for (const tokens of blocks) assert.deepEqual(tokens.slice(-2), ["--job", job]);
+    assert.equal(cardRefusal(readCard(text), repo), null);
+  } finally {
+    world.close();
+  }
+});
+
+test("--job without --inbox, or without a file, is refused before the sweep runs", async () => {
+  const { out } = await sweepRun(["--handoff", "--from", "Review - Shop", "--job", "j.md"], false);
+  assert.equal(out.status, 2);
+  assert.match(out.stderr, /--inbox \[--job <job file>\]/);
+  const bare = await sweepRun(["--inbox", "--job"], false);
+  assert.equal(bare.out.status, 2);
 });
 
 test("--handoff on a map without a pm session sends the batch to the inbox with a notice, and with one writes the hand-off as before", async () => {

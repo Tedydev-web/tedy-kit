@@ -55,9 +55,9 @@ const quoted = (value, id) => {
   return `'${value.replaceAll("'", `'"'"'`)}'`;
 };
 
-const cardCommand = (update) => `node ${quoted(OPENPROJECT_SCRIPT, update.id)} set ${update.id} --status ${quoted(update.to, update.id)}${update.assign ? ` --assignee ${quoted(update.assign, update.id)}` : ""}`;
+const cardCommand = (update, job) => `node ${quoted(OPENPROJECT_SCRIPT, update.id)} set ${update.id} --status ${quoted(update.to, update.id)}${update.assign ? ` --assignee ${quoted(update.assign, update.id)}` : ""}${job ? ` --job ${quoted(job, update.id)}` : ""}`;
 
-export const cardBlocks = (updates) => updates.map((update, index) => `### ${index + 1}\n${cardCommand(update)}\n${updateRow(update)}\n`).join("\n");
+export const cardBlocks = (updates, job) => updates.map((update, index) => `### ${index + 1}\n${cardCommand(update, job)}\n${updateRow(update)}\n`).join("\n");
 
 export function handoffBody(updates) {
   const rows = updates.map(updateRow);
@@ -100,10 +100,13 @@ async function main(argv) {
   const flag = (name) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : undefined);
   const handoff = argv.includes("--handoff");
   const from = flag("--from");
-  if (handoff && !from) {
-    console.error('usage: merged-sweep.mjs [--since <ISO time>] [--inbox | --handoff --from "<this session>"]');
+  const jobGiven = argv.includes("--job");
+  const job = flag("--job");
+  if ((handoff && !from) || (jobGiven && (!argv.includes("--inbox") || !job || job.startsWith("--")))) {
+    console.error('usage: merged-sweep.mjs [--since <ISO time>] [--inbox [--job <job file>] | --handoff --from "<this session>"]');
     return 2;
   }
+  if (job && !existsSync(job)) throw new Error(`the job file ${job} does not exist`);
   const resolved = resolveMap(process.cwd());
   if (!resolved) throw new Error(`no project map covers ${process.cwd()}; run /tedy:setup`);
   const { map } = resolved;
@@ -142,7 +145,7 @@ async function main(argv) {
   if (!handoff && !inbox) return 0;
   const title = `Status from PRs: ${updates.length} work package(s)`;
   if (inbox && updates.length) {
-    const path = card(map, "publish", { title, records: updates.map((update) => `op:${client.host}:wp:${update.id}`).join(","), preview: "run", body: cardBlocks(updates) });
+    const path = card(map, "publish", { title, job: job && resolve(job), records: updates.map((update) => `op:${client.host}:wp:${update.id}`).join(","), preview: "run", body: cardBlocks(updates, job && resolve(job)) });
     console.log(`card: ${path}`);
     if (noPm) console.log("notice: no pm session in the map; the batch went to the inbox");
   } else if (updates.length) {
