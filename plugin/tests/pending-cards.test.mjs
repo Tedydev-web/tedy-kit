@@ -66,9 +66,9 @@ test("card refuses an unknown kind, a question with too few or too many options,
     ["ready", `node ${SCRIPTS}/github-write.mjs post $(cat d.md)`, /block 1 is not plain words and quoted text/],
   ];
   const set = `node ${SCRIPTS}/openproject.mjs set 1 --status X`;
-  for (const tail of ["<(touch /tmp/x)", ">(tee /tmp/x)", "&", "; touch /tmp/x", "&& touch /tmp/x", "|| touch /tmp/x", "*.md", "{a,b}", "~/x", '"$HOME"', "\\x", "#c", "2>/dev/null", "<in", "|& cat", "'a' \"b", "--x=`id`"]) refused.push(["run", `${set} ${tail}`, /block 1 is not plain words and quoted text/]);
+  for (const tail of ["<(touch /tmp/x)", ">(tee /tmp/x)", "&", "; touch /tmp/x", "&& touch /tmp/x", "|| touch /tmp/x", "*.md", "{a,b}", "~/x", '"$HOME"', "\\x", "#c", "2>/dev/null", "<in", "|& cat", "'a' \"b", "--x=`id`", "=node", "--assignee =node", "==x"]) refused.push(["run", `${set} ${tail}`, /block 1 is not plain words and quoted text/]);
   for (const [preview, command, message] of refused) assert.throws(() => card(map, "publish", { title: "T", draft, preview, body: `### 1\n${command}\ntext\n` }), message, command);
-  for (const tail of ['--status "Fixed (Dev Done)"', "--assignee 'Hoàng & Lâm'", '--status "Won\'t fix"', "--assignee Hoàng", "--x=a,b:c@d%e+f"]) assert.ok(card(map, "publish", { title: "Plain", preview: "run", body: `### 1\nnode ${SCRIPTS}/openproject.mjs set 1 ${tail}\n` }), tail);
+  for (const tail of ['--status "Fixed (Dev Done)"', "--assignee 'Hoàng & Lâm'", '--status "Won\'t fix"', "--assignee Hoàng", "--x=a,b:c@d%e+f", "--assignee '=node'", "--x==y", "--assignee \"=n\""]) assert.ok(card(map, "publish", { title: "Plain", preview: "run", body: `### 1\nnode ${SCRIPTS}/openproject.mjs set 1 ${tail}\n` }), tail);
   assert.throws(() => card(map, "publish", { title: "T", job: "plans/jobs/261104-0910-review-pr-712.md", draft, preview: "ready", body: ready(draft) }), /block 1 lacks --job 261104-0910-review-pr-712\.md/);
   assert.ok(card(map, "publish", { title: "T", job: "plans/jobs/261104-0910-review-pr-712.md", draft, preview: "ready", body: `### 1\nnode ${SCRIPTS}/github-write.mjs post ${draft} --job 261104-0910-review-pr-712.md\n` }));
   assert.throws(() => card(map, "publish", { title: "T", preview: "ready", body: ready(draft) }), /a preview: ready card needs draft:/);

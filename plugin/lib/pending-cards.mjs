@@ -6,7 +6,7 @@ import { KIT_PUBLISH_APPLY_VERBS, KIT_PUBLISH_WRITE_VERBS } from "./publish-appr
 import { jobFlag } from "./record-lock.mjs";
 import { tokenize } from "./shell-segments.mjs";
 
-const PLAIN_WORD = String.raw`(?:[\p{L}\p{N}\p{M}_@%+=:,./-]|'[^']*'|"[^"$\x60\\]*")+`;
+const PLAIN_WORD = String.raw`(?!=)(?:[\p{L}\p{N}\p{M}_@%+=:,./-]|'[^']*'|"[^"$\x60\\]*")+`;
 const PLAIN_LINE = new RegExp(`^${PLAIN_WORD}(?: ${PLAIN_WORD})*$`, "u");
 
 export const KINDS = Object.freeze(["publish", "question", "notify"]);
@@ -58,7 +58,7 @@ export function readCard(text) {
 
 function blockRefusal(command, { preview, job }, draft) {
   if (!command) return "has no command on its first line";
-  if (!PLAIN_LINE.test(command)) return "is not plain words and quoted text: only letters, digits, _ @ % + = : , . / - outside quotes, '…' and \"…\" without $ ` \\ inside, one space between words (no operator, redirect, substitution, glob, brace, ~, # or <placeholder>)";
+  if (!PLAIN_LINE.test(command)) return "is not plain words and quoted text: only letters, digits, _ @ % + = : , . / - outside quotes, '…' and \"…\" without $ ` \\ inside, one space between words, no word starting with an unquoted = (no operator, redirect, substitution, glob, brace, ~, #, zsh =command or <placeholder>)";
   const tokens = tokenize(command);
   if (tokens[0] !== "node") return "does not start with node";
   const name = basename(tokens[1] ?? "");
