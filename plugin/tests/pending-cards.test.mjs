@@ -93,7 +93,7 @@ test("every block of a ready card names its pinned draft by absolute path, and a
   assert.throws(() => cardCheck(hand, map), /needs draft-sha:/);
 });
 
-test("two card writers at once with one title write two files", async () => {
+test("the card command writes one file per call, also with six calls at once", async () => {
   const { root, map } = project();
   const profile = profileWith({});
   mkdirSync(join(profile, "projects"));
@@ -189,6 +189,26 @@ test("card-start runs only a fully approved card, marks it started, and a starte
   assert.doesNotMatch(text, /To publish|Refused cards/);
   assert.match(text, new RegExp(`^Started, not closed:\n- Two replies \\(started ${fields.started}\\) ${file}$`, "m"));
   assert.equal(done(file, map).length, 2);
+});
+
+test("an answered question is shown as answered, so the skill does not ask it again", () => {
+  const { map } = project();
+  const question = card(map, "question", { title: "Which toast", body: "Which toast text?\n- Short: one line\n- Long: two lines\n" });
+  assert.match(waitingText(map, { offline: true }), new RegExp(`^Questions:\n- Which toast ${question}$`, "m"));
+  cardNote(question, "Short");
+  assert.match(waitingText(map, { offline: true }), new RegExp(`^Questions:\n- Which toast \\(answered: Short\\) ${question}$`, "m"));
+});
+
+test("a card file name taken by a dangling symlink is skipped, never written through", async () => {
+  const { symlinkSync } = await import("node:fs");
+  const { root, map } = project();
+  const target = join(tempDir("tedy-cards-target-"), "planted.md");
+  const { stamp } = await import("../lib/handoff.mjs");
+  const now = Date.now();
+  for (const at of [now, now + 60_000]) symlinkSync(target, join(root, "plans", "drafts", `${stamp(new Date(at))}-notify-pr-opened.md`));
+  const file = card(map, "notify", { title: "PR opened", body: "x" });
+  assert.match(file, /-notify-pr-opened-2\.md$/);
+  assert.ok(!existsSync(target));
 });
 
 test("a card whose job is still running is listed but not offered, and card-check refuses it", () => {
