@@ -302,6 +302,16 @@ test("resume and close act only on what start recorded outside the job file, so 
   assert.deepEqual(w.calls(), []);
 });
 
+test("close --reason on a running job whose session does not stop in time changes nothing in the job file", async () => {
+  const { close } = await import("../lib/job.mjs");
+  const w = world();
+  const file = jobFile(w);
+  const before = readFileSync(file, "utf8");
+  const claude = (args) => ({ status: 0, stdout: args[0] === "agents" ? JSON.stringify([row("aaaa1111", "busy")]) : "", stderr: "" });
+  assert.throws(() => close({ name: "acme-shop", paths: [w.root], jobs: true }, file, "runaway", { claude, waitMs: 50 }), /did not stop within 0\.05 s; nothing was resumed or closed/);
+  assert.equal(readFileSync(file, "utf8"), before);
+});
+
 test("stop and rm get the fleet row's short id, never the full session id", () => {
   const w = world();
   const file = jobFile(w, { status: "done" });

@@ -244,8 +244,8 @@ export function close(map, file, reason, { claude = claudeCli, waitMs = 30_000 }
   const job = trusted(map, file);
   if (job.status === "closed") throw new Error(`${file} is already closed`);
   if (job.status === "running" && !reason) throw new Error(`${file} is still running; give --reason to stop it, or wait for job.mjs done`);
-  if (job.status === "running") stop(file, reason);
   const row = job.record?.session_id ? stopSession(job, claude, waitMs) : null;
+  if (job.status === "running") stop(file, reason);
   if (row) call(claude, ["rm", row.id]);
   writeAtomic(job.path, setStatus(readFileSync(job.path, "utf8"), "closed", new Date().toISOString()));
   return [`closed: ${job.path}`, job.record ? null : `warning: ${file} has no launch record, so no session was stopped or removed; check claude agents by name`].filter(Boolean).join("\n");
