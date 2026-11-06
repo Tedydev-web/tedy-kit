@@ -132,8 +132,27 @@ test("the card body holds one set block per work package, by the absolute plugin
   const { updates } = sweepPlan({ gathered: [entry(wp(1, "Task", "Merged/Code Review"), [pr(1, "merged")]), entry(wp(2, "Bug", "In progress"), [pr(2, "merged")], ["Tester"])], meId: 140, tracker: TRACKER });
   const scripts = new URL("../scripts/", import.meta.url).pathname;
   const body = cardBlocks(updates);
-  assert.equal(body, `### 1\nnode ${scripts}openproject.mjs set 1 --status "Closed"\n- #1 Task 1 (Task, Merged/Code Review → Closed) · merged: shop-fe#1 https://github.com/o/shop-fe/pull/1\n\n### 2\nnode ${scripts}openproject.mjs set 2 --status "Fixed (Dev Done)" --assignee "Tess Ter"\n- #2 Bug 2 (Bug, In progress → Fixed (Dev Done), assign Tess Ter) · merged: shop-fe#2 https://github.com/o/shop-fe/pull/2\n`);
+  assert.equal(body, `### 1\nnode "${scripts}openproject.mjs" set 1 --status "Closed"\n- #1 Task 1 (Task, Merged/Code Review → Closed) · merged: shop-fe#1 https://github.com/o/shop-fe/pull/1\n\n### 2\nnode "${scripts}openproject.mjs" set 2 --status "Fixed (Dev Done)" --assignee "Tess Ter"\n- #2 Bug 2 (Bug, In progress → Fixed (Dev Done), assign Tess Ter) · merged: shop-fe#2 https://github.com/o/shop-fe/pull/2\n`);
   assert.equal(cardRefusal(readCard(`kind: publish\ntitle: Status\njob: none\npreview: run\n\n${body}`)), null);
+});
+
+test("card blocks quote a plugin path with a space and names with quotes, and still pass the card check", async () => {
+  const { cpSync } = await import("node:fs");
+  const { pathToFileURL } = await import("node:url");
+  const { tokenize } = await import("../lib/shell-segments.mjs");
+  const plugin = join(tempDir("tedy-sweep-space-"), "sp ace", "plugin");
+  for (const dir of ["lib", "scripts", "gates", "shared"]) cpSync(new URL(`../${dir}/`, import.meta.url).pathname, join(plugin, dir), { recursive: true });
+  const copied = await import(pathToFileURL(join(plugin, "lib", "merged-sweep.mjs")).href);
+  const { cardRefusal, readCard } = await import(pathToFileURL(join(plugin, "lib", "pending-cards.mjs")).href);
+  const update = (id, to, assign = null) => ({ id, subject: "s", type: "Task", from: "a", to, assign, event: "merged", prs: [] });
+  const card = readCard(`kind: publish\ntitle: S\njob: none\npreview: run\n\n${copied.cardBlocks([update(1, "Won't fix"), update(2, 'Say "done"', "O'Neil")])}`);
+  assert.equal(cardRefusal(card), null);
+  const script = join(plugin, "scripts", "openproject.mjs");
+  assert.deepEqual(card.blocks.map((block) => tokenize(block.command)), [
+    ["node", script, "set", "1", "--status", "Won't fix"],
+    ["node", script, "set", "2", "--status", 'Say "done"', "--assignee", "O'Neil"],
+  ]);
+  assert.throws(() => copied.cardBlocks([update(3, `It's "odd"`)]), /#3: It's "odd" holds both ' and ", so no card command can quote it/);
 });
 
 async function inboxWorld({ sessions }) {
@@ -188,7 +207,7 @@ test("--inbox writes one run card with a block per update and no hand-off, moves
     const text = readFileSync(cards[0], "utf8");
     const fields = parse(text, CARD_KEYS);
     assert.deepEqual([fields.kind, fields.preview, fields.job, fields.records, fields.title], ["publish", "run", "none", `op:${world.host}:wp:21,op:${world.host}:wp:22`, "Status from PRs: 2 work package(s)"]);
-    assert.deepEqual(readCard(text).blocks.map((block) => block.command.replace(/^node \S+\/openproject\.mjs /, "")), ['set 21 --status "Closed"', 'set 22 --status "Closed"']);
+    assert.deepEqual(readCard(text).blocks.map((block) => block.command.replace(/^node "[^"]+\/openproject\.mjs" /, "")), ['set 21 --status "Closed"', 'set 22 --status "Closed"']);
     assert.deepEqual(await world.files("reports"), []);
     const mark = readSince("shop", world.state);
     assert.notEqual(mark, null);
