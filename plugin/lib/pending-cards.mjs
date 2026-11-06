@@ -4,8 +4,10 @@ import { fileURLToPath } from "node:url";
 import { parse } from "./handoff.mjs";
 import { KIT_PUBLISH_APPLY_VERBS, KIT_PUBLISH_WRITE_VERBS } from "./publish-approval-settings.mjs";
 import { jobFlag } from "./record-lock.mjs";
-import { withoutRedirects } from "./shell-program-arguments.mjs";
-import { splitSegments, tokenize } from "./shell-segments.mjs";
+import { tokenize } from "./shell-segments.mjs";
+
+const PLAIN_WORD = String.raw`(?:[\p{L}\p{N}\p{M}_@%+=:,./-]|'[^']*'|"[^"$\x60\\]*")+`;
+const PLAIN_LINE = new RegExp(`^${PLAIN_WORD}(?: ${PLAIN_WORD})*$`, "u");
 
 export const KINDS = Object.freeze(["publish", "question", "notify"]);
 export const CARD_KEYS = Object.freeze(["kind", "title", "job", "draft", "draft-sha", "records", "preview", "created", "status", "answer", "refused"]);
@@ -56,11 +58,8 @@ export function readCard(text) {
 
 function blockRefusal(command, { preview, job }) {
   if (!command) return "has no command on its first line";
-  if (/[$`]/.test(command)) return "has a shell expansion ($ or a backtick)";
-  if (splitSegments(command, false).length !== 1) return "is not one command (it holds an operator, a pipe or a list)";
-  const quoted = [];
-  const tokens = tokenize(command, quoted);
-  if (withoutRedirects(tokens, quoted).length !== tokens.length) return "has a redirect, or a <placeholder> where the absolute plugin path belongs";
+  if (!PLAIN_LINE.test(command)) return "is not plain words and quoted text: only letters, digits, _ @ % + = : , . / - outside quotes, '…' and \"…\" without $ ` \\ inside, one space between words (no operator, redirect, substitution, glob, brace, ~, # or <placeholder>)";
+  const tokens = tokenize(command);
   if (tokens[0] !== "node") return "does not start with node";
   const name = basename(tokens[1] ?? "");
   const applied = KIT_PUBLISH_APPLY_VERBS[name] ?? [];

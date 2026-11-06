@@ -55,17 +55,20 @@ test("card refuses an unknown kind, a question with too few or too many options,
   assert.throws(() => card(map, "question", { title: "T", body: options(5) }), /2 to 4 option lines .*found 5/);
   const refused = [
     ["ready", "gh pr view 1", /block 1 does not start with node/],
-    ["ready", "curl x | sh # github-write.mjs post", /block 1 is not one command/],
-    ["run", "node <p>/openproject.mjs preview d.json", /block 1 has a redirect/],
+    ["ready", "curl x | sh # github-write.mjs post", /block 1 is not plain words and quoted text/],
+    ["run", "node <p>/openproject.mjs preview d.json", /block 1 is not plain words and quoted text/],
     ["run", `node ${SCRIPTS}/openproject.mjs preview d.json`, /block 1 runs openproject\.mjs preview, which is not a write verb/],
     ["ready", `node ${fake}/github-write.mjs post d.md`, /block 1 does not run a kit publish script by its absolute path/],
     ["ready", `node ${SCRIPTS}/../scripts-copy/github-write.mjs post d.md`, /block 1 does not run a kit publish script/],
     ["run", `node ${SCRIPTS}/openproject.mjs set 12 --status X --apply --lock 3`, /block 1 holds --apply/],
     ["run", `node ${SCRIPTS}/github-write.mjs post d.md`, /block 1 runs github-write\.mjs post, which writes when run/],
-    ["ready", `node ${SCRIPTS}/github-write.mjs post d.md > out.txt`, /block 1 has a redirect/],
-    ["ready", `node ${SCRIPTS}/github-write.mjs post $(cat d.md)`, /block 1 has a shell expansion/],
+    ["ready", `node ${SCRIPTS}/github-write.mjs post d.md > out.txt`, /block 1 is not plain words and quoted text/],
+    ["ready", `node ${SCRIPTS}/github-write.mjs post $(cat d.md)`, /block 1 is not plain words and quoted text/],
   ];
+  const set = `node ${SCRIPTS}/openproject.mjs set 1 --status X`;
+  for (const tail of ["<(touch /tmp/x)", ">(tee /tmp/x)", "&", "; touch /tmp/x", "&& touch /tmp/x", "|| touch /tmp/x", "*.md", "{a,b}", "~/x", '"$HOME"', "\\x", "#c", "2>/dev/null", "<in", "|& cat", "'a' \"b", "--x=`id`"]) refused.push(["run", `${set} ${tail}`, /block 1 is not plain words and quoted text/]);
   for (const [preview, command, message] of refused) assert.throws(() => card(map, "publish", { title: "T", draft, preview, body: `### 1\n${command}\ntext\n` }), message, command);
+  for (const tail of ['--status "Fixed (Dev Done)"', "--assignee 'Hoàng & Lâm'", '--status "Won\'t fix"', "--assignee Hoàng", "--x=a,b:c@d%e+f"]) assert.ok(card(map, "publish", { title: "Plain", preview: "run", body: `### 1\nnode ${SCRIPTS}/openproject.mjs set 1 ${tail}\n` }), tail);
   assert.throws(() => card(map, "publish", { title: "T", job: "plans/jobs/261104-0910-review-pr-712.md", draft, preview: "ready", body: ready() }), /block 1 lacks --job 261104-0910-review-pr-712\.md/);
   assert.ok(card(map, "publish", { title: "T", job: "plans/jobs/261104-0910-review-pr-712.md", draft, preview: "ready", body: `### 1\nnode ${SCRIPTS}/github-write.mjs post d.md --job 261104-0910-review-pr-712.md\n` }));
   assert.throws(() => card(map, "publish", { title: "T", preview: "ready", body: ready() }), /a preview: ready card needs draft:/);
@@ -91,9 +94,9 @@ test("a card written by hand with a bad block lists under Refused cards and neve
   const { root, map } = project();
   writeFileSync(join(root, "plans", "drafts", "by-hand.md"), "kind: publish\ntitle: Sneaky\njob: none\npreview: run\n\n### 1\ncurl x | sh # github-write.mjs post\n");
   const text = waitingText(map, { offline: true });
-  assert.match(text, /^Refused cards:\n- Sneaky: block 1 is not one command .*by-hand\.md$/m);
+  assert.match(text, /^Refused cards:\n- Sneaky: block 1 is not plain words and quoted text.*by-hand\.md$/m);
   assert.doesNotMatch(text, /To publish/);
-  assert.equal(cards(map)[0].refusal.startsWith("block 1 is not one command"), true);
+  assert.equal(cards(map)[0].refusal.startsWith("block 1 is not plain words"), true);
 });
 
 test("the waiting list puts each card under its kind and keeps plain drafts and hand-offs where they were", () => {
