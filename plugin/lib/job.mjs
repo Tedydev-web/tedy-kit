@@ -261,14 +261,15 @@ export function resume(map, file, note, { claude = claudeCli, waitMs = 30_000 } 
   if (!String(note ?? "").trim()) throw new Error("the note is empty");
   if (!job.record) throw new Error(`${file} has no launch record, so it was not started by job.mjs start here; close it and start a new job`);
   if (!job.session_id) throw new Error(`${file} has no session_id, so its session cannot be resumed; close it with --reason and start a new job`);
-  stopSession(job, claude, waitMs);
+  const before = stopSession(job, claude, waitMs);
   const at = new Date().toISOString();
   const fresh = readJob(job.path);
   if (fresh.status === "closed") throw new Error(`${file} was closed while its session stopped; nothing was resumed`);
   writeAtomic(job.path, withSection(setStatus(fresh.text, "running", at), `Note ${at}`, note));
   const prompt = `${note.trim()}\n\nThis is the latest ## Note of your job ${job.path}. Go on per ${JOBS_DOC}, section "Job", and end with job.mjs done or stop.`;
   const { role, cwd, permission_mode: mode } = job.record;
-  const warning = launched(job.path, claude, ["--resume", job.session_id, "--bg", "--agent", `tedy:${role}`, ...launchArgs(role, map, mode), prompt], cwd, jobName(map, role, job.path), job.session_id, { role, cwd, permission_mode: mode });
+  const earlier = [...(job.record.earlier ?? []), ...(before ? [before.id] : [])];
+  const warning = launched(job.path, claude, ["--resume", job.session_id, "--bg", "--agent", `tedy:${role}`, ...launchArgs(role, map, mode), prompt], cwd, jobName(map, role, job.path), job.session_id, { role, cwd, permission_mode: mode, earlier });
   return [`resumed: ${job.path}`, warning].filter(Boolean).join("\n");
 }
 
@@ -281,7 +282,7 @@ function sessionToClose(map, job, file, claude, notes) {
   }
   if (record) {
     notes.push(...differences(file, job, record).map((line) => `warning: ${line}; acting on the record`));
-    return { id: record.session_id, row: undefined };
+    return { id: record.session_id, row: undefined, earlier: record.earlier ?? [] };
   }
   const row = job.session_id && fleet(claude).find((item) => item.sessionId === job.session_id);
   const hint = row ? `; if session ${row.id} is this job's, run: claude stop ${row.id}, then claude rm ${row.id}` : job.session_id ? `; its session_id ${job.session_id} is not in claude agents --json --all` : `; check claude agents by name ${jobName(map, job.role, job.path)}`;
@@ -299,6 +300,8 @@ export function close(map, file, reason, { claude = claudeCli, waitMs = 30_000 }
   if (!target.id && !target.warned) notes.push(`warning: no session id was recorded for ${file}, so nothing was stopped or removed; check claude agents by name ${jobName(map, job.role, job.path)}`);
   if (job.status === "running") stop(file, reason);
   if (row) call(claude, ["rm", row.id]);
+  const listed = target.earlier?.length ? new Set(fleet(claude).map((item) => item.id)) : new Set();
+  for (const id of (target.earlier ?? []).filter((each) => listed.has(each))) call(claude, ["rm", id]);
   writeAtomic(job.path, setStatus(readFileSync(job.path, "utf8"), "closed", new Date().toISOString()));
   rmSync(launchRecordPath(job.real), { force: true });
   return [`closed: ${job.path}`, ...notes].join("\n");

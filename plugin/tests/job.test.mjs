@@ -351,7 +351,7 @@ test("close is the kill switch: it stops the recorded session even when the job 
   const closeNew = halfWritten.run(["close", resumed, "--reason", "half written"], { fx: { agents: [[row("aaaa1111", "stopped"), row("gggg7777", "busy")], [row("aaaa1111", "stopped"), row("gggg7777", "stopped")]] } });
   assert.equal(closeNew.status, 0, closeNew.stderr);
   assert.match(closeNew.stdout, /acting on the record/);
-  assert.deepEqual(stops(halfWritten), [["stop", "gggg7777"], ["rm", "gggg7777"]]);
+  assert.deepEqual(stops(halfWritten), [["stop", "gggg7777"], ["rm", "gggg7777"], ["rm", "aaaa1111"]]);
 
   const noState = world();
   const lost = jobFile(noState, { status: "done" });
@@ -473,7 +473,7 @@ test("done refuses an empty outcome and otherwise appends it, stop records the r
   assert.deepEqual(w.calls(), []);
 });
 
-test("resume stops the session, waits for the stop, then resumes it by its full id with the same settings, and records the new id and the note", () => {
+test("resume stops the session, waits for the stop, then resumes it by its full id with the same settings, records the new id and the note, and close later removes the pre-resume session too", async () => {
   const w = world();
   const file = jobFile(w, { status: "done", mode: "default" });
   const note = join(w.root, "note.md");
@@ -495,6 +495,12 @@ test("resume stops the session, waits for the stop, then resumes it by its full 
   const text = readFileSync(file, "utf8");
   assert.equal(parse(text, JOB_KEYS).session_id, row("dddd4444").sessionId);
   assert.match(text, /\n## Note \d{4}-\d{2}-\d{2}T[\d:.]+Z\n\nAlso add the line world\.\n$/);
+  const { launchRecordPath } = await import("../lib/job.mjs");
+  assert.deepEqual(JSON.parse(readFileSync(launchRecordPath(file, w.state), "utf8")).earlier, ["aaaa1111"]);
+  writeFileSync(join(w.root, "claude.log"), "");
+  const closed = w.run(["close", file, "--reason", "done with it"], { fx: { agents: [[row("aaaa1111", "done"), row("dddd4444", "busy")], [row("aaaa1111", "done"), row("dddd4444", "stopped")], [row("aaaa1111", "done"), row("dddd4444", "stopped")]] } });
+  assert.equal(closed.status, 0, closed.stderr);
+  assert.deepEqual(w.calls().filter((call) => call.args[0] === "stop" || call.args[0] === "rm").map((call) => call.args), [["stop", "dddd4444"], ["rm", "dddd4444"], ["rm", "aaaa1111"]]);
 });
 
 test("resume keeps what the job wrote while its stop was awaited, and every job-file write replaces the file instead of truncating it", async () => {
