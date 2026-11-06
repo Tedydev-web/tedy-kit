@@ -51,14 +51,15 @@ function call(claude, args, cwd) {
   if (status !== 0) throw new Error(`claude ${args.join(" ")} failed: ${(stderr || stdout).trim()}`);
 }
 
-function launchedRow(claude, output, name, previous) {
+function launchedRow(claude, output, name, previous, since) {
   const short = output.match(/backgrounded\s+·\s+(\S+)\s+·/)?.[1];
   let problem = "its session is not in the list";
   for (let tries = 0; tries < 10; tries += 1) {
     try {
-      const rows = fleet(claude).filter((item) => item.sessionId !== previous);
-      const found = (short && rows.find((item) => item.id === short || item.sessionId?.startsWith(short))) || rows.filter((item) => item.name === name).sort((a, b) => String(b.startedAt).localeCompare(String(a.startedAt)))[0];
-      if (found?.sessionId) return { found };
+      const rows = fleet(claude).filter((item) => item.sessionId && item.sessionId !== previous);
+      const matches = short ? rows.filter((item) => item.id === short || item.sessionId.startsWith(short)) : rows.filter((item) => item.name === name && Number(item.startedAt) >= since);
+      if (matches.length === 1) return { found: matches[0] };
+      if (matches.length > 1) problem = short ? `${matches.length} sessions match the short id ${short}` : `${matches.length} sessions named ${name} started after the launch`;
     } catch (error) {
       problem = error.message;
     }
@@ -136,6 +137,7 @@ function trusted(map, file) {
 }
 
 function launched(file, claude, args, cwd, name, previous, launch) {
+  const since = Date.now();
   const { status, stdout, stderr } = spawned(claude, args, cwd);
   if (status !== 0) {
     const text = `${(stderr || stdout).trim()}${trustHint(stderr || stdout, cwd)}`;
@@ -143,7 +145,7 @@ function launched(file, claude, args, cwd, name, previous, launch) {
     console.error(text);
     throw new Error(`the launch failed, so the job is stopped: ${file}`);
   }
-  const { found, problem } = launchedRow(claude, `${stdout}\n${stderr}`, name, previous);
+  const { found, problem } = launchedRow(claude, `${stdout}\n${stderr}`, name, previous, since);
   const text = readFileSync(file, "utf8");
   writeAtomic(file, found ? setKey(text, "session_id", found.sessionId) : withoutKey(text, "session_id"));
   recordLaunch(file, { ...launch, session_id: found?.sessionId });

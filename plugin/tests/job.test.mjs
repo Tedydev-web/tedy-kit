@@ -193,6 +193,30 @@ test("jobs.md has the Job section every prompt and job card names, and the skill
   }
 });
 
+test("a launch binds only to its own short id, and to a name only for a session started after the launch", async () => {
+  const { start } = await import("../lib/job.mjs");
+  const w = world();
+  const map = { name: "acme-shop", paths: [w.root], jobs: true };
+  const old = { ...row("aaaa1111", "done"), name: "dev acme-shop add-hello", startedAt: Date.now() - 86_400_000 };
+  const fresh = (id) => ({ ...row(id, "busy"), name: "dev acme-shop add-hello", startedAt: Date.now() });
+  const runner = (launchLine, lists) => {
+    let polls = 0;
+    return (args) => {
+      if (args.includes("--bg")) return { status: 0, stdout: "", stderr: launchLine };
+      if (args[0] === "agents") return { status: 0, stdout: JSON.stringify(lists[Math.min(polls++, lists.length - 1)]()), stderr: "" };
+      return { status: 0, stdout: "", stderr: "" };
+    };
+  };
+  const sessionOf = (out) => parse(readFileSync(out.split("\n")[0].split(" ").at(-1), "utf8"), JOB_KEYS).session_id;
+  const byShort = start(map, "dev", { title: "Add hello", body: BODY, claude: runner("backgrounded · bbbb2222 · dev acme-shop add-hello\n", [() => [old], () => [old, fresh("bbbb2222")]]) });
+  assert.equal(sessionOf(byShort), row("bbbb2222").sessionId);
+  const byName = start(map, "dev", { title: "Add hello", body: BODY, claude: runner("launched\n", [() => [old], () => [old, { ...fresh("cccc3333"), name: "dev acme-shop add-hello-2" }]]) });
+  assert.equal(sessionOf(byName), row("cccc3333").sessionId);
+  const twice = start(map, "dev", { title: "Add hello", body: BODY, claude: runner("launched\n", [() => [old, { ...fresh("dddd4444"), name: "dev acme-shop add-hello-3" }, { ...fresh("eeee5555"), name: "dev acme-shop add-hello-3" }]]) });
+  assert.match(twice, /warning: .*2 sessions named dev acme-shop add-hello-3 started after the launch/);
+  assert.equal(sessionOf(twice), undefined);
+});
+
 test("each role's prompt names its skill, and devops, which has none, names jobs.md without a slash command", () => {
   const w = world();
   const prompt = (role) => tokenize(w.run(["start", role, "--title", "t", "--body-file", w.body, "--dry-run"]).stdout.trim()).at(-1);
