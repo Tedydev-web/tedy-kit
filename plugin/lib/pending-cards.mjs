@@ -68,6 +68,9 @@ function blockRefusal(command, { preview, job }, draft) {
   if (!verbs.includes(tokens[2])) return `runs ${name} ${tokens[2] ?? "with no verb"}, which is not a write verb (${verbs.join(", ")})`;
   if (preview === "run" && tokens.some((token) => token === "--apply" || token.startsWith("--apply="))) return "holds --apply in a run block, which the cockpit runs before it asks";
   if (preview === "run" && !applied.includes(tokens[2])) return `runs ${name} ${tokens[2]}, which writes when run, so it cannot be a run block`;
+  const flags = tokens.slice(3).filter((token) => token.startsWith("--")).map((token) => token.split("=")[0]);
+  const repeated = flags.find((flag, index) => flags.indexOf(flag) !== index);
+  if (repeated) return `repeats ${repeated}, and the script reads only one of them`;
   if (job !== "none") {
     let given;
     try {
@@ -77,12 +80,35 @@ function blockRefusal(command, { preview, job }, draft) {
     }
     if (!given || basename(given) !== basename(job)) return `lacks --job ${basename(job)}`;
   }
-  const named = (token) => {
-    const path = token.startsWith("--") && token.includes("=") ? token.slice(token.indexOf("=") + 1) : token;
-    return isAbsolute(path) && realOrNull(path) === draft.real;
-  };
-  if (draft && !tokens.slice(3).some(named)) return `does not name its draft ${draft.path} by its absolute path, so draft-sha: would pin a file it does not read`;
-  return null;
+  return draft ? draftRefusal(tokens, name, draft) : null;
+}
+
+const AFTER_VERB = "the file named right after the verb";
+
+const FILE_OPERANDS = Object.freeze({
+  "github-write.mjs": { post: AFTER_VERB, edit: "--body-file", reply: "--body-file", "pr-body": "--body-file" },
+  "openproject.mjs": { apply: AFTER_VERB, comment: "--body-file", "comment-edit": "--body-file" },
+  "figma-comments.mjs": { post: "--body-file", reply: "--body-file" },
+  "gdoc-comments.mjs": { reply: "--body-file", anchor: "--body-file", edit: "--body-file" },
+  "doc-comment-file.mjs": { post: AFTER_VERB },
+});
+
+const OTHER_FILE_FLAGS = Object.freeze({ "doc-comment-file.mjs": ["--html"] });
+
+function draftRefusal(tokens, name, draft) {
+  const verb = tokens[2];
+  const operand = FILE_OPERANDS[name]?.[verb];
+  const words = tokens.map((token, index) => {
+    const glued = token.startsWith("--") && token.includes("=");
+    const owner = glued ? token.split("=")[0] : tokens[index - 1]?.startsWith("--") && !tokens[index - 1].includes("=") ? tokens[index - 1] : null;
+    return { index, owner, value: glued ? token.slice(token.indexOf("=") + 1) : token };
+  }).slice(3);
+  const read = operand === AFTER_VERB ? words.find((word) => word.index === 3 && !word.value.startsWith("--")) : words.find((word) => word.owner === operand);
+  if (!operand) return `does not read its draft ${draft.path}: ${name} ${verb} reads no file`;
+  if (!read || !isAbsolute(read.value) || realOrNull(read.value) !== draft.real) return `does not read its draft ${draft.path}: ${name} ${verb} reads ${operand === AFTER_VERB ? operand : `the file named by ${operand}`}, which must be the draft by its absolute path`;
+  const skipped = ["--job", ...(OTHER_FILE_FLAGS[name] ?? [])];
+  const second = words.find((word) => word !== read && !skipped.includes(word.owner) && isAbsolute(word.value) && realOrNull(word.value));
+  return second ? `names a second file ${second.value}, which draft-sha: does not pin` : null;
 }
 
 export function cardRefusal(card, root = process.cwd()) {

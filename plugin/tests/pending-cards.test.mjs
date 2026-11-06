@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
 import { parse } from "../lib/handoff.mjs";
@@ -82,15 +82,58 @@ test("every block of a ready card names its pinned draft by absolute path, and a
   const other = join(root, "plans", "drafts", "b.md");
   writeFileSync(other, "Another text.\n");
   const post = (file) => `node ${SCRIPTS}/github-write.mjs post ${file} --repo o/r`;
-  assert.throws(() => card(map, "publish", { title: "T", draft, preview: "ready", body: `### 1\n${post(other)}\n` }), new RegExp(`block 1 does not name its draft ${draft} by its absolute path`));
-  assert.throws(() => card(map, "publish", { title: "T", draft, preview: "ready", body: `### 1\n${post(draft)}\n\n### 2\n${post(other)}\n` }), /block 2 does not name its draft/);
-  assert.throws(() => card(map, "publish", { title: "T", draft, preview: "ready", body: "### 1\nnode " + SCRIPTS + "/github-write.mjs post plans/drafts/review-712.md\n" }), /block 1 does not name its draft/);
+  assert.throws(() => card(map, "publish", { title: "T", draft, preview: "ready", body: `### 1\n${post(other)}\n` }), new RegExp(`block 1 does not read its draft ${draft}: github-write\\.mjs post reads the file named right after the verb`));
+  assert.throws(() => card(map, "publish", { title: "T", draft, preview: "ready", body: `### 1\n${post(draft)}\n\n### 2\n${post(other)}\n` }), /block 2 does not read its draft/);
+  assert.throws(() => card(map, "publish", { title: "T", draft, preview: "ready", body: "### 1\nnode " + SCRIPTS + "/github-write.mjs post plans/drafts/review-712.md\n" }), /block 1 does not read its draft .*which must be the draft by its absolute path/);
   assert.ok(card(map, "publish", { title: "T", draft, preview: "ready", body: `### 1\nnode ${SCRIPTS}/github-write.mjs reply 712 99 --body-file=${draft} --repo o/r\n` }));
   assert.ok(card(map, "publish", { title: "T", preview: "run", body: `### 1\nnode ${SCRIPTS}/openproject.mjs comment 12 --body-file ${other}\n` }));
   const hand = join(root, "plans", "drafts", "by-hand.md");
   writeFileSync(hand, `kind: publish\ntitle: No pin\njob: none\ndraft: ${draft}\npreview: ready\n\n### 1\n${post(draft)}\n`);
   assert.match(waitingText(map, { offline: true }), /^Refused cards:\n- No pin: a preview: ready card needs draft-sha:.*by-hand\.md$/m);
   assert.throws(() => cardCheck(hand, map), /needs draft-sha:/);
+});
+
+test("a ready block reads its draft through the verb's own file operand, once, and names no second file", () => {
+  const { root, draft, map } = project();
+  const other = join(root, "plans", "drafts", "b.md");
+  writeFileSync(other, "Another text.\n");
+  const gw = `node ${SCRIPTS}/github-write.mjs`;
+  const make = (command) => () => card(map, "publish", { title: "T", draft, preview: "ready", body: `### 1\n${command}\n` });
+  for (const [command, message] of [
+    [`${gw} reply 712 99 --body-file ${draft} --body-file ${other} --repo o/r`, /block 1 repeats --body-file/],
+    [`${gw} reply 712 99 --body-file=${draft} --body-file ${other} --repo o/r`, /block 1 repeats --body-file/],
+    [`${gw} post ${other} ${draft} --repo o/r`, new RegExp(`block 1 does not read its draft ${draft}: github-write\\.mjs post reads the file named right after the verb`)],
+    [`${gw} reply 712 99 --body-file ${other} --title ${draft} --repo o/r`, /block 1 does not read its draft .*: github-write\.mjs reply reads the file named by --body-file/],
+    [`${gw} post ${draft} ${other} --repo o/r`, new RegExp(`block 1 names a second file ${other}`)],
+    [`${gw} reply 712 99 --body-file ${draft} --title ${draft}`, /block 1 names a second file/],
+    [`${gw} resolve PRRT_1`, /block 1 does not read its draft .*: github-write\.mjs resolve reads no file/],
+    [`node ${SCRIPTS}/openproject.mjs set 1 --status X --status Y`, /block 1 repeats --status/],
+  ]) assert.throws(make(command), message, command);
+  for (const command of [
+    `${gw} post ${draft} --repo o/r`,
+    `${gw} reply 712 99 --body-file ${draft} --repo o/r`,
+    `${gw} pr-body 712 --body-file=${draft} --repo o/r`,
+    `node ${SCRIPTS}/openproject.mjs comment 12 --body-file ${draft} --apply`,
+    `node ${SCRIPTS}/figma-comments.mjs reply 9 --body-file ${draft} --file KEY`,
+    `node ${SCRIPTS}/gdoc-comments.mjs anchor --tab t.1 --quote 'a b' --body-file ${draft} --doc D`,
+    `node ${SCRIPTS}/doc-comment-file.mjs post ${draft} --html ${other} --apply --doc D`,
+  ]) assert.ok(make(command)(), command);
+  const relativeDraft = relative(process.cwd(), draft);
+  assert.throws(make(`${gw} post ${relativeDraft} --repo o/r`), /block 1 does not read its draft .* by its absolute path/);
+});
+
+test("a hand-written card resolves a relative draft: against the project, and a card whose draft is gone is refused", () => {
+  const { root, draft, map } = project();
+  const post = `node ${SCRIPTS}/github-write.mjs post ${draft} --repo o/r`;
+  const relativeCard = join(root, "plans", "drafts", "by-hand-relative.md");
+  writeFileSync(relativeCard, `kind: publish\ntitle: Relative\njob: none\ndraft: plans/drafts/review-712.md\ndraft-sha: ${sha(draft)}\npreview: ready\n\n### 1\n${post}\n`);
+  assert.equal(cardCheck(relativeCard, map), 1);
+  assert.match(waitingText(map, { offline: true }), /^To publish:\n- Relative \(ready, 1 command\) /m);
+  const gone = join(root, "plans", "drafts", "gone.md");
+  const goneCard = join(root, "plans", "drafts", "by-hand-gone.md");
+  writeFileSync(goneCard, `kind: publish\ntitle: Gone\njob: none\ndraft: ${gone}\ndraft-sha: ${sha(draft)}\npreview: ready\n\n### 1\nnode ${SCRIPTS}/github-write.mjs post ${gone} --repo o/r\n`);
+  assert.match(waitingText(map, { offline: true }), new RegExp(`^- Gone: its draft ${gone} does not exist `, "m"));
+  assert.throws(() => cardCheck(goneCard, map), /its draft .* does not exist/);
 });
 
 test("the card command writes one file per call, also with six calls at once", async () => {
