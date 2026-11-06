@@ -8,7 +8,7 @@ import { test } from "node:test";
 import { promisify } from "node:util";
 import { parse } from "../lib/handoff.mjs";
 import { CARD_KEYS } from "../lib/pending-cards.mjs";
-import { card, cardCheck, cardNote, cards, done, waitingText } from "../lib/pending.mjs";
+import { card, cardCheck, cardNote, cards, cardStart, done, waitingText } from "../lib/pending.mjs";
 import { profileWith, tempDir } from "./temp-dir-for-tests.mjs";
 
 const SCRIPTS = new URL("../scripts/", import.meta.url).pathname.replace(/\/$/, "");
@@ -169,6 +169,26 @@ test("card-note writes answers and refusals into the header, a refused card is n
   assert.throws(() => done(first, map), /is not a file/);
   assert.throws(() => cardNote(first, "late"), /not a card file|no such file|ENOENT/);
   assert.throws(() => cardNote(join(root, "plans", "drafts", "review-712.md"), "x"), /not a card file/);
+});
+
+test("card-start runs only a fully approved card, marks it started, and a started card is never offered or checked again", () => {
+  const { draft, map } = project();
+  const post = `node ${SCRIPTS}/github-write.mjs reply 712 99 --body-file ${draft} --repo o/r`;
+  const file = card(map, "publish", { title: "Two replies", draft, preview: "ready", body: `### 1\n${post}\n\n### 2\n${post}\n` });
+  assert.throws(() => cardStart(file, map, ["1"]), /approval covers block\(s\) 1 of 1, 2; a card runs only when every block was approved/);
+  assert.throws(() => cardStart(file, map, []), /approval covers block\(s\) none of 1, 2/);
+  assert.equal(parse(readFileSync(file, "utf8"), CARD_KEYS).status, undefined);
+  assert.equal(cardStart(file, map, ["2", "1"]), 2);
+  const fields = parse(readFileSync(file, "utf8"), CARD_KEYS);
+  assert.equal(fields.status, "started");
+  assert.match(fields.started, /^\d{4}-\d\d-\d\dT/);
+  assert.ok(readFileSync(file, "utf8").endsWith(`\n\n### 1\n${post}\n\n### 2\n${post}\n`));
+  assert.throws(() => cardCheck(file, map), /started at .*: its commands may already have written/);
+  assert.throws(() => cardStart(file, map, ["1", "2"]), /started at /);
+  const text = waitingText(map, { offline: true });
+  assert.doesNotMatch(text, /To publish|Refused cards/);
+  assert.match(text, new RegExp(`^Started, not closed:\n- Two replies \\(started ${fields.started}\\) ${file}$`, "m"));
+  assert.equal(done(file, map).length, 2);
 });
 
 test("a card whose job is still running is listed but not offered, and card-check refuses it", () => {

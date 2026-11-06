@@ -115,7 +115,10 @@ const jobRunning = (job, root) => {
 function judged(path, text, root) {
   const found = readCard(text);
   if (!found) return null;
-  const refusal = found.status === "refused" ? `refused: ${found.refused ?? "no reason given"}` : cardRefusal(found, root);
+  const refusal =
+    found.status === "refused" ? `refused: ${found.refused ?? "no reason given"}`
+    : found.status === "started" ? `started at ${found.started ?? "an unknown time"}: its commands may already have written; check their read-backs, then pending.mjs done the card, or card-note --refuse it`
+    : cardRefusal(found, root);
   return { path, ...found, refusal, running: jobRunning(found.job, root) };
 }
 
@@ -165,15 +168,28 @@ export function card(map, kind, { title, job = "none", draft, records, preview, 
   }
 }
 
-export function cardNote(file, text, { refuse = false } = {}) {
-  const note = oneLine(text ?? "");
-  if (!note) throw new Error("--text needs a line");
+function setHeader(file, drop, add) {
   const lines = readFileSync(file, "utf8").split("\n");
   if (!readCard(lines.join("\n"))) throw new Error(`${file} is not a card file: it has no kind: line`);
   const end = headerLength(lines);
-  const header = lines.slice(0, end).filter((line) => !(refuse && line.startsWith("status: ")));
-  writeFileSync(file, [...header, ...(refuse ? ["status: refused", `refused: ${note}`] : [`answer: ${note}`]), ...lines.slice(end)].join("\n"));
+  const header = lines.slice(0, end).filter((line) => !drop.some((key) => line.startsWith(`${key}: `)));
+  writeFileSync(file, [...header, ...add, ...lines.slice(end)].join("\n"));
   return file;
+}
+
+export function cardNote(file, text, { refuse = false } = {}) {
+  const note = oneLine(text ?? "");
+  if (!note) throw new Error("--text needs a line");
+  return refuse ? setHeader(file, ["status"], ["status: refused", `refused: ${note}`]) : setHeader(file, [], [`answer: ${note}`]);
+}
+
+export function cardStart(file, map, approved) {
+  const count = cardCheck(file, map);
+  const blocks = readCard(readFileSync(file, "utf8")).blocks.map((block) => block.n);
+  const given = [...new Set(approved)].sort((a, b) => a - b);
+  if (given.join(",") !== [...blocks].sort((a, b) => a - b).join(",")) throw new Error(`card refused: the approval covers block(s) ${given.length ? given.join(", ") : "none"} of ${blocks.join(", ")}; a card runs only when every block was approved, so nothing ran`);
+  setHeader(file, ["status"], ["status: started", `started: ${new Date().toISOString()}`]);
+  return count;
 }
 
 export function cardCheck(file, map) {
@@ -226,7 +242,8 @@ export function waitingText(map, { offline = false, handoffs = true, limit = Inf
     ["To publish", open.filter((item) => item.kind === "publish").map((item) => `${item.title} (${item.preview}, ${plural(item.blocks.length, "command")}${item.running ? ", job running" : ""}) ${item.path}`)],
     ["Questions", open.filter((item) => item.kind === "question").map((item) => `${item.title}${item.answer ? ` (answered: ${item.answer})` : ""} ${item.path}`)],
     ["For your information", open.filter((item) => item.kind === "notify").map((item) => `${item.title} ${item.path}`)],
-    ["Refused cards", found.filter((item) => item.refusal).map((item) => `${item.title ?? "untitled"}: ${item.refusal} ${item.path}`)],
+    ["Started, not closed", found.filter((item) => item.status === "started").map((item) => `${item.title} (started ${item.started}) ${item.path}`)],
+    ["Refused cards", found.filter((item) => item.refusal && item.status !== "started").map((item) => `${item.title ?? "untitled"}: ${item.refusal} ${item.path}`)],
     ["Drafts waiting on the user", drafts.filter((path) => !typed.has(path))],
     ["Unpushed work", unpushed],
     ["Draft PRs", prs.flatMap(({ dir, items }) => items.map((line) => `${label(dir)} ${line}`))],
@@ -263,7 +280,11 @@ function main([command, ...args]) {
     console.log(`ok: ${args[0]} (${cardCheck(args[0], resolved.map)} block(s) may run)`);
     return 0;
   }
-  console.error('usage: pending.mjs list [--offline] | done <file under plans/> | stub "<action>" | card <publish|question|notify> --title <t> --body-file <f> [--job <f>] [--draft <f>] [--records <k,k>] [--preview ready|run] | card-note <card> --text <line> [--refuse] | card-check <card>');
+  if (command === "card-start" && args[0] && args.includes("--approved")) {
+    console.log(`started: ${args[0]} (${cardStart(args[0], resolved.map, String(flag("approved") ?? "").split(",").filter(Boolean))} block(s) to run in order)`);
+    return 0;
+  }
+  console.error('usage: pending.mjs list [--offline] | done <file under plans/> | stub "<action>" | card <publish|question|notify> --title <t> --body-file <f> [--job <f>] [--draft <f>] [--records <k,k>] [--preview ready|run] | card-note <card> --text <line> [--refuse] | card-check <card> | card-start <card> --approved <n,n,…>');
   return 2;
 }
 
