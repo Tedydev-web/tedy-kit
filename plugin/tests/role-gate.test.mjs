@@ -385,6 +385,59 @@ test("a job whose role file cannot be written is still judged from agent_type, a
   assert.match(log, /"hook":"role-gate","decision":"ask"/);
 });
 
+const jobsMap = { ...noSessions, jobs: true };
+const JOBS_DOC = new URL("../shared/jobs.md", import.meta.url).pathname;
+const prBody = shell("node /k/scripts/github-write.mjs pr-body 744 --body-file b.md --job /w/acme/plans/jobs/j.md");
+
+test("in a jobs map a session with no agent_type is the cockpit: it asks before code, may run an approved write and reads no fleet list", () => {
+  const list = counted();
+  const code = gate.judge({ ...editCode, session_id: randomUUID() }, jobsMap, list);
+  assert.equal(code.role, "cockpit");
+  assert.equal(code.reason, `tedy role gate: this is the cockpit of acme-shop; changing or committing product code belongs to the dev role. Start a dev job per ${JOBS_DOC}, unless the user allows this one here.`);
+  assert.equal(gate.judge({ ...comment, session_id: randomUUID() }, jobsMap, list).reason, null);
+  assert.equal(gate.judge({ ...postReview, session_id: randomUUID() }, jobsMap, list).reason, null);
+  const card = gate.judge({ ...prBody, session_id: randomUUID() }, jobsMap, list);
+  assert.equal(card.kind, "code");
+  assert.equal(card.reason, null);
+  const commit = gate.judge({ ...shell("cd acme-shop-fe && git commit -m x"), session_id: randomUUID() }, jobsMap, list);
+  assert.equal(commit.role, "cockpit");
+  assert.match(commit.reason, /this is the cockpit of acme-shop/);
+  assert.equal(list.calls, 0);
+});
+
+test("in a jobs map a job's ask points at jobs.md, while a map without jobs keeps its draft text", () => {
+  const verdict = gate.judge({ ...editCode, ...job("tedy:review") }, jobsMap, counted());
+  assert.equal(verdict.reason, `tedy role gate: this is a review job (tedy:review); changing or committing product code belongs to the dev role. Write a card, or a question card to start a dev job, per ${JOBS_DOC}, unless the user allows this one here.`);
+  assert.match(gate.judge({ ...editCode, ...job("tedy:review") }, noSessions, counted()).reason, /Leave a draft under plans\/drafts for it, unless the user allows this one here\.$/);
+});
+
+test("in a map with both jobs and sessions a listed session keeps its legacy result and any other session is the cockpit", () => {
+  const both = { ...map, jobs: true };
+  const listed = randomUUID();
+  const list = counted([{ sessionId: listed, name: "PM - Shop" }]);
+  const pm = gate.judge({ ...editCode, session_id: listed }, both, list);
+  assert.deepEqual(pm, { kind: "code", role: "pm", session: "PM - Shop", reason: decide(map, "PM - Shop", { kind: "code", repo: "acme-shop-fe" }) });
+  const other = gate.judge({ ...editCode, session_id: randomUUID() }, both, list);
+  assert.equal(other.role, "cockpit");
+  assert.equal(other.session, null);
+  assert.match(other.reason, /this is the cockpit of acme-shop/);
+  assert.equal(list.calls, 2);
+});
+
+test("only kit script writes are marked as scripts", () => {
+  assert.equal(bash("node /k/scripts/github-write.mjs pr-body 744 --body-file b.md").script, true);
+  assert.equal(bash("cd acme-shop-fe && git commit -m x").script, undefined);
+});
+
+test("in a jobs map a job's role card names jobs.md and never a hand-off, and the cockpit card names /tedy:pending", () => {
+  const card = gate.jobCard(jobsMap, { role: "dev", label: "tedy:dev" });
+  assert.ok(card.startsWith(`Role: this session is a dev job (tedy:dev) of acme-shop. Work it per ${JOBS_DOC}, section "Job":`), card);
+  assert.match(card, /never call AskUserQuestion/);
+  assert.doesNotMatch(card, /handoff/);
+  assert.equal(gate.cockpitCard(jobsMap), `This is the cockpit of acme-shop: start jobs per ${JOBS_DOC}, approve with /tedy:pending.`);
+  assert.match(gate.jobCard(noSessions, { role: "dev", label: "tedy:dev" }), /into a draft under plans\/drafts/);
+});
+
 test("role-gate asks when it cannot read the project maps", () => {
   const profile = tempDir("tedy-role-profile-");
   writeFileSync(join(profile, "config.json"), JSON.stringify({ gates: { roleGate: true } }));

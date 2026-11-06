@@ -31,8 +31,9 @@ const FORBIDDEN = {
   pm: new Set(["code", "pr-review"]),
   dispatch: new Set(["code", "tracker", "tracker-status", "doc-figma", "pr-review"]),
   reader: new Set(["code", "tracker", "tracker-status", "doc-figma", "pr-review"]),
+  cockpit: new Set(["code"]),
 };
-const AGENT_ROLES = { "tedy:pm": "pm", "tedy:dev": "dev", "tedy:review": "review", "tedy:devops": "devops" };
+export const AGENT_ROLES = { "tedy:pm": "pm", "tedy:dev": "dev", "tedy:review": "review", "tedy:devops": "devops" };
 const JOB_ROLES = new Set(Object.values(AGENT_ROLES));
 const SESSION_ROLES = join(STATE_DIR, "session-roles");
 const SAFE_ID = /^[\w-]+$/;
@@ -103,7 +104,7 @@ function repoOf(map, path) {
 const isCode = (hit) => hit && !hit.inside.split("/").includes("plans") && !hit.inside.endsWith(".md");
 
 export function classifyAction(input, map, role) {
-  if (!role && !map.sessions?.length) return null;
+  if (!role && !map.sessions?.length && !map.jobs) return null;
   const cwd = input.cwd ?? process.cwd();
   if (EDIT_TOOLS.has(input.tool_name)) {
     const path = resolve(cwd, input.tool_input?.file_path ?? input.tool_input?.notebook_path ?? "");
@@ -116,7 +117,7 @@ export function classifyAction(input, map, role) {
       const action = classify(segment, dir);
       if (action.kind === "cd") continue;
       const script = SCRIPT_WRITES.find((write) => write.pattern.test(shellWords(segment)));
-      if (script) return { kind: script.kind, repo: null };
+      if (script) return { kind: script.kind, repo: null, script: true };
       if (action.kind === "commit" || action.kind === "push") {
         const hit = repoOf(map, action.dir);
         if (hit) return { kind: "code", repo: hit.repo };
@@ -148,12 +149,20 @@ export function decide(map, name, action) {
   return `tedy role gate: this is "${name}", the ${role} session; ${WHAT[action.kind]} belongs to the ${owner} session${target ? ` "${target}"` : ""}. Hand it over with what you found and where, per ${fileURLToPath(new URL("../shared/handoff.md", import.meta.url))}, unless the user allows this one here.`;
 }
 
-export function agentReason(who, action) {
+const JOBS_DOC = fileURLToPath(new URL("../shared/jobs.md", import.meta.url));
+
+export function agentReason(who, action, map = {}) {
   if (!FORBIDDEN[who.role]?.has(action.kind)) return null;
-  return `tedy role gate: this is a ${who.role} job (${who.label}); ${WHAT[action.kind]} belongs to the ${OWNER[action.kind]} role. Leave a draft under plans/drafts for it, unless the user allows this one here.`;
+  const owner = OWNER[action.kind];
+  if (who.role === "cockpit") return `tedy role gate: this is the cockpit of ${map.name}; ${WHAT[action.kind]} belongs to the ${owner} role. Start a ${owner} job per ${JOBS_DOC}, unless the user allows this one here.`;
+  const next = map.jobs ? `Write a card, or a question card to start a ${owner} job, per ${JOBS_DOC}` : "Leave a draft under plans/drafts for it";
+  return `tedy role gate: this is a ${who.role} job (${who.label}); ${WHAT[action.kind]} belongs to the ${owner} role. ${next}, unless the user allows this one here.`;
 }
 
+export const cockpitCard = (map) => `This is the cockpit of ${map.name}: start jobs per ${JOBS_DOC}, approve with /tedy:pending.`;
+
 export function jobCard(map, who, gateOn = true) {
+  if (map.jobs) return `Role: this session is a ${who.role} job (${who.label}) of ${map.name}. Work it per ${JOBS_DOC}, section "Job": read the job file your prompt names, never call AskUserQuestion, turn each decision into a question card and each write that needs approval into a publish card, and end with job.mjs done or stop.${gateOn ? " A write that belongs to another role asks the user first." : ""}`;
   return `Role: this session is a ${who.role} job (${who.label}) of ${map.name}. When work for another role turns up (a PRD or Figma question, a tracker task, a PR review, code another role owns), stop looking into it, write what you saw and where (file:line, PRD locator, frame) into a draft under plans/drafts, and return to this job's task; the owning role does the research.${gateOn ? " A write that belongs to another role asks the user first." : ""}`;
 }
 
@@ -174,8 +183,9 @@ export function judge(input, map, list = listSessions) {
   const who = agentRole(input);
   const action = classifyAction(input, map, who?.role);
   if (!action) return null;
-  if (who) return { kind: action.kind, role: who.role, session: null, reason: agentReason(who, action) };
-  const name = sessionName(input.session_id, list());
+  if (who) return { kind: action.kind, role: who.role, session: null, reason: agentReason(who, action, map) };
+  const name = map.jobs && !map.sessions?.length ? null : sessionName(input.session_id, list());
+  if (map.jobs && !roleOf(map, name)) return { kind: action.kind, role: "cockpit", session: null, reason: action.script ? null : agentReason({ role: "cockpit" }, action, map) };
   return { kind: action.kind, role: name && roleOf(map, name), session: name, reason: (name && decide(map, name, action)) || null };
 }
 
