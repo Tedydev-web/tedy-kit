@@ -123,32 +123,27 @@ function printRun(args, { env = {}, cwd } = {}) {
   return { sid, dir, json, usd, models: Object.keys(json.modelUsage ?? {}).join(",") || "none", code: result.code, err: result.err.split("\n").find(Boolean) ?? "" };
 }
 
-function discover(since) {
-  const known = new Set(launched());
-  for (const item of rows()) {
-    if (item.kind !== "background" || known.has(item.sessionId) || !String(item.cwd ?? "").startsWith(WORKSPACE)) continue;
-    if (Date.parse(item.startedAt ?? 0) >= since - 5_000) appendFileSync(LAUNCHED, `${item.sessionId}\n`);
-  }
-}
-
 class Untrusted extends Error {}
 
-function launch(block, uuid, { settings = {}, flags = [], prompt, resume = null, mark = uuid }) {
-  if (!resume) appendFileSync(LAUNCHED, `${uuid}\n`);
+export const shortIdOf = (line) => String(line).match(/backgrounded · ([0-9a-f]{8})\b/)?.[1] ?? null;
+
+function launch(block, mark, { settings = {}, flags = [], prompt, resume = null }) {
   const merged = JSON.stringify({ ...settings, env: { ...(settings.env ?? {}), TEDY_PROBE_MARK: mark } });
-  const head = resume ? ["--resume", resume, "--bg"] : ["--bg", "--session-id", uuid];
-  const since = Date.now();
+  const head = resume ? ["--resume", resume, "--bg"] : ["--bg"];
   const result = sh("claude", [...head, "--plugin-dir", PROBE, "--model", MODEL, "--settings", merged, ...flags, prompt], { cwd: WORKSPACE });
-  discover(since);
   if (/Workspace not trusted/i.test(result.out + result.err)) {
     fact(`LAUNCH-FAILED ${block}: Workspace not trusted`);
     throw new Untrusted();
   }
-  if (result.code !== 0) {
-    fact(`LAUNCH-FAILED ${block}: ${(result.err || result.out).split("\n").find(Boolean) ?? `exit ${result.code}`}`);
+  const line = (result.err || result.out).split("\n").find(Boolean) ?? `exit ${result.code}`;
+  const short = result.code === 0 ? shortIdOf(result.out) : null;
+  const found = short ? rows().find((item) => item.kind === "background" && item.id === short) : null;
+  if (!found) {
+    fact(`LAUNCH-FAILED ${block}: ${line}`);
     return null;
   }
-  return result.out.split("\n").find(Boolean) ?? "";
+  appendFileSync(LAUNCHED, `${found.sessionId}\n`);
+  return { uuid: found.sessionId, short, line: result.out.split("\n").find(Boolean) };
 }
 
 async function watch(uuid, until = () => false) {
@@ -243,55 +238,46 @@ function blockNine() {
 }
 
 async function blockEleven() {
-  const uuid = randomUUID();
-  const out = launch("[11]", uuid, { flags: ["--agent", "probe:zz-job-probe", "--name", "probe job one"], prompt: "/probe:zz-body-probe Then run git status --short." });
+  const mark = randomUUID();
+  const out = launch("[11]", mark, { flags: ["--agent", "probe:zz-job-probe", "--name", "probe job one"], prompt: "/probe:zz-body-probe Then run git status --short." });
   if (out === null) return null;
-  const working = await watch(uuid, stopped(uuid));
+  const { uuid } = out;
+  const working = await watch(uuid, stopped(uuid, mark));
   const after = await stop(uuid);
-  const tools = marked("any-tool", uuid);
+  const tools = marked("any-tool", uuid, mark);
   const all = logs("any-tool").filter((line) => line.session_id === uuid);
-  const stops = marked("stop", uuid);
+  const stops = marked("stop", uuid, mark);
   const text = JSON.stringify(transcript(uuid));
-  fact(`[11] launch="${out}" row=${working.last ? "yes" : "no"} name=${working.last?.name ?? "none"} states=${working.states} after_stop=${after?.state ?? "gone"} skill_started=${text.includes("BODYTOKEN-58213")} body_reply=${text.includes("BODY-LOADED")} agent_type=${uniq(tools.map((line) => line.agent_type))} agent_id=${uniq(tools.map((line) => line.agent_id))} permission_mode=${uniq(tools.map((line) => line.permission_mode))} mark=${tools.length ? "present" : all.length ? "absent" : "no-lines"} stop_lines=${stops.length} stop_agent_type=${uniq(stops.map((line) => line.agent_type))} entrypoint=${uniq(stops.map((line) => line.entrypoint))} ${backgroundCost(uuid)}`);
-  return { uuid, short: after?.id ?? working.last?.id ?? null };
+  fact(`[11] launch="${out.line}" short_id_is_session_prefix=${uuid.startsWith(out.short)} name=${working.last?.name ?? "none"} states=${working.states} after_stop=${after?.state ?? "gone"} skill_started=${text.includes("BODYTOKEN-58213")} body_reply=${text.includes("BODY-LOADED")} agent_type=${uniq(tools.map((line) => line.agent_type))} agent_id=${uniq(tools.map((line) => line.agent_id))} permission_mode=${uniq(tools.map((line) => line.permission_mode))} mark=${tools.length ? "present" : all.length ? "absent" : "no-lines"} stop_lines=${stops.length} stop_agent_type=${uniq(stops.map((line) => line.agent_type))} entrypoint=${uniq(stops.map((line) => line.entrypoint))} ${backgroundCost(uuid)}`);
+  return { uuid, short: out.short };
 }
 
 async function blockThirteen(eleven) {
-  const mark = `${eleven.uuid}-resume`;
   const prompt = "Run git status --short, then reply AGAIN";
-  let target = eleven.short;
-  let out = target ? launch("[13]", eleven.uuid, { resume: target, mark, prompt }) : null;
-  const shortAccepted = out !== null;
-  if (!shortAccepted) {
-    target = eleven.uuid;
-    out = launch("[13]", eleven.uuid, { resume: target, mark, prompt });
-  }
+  const shortMark = randomUUID();
+  const viaShort = launch("[13-short]", shortMark, { resume: eleven.short, prompt });
+  await sleep(30_000);
+  const shortAccepted = logs("any-tool").some((line) => line.mark === shortMark);
+  if (viaShort) await stop(viaShort.uuid);
+  const mark = randomUUID();
+  const out = launch("[13]", mark, { resume: eleven.uuid, prompt });
   if (out === null) return;
-  const since = Date.now();
-  await sleep(10_000);
-  const resumed = () => logs("stop").some((line) => line.mark === mark);
-  const start = Date.now();
-  while (!resumed() && Date.now() - start < WAIT_MS) await sleep(5_000);
+  await watch(out.uuid, stopped(out.uuid, mark));
   const lines = logs("any-tool").filter((line) => line.mark === mark);
-  const sessions = uniq(lines.map((line) => line.session_id));
-  const resumeStart = logs("resume").filter((line) => line.mark === mark);
-  for (const uuid of launched()) {
-    const item = row(uuid);
-    if (item && Date.parse(item.startedAt ?? 0) >= since - 15_000) await stop(uuid);
-  }
-  await stop(eleven.uuid);
-  fact(`[13] short_id_accepted=${shortAccepted} launch="${out}" session_ids=${sessions} same_session=${sessions === eleven.uuid} agent_type=${uniq(lines.map((line) => line.agent_type))} resume_hook_lines=${resumeStart.length} finished=${resumed()} ${backgroundCost(eleven.uuid)}`);
+  await stop(out.uuid);
+  fact(`[13] short_id_accepted=${shortAccepted} launch="${out.line}" new_session_id=${out.uuid !== eleven.uuid} agent_type=${uniq(lines.map((line) => line.agent_type))} tool_lines=${lines.length} finished=${stopped(out.uuid, mark)()} ${backgroundCost(out.uuid)}`);
 }
 
 async function askBlock(block, { settings = {}, flags = [], prompt, marker, hookAsk = false, extra = () => "" }) {
-  const uuid = randomUUID();
-  const out = launch(block, uuid, { settings, flags, prompt });
+  const mark = randomUUID();
+  const out = launch(block, mark, { settings, flags, prompt });
   if (out === null) return null;
+  const { uuid } = out;
   const done = (last) => last?.status === "waiting" || ["ran", "auto-denied"].includes(commandOutcome(transcript(uuid), marker));
   const working = await watch(uuid, done);
   const outcome = askOutcome(uuid, marker, working.last);
-  const tools = marked("any-tool", uuid);
-  const asks = marked("hook-ask", uuid).filter((line) => String(line.cmd ?? "").includes("tedy-hook-ask"));
+  const tools = marked("any-tool", uuid, mark);
+  const asks = marked("hook-ask", uuid, mark).filter((line) => String(line.cmd ?? "").includes("tedy-hook-ask"));
   const summary = `${block} outcome=${outcome} states=${working.states} permission_mode=${uniq(tools.map((line) => line.permission_mode))} mark=${tools.length ? "present" : "absent"}${hookAsk ? ` hook_ask_lines=${asks.length}` : ""} ${extra(uuid)}`;
   return { uuid, summary };
 }
@@ -305,15 +291,13 @@ async function finishAsk(result) {
 async function blockElevenB() {
   const result = await askBlock("[11b]", { settings: { permissions: { ask: ["Bash(echo tedy-ask-probe*)"] } }, prompt: "Run exactly: echo tedy-ask-probe-1", marker: "tedy-ask-probe" });
   if (!result) return;
-  const before = new Set(launched());
-  const out = launch("[13b]", result.uuid, { resume: result.uuid, mark: `${result.uuid}-copy`, prompt: "reply COPY" });
+  const copy = launch("[13b]", randomUUID(), { resume: result.uuid, prompt: "reply COPY" });
   await sleep(15_000);
-  const copies = launched().filter((uuid) => !before.has(uuid));
   const original = row(result.uuid);
-  fact(`[13b] launch="${out ?? "failed"}" new_sessions=${copies.length} new_ids_differ=${copies.every((uuid) => uuid !== result.uuid)} original_state=${original?.state ?? "gone"}/${original?.status ?? "-"}`);
-  for (const uuid of copies) {
-    await stop(uuid);
-    backgroundCost(uuid);
+  fact(`[13b] launch="${copy?.line ?? "failed"}" copy_id_differs=${copy ? copy.uuid !== result.uuid : "n/a"} original_state=${original?.state ?? "gone"}/${original?.waitingFor ?? "-"}`);
+  if (copy) {
+    await stop(copy.uuid);
+    backgroundCost(copy.uuid);
   }
   await finishAsk(result);
 }
@@ -336,11 +320,12 @@ async function blockElevenD() {
 }
 
 async function isolationBlock(block, settings, prompt, file) {
-  const uuid = randomUUID();
-  const out = launch(block, uuid, { flags: ["--permission-mode", "default"], settings, prompt });
+  const mark = randomUUID();
+  const out = launch(block, mark, { flags: ["--permission-mode", "default"], settings, prompt });
   if (out === null) return;
-  const working = await watch(uuid, (last) => stopped(uuid)() || last?.status === "waiting");
-  const tools = marked("any-tool", uuid);
+  const { uuid } = out;
+  const working = await watch(uuid, (last) => stopped(uuid, mark)() || last?.status === "waiting");
+  const tools = marked("any-tool", uuid, mark);
   const nested = existsSync(join(WORKSPACE, ".claude", "worktrees")) ? readdirSync(join(WORKSPACE, ".claude", "worktrees")).filter((name) => existsSync(join(WORKSPACE, ".claude", "worktrees", name, file))) : [];
   const worktrees = sh("git", ["worktree", "list"], { cwd: WORKSPACE }).out.trim().split("\n").length;
   const commit = sh("git", ["log", "--oneline", "-1"], { cwd: join(BASE, "wt") });
@@ -355,15 +340,16 @@ async function blockElevenE() {
 }
 
 async function blockTwelve() {
-  const uuid = randomUUID();
-  appendFileSync(LAUNCHED, `${uuid}\n`);
-  const settings = JSON.stringify({ env: { TEDY_PROBE_MARK: uuid } });
-  const run = printRun([`Run exactly: claude --plugin-dir ${PROBE} --model ${MODEL} --agent probe:zz-job-probe --bg --session-id ${uuid} --name 'probe nested' --settings '${settings}' 'reply OK'`], { cwd: WORKSPACE });
+  const mark = randomUUID();
+  const settings = JSON.stringify({ env: { TEDY_PROBE_MARK: mark } });
+  const run = printRun([`Run exactly: claude --plugin-dir ${PROBE} --model ${MODEL} --agent probe:zz-job-probe --bg --name 'probe nested' --settings '${settings}' 'reply OK'`], { cwd: WORKSPACE });
   await sleep(20_000);
-  const item = row(uuid);
-  const starts = logs("startup").filter((line) => line.session_id === uuid && line.mark === uuid);
-  await stop(uuid);
-  fact(`[12] parent_exit=${run.code} nested_row_after_parent=${item ? "yes" : "no"} state=${item?.state ?? "-"} name=${item?.name ?? "none"} nested_startup_lines=${starts.length} parent_cost=${run.usd.toFixed(3)} model=${run.models} ${backgroundCost(uuid)}`);
+  const starts = logs("startup").filter((line) => line.mark === mark);
+  const uuid = starts[0]?.session_id ?? null;
+  if (uuid) appendFileSync(LAUNCHED, `${uuid}\n`);
+  const item = uuid ? row(uuid) : null;
+  if (uuid) await stop(uuid);
+  fact(`[12] parent_exit=${run.code} nested_row_after_parent=${item ? "yes" : "no"} state=${item?.state ?? "-"} name=${item?.name ?? "none"} nested_startup_lines=${starts.length} parent_cost=${run.usd.toFixed(3)} model=${run.models} ${uuid ? backgroundCost(uuid) : "usage=n/a"}`);
 }
 
 async function main(mode) {

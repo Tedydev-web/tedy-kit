@@ -1,7 +1,14 @@
 import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WORKSPACE, cleanupTargets, commandOutcome } from "../evals/probes/job-probes.mjs";
+import { WORKSPACE, cleanupTargets, commandOutcome, shortIdOf } from "../evals/probes/job-probes.mjs";
+
+test("job probe reads a background session's short id from the launch line", () => {
+  assert.equal(shortIdOf("backgrounded · b81fdaf2 · probe job one"), "b81fdaf2");
+  assert.equal(shortIdOf("backgrounded · 3af3da0e"), "3af3da0e");
+  assert.equal(shortIdOf("Workspace not trusted"), null);
+  assert.equal(shortIdOf("backgrounded · not-an-id"), null);
+});
 
 test("job probe cleanup acts only on recorded background sessions under the probe workspace", () => {
   const rows = [
