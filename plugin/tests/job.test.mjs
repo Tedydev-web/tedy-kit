@@ -252,6 +252,23 @@ test("each role's allowlist lets routine work run and leaves publishing, deploys
 
 const { recordLaunch } = await import("../lib/job.mjs");
 
+test("every role asks before git writes a file through --output, and dev and devops ask before editing the profile", async () => {
+  const { askRules } = await import("../lib/job.mjs");
+  const at = { plugin: "/k/plugin", root: "/w/shop", profile: "/p/tedy" };
+  const matches = (pattern, command) => new RegExp(`^${pattern.split("*").map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*")}$`).test(command);
+  for (const role of ["pm", "dev", "review", "devops"]) {
+    const bash = askRules(role, at).filter((rule) => rule.startsWith("Bash(")).map((rule) => rule.slice(5, -1));
+    for (const command of ["git diff --output=/home/u/.bashrc", "git log -1 -p --output /w/shop/fe/a.ts", "git -C /w/shop/fe show HEAD --output=x"]) assert.ok(bash.some((pattern) => matches(pattern, command)), `${role} asks for ${command}`);
+    assert.ok(!bash.some((pattern) => matches(pattern, "git diff origin/dev")), role);
+    assert.equal(askRules(role, at).includes("Edit(//p/tedy/**)"), role === "dev" || role === "devops", role);
+  }
+  const w = world();
+  const settings = settingsOf(tokenize(w.run(["start", "pm", "--title", "t", "--body-file", w.body, "--dry-run"]).stdout.trim()));
+  assert.deepEqual(settings.permissions.ask, ["Bash(git *--output*)"]);
+  const dev = settingsOf(tokenize(w.run(["start", "dev", "--title", "t", "--body-file", w.body, "--dry-run"]).stdout.trim()));
+  assert.deepEqual(dev.permissions.ask, ["Bash(git *--output*)", `Edit(/${w.profile}/**)`]);
+});
+
 function jobFile(w, { role = "dev", status = "running", session = row("aaaa1111").sessionId, mode, created = new Date(Date.now() - (3 * 60 + 5) * 60_000).toISOString(), name = "add-hello", record = true } = {}) {
   mkdirSync(join(w.root, "plans", "jobs"), { recursive: true });
   const file = join(w.root, "plans", "jobs", `261106-0900-${role}-${name}.md`);
