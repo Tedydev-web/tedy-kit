@@ -79,6 +79,8 @@ function graphQuery(args) {
   return null;
 }
 
+const GH_API_VALUE_FLAGS = new Set(["-H", "--header", "-q", "--jq", "-t", "--template", "-p", "--preview", "--hostname", "--cache"]);
+
 function classifyGitHubApi(args) {
   let method = null;
   let hasFields = false;
@@ -94,6 +96,8 @@ function classifyGitHubApi(args) {
       method = token.replace(/^-X=?/, "").toUpperCase();
     } else if (["-f", "-F", "--field", "--raw-field", "--input"].includes(token)) {
       hasFields = true;
+      index += 1;
+    } else if (GH_API_VALUE_FLAGS.has(token)) {
       index += 1;
     } else if (/^(--(raw-)?field=|--input=|-[fF].)/.test(token)) {
       hasFields = true;
@@ -114,20 +118,23 @@ function classifyGitHubApi(args) {
   return effective === "GET" ? null : "github-write";
 }
 
-export function commandTokens(segment, keep) {
-  const tokens = strippedTokens(segment, keep);
-  return tokens.length && tokens[0].includes("/") ? [basename(tokens[0]), ...tokens.slice(1)] : tokens;
+function commandWords(segment, keep) {
+  const { tokens, quoted } = strippedWords(segment, keep);
+  return { tokens: tokens.length && tokens[0].includes("/") ? [basename(tokens[0]), ...tokens.slice(1)] : tokens, quoted };
 }
 
-function strippedTokens(segment, keep = new Set()) {
-  const all = tokenize(segment);
+export const commandTokens = (segment, keep) => commandWords(segment, keep).tokens;
+
+function strippedWords(segment, keep = new Set()) {
+  const quoted = [];
+  const all = tokenize(segment, quoted);
   let at = 0;
   for (;;) {
     for (let skip = 1; skip; at += skip) {
       while (at < all.length && (ENV_ASSIGNMENT.test(all[at]) || /^[({!]+$/.test(all[at]))) at += 1;
       const before = all[at];
       if (at < all.length) all[at] = all[at].replace(/^[({!]+/, "");
-      skip = redirectLength(all, at, before !== all[at]);
+      skip = redirectLength(all, at, before !== all[at], quoted);
     }
     const flags = keep.has(basename(all[at] ?? "")) ? undefined : WRAPPERS.get(basename(all[at] ?? ""));
     if (!flags) break;
@@ -135,7 +142,7 @@ function strippedTokens(segment, keep = new Set()) {
     at += 1;
     while (at < all.length) {
       if (ENV_ASSIGNMENT.test(all[at])) at += 1;
-      else if (redirectLength(all, at)) at += redirectLength(all, at);
+      else if (redirectLength(all, at, false, quoted)) at += redirectLength(all, at, false, quoted);
       else if (all[at].startsWith("-")) at += flags.includes(all[at]) ? 2 : 1;
       else if (positionals > 0) {
         positionals -= 1;
@@ -143,8 +150,10 @@ function strippedTokens(segment, keep = new Set()) {
       } else break;
     }
   }
-  return all.slice(at);
+  return { tokens: all.slice(at), quoted: quoted.slice(at) };
 }
+
+const strippedTokens = (segment, keep) => strippedWords(segment, keep).tokens;
 
 function unreadable(segment, piped = false) {
   const tokens = strippedTokens(segment);
@@ -275,8 +284,9 @@ function withoutRepoFlags(args) {
 }
 
 export function classify(segment, cwd) {
-  const [program, ...rest] = commandTokens(segment);
-  const args = withoutRedirects(rest);
+  const { tokens, quoted } = commandWords(segment);
+  const [program, ...rest] = tokens;
+  const args = withoutRedirects(rest, quoted.slice(1));
   if (program === "cd") return { kind: "cd", dir: resolve(cwd, (args[0] ?? "~").replace(/^~(?=\/|$)/, homedir())) };
   if (program === "git") {
     let dir = cwd;

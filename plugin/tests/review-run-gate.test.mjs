@@ -146,6 +146,10 @@ test("gmake, a makefile, an attached directory, a node preload or test path insi
     ["2>&- npm test", wt],
     ["timeout 300 </dev/null npm test", wt],
     [`2>&1 cd ${wt} && npm test`, setup.repo],
+    ["timeout </dev/null 300 npm test", wt],
+    [`cd 2>/dev/null ${wt} && npm test`, setup.repo],
+    [`cd > /dev/null ${wt} && npm test`, setup.repo],
+    [`pushd > /dev/null ${wt} && npm test`, setup.repo],
     [`${wt}/node_modules/.bin/npm test`, setup.repo],
     [`${wt}/bin/make test`, setup.repo],
   ]) {

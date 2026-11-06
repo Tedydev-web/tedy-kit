@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { redirectLength } from "./shell-program-arguments.mjs";
+import { redirectLength, withoutRedirects } from "./shell-program-arguments.mjs";
 
 const SHELL_WRAPPER = /^(?:bash|sh|zsh|dash|ksh)\s+(?:--login\s+)?-[a-zA-Z]*c[a-zA-Z]*\s+(?:--\s+)?(['"])([\s\S]*)\1$/;
 const HEREDOC = /(?<!<)<<(?!<)(-?)\s*(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2/g;
@@ -117,7 +117,7 @@ export function splitParts(command, unwrap = true) {
       end();
       continue;
     }
-    if (char === ";" || char === "|") {
+    if (char === ";" || (char === "|" && (command[index - 1] !== ">" || command[index - 2] === "\\"))) {
       line += char;
       end(char === "|");
       continue;
@@ -150,17 +150,19 @@ export function* walkParts(command, cwd, unwrap = true) {
       yield { ...part, dir: scope.dir, changesDir: false };
       continue;
     }
-    const tokens = tokenize(part.text);
+    const quoted = [];
+    const tokens = tokenize(part.text, quoted);
     let at = 0;
     for (;;) {
       if (at < tokens.length && (ASSIGNMENT.test(tokens[at]) || LEADING_WORDS.has(tokens[at]))) at += 1;
-      else if (redirectLength(tokens, at)) at += redirectLength(tokens, at);
+      else if (redirectLength(tokens, at, false, quoted)) at += redirectLength(tokens, at, false, quoted);
       else if (tokens[at] === "time") {
         at += 1;
         while (tokens[at]?.startsWith("-")) at += 1;
       } else break;
     }
-    const [word, ...args] = tokens.slice(at);
+    const word = tokens[at];
+    const args = withoutRedirects(tokens.slice(at + 1), quoted.slice(at + 1));
     const target = args.find((arg) => !/^[-+<>]|^\d+[<>]/.test(arg));
     const changesDir = word === "cd" || word === "popd" || (word === "pushd" && target !== undefined);
     yield { ...part, dir: scope.dir, changesDir };
@@ -188,11 +190,20 @@ export function splitSegments(command, unwrap = true) {
   return splitParts(command, unwrap).map((part) => part.text);
 }
 
-export function tokenize(segment) {
+const OPERATOR = /^\d*(?:[<>][<>&|-]*|&>>?)/;
+
+export function tokenize(segment, quoted = []) {
   const tokens = [];
   let current = "";
   let quote = null;
   let started = false;
+  let literal = Infinity;
+  const push = () => {
+    tokens.push(current);
+    quoted.push(literal < (current.match(OPERATOR)?.[0].length ?? 0));
+    current = "";
+    literal = Infinity;
+  };
   for (let index = 0; index < segment.length; index += 1) {
     const char = segment[index];
     if (quote) {
@@ -204,6 +215,7 @@ export function tokenize(segment) {
     if (char === "\\") {
       const next = segment[(index += 1)];
       if (next !== undefined && next !== "\n") {
+        literal = Math.min(literal, current.length);
         current += next;
         started = true;
       }
@@ -211,28 +223,27 @@ export function tokenize(segment) {
     }
     if (char === "$" && (segment[index + 1] === "'" || segment[index + 1] === '"')) {
       quote = segment[(index += 1)];
+      literal = Math.min(literal, current.length);
       started = true;
       continue;
     }
     if (char === "'" || char === '"') {
       quote = char;
+      literal = Math.min(literal, current.length);
       started = true;
       continue;
     }
     if (/\s/.test(char)) {
-      if (started) tokens.push(current);
+      if (started) push();
       current = "";
       started = false;
       continue;
     }
-    if ((char === "<" || char === ">") && segment[index + 1] !== "(" && started && !/^(\d*|&)$|[<>]$/.test(current)) {
-      tokens.push(current);
-      current = "";
-    }
+    if ((char === "<" || char === ">") && segment[index + 1] !== "(" && started && !/^(\d*|&)$|[<>]$/.test(current)) push();
     current += char;
     started = true;
   }
-  if (started) tokens.push(current);
+  if (started) push();
   return tokens;
 }
 

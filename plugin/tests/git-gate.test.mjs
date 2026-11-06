@@ -20,9 +20,19 @@ test("classify recognises git and gh actions through env vars and -C", () => {
   assert.deepEqual(classify("git push origin x", "/w"), { kind: "push", dir: "/w", args: ["origin", "x"] });
   assert.deepEqual(classify("FOO=1 git -C sub commit -am msg", "/w"), { kind: "commit", dir: "/w/sub", all: true });
   assert.deepEqual(classify("git -c core.x=y push", "/w"), { kind: "push", dir: "/w", args: [] });
-  for (const command of ["2>&1 git push origin x", "</dev/null git push origin x", "< /dev/null git push origin x", "2> err git push origin x", "&>/dev/null git push origin x", "FOO=1 >out git push origin x", "(2>&1 git push origin x)", "sudo 2>&1 git push origin x", "env 2>/dev/null git push origin x", "2>&- git push origin x", ">&- git push origin x", "<&- git push origin x", "timeout 30 >/dev/null git push origin x", "nice -n 5 2>&1 git push origin x", "git 2>&1 push origin x", "git -C . 2> err push origin x"]) {
+  for (const command of ["2>&1 git push origin x", "</dev/null git push origin x", "< /dev/null git push origin x", "2> err git push origin x", "&>/dev/null git push origin x", "FOO=1 >out git push origin x", "(2>&1 git push origin x)", "sudo 2>&1 git push origin x", "env 2>/dev/null git push origin x", "2>&- git push origin x", ">&- git push origin x", "<&- git push origin x", "timeout 30 >/dev/null git push origin x", "nice -n 5 2>&1 git push origin x", "git 2>&1 push origin x", "git -C . 2> err push origin x", "timeout >/dev/null 30 git push origin x", "sudo 2>&1 -u x git push origin x"]) {
     assert.equal(classify(command, "/w").kind, "push", command);
   }
+  assert.deepEqual(splitSegments(">| f git push origin main"), [">| f git push origin main"]);
+  assert.equal(classify(">| f git push origin main", "/w").kind, "push");
+  for (const [command, flag] of [["git push --repo '>' --force origin feat", "--force"], ["git push -o \"2>\" --delete origin x", "--delete"], ["git push --push-option \\> --mirror", "--mirror"]]) {
+    assert.ok(classify(command, "/w").args.includes(flag), command);
+  }
+  assert.deepEqual(classify("git push >'out' origin x", "/w").args, ["origin", "x"]);
+  for (const command of ["gh api --template '>' -X PUT repos/o/r/pulls/1/merge", "gh api -H \"2>\" --method PUT repos/o/r/pulls/1/merge", "gh api -H 'Accept: application/vnd.github+json' -X PUT repos/o/r/pulls/1/merge", "gh api --hostname github.com -q .sha -X PUT repos/o/r/pulls/1/merge"]) {
+    assert.deepEqual(classify(command, "/w"), { kind: "github-write", dir: "/w", pr: true, verbs: ["merge"] }, command);
+  }
+  assert.equal(classify("gh api -t '<' --method DELETE repos/o/r/git/refs/heads/x", "/w").kind, "github-write");
   for (const command of ["2>&1 gh pr merge 12", "</dev/null gh pr merge 12", ">/tmp/o gh pr edit 12 --title x", "<&- gh pr merge 12", "gh 2>&1 pr merge 12", "gh 2> err pr merge 12"]) {
     assert.equal(classify(command, "/w").kind, "github-write", command);
   }

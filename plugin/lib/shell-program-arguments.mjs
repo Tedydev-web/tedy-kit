@@ -22,20 +22,20 @@ function family(program) {
   return "other";
 }
 
-export function redirectLength(tokens, at, glued = false) {
+export function redirectLength(tokens, at, glued = false, quoted = []) {
   const token = tokens[at] ?? "";
-  if (/^\d*<<(?!<)/.test(token)) return 0;
-  if (glued && /^\d+$/.test(token) && /^[<>]/.test(tokens[at + 1] ?? "")) return 1 + redirectLength(tokens, at + 1);
+  if (quoted[at] || /^\d*<<(?!<)/.test(token)) return 0;
+  if (glued && /^\d+$/.test(token) && /^[<>]/.test(tokens[at + 1] ?? "") && !quoted[at + 1]) return 1 + redirectLength(tokens, at + 1, false, quoted);
   if (/^\d*[<>]&-$/.test(token)) return 1;
   if (BARE_REDIRECT.test(token)) return 2;
   return REDIRECT.test(token) ? 1 : 0;
 }
 
-export function withoutRedirects(tokens) {
+export function withoutRedirects(tokens, quoted = []) {
   const kept = [];
   let at = 0;
   while (at < tokens.length) {
-    const skip = redirectLength(tokens, at);
+    const skip = redirectLength(tokens, at, false, quoted);
     if (skip) at += skip;
     else kept.push(tokens[at++]);
   }
