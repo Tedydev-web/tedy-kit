@@ -71,6 +71,11 @@ function blockRefusal(command, { preview, job }, draft) {
   const flags = tokens.slice(3).filter((token) => token.startsWith("--")).map((token) => token.split("=")[0]);
   const repeated = flags.find((flag, index) => flags.indexOf(flag) !== index);
   if (repeated) return `repeats ${repeated}, and the script reads only one of them`;
+  const glued = GLUED_FLAGS.has(name) ? undefined : tokens.slice(3).find((token) => /^--[^=]+=/.test(token) && !token.startsWith("--job="));
+  if (glued) {
+    const flag = glued.slice(0, glued.indexOf("="));
+    return `glues ${flag}=, which ${name} does not read; write ${flag} and its value as two words`;
+  }
   if (job !== "none") {
     let given;
     try {
@@ -107,7 +112,6 @@ function draftRefusal(tokens, name, draft) {
   }).slice(3);
   const read = operand === AFTER_VERB ? words.find((word) => word.index === 3 && !tokens[3].startsWith("-")) : words.find((word) => word.owner === operand);
   if (!operand) return `does not read its draft ${draft.path}: ${name} ${verb} reads no file`;
-  if (read && operand !== AFTER_VERB && !GLUED_FLAGS.has(name) && tokens[read.index].startsWith(`${operand}=`)) return `glues ${operand}=, which ${name} does not read; write ${operand} and the file as two words`;
   if (!read || !isAbsolute(read.value) || realOrNull(read.value) !== draft.real) return `does not read its draft ${draft.path}: ${name} ${verb} reads ${operand === AFTER_VERB ? operand : `the file named by ${operand}`}, which must be the draft by its absolute path`;
   const skipped = ["--job", ...(OTHER_FILE_FLAGS[name] ?? [])];
   const second = words.find((word) => word !== read && !skipped.includes(word.owner) && isAbsolute(word.value) && realOrNull(word.value));
