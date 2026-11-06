@@ -246,7 +246,7 @@ function stopSession(job, claude, waitMs, row = fleet(claude).find((item) => ite
     const now = fleet(claude).find((item) => item.sessionId === job.session_id);
     if (!now) return null;
     if (ENDED.has(now.state)) return row;
-    if (Date.now() > until) throw new Error(`the session ${row.id} did not stop within ${waitMs / 1000} s; nothing was resumed or closed, run the command again`);
+    if (Date.now() > until) throw new Error(`the session ${row.id}${now.pid ? ` (pid ${now.pid})` : ""} did not stop within ${waitMs / 1000} s; nothing was resumed or closed, run the command again${now.pid ? `, or end a hung session with kill ${now.pid}` : ""}`);
   }
 }
 
