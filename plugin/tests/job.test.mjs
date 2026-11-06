@@ -360,8 +360,12 @@ test("close is the kill switch: it stops the recorded session even when the job 
   const refused = noState.run(["resume", lost, "--note-file", join(noState.root, "note.md")], { fx: { lockDir: records, launches: ["hhhh8888"], agents: [[row("aaaa1111", "stopped")], [row("aaaa1111", "stopped")], [row("aaaa1111", "stopped"), row("hhhh8888", "busy")]] } });
   chmodSync(records, 0o755);
   assert.equal(refused.status, 1);
-  assert.match(refused.stderr, /the launch record for .* could not be written \(.*\), but its session hhhh8888 is running; stop it with claude stop hhhh8888, then close the job/);
-  assert.equal(parse(readFileSync(lost, "utf8"), JOB_KEYS).session_id, row("hhhh8888").sessionId);
+  assert.match(refused.stderr, /the launch record for .* could not be written \(.*\), so its new session hhhh8888 was stopped and the job is stopped/);
+  assert.deepEqual(noState.calls().filter((call) => call.args[0] === "stop").map((call) => call.args), [["stop", "hhhh8888"]]);
+  const stoppedText = readFileSync(lost, "utf8");
+  assert.equal(parse(stoppedText).status, "stopped");
+  assert.equal(parse(stoppedText, JOB_KEYS).session_id, row("hhhh8888").sessionId);
+  assert.match(stoppedText, /\n## Outcome\n\nThe launch record could not be written \(.*\); claude stop hhhh8888 was run\.\n$/);
 
   const repo = world();
   mkdirSync(join(repo.root, "plans", "jobs"), { recursive: true });

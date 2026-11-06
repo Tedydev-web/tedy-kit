@@ -164,8 +164,14 @@ function launched(file, claude, args, cwd, name, previous, launch) {
     unrecorded = error;
   }
   const text = readFileSync(file, "utf8");
-  writeAtomic(file, found ? setKey(text, "session_id", found.sessionId) : withoutKey(text, "session_id"));
-  if (unrecorded) throw new Error(`the launch record for ${file} could not be written (${unrecorded.message}), but its session ${found?.id ?? "(unknown)"} is running; stop it with claude stop ${found?.id ?? "<short id from claude agents>"}, then close the job`);
+  const bound = found ? setKey(text, "session_id", found.sessionId) : withoutKey(text, "session_id");
+  if (unrecorded) {
+    const stopped = found ? spawned(claude, ["stop", found.id]) : null;
+    const what = !found ? "its new session could not be found to stop; check claude agents by name" : stopped.status === 0 ? `claude stop ${found.id} was run` : `claude stop ${found.id} failed (${(stopped.stderr || stopped.stdout).trim()}); run it by hand`;
+    writeAtomic(file, withSection(setStatus(bound, "stopped", new Date().toISOString()), "Outcome", `The launch record could not be written (${unrecorded.message}); ${what}.`));
+    throw new Error(`the launch record for ${file} could not be written (${unrecorded.message}), so ${stopped?.status === 0 ? `its new session ${found.id} was stopped` : "its new session was not stopped"} and the job is stopped; ${what}`);
+  }
+  writeAtomic(file, bound);
   return found ? null : `warning: ${name} was started, but its session id could not be read (${problem}); the job file has no session_id, so job.mjs list shows it lost; find the session by name in claude agents`;
 }
 
