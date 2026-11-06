@@ -116,7 +116,7 @@ function launchRecord(file) {
     return JSON.parse(readFileSync(path, "utf8"));
   } catch (error) {
     if (error.code === "ENOENT") return null;
-    throw new Error(`the launch record ${path} cannot be read (${error.message}); resume refuses it, and job.mjs close still stops the job's session when its fleet row runs inside the project`);
+    throw new Error(`the launch record ${path} cannot be read (${error.message}); resume refuses it, and job.mjs close stops nothing for it but prints the commands to end its session`);
   }
 }
 
@@ -145,12 +145,6 @@ function trusted(map, file) {
   if (different) throw new Error(`${different}; a job file may not change it`);
   if (record.cwd !== map.paths[0]) writableRepo(map, record.cwd);
   return { ...job, record };
-}
-
-function insideMap(map, dir) {
-  const root = map.paths[0];
-  const places = [...map.paths, ...(map.repos ?? []).map((repo) => resolve(root, repo.path))];
-  return typeof dir === "string" && places.some((place) => dir === place || dir.startsWith(`${place}/`));
 }
 
 function launched(file, claude, args, cwd, name, previous, launch) {
@@ -283,14 +277,10 @@ function sessionToClose(map, job, file, claude, notes) {
     notes.push(...differences(file, job, record).map((line) => `warning: ${line}; acting on the record`));
     return { id: record.session_id, row: undefined };
   }
-  if (!job.session_id) return { id: undefined };
-  const row = fleet(claude).find((item) => item.sessionId === job.session_id);
-  if (!row || !insideMap(map, row.cwd)) {
-    notes.push(`warning: ${file} has ${notes.length ? "no usable" : "no"} launch record, and the fleet row of its session_id ${job.session_id} ${row ? "does not run inside the project" : "is not listed"}, so nothing was stopped or removed; check claude agents by name ${jobName(map, job.role, job.path)}`);
-    return { id: undefined, warned: true };
-  }
-  notes.push(`warning: ${file} has ${notes.length ? "no usable" : "no"} launch record; stopped the session ${row.id} its session_id names, whose fleet row runs in ${row.cwd}`);
-  return { id: job.session_id, row };
+  const row = job.session_id && fleet(claude).find((item) => item.sessionId === job.session_id);
+  const hint = row ? `; if session ${row.id} is this job's, run: claude stop ${row.id}, then claude rm ${row.id}` : job.session_id ? `; its session_id ${job.session_id} is not in claude agents --json --all` : `; check claude agents by name ${jobName(map, job.role, job.path)}`;
+  notes.push(`warning: ${file} has no usable launch record, so nothing was stopped or removed${hint}`);
+  return { id: undefined, warned: true };
 }
 
 export function close(map, file, reason, { claude = claudeCli, waitMs = 30_000 } = {}) {

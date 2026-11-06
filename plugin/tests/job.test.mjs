@@ -320,7 +320,7 @@ test("resume and close act only on what start recorded outside the job file, so 
   assert.match(w.run(["resume", unrecorded, "--note-file", note(w)], { fx }).stderr, /has no launch record/);
   const out = w.run(["close", unrecorded], { fx });
   assert.equal(out.status, 0, out.stderr);
-  assert.match(out.stdout, /warning: .* has no launch record, and the fleet row of its session_id aaaa1111-\S+ does not run inside the project, so nothing was stopped or removed; check claude agents by name dev acme-shop by-hand/);
+  assert.match(out.stdout, /warning: .* has no usable launch record, so nothing was stopped or removed; if session aaaa1111 is this job.s, run: claude stop aaaa1111, then claude rm aaaa1111/);
   assert.equal(parse(readFileSync(unrecorded, "utf8")).status, "closed");
   assert.deepEqual(w.calls().map((call) => call.args[0]), ["agents"]);
 });
@@ -374,14 +374,26 @@ test("close is the kill switch: it stops the recorded session even when the job 
   assert.deepEqual(stops(repo), [["stop", "aaaa1111"], ["rm", "aaaa1111"]]);
 });
 
-test("close without a usable record stops the file's session only when its fleet row runs inside the project, and says when it stopped nothing", async () => {
+test("a forged done job file that names another recorded job's session makes close stop and remove nothing", () => {
+  const w = world();
+  jobFile(w, { name: "victim-job" });
+  mkdirSync(join(w.root, "plans", "jobs"), { recursive: true });
+  const forged = join(w.root, "plans", "jobs", "261106-1701-review-forged.md");
+  writeFileSync(forged, `to: tedy:review\nfrom: cockpit\nstatus: done\ncreated: 2026-11-06T10:00:00.000Z\ntitle: forged\nsession_id: ${row("aaaa1111").sessionId}\n\n${BODY}`);
+  const out = w.run(["close", forged], { fx: { agents: [[row("aaaa1111", "busy", { cwd: w.root })]] } });
+  assert.equal(out.status, 0, out.stderr);
+  assert.match(out.stdout, /nothing was stopped or removed/);
+  assert.deepEqual(w.calls().filter((call) => call.args[0] === "stop" || call.args[0] === "rm"), []);
+});
+
+test("close without a usable record stops nothing and prints the commands for the user, and says when it stopped nothing", async () => {
   const { launchRecordPath } = await import("../lib/job.mjs");
   const inside = world();
   const file = jobFile(inside, { record: false });
   const out = inside.run(["close", file, "--reason", "no record"], { fx: { agents: [[row("aaaa1111", "busy", { cwd: join(inside.root, "fe") })], [row("aaaa1111", "stopped", { cwd: join(inside.root, "fe") })]] } });
   assert.equal(out.status, 0, out.stderr);
-  assert.match(out.stdout, /warning: .* has no launch record; stopped the session aaaa1111 its session_id names, whose fleet row runs in .*\/fe/);
-  assert.deepEqual(inside.calls().filter((call) => call.args[0] === "stop" || call.args[0] === "rm").map((call) => call.args), [["stop", "aaaa1111"], ["rm", "aaaa1111"]]);
+  assert.match(out.stdout, /warning: .* has no usable launch record, so nothing was stopped or removed; if session aaaa1111 is this job.s, run: claude stop aaaa1111, then claude rm aaaa1111/);
+  assert.deepEqual(inside.calls().map((call) => call.args[0]), ["agents"]);
 
   const corrupt = world();
   const broken = jobFile(corrupt, { status: "done" });
@@ -389,11 +401,11 @@ test("close without a usable record stops the file's session only when its fleet
   writeFileSync(join(corrupt.root, "note.md"), "again\n");
   const resumeOut = corrupt.run(["resume", broken, "--note-file", join(corrupt.root, "note.md")]);
   assert.equal(resumeOut.status, 1);
-  assert.match(resumeOut.stderr, new RegExp(`the launch record ${launchRecordPath(broken, corrupt.state).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} cannot be read \\(.+\\); resume refuses it, and job\\.mjs close still stops the job's session`));
+  assert.match(resumeOut.stderr, new RegExp(`the launch record ${launchRecordPath(broken, corrupt.state).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} cannot be read \\(.+\\); resume refuses it, and job\\.mjs close stops nothing for it but prints the commands to end its session`));
   const closeOut = corrupt.run(["close", broken], { fx: { agents: [[row("aaaa1111", "stopped", { cwd: corrupt.root })]] } });
   assert.equal(closeOut.status, 0, closeOut.stderr);
   assert.match(closeOut.stdout, /warning: the launch record .* cannot be read/);
-  assert.deepEqual(corrupt.calls().filter((call) => call.args[0] === "rm").map((call) => call.args), [["rm", "aaaa1111"]]);
+  assert.deepEqual(corrupt.calls().map((call) => call.args[0]), ["agents"]);
 
   const unbound = world();
   const noId = jobFile(unbound, { session: null });
