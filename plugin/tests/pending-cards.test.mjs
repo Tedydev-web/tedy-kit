@@ -24,19 +24,19 @@ function project() {
   return { root, draft, map };
 }
 
-const ready = (body = `### 1\nnode ${SCRIPTS}/github-write.mjs reply 712 99 --body-file b.md --repo o/r\nLine one of the review.\n`) => body;
+const ready = (draft) => `### 1\nnode ${SCRIPTS}/github-write.mjs reply 712 99 --body-file ${draft} --repo o/r\nLine one of the review.\n`;
 const sha = (file) => createHash("sha256").update(readFileSync(file)).digest("hex");
 
 test("card publish writes the header and body, and parse reads them back", () => {
   const { root, draft, map } = project();
-  const file = card(map, "publish", { title: "Post review on PR 712", draft, records: "github:o/r#712", preview: "ready", body: ready() });
+  const file = card(map, "publish", { title: "Post review on PR 712", draft, records: "github:o/r#712", preview: "ready", body: ready(draft) });
   assert.match(file, new RegExp(`^${join(root, "plans", "drafts")}/\\d{6}-\\d{4}-publish-post-review-on-pr-712\\.md$`));
   const text = readFileSync(file, "utf8");
   const fields = parse(text, CARD_KEYS);
   assert.deepEqual(Object.keys(fields), ["kind", "title", "job", "draft", "draft-sha", "records", "preview", "created"]);
   assert.deepEqual({ ...fields, created: undefined }, { kind: "publish", title: "Post review on PR 712", job: "none", draft, "draft-sha": sha(draft), records: "github:o/r#712", preview: "ready", created: undefined });
   assert.match(fields.created, /^\d{4}-\d\d-\d\dT/);
-  assert.ok(text.endsWith(`\n\n${ready()}`), text);
+  assert.ok(text.endsWith(`\n\n${ready(draft)}`), text);
   const run = card(map, "publish", { title: "Status", preview: "run", body: `### 1\nnode ${SCRIPTS}/openproject.mjs set 12 --status "In Review"\n- #12 Task 12\n` });
   assert.equal(parse(readFileSync(run, "utf8"), CARD_KEYS).preview, "run");
   const [listed] = cards(map).filter((item) => item.path === run);
@@ -69,12 +69,28 @@ test("card refuses an unknown kind, a question with too few or too many options,
   for (const tail of ["<(touch /tmp/x)", ">(tee /tmp/x)", "&", "; touch /tmp/x", "&& touch /tmp/x", "|| touch /tmp/x", "*.md", "{a,b}", "~/x", '"$HOME"', "\\x", "#c", "2>/dev/null", "<in", "|& cat", "'a' \"b", "--x=`id`"]) refused.push(["run", `${set} ${tail}`, /block 1 is not plain words and quoted text/]);
   for (const [preview, command, message] of refused) assert.throws(() => card(map, "publish", { title: "T", draft, preview, body: `### 1\n${command}\ntext\n` }), message, command);
   for (const tail of ['--status "Fixed (Dev Done)"', "--assignee 'Hoàng & Lâm'", '--status "Won\'t fix"', "--assignee Hoàng", "--x=a,b:c@d%e+f"]) assert.ok(card(map, "publish", { title: "Plain", preview: "run", body: `### 1\nnode ${SCRIPTS}/openproject.mjs set 1 ${tail}\n` }), tail);
-  assert.throws(() => card(map, "publish", { title: "T", job: "plans/jobs/261104-0910-review-pr-712.md", draft, preview: "ready", body: ready() }), /block 1 lacks --job 261104-0910-review-pr-712\.md/);
-  assert.ok(card(map, "publish", { title: "T", job: "plans/jobs/261104-0910-review-pr-712.md", draft, preview: "ready", body: `### 1\nnode ${SCRIPTS}/github-write.mjs post d.md --job 261104-0910-review-pr-712.md\n` }));
-  assert.throws(() => card(map, "publish", { title: "T", preview: "ready", body: ready() }), /a preview: ready card needs draft:/);
-  assert.throws(() => card(map, "publish", { title: "T", draft, body: ready() }), /preview: ready or preview: run/);
+  assert.throws(() => card(map, "publish", { title: "T", job: "plans/jobs/261104-0910-review-pr-712.md", draft, preview: "ready", body: ready(draft) }), /block 1 lacks --job 261104-0910-review-pr-712\.md/);
+  assert.ok(card(map, "publish", { title: "T", job: "plans/jobs/261104-0910-review-pr-712.md", draft, preview: "ready", body: `### 1\nnode ${SCRIPTS}/github-write.mjs post ${draft} --job 261104-0910-review-pr-712.md\n` }));
+  assert.throws(() => card(map, "publish", { title: "T", preview: "ready", body: ready(draft) }), /a preview: ready card needs draft:/);
+  assert.throws(() => card(map, "publish", { title: "T", draft, body: ready(draft) }), /preview: ready or preview: run/);
   assert.throws(() => card(map, "notify", { title: "!!!", body: "x" }), /no words/);
   assert.equal(readdirSync(join(root, "plans", "drafts")).filter((name) => name.includes("-publish-t")).length, 1);
+});
+
+test("every block of a ready card names its pinned draft by absolute path, and a ready card without draft-sha never runs", () => {
+  const { root, draft, map } = project();
+  const other = join(root, "plans", "drafts", "b.md");
+  writeFileSync(other, "Another text.\n");
+  const post = (file) => `node ${SCRIPTS}/github-write.mjs post ${file} --repo o/r`;
+  assert.throws(() => card(map, "publish", { title: "T", draft, preview: "ready", body: `### 1\n${post(other)}\n` }), new RegExp(`block 1 does not name its draft ${draft} by its absolute path`));
+  assert.throws(() => card(map, "publish", { title: "T", draft, preview: "ready", body: `### 1\n${post(draft)}\n\n### 2\n${post(other)}\n` }), /block 2 does not name its draft/);
+  assert.throws(() => card(map, "publish", { title: "T", draft, preview: "ready", body: "### 1\nnode " + SCRIPTS + "/github-write.mjs post plans/drafts/review-712.md\n" }), /block 1 does not name its draft/);
+  assert.ok(card(map, "publish", { title: "T", draft, preview: "ready", body: `### 1\nnode ${SCRIPTS}/github-write.mjs reply 712 99 --body-file=${draft} --repo o/r\n` }));
+  assert.ok(card(map, "publish", { title: "T", preview: "run", body: `### 1\nnode ${SCRIPTS}/openproject.mjs comment 12 --body-file ${other}\n` }));
+  const hand = join(root, "plans", "drafts", "by-hand.md");
+  writeFileSync(hand, `kind: publish\ntitle: No pin\njob: none\ndraft: ${draft}\npreview: ready\n\n### 1\n${post(draft)}\n`);
+  assert.match(waitingText(map, { offline: true }), /^Refused cards:\n- No pin: a preview: ready card needs draft-sha:.*by-hand\.md$/m);
+  assert.throws(() => cardCheck(hand, map), /needs draft-sha:/);
 });
 
 test("two card writers at once with one title write two files", async () => {
@@ -102,7 +118,7 @@ test("a card written by hand with a bad block lists under Refused cards and neve
 test("the waiting list puts each card under its kind and keeps plain drafts and hand-offs where they were", () => {
   const { root, draft, map } = project();
   writeFileSync(join(root, "plans", "reports", "handoff-1-to-pm.md"), "to: PM - Shop\nfrom: Dev\nstatus: pending\ncreated: c\ntitle: Fix toast\n\nx\n");
-  const publish = card(map, "publish", { title: "Post review on PR 712", draft, preview: "ready", body: ready() });
+  const publish = card(map, "publish", { title: "Post review on PR 712", draft, preview: "ready", body: ready(draft) });
   const question = card(map, "question", { title: "Which toast", body: "Which toast text?\n- Short: one line\n- Long: two lines\n" });
   const notice = card(map, "notify", { title: "PR 713 opened", body: "https://x/713\n" });
   const text = waitingText(map, { offline: true });
@@ -116,14 +132,14 @@ test("the waiting list puts each card under its kind and keeps plain drafts and 
 
 test("done on a card archives the card and its draft, and leaves a draft outside plans/drafts alone", () => {
   const { root, draft, map } = project();
-  const file = card(map, "publish", { title: "Post review", draft, preview: "ready", body: ready() });
+  const file = card(map, "publish", { title: "Post review", draft, preview: "ready", body: ready(draft) });
   const moved = done(file, map);
   assert.deepEqual(moved, [join(root, "plans", "archive", "drafts", file.split("/").pop()), join(root, "plans", "archive", "drafts", "review-712.md")]);
   assert.ok(!existsSync(file) && !existsSync(draft));
   assert.equal(readFileSync(join(root, "plans", "archive", "MOVES.tsv"), "utf8").split("\n").filter(Boolean).length, 3);
   const outside = join(root, "plans", "reports", "review-713.md");
   writeFileSync(outside, "x\n");
-  const other = card(map, "publish", { title: "Post 713", draft: outside, preview: "ready", body: ready() });
+  const other = card(map, "publish", { title: "Post 713", draft: outside, preview: "ready", body: ready(outside) });
   assert.equal(done(other, map).length, 1);
   assert.ok(existsSync(outside));
 });
@@ -134,7 +150,7 @@ test("card-note writes answers and refusals into the header, a refused card is n
   cardNote(question, "Short");
   assert.equal(parse(readFileSync(question, "utf8"), CARD_KEYS).answer, "Short");
   assert.match(readFileSync(question, "utf8"), /\n\nWhich toast text\?\n- Short: one line\n- Long: two lines\n$/);
-  const first = card(map, "publish", { title: "Post review", draft, preview: "ready", body: ready() });
+  const first = card(map, "publish", { title: "Post review", draft, preview: "ready", body: ready(draft) });
   assert.equal(cardCheck(first, map), 1);
   writeFileSync(draft, "Line one, reworded.\n");
   assert.throws(() => cardCheck(first, map), /the draft changed since the card was written/);
@@ -142,11 +158,11 @@ test("card-note writes answers and refusals into the header, a refused card is n
   const fields = parse(readFileSync(first, "utf8"), CARD_KEYS);
   assert.equal(fields.status, "refused");
   assert.equal(fields.refused, "the user asked to reword line one");
-  assert.ok(readFileSync(first, "utf8").endsWith(`\n\n${ready()}`));
+  assert.ok(readFileSync(first, "utf8").endsWith(`\n\n${ready(draft)}`));
   assert.throws(() => cardCheck(first, map), /refused: the user asked to reword line one/);
   assert.match(waitingText(map, { offline: true }), /^Refused cards:\n- Post review: refused: the user asked to reword line one /m);
   assert.doesNotMatch(waitingText(map, { offline: true }), /To publish/);
-  const second = card(map, "publish", { title: "Post review again", draft, preview: "ready", body: ready() });
+  const second = card(map, "publish", { title: "Post review again", draft, preview: "ready", body: ready(draft) });
   assert.equal(cardCheck(second, map), 1);
   assert.equal(done(first, map).length, 1);
   assert.ok(existsSync(draft));
@@ -160,7 +176,7 @@ test("a card whose job is still running is listed but not offered, and card-chec
   mkdirSync(join(root, "plans", "jobs"));
   const job = join(root, "plans", "jobs", "261104-0910-review-pr-712.md");
   writeFileSync(job, "to: tedy:review\nfrom: cockpit\nstatus: running\ncreated: c\ntitle: Review 712\n\nx\n");
-  const file = card(map, "publish", { title: "Post review", job, draft, preview: "ready", body: `### 1\nnode ${SCRIPTS}/github-write.mjs post d.md --job=261104-0910-review-pr-712.md\n` });
+  const file = card(map, "publish", { title: "Post review", job, draft, preview: "ready", body: `### 1\nnode ${SCRIPTS}/github-write.mjs post ${draft} --job=261104-0910-review-pr-712.md\n` });
   assert.match(waitingText(map, { offline: true }), /^To publish:\n- Post review \(ready, 1 command, job running\) /m);
   assert.throws(() => cardCheck(file, map), /its job .* is still running/);
   writeFileSync(job, "to: tedy:review\nfrom: cockpit\nstatus: done\ncreated: c\ntitle: Review 712\n\nx\n");

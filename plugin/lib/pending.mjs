@@ -115,7 +115,7 @@ const jobRunning = (job, root) => {
 function judged(path, text, root) {
   const found = readCard(text);
   if (!found) return null;
-  const refusal = found.status === "refused" ? `refused: ${found.refused ?? "no reason given"}` : cardRefusal(found);
+  const refusal = found.status === "refused" ? `refused: ${found.refused ?? "no reason given"}` : cardRefusal(found, root);
   return { path, ...found, refusal, running: jobRunning(found.job, root) };
 }
 
@@ -150,7 +150,7 @@ export function card(map, kind, { title, job = "none", draft, records, preview, 
     ["created", new Date().toISOString()],
   ].filter(([, value]) => value !== undefined && value !== "");
   const text = `${header.map(([key, value]) => `${key}: ${oneLine(value)}`).join("\n")}\n\n${String(body ?? "").trim()}\n`;
-  const refusal = cardRefusal(readCard(text) ?? { kind });
+  const refusal = cardRefusal(readCard(text) ?? { kind }, map.paths[0]);
   if (refusal) throw new Error(`card refused: ${refusal}`);
   const dir = join(map.paths[0], "plans", "drafts");
   mkdirSync(dir, { recursive: true });

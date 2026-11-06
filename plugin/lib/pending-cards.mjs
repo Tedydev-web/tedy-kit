@@ -1,5 +1,5 @@
 import { realpathSync } from "node:fs";
-import { basename, isAbsolute, join } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "./handoff.mjs";
 import { KIT_PUBLISH_APPLY_VERBS, KIT_PUBLISH_WRITE_VERBS } from "./publish-approval-settings.mjs";
@@ -56,7 +56,7 @@ export function readCard(text) {
   };
 }
 
-function blockRefusal(command, { preview, job }) {
+function blockRefusal(command, { preview, job }, draft) {
   if (!command) return "has no command on its first line";
   if (!PLAIN_LINE.test(command)) return "is not plain words and quoted text: only letters, digits, _ @ % + = : , . / - outside quotes, '…' and \"…\" without $ ` \\ inside, one space between words (no operator, redirect, substitution, glob, brace, ~, # or <placeholder>)";
   const tokens = tokenize(command);
@@ -77,10 +77,15 @@ function blockRefusal(command, { preview, job }) {
     }
     if (!given || basename(given) !== basename(job)) return `lacks --job ${basename(job)}`;
   }
+  const named = (token) => {
+    const path = token.startsWith("--") && token.includes("=") ? token.slice(token.indexOf("=") + 1) : token;
+    return isAbsolute(path) && realOrNull(path) === draft.real;
+  };
+  if (draft && !tokens.slice(3).some(named)) return `does not name its draft ${draft.path} by its absolute path, so draft-sha: would pin a file it does not read`;
   return null;
 }
 
-export function cardRefusal(card) {
+export function cardRefusal(card, root = process.cwd()) {
   if (!KINDS.includes(card.kind)) return `unknown card kind ${card.kind}; use publish, question or notify`;
   if (!card.title) return "has no title";
   if (card.kind === "notify" && !card.body) return "has no text";
@@ -93,8 +98,11 @@ export function cardRefusal(card) {
   if (card.preview === "ready" && !card.draft) return "a preview: ready card needs draft:";
   if (card.preview === "ready" && !card["draft-sha"]) return "a preview: ready card needs draft-sha:; write it with pending.mjs card";
   if (!card.blocks.length) return "has no ### 1 block";
+  const draftPath = card.preview === "ready" ? resolve(root, card.draft) : null;
+  const draft = draftPath && { path: draftPath, real: realOrNull(draftPath) };
+  if (draft && !draft.real) return `its draft ${draftPath} does not exist`;
   for (const block of card.blocks) {
-    const why = blockRefusal(block.command, card);
+    const why = blockRefusal(block.command, card, draft);
     if (why) return `block ${block.n} ${why}`;
   }
   return null;
