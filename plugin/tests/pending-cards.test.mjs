@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
 import { parse } from "../lib/handoff.mjs";
@@ -232,6 +232,25 @@ test("card-start runs only a fully approved card, marks it started, and a starte
   assert.doesNotMatch(text, /To publish|Refused cards/);
   assert.match(text, new RegExp(`^Started, not closed:\n- Two replies \\(started ${fields.started}\\) ${file}$`, "m"));
   assert.equal(done(file, map).length, 2);
+});
+
+test("card-start claims a card with an exclusive marker, so a second session that loses the claim runs nothing", () => {
+  const { draft, map } = project();
+  const file = card(map, "publish", { title: "One reply", draft, preview: "ready", body: ready(draft) });
+  const marker = join(dirname(file), `.${basename(file)}.started`);
+  writeFileSync(marker, "2026-11-06T03:00:00.000Z\n");
+  const before = readFileSync(file, "utf8");
+  assert.throws(() => cardStart(file, map, ["1"]), /started at 2026-11-06T03:00:00\.000Z by another session/);
+  assert.equal(readFileSync(file, "utf8"), before);
+  assert.throws(() => cardCheck(file, map), /started at 2026-11-06T03:00:00\.000Z/);
+  assert.match(waitingText(map, { offline: true }), new RegExp(`^Started, not closed:\n- One reply \\(started 2026-11-06T03:00:00\\.000Z\\) ${file}$`, "m"));
+  assert.equal(done(file, map).length, 2);
+  assert.ok(!existsSync(marker));
+  const second = card(map, "publish", { title: "Run", preview: "run", body: `### 1\nnode ${SCRIPTS}/openproject.mjs set 1 --status X\n` });
+  const claim = join(dirname(second), `.${basename(second)}.started`);
+  assert.equal(cardStart(second, map, ["1"]), 1);
+  assert.equal(readFileSync(claim, "utf8").trim(), parse(readFileSync(second, "utf8"), CARD_KEYS).started);
+  assert.ok(!waitingText(map, { offline: true }).includes(claim));
 });
 
 test("an answered question is shown as answered, so the skill does not ask it again", () => {

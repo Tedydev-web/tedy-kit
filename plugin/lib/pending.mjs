@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { appendFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, statSync, writeFileSync } from "node:fs";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { appendFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { listPending, parse, reportsDir, slugOf, stamp } from "./handoff.mjs";
 import { cardRefusal, headerLength, oneLine, readCard } from "./pending-cards.mjs";
@@ -112,9 +112,22 @@ const jobRunning = (job, root) => {
   return existsSync(path) && parse(readFileSync(path, "utf8")).status === "running";
 };
 
-function judged(path, text, root) {
-  const found = readCard(text);
-  if (!found) return null;
+const startMarker = (path) => join(dirname(path), `.${basename(path)}.started`);
+
+function claimedAt(path) {
+  try {
+    return readFileSync(startMarker(path), "utf8").trim();
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+function judged(path, text, root, ownClaim = false) {
+  const read = readCard(text);
+  if (!read) return null;
+  const claimed = ownClaim || read.status === "refused" || read.status === "started" ? null : claimedAt(path);
+  const found = claimed === null ? read : { ...read, status: "started", started: claimed || undefined };
   const refusal =
     found.status === "refused" ? `refused: ${found.refused ?? "no reason given"}`
     : found.status === "started" ? `started at ${found.started ?? "an unknown time"}: its commands may already have written; check their read-backs, then pending.mjs done the card, or card-note --refuse it`
@@ -184,17 +197,26 @@ export function cardNote(file, text, { refuse = false } = {}) {
 }
 
 export function cardStart(file, map, approved) {
-  const count = cardCheck(file, map);
+  const count = checkCard(file, map, true);
   const blocks = readCard(readFileSync(file, "utf8")).blocks.map((block) => block.n);
   const given = [...new Set(approved)].sort((a, b) => a - b);
   if (given.join(",") !== [...blocks].sort((a, b) => a - b).join(",")) throw new Error(`card refused: the approval covers block(s) ${given.length ? given.join(", ") : "none"} of ${blocks.join(", ")}; a card runs only when every block was approved, so nothing ran`);
-  setHeader(file, ["status"], ["status: started", `started: ${new Date().toISOString()}`]);
+  const at = new Date().toISOString();
+  try {
+    writeFileSync(startMarker(resolve(file)), `${at}\n`, { flag: "wx" });
+  } catch (error) {
+    if (error.code !== "EEXIST") throw error;
+    throw new Error(`card refused: started at ${claimedAt(resolve(file)) || "an unknown time"} by another session; run nothing from it`);
+  }
+  setHeader(file, ["status"], ["status: started", `started: ${at}`]);
   return count;
 }
 
-export function cardCheck(file, map) {
+export const cardCheck = (file, map) => checkCard(file, map, false);
+
+function checkCard(file, map, ownClaim) {
   const root = map.paths[0];
-  const found = judged(resolve(file), readFileSync(file, "utf8"), root);
+  const found = judged(resolve(file), readFileSync(file, "utf8"), root, ownClaim);
   if (!found) throw new Error(`${file} is not a card file: it has no kind: line`);
   if (found.refusal) throw new Error(`card refused: ${found.refusal}`);
   if (found.running) throw new Error(`card refused: its job ${found.job} is still running and may rewrite the draft`);
@@ -215,6 +237,7 @@ export function done(file, map) {
   const named = (other) => other.draft && existsSync(resolve(root, other.draft)) && realpathSync(resolve(root, other.draft)) === draft;
   const keep = !draft || !underDrafts(draft, map) || cards(map).some((other) => realpathSync(other.path) !== realpathSync(path) && named(other));
   const moved = [archive(file, map)];
+  rmSync(startMarker(path), { force: true });
   if (!keep) moved.push(archive(draft, map));
   return moved;
 }
