@@ -13,3 +13,4 @@ Object.assign(process.env, {
   TEDY_KNOWN_MARKETPLACES: join(scratch, "known_marketplaces.json"),
 });
 delete process.env.CLAUDE_PROJECT_DIR;
+for (const key of ["HERDR_ENV", "HERDR_PANE_ID", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID"]) delete process.env[key];

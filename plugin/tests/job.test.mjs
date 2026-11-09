@@ -1,49 +1,16 @@
 import "./test-isolation.mjs";
 import assert from "node:assert/strict";
-import { execFile, spawn, spawnSync } from "node:child_process";
+import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import { parse } from "../lib/handoff.mjs";
 import { launchRecordPath, recordLaunch } from "../lib/job-files.mjs";
 import { handle, processInfo } from "../lib/job-session-hooks.mjs";
 import { tokenize } from "../lib/shell-segments.mjs";
+import { BODY, JOBS_DOC, jobFile, PLUGIN, world } from "./job-world-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
-
-const PLUGIN = fileURLToPath(new URL("../", import.meta.url)).replace(/\/$/, "");
-const SCRIPT = join(PLUGIN, "scripts", "job.mjs");
-const JOBS_DOC = join(PLUGIN, "shared", "jobs.md");
-
-const BODY = "Add the line hello to notes.txt.\n\n## User decisions\nnone yet\n\n## First safe step\nRead notes.txt.\n\n## Sources\nthe user's request\n";
-
-function world(mapExtra = { jobs: true }) {
-  const root = tempDir("tedy-job-");
-  const profile = join(root, "profile");
-  const state = join(root, "state");
-  const bin = join(root, "bin");
-  for (const dir of [join(profile, "projects"), state, bin, join(root, "fe"), join(root, "be")]) mkdirSync(dir, { recursive: true });
-  const map = { name: "acme-shop", paths: [root], repos: [{ path: "fe", role: "FE" }, { path: "be", role: "BE", readonly: true }], ...mapExtra };
-  writeFileSync(join(profile, "projects", "shop.md"), `# map\n\n\`\`\`json\n${JSON.stringify(map)}\n\`\`\`\n`);
-  const log = join(root, "claude.log");
-  writeFileSync(log, "");
-  writeFileSync(join(bin, "claude"), `#!/bin/sh\necho "$@" >> "${log}"\n`);
-  chmodSync(join(bin, "claude"), 0o755);
-  const body = join(root, "body.md");
-  writeFileSync(body, BODY);
-  const env = (extra = {}) => ({ ...process.env, PATH: `${bin}:${process.env.PATH}`, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: state, TEDY_JOB_PLUGIN_DIR: "", ...extra });
-  const run = (args, { extra } = {}) => {
-    const { status, stdout, stderr } = spawnSync("node", [SCRIPT, ...args], { cwd: root, encoding: "utf8", env: env(extra) });
-    return { status, stdout, stderr };
-  };
-  const runAsync = (args) => promisify(execFile)("node", [SCRIPT, ...args], { cwd: root, encoding: "utf8", env: env() });
-  const calls = () => readFileSync(log, "utf8").split("\n").filter(Boolean);
-  const jobs = () => (existsSync(join(root, "plans", "jobs")) ? readdirSync(join(root, "plans", "jobs")).filter((name) => name.endsWith(".md")).map((name) => join(root, "plans", "jobs", name)) : []);
-  const record = (file) => JSON.parse(readFileSync(launchRecordPath(file, state), "utf8"));
-  return { root, profile, state, body, map, run, runAsync, calls, jobs, record };
-}
 
 const JOB_KEYS = ["to", "from", "status", "updated", "created", "title", "cwd", "permission_mode", "session_id"];
 
@@ -102,7 +69,7 @@ test("start --json prints the launch spec object, and a mode or plugin dir joins
   const spec = JSON.parse(out.stdout);
   const [file] = w.jobs();
   const settings = join(w.state, "jobs", "settings", "pm.json");
-  assert.deepEqual(Object.keys(spec).sort(), ["agent", "command", "cwd", "prompt", "role", "settings", "title"]);
+  assert.deepEqual(Object.keys(spec).sort(), ["agent", "command", "cwd", "prompt", "role", "settings", "title", "via"]);
   assert.deepEqual([spec.role, spec.cwd, spec.title, spec.agent, spec.settings], ["pm", w.root, "pm acme-shop gaps", "tedy:pm", settings]);
   assert.equal(spec.prompt, `/tedy:pm job ${file}. First read ${JOBS_DOC}, section "Job".`);
   assert.deepEqual(tokenize(spec.command), ["cd", w.root, "&&", "claude", "--agent", "tedy:pm", "--settings", settings, "--permission-mode", "default", "--plugin-dir", "/opt/kit/plugin", spec.prompt]);
@@ -192,15 +159,6 @@ test("every role asks before git writes a file through --output and before it ed
   assert.ok(!bash.some((pattern) => matches(pattern, "git diff origin/dev")));
   assert.ok(askRules(at).includes("Edit(//p/tedy/**)") && askRules(at).includes("Edit(//s/tedy/**)"));
 });
-
-function jobFile(w, { role = "dev", status = "running", mode, created = new Date(Date.now() - (3 * 60 + 5) * 60_000).toISOString(), name = "add-hello", record = {} } = {}) {
-  mkdirSync(join(w.root, "plans", "jobs"), { recursive: true });
-  const file = join(w.root, "plans", "jobs", `261106-0900-${role}-${name}.md`);
-  const header = [`to: tedy:${role}`, "from: cockpit", `status: ${status}`, `created: ${created}`, `title: ${name.replaceAll("-", " ")}`, `cwd: ${w.root}`, ...(mode ? [`permission_mode: ${mode}`] : [])];
-  writeFileSync(file, `${header.join("\n")}\n\n${BODY}`);
-  if (record) recordLaunch(file, { role, cwd: w.root, permission_mode: mode, settings: join(w.state, "jobs", "settings", `${role}.json`), ...record }, w.state);
-  return file;
-}
 
 async function sleeper(ignoreTerm = false) {
   const child = spawn("node", ["-e", `${ignoreTerm ? "process.on('SIGTERM', () => {});" : ""} setInterval(() => {}, 1000); console.log("up")`], { stdio: ["ignore", "pipe", "ignore"] });

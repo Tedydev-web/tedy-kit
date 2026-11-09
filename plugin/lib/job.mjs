@@ -3,6 +3,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { missingSections, render, setStatus, slugOf, stamp } from "./handoff.mjs";
 import { age, createAtomic, JOB_ROLES, jobsDir, launchRecordPath, listJobs, readJob, recordLaunch, setKey, withSection, writeAtomic, writeRecord } from "./job-files.mjs";
+import { chooseAdapter, HerdrError, herdrAgent, herdrName, herdrState, herdrTab, onPath, t3Instance } from "./job-adapters.mjs";
 import { alive, claudeProcess, processInfo } from "./job-session-hooks.mjs";
 import { profileDir } from "./profile.mjs";
 import { STATE_DIR } from "./state-dir.mjs";
@@ -61,9 +62,46 @@ const startPrompt = (role, file) => (role === "devops" ? `Job file ${file}. Read
 
 const jobName = (map, role, file) => `${role} ${map.name} ${basename(file, ".md").replace(/^\d{6}-\d{4}-/, "").slice(`${role}-`.length)}`;
 
-function launchSpec({ role, cwd, title, settings, prompt, mode, resume }) {
-  const flags = [...(resume ? ["--resume", resume] : []), "--agent", `tedy:${role}`, "--settings", quoted(settings), ...(mode ? ["--permission-mode", mode] : []), ...(process.env.TEDY_JOB_PLUGIN_DIR ? ["--plugin-dir", quoted(process.env.TEDY_JOB_PLUGIN_DIR)] : [])];
-  return { role, cwd, title, agent: `tedy:${role}`, settings, prompt, ...(resume && { resume }), command: `cd ${quoted(cwd)} && claude ${flags.join(" ")} ${quoted(prompt)}` };
+const word = (text) => (/^[A-Za-z0-9:_-]+$/.test(text) ? text : quoted(text));
+
+const pluginDir = () => (process.env.TEDY_JOB_PLUGIN_DIR ? ["--plugin-dir", process.env.TEDY_JOB_PLUGIN_DIR] : []);
+
+const claudeArgs = ({ role, settings, prompt, mode, resume }) => [...(resume ? ["--resume", resume] : []), "--agent", `tedy:${role}`, "--settings", settings, ...(mode ? ["--permission-mode", mode] : []), ...pluginDir(), prompt];
+
+function launchSpec({ role, cwd, title, settings, prompt, mode, resume, via }) {
+  const args = claudeArgs({ role, settings, prompt, mode, resume });
+  return { role, cwd, title, agent: `tedy:${role}`, settings, prompt, ...(resume && { resume }), via, ...(via === "t3" && { t3: { instanceId: t3Instance(role), title, message: prompt } }), command: `cd ${quoted(cwd)} && claude ${args.map(word).join(" ")}` };
+}
+
+function openPane(adapter, forced, place) {
+  if (adapter !== "herdr") return { adapter, warnings: [] };
+  try {
+    return { adapter, warnings: [], ...herdrTab(place) };
+  } catch (error) {
+    if (!(error instanceof HerdrError) || forced) throw error;
+    return { adapter: "print", warnings: [`warning: ${error.message}; run the command below in any terminal`] };
+  }
+}
+
+function startAgent(file, spec, args, opened, turn) {
+  if (opened.adapter !== "herdr") return { spec, warnings: opened.warnings };
+  const record = launchRecord(file);
+  const herdr = { name: herdrName(spec.role, file, turn), pane: opened.pane };
+  try {
+    const warnings = herdrAgent({ ...herdr, args });
+    writeRecord(launchRecordPath(file), { ...record, via: "herdr", herdr });
+    return { spec: { ...spec, via: "herdr", herdr }, warnings: [...opened.warnings, ...warnings] };
+  } catch (error) {
+    if (!(error instanceof HerdrError)) throw error;
+    writeRecord(launchRecordPath(file), { ...record, via: "print" });
+    return { spec: { ...spec, via: "print" }, warnings: [...opened.warnings, `warning: ${error.message}; run the command below in any terminal`] };
+  }
+}
+
+export function t3InstanceText(role, current) {
+  const file = writeSettings(role, current);
+  const env = Object.entries(JSON.parse(readFileSync(file, "utf8")).env ?? {}).map(([key, value]) => `${key}=${value}`);
+  return [`Instance name: ${t3Instance(role)}`, `Launch arguments: ${["--agent", `tedy:${role}`, "--settings", file, ...pluginDir()].join(" ")}`, ...(env.length ? ["Environment:", ...env] : ["Environment: none"])].join("\n");
 }
 
 function launchRecord(file) {
@@ -77,7 +115,7 @@ function launchRecord(file) {
 }
 
 const RECORDED = ["role", "cwd", "permission_mode"];
-const SESSION_KEYS = ["session_id", "transcript_path", "pid", "pid_start", "bound_at", "state", "last_event_at"];
+const SESSION_KEYS = ["session_id", "transcript_path", "pid", "pid_start", "bound_at", "state", "last_event_at", "herdr"];
 
 const differences = (file, job, record) => RECORDED.filter((key) => job[key] !== record[key]).map((key) => `${file}: its ${key}: ${job[key] ?? "(none)"} differs from the launch record (${record[key] ?? "none"})`);
 
@@ -117,7 +155,7 @@ function createJob(dir, base, text) {
   }
 }
 
-export function start(map, role, { title, body, repo, mode }) {
+export function start(map, role, { title, body, repo, mode, via, t3 }) {
   if (map.jobs !== true) throw new Error(`the project map ${map.name} does not set "jobs": true; hand the work over per ${join(PLUGIN, "shared", "handoff.md")} instead`);
   if (!JOB_ROLES.includes(role)) throw new Error(`unknown role ${role}; use pm, dev, review or devops`);
   const line = String(title ?? "").replace(/\s+/g, " ").trim();
@@ -126,13 +164,17 @@ export function start(map, role, { title, body, repo, mode }) {
   const missing = missingSections(body);
   if (missing.length) throw new Error(`the body lacks ${missing.join(", ")}; see ${JOBS_DOC}`);
   if (mode !== undefined && !MODE.test(mode)) throw new Error(`--permission-mode ${mode} is not a mode name`);
+  const adapter = chooseAdapter({ via, t3 });
   const cwd = repo ? writableRepo(map, repo) : map.paths[0];
   const settings = writeSettings(role, map);
+  const opened = openPane(adapter, via === adapter, { cwd, label: `${role} ${map.name} ${slug}` });
   const created = new Date().toISOString();
   const header = [["cwd", cwd], ["permission_mode", mode]].filter(([, value]) => value).reduce((text, [key, value]) => setKey(text, key, value), setStatus(render({ to: `tedy:${role}`, from: "cockpit", title: line, body, created }), "running", created));
   const file = createJob(jobsDir(map), `${stamp()}-${role}-${slug}`, () => header);
-  recordLaunch(file, { role, cwd, permission_mode: mode, settings, created });
-  return launchSpec({ role, cwd, title: jobName(map, role, file), settings, prompt: startPrompt(role, file), mode });
+  recordLaunch(file, { role, cwd, permission_mode: mode, settings, created, via: opened.adapter });
+  const prompt = startPrompt(role, file);
+  const spec = launchSpec({ role, cwd, title: jobName(map, role, file), settings, prompt, mode, via: opened.adapter });
+  return startAgent(realpathSync(file), spec, claudeArgs({ role, settings, prompt, mode }), opened, 0);
 }
 
 function open(file) {
@@ -194,7 +236,8 @@ export function close(map, file, reason, options) {
   return [`closed: ${job.path}`, ...lines].join("\n");
 }
 
-export function resume(map, file, note) {
+export function resume(map, file, note, { via, t3 } = {}) {
+  const adapter = chooseAdapter({ via, t3 });
   const job = trusted(map, file);
   if (job.status === "closed") throw new Error(`${file} is closed; start a new job instead`);
   if (!String(note ?? "").trim()) throw new Error("the note is empty");
@@ -202,14 +245,26 @@ export function resume(map, file, note) {
   const { record } = job;
   if (!record.session_id) throw new Error(`${file} has no session yet; run the command job.mjs start printed for it, or close it and start a new job`);
   const open = alive(record) ? [`warning: session ${record.session_id} is still open (pid ${record.pid}); type the note in its window, or end it before you run this command, because resuming a running session starts a copy`] : [];
+  const title = jobName(map, record.role, job.path);
+  const opened = openPane(adapter, via === adapter, { cwd: record.cwd, label: title });
   const at = new Date().toISOString();
   writeAtomic(job.path, withSection(setStatus(job.text, "running", at), `Note ${at}`, note));
   const session = record.session_id;
+  const earlier = [...(record.earlier ?? []), session];
   const kept = Object.fromEntries(Object.entries(record).filter(([key]) => !SESSION_KEYS.includes(key)));
-  writeRecord(launchRecordPath(job.real), { ...kept, earlier: [...(record.earlier ?? []), session] });
+  writeRecord(launchRecordPath(job.real), { ...kept, earlier, via: opened.adapter });
   const prompt = `${note.trim()}\n\nThis is the latest ## Note of your job ${job.path}. Go on per ${JOBS_DOC}, section "Job", and end with job.mjs done or stop.`;
   const settings = record.settings ?? writeSettings(record.role, map);
-  return { spec: launchSpec({ role: record.role, cwd: record.cwd, title: jobName(map, record.role, job.path), settings, prompt, mode: record.permission_mode, resume: session }), warnings: open };
+  const launch = { role: record.role, settings, prompt, mode: record.permission_mode, resume: session };
+  const started = startAgent(job.real, launchSpec({ ...launch, cwd: record.cwd, title, via: opened.adapter }), claudeArgs(launch), opened, earlier.length);
+  return { spec: started.spec, warnings: [...open, ...started.warnings] };
+}
+
+function kitStatus(record) {
+  if (!record.session_id) return "not started";
+  if (!record.pid && !record.bound_at) return "lost (no pid recorded, started by an older kit)";
+  if (record.pid && !alive(record)) return `lost (last seen ${record.last_event_at ?? record.bound_at ?? "never"})`;
+  return record.state ?? "running";
 }
 
 function status(job) {
@@ -221,10 +276,9 @@ function status(job) {
     return `unknown (${error.message})`;
   }
   if (!record) return "lost (no launch record)";
-  if (!record.session_id) return "not started";
-  if (!record.pid && !record.bound_at) return "lost (no pid recorded, started by an older kit)";
-  if (record.pid && !alive(record)) return `lost (last seen ${record.last_event_at ?? record.bound_at ?? "never"})`;
-  return record.state ?? "running";
+  const state = kitStatus(record);
+  if (!record.herdr?.name || /^(waiting|lost)/.test(state) || !onPath("herdr")) return state;
+  return `${state} (herdr: ${herdrState(record.herdr.name)})`;
 }
 
 export const list = (map) => listJobs(map).map((job) => `${job.role} · ${job.title} · ${status(job)} · ${age(job.created)} · ${job.path}`);
@@ -247,7 +301,13 @@ function project() {
 
 const text = (value) => (typeof value === "string" ? value : undefined);
 
-const printSpec = (spec, json) => console.log(json ? JSON.stringify(spec, null, 2) : spec.command);
+function printLaunch({ spec, warnings }, json) {
+  for (const warning of warnings) console.error(warning);
+  if (json) console.log(JSON.stringify(spec, null, 2));
+  else console.log(spec.via === "herdr" ? `herdr agent ${spec.herdr.name} started in pane ${spec.herdr.pane}` : spec.command);
+}
+
+const adapterFlags = (given) => ({ via: given.via === true ? "" : given.via, t3: given.t3 !== undefined });
 
 function main([command, target, ...rest]) {
   const given = flags(rest);
@@ -255,8 +315,12 @@ function main([command, target, ...rest]) {
     console.log(writeSettings(target, resolveMap(process.cwd())?.map));
     return 0;
   }
+  if (command === "t3-instance" && target) {
+    console.log(t3InstanceText(target, resolveMap(process.cwd())?.map));
+    return 0;
+  }
   if (command === "start" && target && text(given.title) && text(given["body-file"])) {
-    printSpec(start(project(), target, { title: given.title, body: readFileSync(given["body-file"], "utf8"), repo: text(given.repo), mode: text(given["permission-mode"]) }), given.json === true);
+    printLaunch(start(project(), target, { title: given.title, body: readFileSync(given["body-file"], "utf8"), repo: text(given.repo), mode: text(given["permission-mode"]), ...adapterFlags(given) }), given.json === true);
     return 0;
   }
   if (command === "done" && target && text(given["outcome-file"])) {
@@ -268,9 +332,7 @@ function main([command, target, ...rest]) {
     return 0;
   }
   if (command === "resume" && target && text(given["note-file"])) {
-    const { spec, warnings } = resume(project(), target, readFileSync(given["note-file"], "utf8"));
-    for (const warning of warnings) console.error(warning);
-    printSpec(spec, given.json === true);
+    printLaunch(resume(project(), target, readFileSync(given["note-file"], "utf8"), adapterFlags(given)), given.json === true);
     return 0;
   }
   if (command === "close" && target) {
@@ -281,7 +343,7 @@ function main([command, target, ...rest]) {
     console.log(list(project()).join("\n") || "No jobs are open.");
     return 0;
   }
-  console.error("usage: job.mjs settings <pm|dev|review|devops> | start <pm|dev|review|devops> --title <t> --body-file <f> [--repo <path>] [--permission-mode <mode>] [--json] | done <job file> --outcome-file <f> | stop <job file> --reason <text> | resume <job file> --note-file <f> [--json] | close <job file> [--reason <text>] | list");
+  console.error("usage: job.mjs settings <pm|dev|review|devops> | t3-instance <pm|dev|review|devops> | start <pm|dev|review|devops> --title <t> --body-file <f> [--repo <path>] [--permission-mode <mode>] [--via t3|herdr|print] [--t3] [--json] | done <job file> --outcome-file <f> | stop <job file> --reason <text> | resume <job file> --note-file <f> [--via t3|herdr|print] [--t3] [--json] | close <job file> [--reason <text>] | list");
   return 2;
 }
 
