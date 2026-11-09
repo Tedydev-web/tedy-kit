@@ -220,7 +220,8 @@ test("list reads only kit records: the file status when not running, else not st
     jobFile(w, { name: "busy", record: { session_id: "s-2", pid: live.pid, pid_start: live.start, state: "running" } });
     jobFile(w, { name: "gone", record: { session_id: "s-3", pid: DEAD_PID, pid_start: "1", state: "waiting: permission", last_event_at: "2026-11-09T03:20:53.000Z" } });
     jobFile(w, { name: "reused", record: { session_id: "s-4", pid: live.pid, pid_start: `${live.start}9`, state: "running", last_event_at: "2026-11-09T03:21:00.000Z" } });
-    jobFile(w, { name: "no-pid", record: { session_id: "s-5", state: "idle" } });
+    jobFile(w, { name: "no-pid", record: { session_id: "s-5", bound_at: "2026-11-09T03:00:00.000Z", state: "idle" } });
+    jobFile(w, { name: "older-kit", record: { session_id: "s-9" } });
     jobFile(w, { name: "finished", status: "done", created: new Date(Date.now() - 26 * 3_600_000).toISOString(), record: { session_id: "s-6", pid: DEAD_PID, pid_start: "1" } });
     jobFile(w, { name: "old", status: "closed" });
     const out = w.run(["list"]);
@@ -233,6 +234,7 @@ test("list reads only kit records: the file status when not running, else not st
       "dev · gone · lost (last seen 2026-11-09T03:20:53.000Z) · 3h 5m",
       "dev · reused · lost (last seen 2026-11-09T03:21:00.000Z) · 3h 5m",
       "dev · no pid · idle · 3h 5m",
+      "dev · older kit · lost (no pid recorded, started by an older kit) · 3h 5m",
       "dev · finished · done · 1d 2h",
     ].sort());
     assert.deepEqual(w.calls(), []);

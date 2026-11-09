@@ -222,6 +222,7 @@ function status(job) {
   }
   if (!record) return "lost (no launch record)";
   if (!record.session_id) return "not started";
+  if (!record.pid && !record.bound_at) return "lost (no pid recorded, started by an older kit)";
   if (record.pid && !alive(record)) return `lost (last seen ${record.last_event_at ?? record.bound_at ?? "never"})`;
   return record.state ?? "running";
 }
