@@ -1,7 +1,11 @@
 import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { WORKSPACE, cleanupTargets, commandOutcome, shortIdOf } from "../evals/probes/job-probes.mjs";
+import { LEGACY, WORKSPACE, cleanupTargets, commandOutcome, shortIdOf } from "../evals/probes/job-probes.mjs";
+
+test("the job probes say they measure the legacy --bg launch, which job.mjs no longer uses", () => {
+  assert.match(LEGACY, /^\[legacy\] .*claude --bg.*job\.mjs no longer launches/);
+});
 
 test("job probe reads a background session's short id from the launch line", () => {
   assert.equal(shortIdOf("backgrounded · b81fdaf2 · probe job one"), "b81fdaf2");

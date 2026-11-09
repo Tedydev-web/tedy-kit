@@ -6,6 +6,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 export const WORKSPACE = process.env.TEDY_PROBE_WORKSPACE ?? "/tmp/tedy-probes-bg/work";
+export const LEGACY = "[legacy] these blocks measure claude --bg sessions, which job.mjs no longer launches (ADR 0018); they re-measure ADR 0015 blocks [9] to [13b] only";
 const BASE = dirname(WORKSPACE);
 const LAUNCHED = join(BASE, "launched");
 const FACTS = join(BASE, "facts.txt");
@@ -362,6 +363,7 @@ async function main(mode) {
   process.on("exit", cleanup);
   for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(130));
   prepare();
+  fact(LEGACY);
   if (mode === "9") return blockNine();
   if (mode !== "10" && !trusted()) {
     fact("[gate] workspace not trusted; open claude once in /tmp/tedy-probes-bg/work and rerun");

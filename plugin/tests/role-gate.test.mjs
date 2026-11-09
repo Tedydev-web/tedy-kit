@@ -451,7 +451,8 @@ test("only kit script writes are marked as scripts", () => {
 test("in a jobs map a job's role card names jobs.md and never a hand-off, and the cockpit card names /tedy:pending", () => {
   const card = gate.jobCard(jobsMap, { role: "dev", label: "tedy:dev" });
   assert.ok(card.startsWith(`Role: this session is a dev job (tedy:dev) of acme-shop. Work it per ${JOBS_DOC}, section "Job":`), card);
-  assert.match(card, /never call AskUserQuestion/);
+  assert.match(card, /ask the user with AskUserQuestion in this window/);
+  assert.doesNotMatch(card, /never call AskUserQuestion|question card/);
   assert.doesNotMatch(card, /handoff/);
   assert.equal(gate.cockpitCard(jobsMap), `This is the cockpit of acme-shop: start jobs per ${JOBS_DOC}, approve with /tedy:pending.`);
   assert.match(gate.jobCard(noSessions, { role: "dev", label: "tedy:dev" }), /into a draft under plans\/drafts/);
