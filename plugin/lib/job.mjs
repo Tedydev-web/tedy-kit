@@ -3,7 +3,8 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { missingSections, render, setStatus, slugOf, stamp } from "./handoff.mjs";
 import { age, createAtomic, JOB_ROLES, jobsDir, launchRecordPath, listJobs, readJob, recordLaunch, setKey, withSection, writeAtomic, writeRecord } from "./job-files.mjs";
-import { chooseAdapter, HerdrError, herdrAgent, herdrName, herdrState, herdrTab, onPath, t3Instance } from "./job-adapters.mjs";
+import { chooseAdapter, HerdrError, herdrAgent, herdrName, herdrState, herdrTab, herdrWorktree, onPath, t3Instance } from "./job-adapters.mjs";
+import { addWorktree, planWorktree, t3Strategy } from "./job-worktrees.mjs";
 import { alive, claudeProcess, processInfo } from "./job-session-hooks.mjs";
 import { profileDir } from "./profile.mjs";
 import { STATE_DIR } from "./state-dir.mjs";
@@ -68,15 +69,16 @@ const pluginDir = () => (process.env.TEDY_JOB_PLUGIN_DIR ? ["--plugin-dir", proc
 
 const claudeArgs = ({ role, settings, prompt, mode, resume }) => [...(resume ? ["--resume", resume] : []), "--agent", `tedy:${role}`, "--settings", settings, ...(mode ? ["--permission-mode", mode] : []), ...pluginDir(), prompt];
 
-function launchSpec({ role, cwd, title, settings, prompt, mode, resume, via }) {
+function launchSpec({ role, cwd, title, settings, prompt, mode, resume, via, tree }) {
   const args = claudeArgs({ role, settings, prompt, mode, resume });
-  return { role, cwd, title, agent: `tedy:${role}`, settings, prompt, ...(resume && { resume }), via, ...(via === "t3" && { t3: { instanceId: t3Instance(role), title, message: prompt } }), command: `cd ${quoted(cwd)} && claude ${args.map(word).join(" ")}` };
+  const t3 = { instanceId: t3Instance(role), title, message: prompt, ...(tree && { workspaceStrategy: t3Strategy(tree) }) };
+  return { role, cwd, title, agent: `tedy:${role}`, settings, prompt, ...(resume && { resume }), via, ...(via === "t3" && { t3 }), command: `cd ${quoted(cwd)} && claude ${args.map(word).join(" ")}` };
 }
 
-function openPane(adapter, forced, place) {
+function openPane(adapter, forced, { cwd, label, tree }) {
   if (adapter !== "herdr") return { adapter, warnings: [] };
   try {
-    return { adapter, warnings: [], ...herdrTab(place) };
+    return { adapter, warnings: [], ...(tree ? herdrWorktree({ ...tree, label }) : herdrTab({ cwd, label })) };
   } catch (error) {
     if (!(error instanceof HerdrError) || forced) throw error;
     return { adapter: "print", warnings: [`warning: ${error.message}; run the command below in any terminal`] };
@@ -114,7 +116,7 @@ function launchRecord(file) {
   }
 }
 
-const RECORDED = ["role", "cwd", "permission_mode"];
+const RECORDED = ["role", "cwd", "permission_mode", "repo"];
 const SESSION_KEYS = ["session_id", "transcript_path", "pid", "pid_start", "bound_at", "state", "last_event_at", "herdr"];
 
 const differences = (file, job, record) => RECORDED.filter((key) => job[key] !== record[key]).map((key) => `${file}: its ${key}: ${job[key] ?? "(none)"} differs from the launch record (${record[key] ?? "none"})`);
@@ -138,7 +140,8 @@ function trusted(map, file) {
   if (!record) return { ...job, record: null };
   const [different] = differences(file, job, record);
   if (different) throw new Error(`${different}; a job file may not change it`);
-  if (record.cwd !== map.paths[0]) writableRepo(map, record.cwd);
+  const repo = record.repo ?? record.cwd;
+  if (repo !== map.paths[0]) writableRepo(map, repo);
   return { ...job, record };
 }
 
@@ -155,7 +158,15 @@ function createJob(dir, base, text) {
   }
 }
 
-export function start(map, role, { title, body, repo, mode, via, t3 }) {
+function worktreeFor(opened, tree) {
+  if (!tree) return {};
+  if (opened.adapter === "t3") return { owner: "t3" };
+  if (opened.adapter === "herdr") return { owner: "herdr", path: opened.cwd };
+  addWorktree(tree);
+  return { owner: "core", path: tree.path };
+}
+
+export function start(map, role, { title, body, repo, mode, via, t3, branch }) {
   if (map.jobs !== true) throw new Error(`the project map ${map.name} does not set "jobs": true; hand the work over per ${join(PLUGIN, "shared", "handoff.md")} instead`);
   if (!JOB_ROLES.includes(role)) throw new Error(`unknown role ${role}; use pm, dev, review or devops`);
   const line = String(title ?? "").replace(/\s+/g, " ").trim();
@@ -165,15 +176,20 @@ export function start(map, role, { title, body, repo, mode, via, t3 }) {
   if (missing.length) throw new Error(`the body lacks ${missing.join(", ")}; see ${JOBS_DOC}`);
   if (mode !== undefined && !MODE.test(mode)) throw new Error(`--permission-mode ${mode} is not a mode name`);
   const adapter = chooseAdapter({ via, t3 });
-  const cwd = repo ? writableRepo(map, repo) : map.paths[0];
+  const repoPath = repo ? writableRepo(map, repo) : null;
+  const tree = role === "dev" && repoPath ? planWorktree(map, repoPath, { branch, slug }) : null;
+  if (branch !== undefined && !tree) throw new Error("--branch applies only to a dev job with --repo");
   const settings = writeSettings(role, map);
-  const opened = openPane(adapter, via === adapter, { cwd, label: `${role} ${map.name} ${slug}` });
+  const opened = openPane(adapter, via === adapter, { cwd: repoPath ?? map.paths[0], label: `${role} ${map.name} ${slug}`, tree });
+  const worktree = worktreeFor(opened, tree);
+  const cwd = worktree.path ?? repoPath ?? map.paths[0];
   const created = new Date().toISOString();
-  const header = [["cwd", cwd], ["permission_mode", mode]].filter(([, value]) => value).reduce((text, [key, value]) => setKey(text, key, value), setStatus(render({ to: `tedy:${role}`, from: "cockpit", title: line, body, created }), "running", created));
+  const keys = [["cwd", cwd], ["permission_mode", mode], ["repo", repoPath], ["branch", tree?.branch], ["base", tree?.base], ["worktree", worktree.path], ["worktree_owner", worktree.owner]];
+  const header = keys.filter(([, value]) => value).reduce((text, [key, value]) => setKey(text, key, value), setStatus(render({ to: `tedy:${role}`, from: "cockpit", title: line, body, created }), "running", created));
   const file = createJob(jobsDir(map), `${stamp()}-${role}-${slug}`, () => header);
-  recordLaunch(file, { role, cwd, permission_mode: mode, settings, created, via: opened.adapter });
+  recordLaunch(file, { role, cwd, permission_mode: mode, settings, created, via: opened.adapter, ...(repoPath && { repo: repoPath }) });
   const prompt = startPrompt(role, file);
-  const spec = launchSpec({ role, cwd, title: jobName(map, role, file), settings, prompt, mode, via: opened.adapter });
+  const spec = launchSpec({ role, cwd, title: jobName(map, role, file), settings, prompt, mode, via: opened.adapter, tree: worktree.owner === "t3" && tree });
   return startAgent(realpathSync(file), spec, claudeArgs({ role, settings, prompt, mode }), opened, 0);
 }
 
@@ -244,6 +260,7 @@ export function resume(map, file, note, { via, t3 } = {}) {
   if (!job.record) throw new Error(`${file} has no launch record, so it was not started by job.mjs start here; close it and start a new job`);
   const { record } = job;
   if (!record.session_id) throw new Error(`${file} has no session yet; run the command job.mjs start printed for it, or close it and start a new job`);
+  if (!existsSync(record.cwd)) throw new Error(`${file}: its folder ${record.cwd} no longer exists; close it and start a new job`);
   const open = alive(record) ? [`warning: session ${record.session_id} is still open (pid ${record.pid}); type the note in its window, or end it before you run this command, because resuming a running session starts a copy`] : [];
   const title = jobName(map, record.role, job.path);
   const opened = openPane(adapter, via === adapter, { cwd: record.cwd, label: title });
@@ -320,7 +337,7 @@ function main([command, target, ...rest]) {
     return 0;
   }
   if (command === "start" && target && text(given.title) && text(given["body-file"])) {
-    printLaunch(start(project(), target, { title: given.title, body: readFileSync(given["body-file"], "utf8"), repo: text(given.repo), mode: text(given["permission-mode"]), ...adapterFlags(given) }), given.json === true);
+    printLaunch(start(project(), target, { title: given.title, body: readFileSync(given["body-file"], "utf8"), repo: text(given.repo), mode: text(given["permission-mode"]), branch: text(given.branch), ...adapterFlags(given) }), given.json === true);
     return 0;
   }
   if (command === "done" && target && text(given["outcome-file"])) {
@@ -343,7 +360,7 @@ function main([command, target, ...rest]) {
     console.log(list(project()).join("\n") || "No jobs are open.");
     return 0;
   }
-  console.error("usage: job.mjs settings <pm|dev|review|devops> | t3-instance <pm|dev|review|devops> | start <pm|dev|review|devops> --title <t> --body-file <f> [--repo <path>] [--permission-mode <mode>] [--via t3|herdr|print] [--t3] [--json] | done <job file> --outcome-file <f> | stop <job file> --reason <text> | resume <job file> --note-file <f> [--via t3|herdr|print] [--t3] [--json] | close <job file> [--reason <text>] | list");
+  console.error("usage: job.mjs settings <pm|dev|review|devops> | t3-instance <pm|dev|review|devops> | start <pm|dev|review|devops> --title <t> --body-file <f> [--repo <path>] [--branch <name>] [--permission-mode <mode>] [--via t3|herdr|print] [--t3] [--json] | done <job file> --outcome-file <f> | stop <job file> --reason <text> | resume <job file> --note-file <f> [--via t3|herdr|print] [--t3] [--json] | close <job file> [--reason <text>] | list");
   return 2;
 }
 

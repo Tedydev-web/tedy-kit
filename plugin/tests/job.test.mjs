@@ -40,24 +40,24 @@ test("settings writes one settings file per role in the state dir with the role'
 
 test("start writes the running job file and its launch record, then prints one cd-and-claude command for the user and never runs claude", () => {
   const w = world();
-  const out = w.run(["start", "dev", "--title", "Add hello", "--body-file", w.body, "--repo", "fe"]);
+  const out = w.run(["start", "dev", "--title", "Add hello", "--body-file", w.body]);
   assert.equal(out.status, 0, out.stderr);
   const [file] = w.jobs();
   assert.match(file, /plans\/jobs\/\d{6}-\d{4}-dev-add-hello\.md$/);
   const settings = join(w.state, "jobs", "settings", "dev.json");
   const line = out.stdout.trim();
   assert.equal(line.split("\n").length, 1);
-  assert.ok(line.startsWith(`cd '${join(w.root, "fe")}' && claude --agent tedy:dev --settings '${settings}' '/tedy:dev job `), line);
+  assert.ok(line.startsWith(`cd '${w.root}' && claude --agent tedy:dev --settings '${settings}' '/tedy:dev job `), line);
   const tokens = tokenize(line);
-  assert.deepEqual(tokens.slice(0, 8), ["cd", join(w.root, "fe"), "&&", "claude", "--agent", "tedy:dev", "--settings", settings]);
+  assert.deepEqual(tokens.slice(0, 8), ["cd", w.root, "&&", "claude", "--agent", "tedy:dev", "--settings", settings]);
   assert.equal(tokens.length, 9);
   assert.equal(tokens[8], `/tedy:dev job ${file}. First read ${JOBS_DOC}, section "Job".`);
   assert.ok(!tokens.some((token) => ["--bg", "--name", "--session-id", "-w"].includes(token)));
   const job = parse(readFileSync(file, "utf8"), JOB_KEYS);
-  assert.deepEqual([job.to, job.from, job.status, job.title, job.cwd, job.session_id], ["tedy:dev", "cockpit", "running", "Add hello", join(w.root, "fe"), undefined]);
+  assert.deepEqual([job.to, job.from, job.status, job.title, job.cwd, job.session_id], ["tedy:dev", "cockpit", "running", "Add hello", w.root, undefined]);
   assert.match(readFileSync(file, "utf8"), /\n\nAdd the line hello to notes\.txt\.\n\n## User decisions\n/);
   const record = w.record(file);
-  assert.deepEqual([record.file, record.role, record.cwd, record.settings, record.session_id], [file, "dev", join(w.root, "fe"), settings, undefined]);
+  assert.deepEqual([record.file, record.role, record.cwd, record.settings, record.session_id], [file, "dev", w.root, settings, undefined]);
   assert.ok(existsSync(settings));
   assert.deepEqual(w.calls(), []);
 });

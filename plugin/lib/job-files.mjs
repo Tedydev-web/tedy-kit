@@ -31,7 +31,7 @@ export function recordLaunch(file, launch, dir = STATE_DIR) {
 
 export const writeRecord = (path, record) => writeAtomic(path, `${JSON.stringify(record)}\n`);
 
-export const JOB_KEYS =Object.freeze([...HANDOFF_KEYS, "cwd", "permission_mode", "session_id"]);
+export const JOB_KEYS = Object.freeze([...HANDOFF_KEYS, "cwd", "permission_mode", "session_id", "repo", "branch", "base", "worktree", "worktree_owner"]);
 export const JOB_ROLES = Object.freeze(["pm", "dev", "review", "devops"]);
 const HEADER = new RegExp(`^(${JOB_KEYS.join("|")}): `);
 
