@@ -271,10 +271,9 @@ test("in a jobs map that still lists sessions, a listed session gets its legacy 
   assert.match(other, /^This is the cockpit of shop:/m);
 });
 
-test("the Stop nudge never pushes a job toward AskUserQuestion", () => {
+test("the Stop nudge pushes a job toward AskUserQuestion like any session, since a job asks in its own window", () => {
   const entries = [prompt("x"), say("Anh muốn em đăng các góp ý này không?")];
-  assert.deepEqual(decideNudge(entries, false, undefined, "tedy:dev"), { nudge: false, why: "job" });
-  assert.equal(decideNudge(entries, false, undefined, "Explore").nudge, true);
+  assert.equal(decideNudge(entries, false, undefined).nudge, true);
 });
 
 test("memories with no recognised type are logged as format drift, project-only memories are not, and a moved memory folder is reported", async () => {
