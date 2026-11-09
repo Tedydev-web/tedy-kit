@@ -234,6 +234,70 @@ function dataOnly(segment) {
   return DATA_PROGRAMS.has(word);
 }
 
+const SHELL_LOOKUP = /^(?:PATH|IFS|ENV|BASH_ENV|LD_\w+|DYLD_\w+)$/;
+const SED_FLAG = /^(?:-[nErsuz]+|-[nErsuz]*i[\w.~-]*|--in-place(?:=[\w.~-]*)?|--quiet|--silent|--regexp-extended|--separate|--null-data|--posix)$/;
+
+function textOnlySedScript(script) {
+  let at = 0;
+  const through = (delimiter) => {
+    while (at < script.length && script[at] !== delimiter) at += script[at] === "\\" ? 2 : 1;
+    at += 1;
+    return at <= script.length;
+  };
+  while (at < script.length) {
+    const char = script[at];
+    if (/[\s;{}!,0-9$~+]/.test(char) || "pPdDnNgGhHxlzF=qQ".includes(char)) at += 1;
+    else if (char === "/" || char === "\\") {
+      const delimiter = char === "/" ? "/" : script[at + 1];
+      at += char === "/" ? 1 : 2;
+      if (!delimiter || !through(delimiter)) return false;
+      while (/[IM]/.test(script[at] ?? "")) at += 1;
+    } else if (char === "s" || char === "y") {
+      const delimiter = script[at + 1];
+      if (!delimiter || /[\s\\]/.test(delimiter)) return false;
+      at += 2;
+      if (!through(delimiter) || !through(delimiter)) return false;
+      if (char === "s") while (/[gpiImM0-9]/.test(script[at] ?? "")) at += 1;
+      if (at < script.length && !/[\s;}]/.test(script[at])) return false;
+    } else return false;
+  }
+  return true;
+}
+
+function textOnlySed(args, known) {
+  const scripts = [];
+  let positional = false;
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "-e" || arg === "--expression") {
+      if (args[index + 1] === undefined) return false;
+      scripts.push(args[(index += 1)]);
+    } else if (arg.startsWith("-") && arg !== "-") {
+      if (!SED_FLAG.test(arg)) return false;
+    } else if (!scripts.length && !positional) {
+      scripts.push(arg);
+      positional = true;
+    }
+  }
+  const expanded = (script) => script.replace(/\$(?:\{(\w+)\}|(\w+))/g, (_, braced, bare) => known.get(braced ?? bare) ?? "\u0000");
+  return scripts.length > 0 && scripts.every((script) => textOnlySedScript(script) && !expanded(script).includes("\u0000") && textOnlySedScript(expanded(script)));
+}
+
+function textOnly(segment, known) {
+  if (dataOnly(segment)) return true;
+  if (substitutions(segment)?.length !== 0) return false;
+  const [word, ...args] = tokenize(segment);
+  if (ENV_ASSIGNMENT.test(word ?? "") && args.every((arg) => ENV_ASSIGNMENT.test(arg))) {
+    for (const assignment of [word, ...args]) {
+      const name = assignment.slice(0, assignment.indexOf("="));
+      if (SHELL_LOOKUP.test(name)) return false;
+      known.set(name, assignment.slice(name.length + 1));
+    }
+    return true;
+  }
+  return word === "sed" && textOnlySed(args, known);
+}
+
 function xargsUnreadable(segment) {
   const tokens = tokenize(segment);
   const at = tokens.findIndex((token) => basename(token) === "xargs");
@@ -247,11 +311,14 @@ function runsPublish(segment) {
   return (call !== null && (call.viaXargs || PUBLISH.test(call.words.join(" ")))) || xargsUnreadable(segment);
 }
 
-export const dataOnlyCommand = (command) => splitSegments(command, false).every(dataOnly);
+export function dataOnlyCommand(command) {
+  const known = new Map();
+  return splitSegments(command, false).every((segment) => textOnly(segment, known));
+}
 
 export function publishingSegments(command) {
   const segments = splitSegments(command, false);
-  const data = segments.every(dataOnly);
+  const data = dataOnlyCommand(command);
   return segments.filter((segment) => runsPublish(segment) || (!data && PUBLISH.test(shellWords(segment)) && !searchOnly(segment)));
 }
 
