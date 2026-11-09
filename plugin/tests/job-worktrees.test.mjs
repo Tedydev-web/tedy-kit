@@ -68,6 +68,18 @@ test("the worktree root, the branch and the integration branch follow the map an
   assert.equal(w.jobs().length, 1);
 });
 
+test("a core worktree starts from the integration branch as origin has it now, not as the repository last fetched it", () => {
+  const w = gitWorld();
+  writeFileSync(join(w.seed, "notes.txt"), "newer\n");
+  git(w.seed, "commit", "-q", "-am", "newer");
+  git(w.seed, "push", "-q", "origin", "HEAD:main");
+  const tip = git(w.seed, "rev-parse", "HEAD");
+  assert.notEqual(git(w.fe, "rev-parse", "origin/main"), tip);
+  const out = w.start(["--json"]);
+  assert.equal(out.status, 0, out.stderr);
+  assert.equal(git(JSON.parse(out.stdout).cwd, "rev-parse", "HEAD"), tip);
+});
+
 test("only a dev job with --repo gets a worktree", () => {
   const w = gitWorld();
   assert.equal(JSON.parse(w.run(["start", "dev", "--title", "x", "--body-file", w.body, "--json"]).stdout).cwd, w.root);
