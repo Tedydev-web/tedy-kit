@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync } from "node:fs";
 import { basename, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { herdr, HerdrError } from "./job-adapters.mjs";
 import { launchRecordPath, writeRecord } from "./job-files.mjs";
 import { isUserPrompt, logGate, readHookInput } from "./hook-io.mjs";
 import { STATE_DIR } from "./state-dir.mjs";
@@ -135,7 +136,17 @@ function nextState({ hook_event_name: event, notification_type: type, tool_name:
   return undefined;
 }
 
-export function handle(input, { dir = STATE_DIR, now = new Date().toISOString(), claude = claudeProcess } = {}) {
+function notifyHerdr(record, state, env, warnings) {
+  if (env.HERDR_ENV !== "1" || !state?.startsWith("waiting") || state === record.state) return;
+  try {
+    herdr(["notification", "show", `tedy ${record.role} job: ${state}`, "--body", basename(record.file ?? ""), "--sound", "request"], env);
+  } catch (error) {
+    if (!(error instanceof HerdrError)) throw error;
+    warnings.push(`${error.message}; the job is ${state}`);
+  }
+}
+
+export function handle(input, { dir = STATE_DIR, now = new Date().toISOString(), claude = claudeProcess, env = process.env } = {}) {
   const warnings = [];
   bind(input, dir, now, claude, warnings);
   const found = recordOfSession(dir, input.session_id);
@@ -143,6 +154,7 @@ export function handle(input, { dir = STATE_DIR, now = new Date().toISOString(),
   const state = nextState(input);
   const started = input.hook_event_name === "SessionStart" ? claude() : null;
   writeRecord(found.path, { ...found.record, ...(started && { pid: started.pid, pid_start: started.start }), ...(state && { state }), last_event_at: now });
+  notifyHerdr(found.record, state, env, warnings);
   return warnings;
 }
 

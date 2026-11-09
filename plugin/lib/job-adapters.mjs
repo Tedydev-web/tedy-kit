@@ -54,7 +54,7 @@ function parsed(text) {
 
 export function herdr(args, env = process.env) {
   const command = args.slice(0, 2).join(" ");
-  const result = spawnSync("herdr", args, { encoding: "utf8", env });
+  const result = spawnSync("herdr", args, { encoding: "utf8", env, timeout: 60_000 });
   if (result.error) throw new HerdrError(command, result.error.code ?? "spawn", result.error.message);
   if (result.status !== 0) {
     const error = parsed(result.stderr)?.error;

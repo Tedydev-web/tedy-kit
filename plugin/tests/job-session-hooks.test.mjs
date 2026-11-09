@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { launchRecordPath, recordLaunch } from "../lib/job-files.mjs";
 import { alive, claudeProcess, handle, processInfo } from "../lib/job-session-hooks.mjs";
+import { fakeHerdr } from "./job-world-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const PLUGIN = fileURLToPath(new URL("../", import.meta.url)).replace(/\/$/, "");
@@ -112,6 +113,25 @@ test("the record's state follows the hooks: permission and idle notifications, A
   const before = w.record();
   w.fire({ hook_event_name: "Stop", session_id: "s-other" });
   assert.deepEqual(w.record(), before);
+});
+
+test("inside herdr a job that starts waiting raises one herdr notification, and outside herdr or on a failed call nothing breaks", () => {
+  const w = world();
+  const bin = tempDir("tedy-herdr-bin-");
+  const herdrCalls = fakeHerdr(bin);
+  const env = (extra = {}) => ({ ...process.env, PATH: `${bin}:${process.env.PATH}`, HERDR_ENV: "1", ...extra });
+  const fire = (input, extra) => handle({ session_id: "s-1", ...input }, { dir: w.state, now: "2026-11-09T05:00:00.000Z", claude: () => null, env: env(extra) });
+  fire(w.prompt(slash(w.files[0])));
+  assert.deepEqual(fire({ hook_event_name: "Notification", notification_type: "permission_prompt" }), []);
+  fire({ hook_event_name: "Notification", notification_type: "permission_prompt" });
+  assert.deepEqual(herdrCalls(), [["notification", "show", "tedy dev job: waiting: permission", "--body", "261109-1000-dev-add-hello.md", "--sound", "request"]]);
+  fire({ hook_event_name: "PostToolUse", tool_name: "Bash" });
+  fire({ hook_event_name: "PreToolUse", tool_name: "AskUserQuestion" }, { HERDR_ENV: "" });
+  assert.equal(herdrCalls().length, 1);
+  fire({ hook_event_name: "Stop" });
+  const warnings = fire({ hook_event_name: "Notification", notification_type: "idle_prompt" }, { FAKE_HERDR_FAIL: "notification show:server_unavailable" });
+  assert.deepEqual(warnings, ["herdr notification show failed (server_unavailable: fake failure); the job is waiting: input"]);
+  assert.equal(w.record().state, "waiting: input");
 });
 
 test("SessionStart of a bound session records its claude pid again", () => {
