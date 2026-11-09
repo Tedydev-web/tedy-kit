@@ -42,6 +42,12 @@
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/review-run-gate.mjs\"", "timeout": 30, "onFailure": "block" }
         ]
+      },
+      {
+        "matcher": "^AskUserQuestion$",
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/job-session-hooks.mjs\"", "timeout": 10 }
+        ]
       }
     ],
     "PostToolUse": [
@@ -55,6 +61,19 @@
         "matcher": "^AskUserQuestion$",
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/publish-approval-ticket.mjs\"", "timeout": 15 }
+        ]
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/job-session-hooks.mjs\"", "timeout": 10 }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "permission_prompt|idle_prompt",
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/job-session-hooks.mjs\"", "timeout": 10 }
         ]
       }
     ],
@@ -70,12 +89,23 @@
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-hooks.mjs\" role-reminder", "timeout": 15 }
         ]
+      },
+      {
+        "matcher": "startup|resume",
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/job-session-hooks.mjs\"", "timeout": 10 }
+        ]
       }
     ],
     "Stop": [
       {
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-hooks.mjs\" decision-nudge", "timeout": 15 }
+        ]
+      },
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/job-session-hooks.mjs\"", "timeout": 10 }
         ]
       }
     ]

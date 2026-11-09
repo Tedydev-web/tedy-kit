@@ -1,6 +1,8 @@
-import { existsSync, linkSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { existsSync, linkSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { HANDOFF_KEYS, parse } from "./handoff.mjs";
+import { STATE_DIR } from "./state-dir.mjs";
 
 const temporary = (file) => join(dirname(file), `.${basename(file)}.${process.pid}.tmp`);
 
@@ -20,7 +22,16 @@ export function createAtomic(file, text) {
   }
 }
 
-export const JOB_KEYS = Object.freeze([...HANDOFF_KEYS, "cwd", "permission_mode", "session_id"]);
+export const launchRecordPath = (file, dir = STATE_DIR) => join(dir, "jobs", `${createHash("sha256").update(realpathSync(file)).digest("hex").slice(0, 32)}.json`);
+
+export function recordLaunch(file, launch, dir = STATE_DIR) {
+  mkdirSync(join(dir, "jobs"), { recursive: true });
+  writeAtomic(launchRecordPath(file, dir), `${JSON.stringify({ file: realpathSync(file), ...launch })}\n`);
+}
+
+export const writeRecord = (path, record) => writeAtomic(path, `${JSON.stringify(record)}\n`);
+
+export const JOB_KEYS =Object.freeze([...HANDOFF_KEYS, "cwd", "permission_mode", "session_id"]);
 export const JOB_ROLES = Object.freeze(["pm", "dev", "review", "devops"]);
 const HEADER = new RegExp(`^(${JOB_KEYS.join("|")}): `);
 

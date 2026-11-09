@@ -41,3 +41,11 @@ test("the publish-approval ticket hook runs after AskUserQuestion only", () => {
   assert.ok(matcher.test("AskUserQuestion"));
   for (const tool of ["Bash", "AskUserQuestionX", "mcp__x__AskUserQuestion"]) assert.ok(!matcher.test(tool), tool);
 });
+
+test("the job status hook runs on the permission and idle notifications, around AskUserQuestion, after every tool, at session start and at the end of a turn, never blocking and never on a per-prompt event", () => {
+  const { hooks } = JSON.parse(readFileSync(new URL("../hooks/hooks.json", import.meta.url), "utf8"));
+  const entries = Object.entries(hooks).flatMap(([event, list]) => list.filter((item) => item.hooks.some((hook) => hook.command.includes("/job-session-hooks.mjs"))).map((item) => [event, item]));
+  assert.deepEqual(entries.map(([event, item]) => [event, item.matcher]).sort(), [["Notification", "permission_prompt|idle_prompt"], ["PostToolUse", undefined], ["PreToolUse", "^AskUserQuestion$"], ["SessionStart", "startup|resume"], ["Stop", undefined]].sort());
+  for (const [, item] of entries) for (const hook of item.hooks) assert.equal(hook.onFailure, undefined, hook.command);
+  assert.match(entries.find(([event]) => event === "Notification")[1].matcher, /^[\w|]+$/);
+});

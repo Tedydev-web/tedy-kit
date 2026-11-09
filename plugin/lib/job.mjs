@@ -1,10 +1,9 @@
 import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { missingSections, render, setStatus, slugOf, stamp } from "./handoff.mjs";
-import { age, createAtomic, JOB_ROLES, jobsDir, listJobs, readJob, setKey, withoutKey, withSection, writeAtomic } from "./job-files.mjs";
+import { age, createAtomic, JOB_ROLES, jobsDir, launchRecordPath, listJobs, readJob, recordLaunch, setKey, withoutKey, withSection, writeAtomic } from "./job-files.mjs";
 import { profileDir } from "./profile.mjs";
 import { STATE_DIR } from "./state-dir.mjs";
 import { resolveMap } from "./project-map.mjs";
@@ -98,12 +97,7 @@ function spawned(claude, args, cwd) {
   }
 }
 
-export const launchRecordPath = (file, dir = STATE_DIR) => join(dir, "jobs", `${createHash("sha256").update(realpathSync(file)).digest("hex").slice(0, 32)}.json`);
-
-export function recordLaunch(file, launch, dir = STATE_DIR) {
-  mkdirSync(join(dir, "jobs"), { recursive: true });
-  writeAtomic(launchRecordPath(file, dir), `${JSON.stringify({ file: realpathSync(file), ...launch })}\n`);
-}
+export { launchRecordPath, recordLaunch };
 
 function launchRecord(file) {
   const path = launchRecordPath(file);
