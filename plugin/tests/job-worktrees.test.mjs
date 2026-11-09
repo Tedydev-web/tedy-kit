@@ -10,7 +10,7 @@ import { linkedWorktree } from "../lib/job-worktrees.mjs";
 import { tokenize } from "../lib/shell-segments.mjs";
 import { world } from "./job-world-for-tests.mjs";
 
-const IDENTITY = { GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@example.invalid", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@example.invalid" };
+const IDENTITY = { GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t" };
 const HEADER = ["to", "status", "cwd", "repo", "branch", "base", "worktree", "worktree_owner"];
 
 const git = (dir, ...args) => execFileSync("git", ["-C", dir, ...args], { encoding: "utf8", env: { ...process.env, ...IDENTITY }, stdio: ["ignore", "pipe", "pipe"] }).trim();

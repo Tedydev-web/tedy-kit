@@ -4,7 +4,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { tokenize } from "../lib/shell-segments.mjs";
-import { jobFile, world } from "./job-world-for-tests.mjs";
+import { jobFile, PLUGIN, world } from "./job-world-for-tests.mjs";
 
 const inHerdr = (w, extra = {}) => ({ extra: { HERDR_ENV: "1", ...extra } });
 const NAME = /^[a-z][a-z0-9_-]{0,31}$/;
@@ -124,6 +124,31 @@ test("list adds herdr's state for a job herdr runs, unless the kit's own record 
   assert.deepEqual(lines({ FAKE_HERDR_STATUS: "blocked" }), ["asking · waiting: question", "plain · idle", "working · running (herdr: blocked)"]);
   assert.deepEqual(w.herdrCalls(), [["agent", "get", "dev-abc123"]]);
   assert.deepEqual(lines({}), ["asking · waiting: question", "plain · idle", "working · running (herdr: agent_not_found)"]);
+});
+
+test("the docs describe each adapter and the worktree owners, and no doc still sends jobs to --bg or agent view", () => {
+  const read = (path) => readFileSync(join(PLUGIN, "..", path), "utf8");
+  const jobs = read("plugin/shared/jobs.md");
+  for (const phrase of ["t3_thread_launch", "job.mjs t3-instance", "--via", "--t3", "herdr agent start", "herdr worktree create", "workspaceStrategy", "job.mjs prune", "orchestrator_capabilities"]) assert.ok(jobs.includes(phrase), `jobs.md lacks ${phrase}`);
+  const readme = read("README.md");
+  for (const phrase of ["job.mjs t3-instance", "--via", "job.mjs prune", "herdr"]) assert.ok(readme.includes(phrase), `README lacks ${phrase}`);
+  assert.ok(read("plugin/skills/dev/SKILL.md").includes("A job: `jobs.md` Job 5."), "the dev skill does not point a job at its worktree rule");
+  assert.ok(jobs.includes("git rev-parse --path-format=absolute --git-dir --git-common-dir"), "jobs.md lacks the linked-worktree check");
+  assert.match(jobs, /`worktree_owner: t3` or `herdr`[^.]*push the branch with `git push -u origin <branch>` right after the first commit/);
+  assert.ok(read("plugin/shared/project-map-schema.md").includes("`worktree_root`"));
+  for (const path of ["plugin/skills/review-pr/references/checkout.md", "plugin/shared/decision-points.md", "docs/canon/surface-fit.json"]) {
+    const text = read(path);
+    for (const word of ["--bg", "agent view", "bgIsolation"]) assert.ok(!text.includes(word), `${path} still has ${word}`);
+  }
+});
+
+test("every role may run the linked-worktree check", async () => {
+  const { allowRules } = await import("../lib/job.mjs");
+  for (const role of ["pm", "dev", "review", "devops"]) {
+    const rules = allowRules(role, { plugin: "/k/plugin", root: "/w/shop", profile: "/p/tedy" });
+    assert.ok(rules.includes("Bash(git rev-parse --path-format=absolute --git-dir --git-common-dir)"), role);
+  }
+  assert.ok(allowRules("dev", { plugin: "/k/plugin", root: "/w/shop", profile: "/p/tedy" }).includes("Bash(git -C * rev-parse --path-format=absolute --git-dir --git-common-dir)"));
 });
 
 test("resume inside herdr opens a new tab and starts the resumed session under a new agent name", () => {

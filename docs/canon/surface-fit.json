@@ -93,9 +93,9 @@
     {
       "need": "one short-lived session per job, with a role identity that hooks can read",
       "uses": {
-        "subagent": "a body-less tedy:<role> agent started as the main thread with claude --agent tedy:<role> --bg, shown and stopped in agent view; hook input carries agent_type. Not spawned through the Agent tool, whose subagent ends with the cockpit's turn and shares its context",
+        "subagent": "a body-less tedy:<role> agent started as the main thread with claude --agent tedy:<role>, in a T3 thread, a herdr pane or a terminal the user runs; hook input carries agent_type. Not spawned through the Agent tool, whose subagent ends with the cockpit's turn and shares its context",
         "hooks": "SessionStart gives the job its card and PreToolUse role-gates it from agent_type, with no fleet lookup",
-        "permission rule": "the role's allowlist, worktree.bgIsolation none and the TEDY_* env reach the job through --settings on its launch line, because plugin agents ignore permissionMode and a plugin settings.json carries no permissions"
+        "permission rule": "the role's allowlist and the TEDY_* env reach the job through --settings <role settings file> on its launch line or in T3's Launch arguments, because plugin agents ignore permissionMode and a plugin settings.json carries no permissions"
       },
       "rejected": {
         "skill": "runs inside the session that loads it, so it gives no separate session or identity",

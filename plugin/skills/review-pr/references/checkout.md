@@ -32,7 +32,7 @@ Before any project script (typecheck, lint, test, format) runs in the worktree:
 
 The hook after AskUserQuestion records an approving answer (`run.lint` or `run.all`, no note) for its head sha under `<state>/review-runs/`. The review-run gate refuses package managers (also through corepack and volta), make, and node running a file inside the checkout, in a review checkout whose head has no recorded approval. It does not know which option was picked: nothing but this step keeps a `run.lint` answer to typecheck and lint.
 
-In a background session (`--bg`) the question would wait for the user. Write it as a draft under `plans/drafts/` (`shared/decision-points.md`), put "verify not run: awaiting the run question" in the findings, and go on with steps 4 to 9.
+Under Remote Control the question would wait unseen for the user. Write it as a draft under `plans/drafts/` (`shared/decision-points.md`), put "verify not run: awaiting the run question" in the findings, and go on with steps 4 to 9. A review job asks it in its own window, like any session (`shared/jobs.md`).
 
 ## Clean-up
 

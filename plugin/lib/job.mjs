@@ -15,7 +15,7 @@ const PLUGIN = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
 const JOBS_DOC = join(PLUGIN, "shared", "jobs.md");
 
 const KIT_READERS = ["draft-lint.mjs", "project-map.mjs", "project-state.mjs get", "profile.mjs path", "labels.mjs", "prd-section.mjs", "figma-read.mjs", "task-lint.mjs", "op-status.mjs", "openproject.mjs get", "openproject.mjs list", "openproject.mjs preview", "openproject.mjs pr-body", "gdoc-comments.mjs list", "figma-comments.mjs list", "merged-sweep.mjs", "pending.mjs card publish", "pending.mjs card question", "pending.mjs card notify", "job.mjs done", "job.mjs stop"];
-const READ_GIT = ["status*", "diff*", "log*", "show*", "fetch -q origin"];
+const READ_GIT = ["status*", "diff*", "log*", "show*", "fetch -q origin", "rev-parse --path-format=absolute --git-dir --git-common-dir"];
 const READ_GH = ["pr view*", "pr diff*", "pr list*", "pr checks*"];
 const NPM_SCRIPTS = ["typecheck", "lint", "lint:check", "format:check", "check", "test", "test:unit", "test:cov"];
 const BUILD_GIT = ["worktree add *", "worktree list*", "worktree remove *", "switch *", "add *", "commit *", "push -u origin *"];
