@@ -4,7 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { missingSections, render, setStatus, slugOf, stamp } from "./handoff.mjs";
 import { age, createAtomic, JOB_ROLES, jobsDir, launchRecordPath, listJobs, readJob, recordLaunch, setKey, withSection, writeAtomic, writeRecord } from "./job-files.mjs";
 import { chooseAdapter, HerdrError, herdrAgent, herdrName, herdrState, herdrTab, herdrWorktree, onPath, t3Instance } from "./job-adapters.mjs";
-import { addWorktree, planWorktree, t3Strategy } from "./job-worktrees.mjs";
+import { addWorktree, git as gitRun, merged, planWorktree, removeWorktree, t3Strategy } from "./job-worktrees.mjs";
 import { alive, claudeProcess, processInfo } from "./job-session-hooks.mjs";
 import { profileDir } from "./profile.mjs";
 import { STATE_DIR } from "./state-dir.mjs";
@@ -249,7 +249,46 @@ export function close(map, file, reason, options) {
   const lines = endRecordedSession(job.real, options);
   writeAtomic(job.path, setStatus(readFileSync(job.path, "utf8"), "closed", new Date().toISOString()));
   rmSync(launchRecordPath(job.real), { force: true });
-  return [`closed: ${job.path}`, ...lines].join("\n");
+  const tree = coreWorktree(job) ? [removeWorktree(job, "the job is closed")] : [];
+  return [`closed: ${job.path}`, ...lines, ...tree].join("\n");
+}
+
+const DAY = 86_400_000;
+
+const coreWorktree = (job) => job.worktree_owner === "core" && job.worktree && job.repo && existsSync(job.worktree);
+
+function pruneDecision(job, days, now) {
+  if (job.status === "closed") return { reason: "the job is closed" };
+  const record = launchRecord(job.path);
+  if (record && alive(record)) return { why: "its session is open" };
+  const finished = job.status === "done" || job.status === "stopped";
+  if (finished && merged(job)) return { reason: `its branch is merged into origin/${job.base}` };
+  const idle = now - Date.parse(record?.last_event_at ?? record?.bound_at ?? job.updated ?? job.created);
+  if (idle > days * DAY) return { reason: `idle for ${Math.floor(idle / DAY)} days` };
+  return { why: `the job is ${job.status}${finished ? `, its branch is not merged into origin/${job.base} and it` : " and"} was active within ${days} days` };
+}
+
+function pruneJob(job, days, dryRun, now) {
+  try {
+    const { reason, why } = pruneDecision(job, days, now);
+    return why ? `kept ${job.worktree}: ${why}` : removeWorktree(job, reason, dryRun);
+  } catch (error) {
+    return `kept ${job.worktree}: ${error.message}`;
+  }
+}
+
+export function prune(map, { days = 10, dryRun = false, now = Date.now() } = {}) {
+  if (!Number.isInteger(days) || days < 1) throw new Error("--days needs a whole number of days above 0");
+  const jobs = listJobs(map, { closed: true }).filter(coreWorktree);
+  const warnings = [...new Set(jobs.map((job) => job.repo))].flatMap((repo) => {
+    try {
+      gitRun(repo, "fetch", "-q", "origin");
+      return [];
+    } catch (error) {
+      return [`warning: ${error.message}; the merged and pushed checks use the last fetched refs`];
+    }
+  });
+  return [...warnings, ...jobs.map((job) => pruneJob(job, days, dryRun, now))];
 }
 
 export function resume(map, file, note, { via, t3 } = {}) {
@@ -360,7 +399,12 @@ function main([command, target, ...rest]) {
     console.log(list(project()).join("\n") || "No jobs are open.");
     return 0;
   }
-  console.error("usage: job.mjs settings <pm|dev|review|devops> | t3-instance <pm|dev|review|devops> | start <pm|dev|review|devops> --title <t> --body-file <f> [--repo <path>] [--branch <name>] [--permission-mode <mode>] [--via t3|herdr|print] [--t3] [--json] | done <job file> --outcome-file <f> | stop <job file> --reason <text> | resume <job file> --note-file <f> [--via t3|herdr|print] [--t3] [--json] | close <job file> [--reason <text>] | list");
+  if (command === "prune") {
+    const options = flags([target, ...rest].filter((arg) => arg !== undefined));
+    console.log(prune(project(), { days: options.days === undefined ? undefined : Number(options.days), dryRun: options["dry-run"] === true }).join("\n") || "No job worktrees to prune.");
+    return 0;
+  }
+  console.error("usage: job.mjs settings <pm|dev|review|devops> | t3-instance <pm|dev|review|devops> | start <pm|dev|review|devops> --title <t> --body-file <f> [--repo <path>] [--branch <name>] [--permission-mode <mode>] [--via t3|herdr|print] [--t3] [--json] | done <job file> --outcome-file <f> | stop <job file> --reason <text> | resume <job file> --note-file <f> [--via t3|herdr|print] [--t3] [--json] | close <job file> [--reason <text>] | list | prune [--days <n>] [--dry-run]");
   return 2;
 }
 

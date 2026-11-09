@@ -39,4 +39,26 @@ export function addWorktree({ repo, branch, base, path }) {
   }
 }
 
-export const t3Strategy = ({ branch, base }) => ({ type: "worktree", baseRef: `origin/${base}`, branch, startFromOrigin: true });
+export const merged = ({ repo, branch, base }) => spawnSync("git", ["-C", repo, "merge-base", "--is-ancestor", `refs/heads/${branch}`, `refs/remotes/origin/${base}`], { encoding: "utf8" }).status === 0;
+
+function blocker(tree) {
+  if (!linkedWorktree(tree)) return "it is not a linked worktree";
+  if (git(tree, "status", "--porcelain")) return "it has uncommitted changes";
+  const ahead = Number(git(tree, "rev-list", "--count", "HEAD", "--not", "--remotes"));
+  if (ahead) return `it has ${ahead} commit${ahead === 1 ? "" : "s"} on no remote`;
+  return null;
+}
+
+export function removeWorktree({ repo, worktree }, reason, dryRun = false) {
+  const why = blocker(worktree);
+  if (why) return `kept ${worktree}: ${why}`;
+  if (dryRun) return `would remove ${worktree} (${reason})`;
+  try {
+    git(repo, "worktree", "remove", worktree);
+  } catch (error) {
+    return `kept ${worktree}: ${error.message}`;
+  }
+  return `removed ${worktree} (${reason})`;
+}
+
+export const t3Strategy =({ branch, base }) => ({ type: "worktree", baseRef: `origin/${base}`, branch, startFromOrigin: true });

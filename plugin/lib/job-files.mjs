@@ -68,7 +68,7 @@ export function readJob(file) {
   return { path, text, ...job };
 }
 
-export function listJobs(map) {
+export function listJobs(map, { closed = false } = {}) {
   const dir = jobsDir(map);
   if (!existsSync(dir)) return [];
   return readdirSync(dir)
@@ -76,7 +76,7 @@ export function listJobs(map) {
     .sort()
     .flatMap((name) => {
       const job = fields(readFileSync(join(dir, name), "utf8"));
-      return job && job.status !== "closed" ? [{ path: join(dir, name), ...job }] : [];
+      return job && (closed || job.status !== "closed") ? [{ path: join(dir, name), ...job }] : [];
     });
 }
 

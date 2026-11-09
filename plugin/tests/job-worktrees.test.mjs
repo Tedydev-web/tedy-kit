@@ -126,3 +126,80 @@ test("resume trusts a worktree job by its recorded repository and runs in its wo
   assert.equal(gone.status, 1);
   assert.match(gone.stderr, /its folder .* no longer exists; close it and start a new job/);
 });
+
+function pruneWorld() {
+  const w = gitWorld();
+  const make = (title, { status, record, edit } = {}) => {
+    assert.equal(w.start(["--title", title]).status, 0);
+    const file = w.jobs().find((path) => path.endsWith(`-dev-${title}.md`));
+    const tree = w.header(file).worktree;
+    if (status) writeFileSync(file, readFileSync(file, "utf8").replace("status: running", `status: ${status}`));
+    if (record) writeRecord(launchRecordPath(file, w.state), { ...w.record(file), ...record });
+    if (edit) edit(tree);
+    return tree;
+  };
+  return { w, make };
+}
+
+const DAY = 86_400_000;
+
+test("prune removes the core worktrees of closed jobs, of finished jobs whose branch is merged, and of jobs idle past the limit, and keeps the rest with the reason", () => {
+  const { w, make } = pruneWorld();
+  const closed = make("closed", { status: "closed" });
+  const merged = make("merged", { status: "done" });
+  const ignored = make("ignored", { status: "closed", edit: (tree) => writeFileSync(join(tree, "a.local.test.ts"), "x\n") });
+  const idle = make("idle", { record: { session_id: "s-1", bound_at: "t", last_event_at: new Date(Date.now() - 11 * DAY).toISOString() } });
+  const active = make("active");
+  const dirty = make("dirty", { status: "closed", edit: (tree) => writeFileSync(join(tree, "new.txt"), "x\n") });
+  const unpushed = make("unpushed", { status: "closed", edit: (tree) => { writeFileSync(join(tree, "notes.txt"), "changed\n"); git(tree, "commit", "-q", "-am", "local"); } });
+  const ahead = make("ahead", { status: "done", edit: (tree) => { writeFileSync(join(tree, "notes.txt"), "pushed\n"); git(tree, "commit", "-q", "-am", "pushed"); git(tree, "push", "-q", "origin", "HEAD:refs/heads/feat/ahead"); } });
+  const dry = w.run(["prune", "--dry-run"], { extra: IDENTITY });
+  assert.equal(dry.status, 0, dry.stderr);
+  assert.match(dry.stdout, new RegExp(`^would remove ${closed} \\(the job is closed\\)$`, "m"));
+  for (const tree of [closed, merged, ignored, idle]) assert.ok(existsSync(tree), tree);
+  const out = w.run(["prune"], { extra: IDENTITY });
+  assert.equal(out.status, 0, out.stderr);
+  const lines = out.stdout.trim().split("\n").sort();
+  assert.deepEqual(lines, [
+    `kept ${active}: the job is running and was active within 10 days`,
+    `kept ${ahead}: the job is done, its branch is not merged into origin/main and it was active within 10 days`,
+    `kept ${dirty}: it has uncommitted changes`,
+    `kept ${unpushed}: it has 1 commit on no remote`,
+    `removed ${closed} (the job is closed)`,
+    `removed ${idle} (idle for 11 days)`,
+    `removed ${ignored} (the job is closed)`,
+    `removed ${merged} (its branch is merged into origin/main)`,
+  ].sort());
+  for (const tree of [closed, merged, ignored, idle]) assert.ok(!existsSync(tree), tree);
+  for (const tree of [active, ahead, dirty, unpushed]) assert.ok(existsSync(tree), tree);
+  assert.equal(git(w.fe, "rev-parse", "--verify", "feat/unpushed").length > 0, true);
+});
+
+test("prune --days moves the idle limit, refuses a bad value, and leaves T3 and herdr worktrees to their owner", () => {
+  const { w, make } = pruneWorld();
+  const idle = make("idle", { record: { session_id: "s-1", bound_at: "t", last_event_at: new Date(Date.now() - 11 * DAY).toISOString() } });
+  assert.equal(w.run(["prune", "--days", "30"], { extra: IDENTITY }).stdout.trim(), `kept ${idle}: the job is running and was active within 30 days`);
+  assert.match(w.run(["prune", "--days", "0"]).stderr, /--days needs a whole number of days above 0/);
+  const herdrTree = join(w.root, "herdr-tree");
+  git(w.fe, "worktree", "add", "-q", "-b", "feat/by-herdr", herdrTree, "origin/main");
+  assert.equal(w.start(["--title", "by herdr"], { HERDR_ENV: "1", FAKE_HERDR_WORKTREE: herdrTree }).status, 0);
+  const file = w.jobs().find((path) => path.endsWith("-dev-by-herdr.md"));
+  writeFileSync(file, readFileSync(file, "utf8").replace("status: running", "status: closed"));
+  assert.doesNotMatch(w.run(["prune"], { extra: IDENTITY }).stdout, /herdr-tree/);
+  assert.ok(existsSync(herdrTree));
+});
+
+test("close removes its own job's clean core worktree and keeps a dirty one with the reason", () => {
+  const { w, make } = pruneWorld();
+  const clean = make("clean", { status: "done" });
+  const dirty = make("dirty", { status: "done", edit: (tree) => writeFileSync(join(tree, "new.txt"), "x\n") });
+  const job = (title) => w.jobs().find((path) => path.endsWith(`-dev-${title}.md`));
+  const closedClean = w.run(["close", job("clean")], { extra: IDENTITY });
+  assert.equal(closedClean.status, 0, closedClean.stderr);
+  assert.match(closedClean.stdout, new RegExp(`^removed ${clean} \\(the job is closed\\)$`, "m"));
+  assert.ok(!existsSync(clean));
+  const closedDirty = w.run(["close", job("dirty")], { extra: IDENTITY });
+  assert.match(closedDirty.stdout, new RegExp(`^kept ${dirty}: it has uncommitted changes$`, "m"));
+  assert.ok(existsSync(dirty));
+  assert.equal(parse(readFileSync(job("dirty"), "utf8"), JOB_KEYS).status, "closed");
+});
