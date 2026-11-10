@@ -274,8 +274,9 @@ export function close(map, file, reason, options) {
   const { record, error } = readableRecord(job.real);
   const lines = [...(error ? [`warning: ${error}; nothing was signalled`] : []), ...endSession(record, options), ...closePane(record, options)];
   writeAtomic(job.path, setStatus(readFileSync(job.path, "utf8"), "closed", new Date().toISOString()));
-  const tree = coreWorktree(record) ? [removeWorktree(record, "the job is closed")] : [];
-  if (tree.length && existsSync(record.worktree)) updateRecord(launchRecordPath(job.real), (fresh) => withoutSession(fresh ?? record));
+  const live = Boolean(record?.pid) && alive(record);
+  const tree = !coreWorktree(record) ? [] : live ? [`kept ${record.worktree}: its session is still open`] : [removeWorktree(record, "the job is closed")];
+  if (tree.length && existsSync(record.worktree)) updateRecord(launchRecordPath(job.real), (fresh) => (live ? (fresh ?? record) : withoutSession(fresh ?? record)));
   else removeRecord(launchRecordPath(job.real));
   return [`closed: ${job.path}`, ...lines, ...tree].join("\n");
 }
