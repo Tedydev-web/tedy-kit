@@ -52,38 +52,9 @@ const REVIEWED = [
   `env '-S${APPLY}' true`,
   `env -S '${APPLY}' true`,
   `echo '${REPLY}' | xargs printf`,
+  "sed -i 's/the `github-write.mjs post` command lin/the `github-write.mjs post <draft> --repo <o\\/r>` command lin/' plugin/skills/review-pr/SKILL.md",
   'git commit -m "docs: say doc-comment-file.mjs post items.json --apply"',
 ];
-
-const DRAFT_EDITS = [
-  `cd /w/shop/plans/drafts && J=/w/shop/plans/jobs/261109-0950-pm-toasts.md && sed -i "s#^node /k/plugin/scripts/doc-comment-file.mjs post .*#\\#\\#\\# 1\\n& --job $J#" card-doc.md && sed -i "s#^node /k/plugin/scripts/openproject.mjs apply .*#\\#\\#\\# 1\\n& --job $J#" card-op.md && sed -i '/^$/{N;/^\\n### 1/s/^\\n//}' card-doc.md card-op.md && sed -n '1,6p' card-doc.md && sed -n '1,6p' card-op.md`,
-  "sed -i 's/the `github-write.mjs post` command lin/the `github-write.mjs post <draft> --repo <o\\/r>` command lin/' plugin/skills/review-pr/SKILL.md",
-  `sed -i -e 's|^${APPLY}$|${APPLY} --job j.md|g' -e '3d' card.md`,
-];
-
-const DRAFT_EDITS_THAT_RUN = [
-  `sed -i 's|^x$|${APPLY}|' run.sh && sh run.sh`,
-  `sed -i 's|^x$|${APPLY}|e' card.md`,
-  `sed -i 's|^x$|${APPLY}|w /tmp/run.sh' card.md`,
-  `sed -i '1e ${APPLY}' card.md`,
-  `sed -f /tmp/script.sed -i 's|^x$|${APPLY}|' card.md`,
-  `PATH=/tmp/b:/usr/bin && sed -i 's|^x$|${APPLY}|' card.md`,
-  `J=$(${APPLY}) && sed -i 's|^x$|y|' card.md`,
-  `X=1 sed -i 's|^x$|${APPLY}|' card.md`,
-];
-
-test("a sed that only substitutes text in a draft holding a publish line is not a publish, so the job editing its card is not asked", () => {
-  for (const command of [...DRAFT_EDITS, `sed -i 's/a/b/' f.md`]) assert.equal(dataOnlyCommand(command), true, command);
-  for (const command of [`sed -n '$p' f.md`, `sed -i "s/x/$V/" f.md`, `sed -i 's/x/y/w out' f.md`, `sed -i -f s.sed f.md`, `X=1 sed -i 's/a/b/' f.md`]) assert.equal(dataOnlyCommand(command), false, command);
-  for (const command of DRAFT_EDITS) {
-    assert.equal(hiddenPublish(command), null, command);
-    for (const mode of ["ask", "answer"]) assert.equal(decision(command, mode), "allow", `${mode}: ${command}`);
-  }
-});
-
-test("a sed or a later command that can run the substituted publish line still asks", () => {
-  for (const command of DRAFT_EDITS_THAT_RUN) assert.notEqual(decision(command, "ask"), "allow", command);
-});
 
 test("a kit script name inside data a command only writes is not a publish, in ask and answer mode", () => {
   for (const command of DATA) {
@@ -110,7 +81,7 @@ test("the data list stays closed: sed, git, sort or any other program added to i
 });
 
 test("only a bare first word from the closed list, with no assignment, wrapper or printf -v, counts as data", () => {
-  for (const command of [...REVIEWED, "sort f.md > g.md", "git status", `rg -n 'x' plugin`, "head -1 f.md", `"" printf x`, `X=1 printf x`, `nohup printf x`, `/usr/bin/printf x`, `printf -v x y`, `printf -vx y`,`printf "$(date)"`]) assert.equal(dataOnlyCommand(command), false, command);
+  for (const command of [...REVIEWED, `sed -i 's/a/b/' f.md`, "sort f.md > g.md", "git status", `rg -n 'x' plugin`, "head -1 f.md", `"" printf x`, `X=1 printf x`, `nohup printf x`, `/usr/bin/printf x`, `printf -v x y`, `printf -vx y`,`printf "$(date)"`]) assert.equal(dataOnlyCommand(command), false, command);
 });
 
 test("a kit script run directly, through an interpreter or a wrapper still publishes", () => {
@@ -121,6 +92,17 @@ test("a kit script run directly, through an interpreter or a wrapper still publi
   }
   assert.equal(hiddenPublish(REPLY), null);
   for (const command of [`env X=1 ${REPLY}`, `echo $(${REPLY})`, `echo ${REPLY} > p.sh && sh p.sh`]) assert.equal(quotedPublishes(command, "/w", () => "").length, 1, command);
+});
+
+const SPLIT_REPLY = "1e\\ node\\ /k/scripts/github-write.mjs\\ re''ply\\ 1\\ 2\\ --body\\ x";
+
+test("a sed -i edit of a draft holding a publish line asks, and so does a sed whose later operand becomes a script", () => {
+  for (const command of [
+    `cd /w/shop/plans/drafts && J=/w/shop/plans/jobs/261109-0950-pm-toasts.md && sed -i "s#^node /k/plugin/scripts/openproject.mjs apply .*#\\#\\#\\# 1\\n& --job $J#" card-op.md`,
+    `sed -i 's|^${APPLY}$|${APPLY} --job j.md|g' card.md`,
+    `E=-e && sed -i 's/a/b/' $E ${SPLIT_REPLY} card.md`,
+    `sed -i 's/a/b/' {-e,${SPLIT_REPLY}} card.md`,
+  ]) assert.equal(decision(command, "ask"), "ask", command);
 });
 
 test("a form the reviewer found, and the two first examples, decide as before the data exemption", () => {

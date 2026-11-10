@@ -52,7 +52,7 @@ Status: accepted (2026-11-09, user decisions; built and probed 2026-11-09 to 202
   - the docs check.
 - `plugin/tests/job-worktrees.test.mjs`: the worktree owner for each adapter, prune and close.
 - `plugin/tests/job-probes.test.mjs`: the eval probes keep no background launch.
-- `plugin/tests/git-gate-script-names-in-data.test.mjs`: the PM job's draft edit is data, not a publish.
+- `plugin/tests/git-gate-script-names-in-data.test.mjs`: "a sed -i edit of a draft holding a publish line asks, and so does a sed whose later operand becomes a script".
 - `plugin/tests/canon-checks.test.mjs`: "a kit hook on an event that adds text to every prompt or every subagent spawn fails" keeps UserPromptSubmit out of hooks.json.
 - Isolation: every job test puts a fake `herdr` first on PATH, and `test-isolation.mjs` points `TEDY_T3_SETTINGS` at a scratch file.
 
@@ -107,7 +107,7 @@ position: role-coordination conforms
 - **Worktrees:** T3 deletes its worktrees after 10 days or on merge, so a dev job in a T3 or herdr worktree pushes its branch at its first commit.
 - **Open:**
   - The cause of the review job's 29-minute wait is not known.
-  - The git-gate false positive behind the PM job's wait is fixed and tested.
+- **The git-gate false positive behind the PM job's wait stays.** A rule that read a text-only `sed -i` edit of a draft as data was built and then reverted (2026-11-10): a later operand that bash turns into `-e` (`$E`, a brace expansion, a glob) makes sed run the next operand as a script, so a quote-split publish passed the gate and no ask rule matched it. A job's ask now shows in its own window, so the false positive costs one visible approval. Jobs edit drafts and job files with the Edit or Write tool instead (`jobs.md`, Job 1).
 - **Not yet exercised live:**
   - a role-gate ask through an allowlist under T3
   - herdr notifications on `waiting`

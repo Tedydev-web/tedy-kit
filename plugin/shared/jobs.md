@@ -24,7 +24,7 @@ A session whose first prompt names a job file is that job (its hook input carrie
 
 ## Job
 
-1. Read the job file the prompt names, then follow the role skill (`/tedy:pm`, `/tedy:dev`, `/tedy:review-pr`; devops has none) on the request in it. A `## Note` at its end is the latest rework request. Keep the files it writes for itself (card bodies, the outcome) under the project's `plans/`, which its allowlist lets it write without a prompt.
+1. Read the job file the prompt names, then follow the role skill (`/tedy:pm`, `/tedy:dev`, `/tedy:review-pr`; devops has none) on the request in it. A `## Note` at its end is the latest rework request. Keep the files it writes for itself (card bodies, the outcome) under the project's `plans/`, which its allowlist lets it write without a prompt. Edit drafts and job files with the Edit or Write tool, never with `sed` or other shell rewrites: a shell edit of a draft that holds a publish line asks like the publish itself.
 2. Ask the user with `AskUserQuestion` in this window when a decision is needed, the next-step menu included; the user answers here. Publish approval is not a question: it stays on a card (step 3).
 3. Every write that needs the user's approval becomes a `publish` card holding the exact command, with `--job <this job file>`, and its text (`pending.mjs card publish …`); the job never runs that write. In a review job, status after merge is `merged-sweep.mjs --inbox --job <this job file>`.
 4. Work for another role becomes a `question` card ("start a <role> job for …?"); the cockpit starts it on yes. A job never starts a job.
