@@ -38,7 +38,7 @@ function world(names = ["261109-1000-dev-add-hello"]) {
 const slash = (file) => `<command-message>tedy:dev</command-message>\n<command-name>/tedy:dev</command-name>\n<command-args>job ${file}. First read the jobs doc, section "Job".</command-args>`;
 
 test("a job session's first event after a prompt naming its job file binds the session, its transcript and its claude pid into the launch record", () => {
-  for (const [content, event] of [[(file) => slash(file), "PreToolUse"], [(file) => [{ type: "text", text: `Job file ${file}. Read the jobs doc.` }], "Notification"], [(file) => `Go on with ${file}`, "SessionStart"]]) {
+  for (const [content, event] of [[(file) => slash(file), "PreToolUse"], [(file) => [{ type: "text", text: `Job file ${file}. Read the jobs doc.` }], "Notification"], [(file) => `/tedy:dev job ${file}. First read the jobs doc.`, "SessionStart"]]) {
     const w = world();
     const input = w.prompt(content(w.files[0]), { event });
     assert.deepEqual(w.fire(input), []);
@@ -71,6 +71,23 @@ test("the cockpit, a subagent, another role's session, a tool result or a reply 
     assert.deepEqual(w.fire(input), []);
     assert.equal(w.record().session_id, undefined, JSON.stringify(input));
   }
+});
+
+test("binding reads only the kit's launch form at the start of the first user prompt, never another job path the prompt or a later prompt names", () => {
+  const w = world(["261109-1000-dev-add-hello", "261109-1005-dev-other"]);
+  const [mine, other] = w.files;
+  const inputs = [
+    w.prompt(`Go on with ${mine}`),
+    w.prompt(`Same fix as in ${other}, please.\n\n/tedy:dev job ${mine}. First read the jobs doc.`),
+    w.prompt([{ type: "text", text: `See ${other}` }, { type: "text", text: `Job file ${mine}.` }]),
+    w.prompt("hello", { extra: [{ type: "user", message: { content: slash(mine) } }] }),
+  ];
+  for (const input of inputs) {
+    assert.deepEqual(w.fire(input), []);
+    assert.deepEqual([w.record(mine).session_id, w.record(other).session_id], [undefined, undefined], JSON.stringify(input));
+  }
+  w.fire(w.prompt(`${slash(mine)} Same fix as in ${other}, please.`));
+  assert.deepEqual([w.record(mine).session_id, w.record(other).session_id], ["s-1", undefined]);
 });
 
 test("a second session naming a bound job file does not rebind it and only returns a warning for stderr", () => {

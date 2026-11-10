@@ -24,7 +24,7 @@ Status: accepted (2026-11-09, user decisions; built and probed 2026-11-09 to 202
   - The cockpit never runs that command in its own Bash.
 - **Each role has one settings file**, `<state>/jobs/settings/<role>.json`. It holds the role's allowlist, the ask rules and the `TEDY_*` env, and the same file serves T3 Launch arguments, herdr agent args and a terminal.
 - **The kit writes job status itself.**
-  - Hooks bind a `tedy:<role>` session to its job file by reading the first user prompts in its transcript. They never bind one to a job file whose status is `closed`; the status is read under the record lock, so a record `close` kept for its worktree is not bound again by the closed job's still-running session.
+  - Hooks bind a `tedy:<role>` session to its job file by reading the kit's own launch form at the start of the first user prompt in its transcript: `/tedy:<skill> job <file>` (in the transcript wrapped as `<command-message>…<command-args>job <file>`, observed in the print, herdr and T3 probe transcripts) or `Job file <file>` for devops. No other path in the prompt counts. The resume prompt starts with the same form for its own job and puts the note after it, so a note naming another job binds the session to its own job. They never bind one to a job file whose status is `closed`; the status is read under the record lock, so a record `close` kept for its worktree is not bound again by the closed job's still-running session.
   - They record the claude pid with its start time, and they record each state: `running`, `waiting: permission`, `waiting: input`, `waiting: question`, `idle`.
   - `job.mjs list` reads only these records, and shows `lost (last seen <time>)` once the pid is gone.
   - Every change to a launch record, from a hook or from `job.mjs`, reads and writes it under the kit's record lock in the same state dir, and a hook writes only while the record still holds its session. A hook that read the record before `close` deleted it, or before `resume` unbound it, writes nothing back. No lock is held across a herdr call, git or the wait for a signalled process.
@@ -46,7 +46,7 @@ Status: accepted (2026-11-09, user decisions; built and probed 2026-11-09 to 202
 - `plugin/tests/job.test.mjs`:
   - "start writes the running job file and its launch record, then prints one cd-and-claude command for the user and never runs claude"
   - "the job code never runs claude: no fleet list, background launch, claude stop or claude rm is left in it"
-  - the list, stop, close and resume cases, including "close that may not signal the recorded process says why and leaves the job not closed with its record" and "close refuses when it runs in a bound job's session, for another job or its own, whatever shell form runs it, before it writes anything"
+  - the list, stop, close and resume cases, including "close that may not signal the recorded process says why and leaves the job not closed with its record", "close refuses when it runs in a bound job's session, for another job or its own, whatever shell form runs it, before it writes anything" and "a resume note that names another job of the same role binds the resumed session to its own job"
   - "a hook that read a job's record before close deleted it, or before resume unbound it, does not write the old session back".
 - `plugin/tests/role-gate.test.mjs`:
   - "a job asks before job.mjs close of another job or of itself and names the job file, and the cockpit is not asked"
@@ -54,7 +54,7 @@ Status: accepted (2026-11-09, user decisions; built and probed 2026-11-09 to 202
   - "the gate entry asks a job before job.mjs close with the role gate off and no map covering the folder, and lets the cockpit close"
   - "with the role gate off a job's subagent is asked before job.mjs close once the job's main thread has run a tool".
 - `plugin/tests/record-lock.test.mjs`: "withLockSync waits for a held lock, refuses after its wait with the holder named, and releases the lock when its function returns or throws".
-- `plugin/tests/job-session-hooks.test.mjs`: binding from the transcript, no rebinding, "a job file whose status is closed binds no session, even when its record has none, and the session does not bind a later job file it names", the state each hook writes, the pid walk, and the start-time check in `alive`.
+- `plugin/tests/job-session-hooks.test.mjs`: binding from the transcript, "binding reads only the kit's launch form at the start of the first user prompt, never another job path the prompt or a later prompt names", no rebinding, "a job file whose status is closed binds no session, even when its record has none, and the session does not bind a later job file it names", the state each hook writes, the pid walk, and the start-time check in `alive`.
 - `plugin/tests/job-adapters.test.mjs`:
   - adapter choice and `--via` refusals; the herdr tab, agent, fallback and list cases
   - "close ends the job's session first, then closes the herdr pane the kit opened for it; stop and a job with no kit pane make no herdr call", and the case that leaves a pane open

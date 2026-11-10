@@ -7,7 +7,7 @@ import { launchRecordPath, readJob, readRecord, updateRecord } from "./job-files
 import { isUserPrompt, logGate, readHookInput } from "./hook-io.mjs";
 import { STATE_DIR } from "./state-dir.mjs";
 
-const JOB_PATH = /\/[^\s"'\\]*?\/plans\/jobs\/\d{6}-\d{4}-(pm|dev|review|devops)-[a-z0-9-]+\.md/g;
+const LAUNCH_FORM = /^(?:<command-message>[^<]*<\/command-message>\s*<command-name>\/tedy:[a-z-]+<\/command-name>\s*<command-args>job |\/tedy:[a-z-]+ job |Job file )(\/[^\s"'\\]*?\/plans\/jobs\/\d{6}-\d{4}-(pm|dev|review|devops)-[a-z0-9-]+\.md)/;
 const JOB_AGENT = /^tedy:(pm|dev|review|devops)$/;
 const TRANSCRIPT_HEAD = 1 << 20;
 const WAITING = { permission_prompt: "waiting: permission", idle_prompt: "waiting: input" };
@@ -83,47 +83,51 @@ export const recordOfSession = (dir, session) => (session ? findRecord(dir, (rec
 
 export const recordOfProcess = (dir, claude) => (Number.isInteger(claude?.pid) ? findRecord(dir, (record) => record.pid === claude.pid && record.pid_start === claude.start) : null);
 
-function promptedJobFiles(transcript) {
-  if (!transcript || !existsSync(transcript)) return [];
+function firstPrompt(transcript) {
   let descriptor;
   try {
     descriptor = openSync(transcript, "r");
     const buffer = Buffer.alloc(TRANSCRIPT_HEAD);
     const length = readSync(descriptor, buffer, 0, TRANSCRIPT_HEAD, 0);
-    return buffer
-      .toString("utf8", 0, length)
-      .split("\n")
-      .flatMap((line) => {
-        try {
-          const entry = JSON.parse(line);
-          return isUserPrompt(entry) ? [...JSON.stringify(entry.message.content).matchAll(JOB_PATH)] : [];
-        } catch {
-          return [];
-        }
-      });
+    for (const line of buffer.toString("utf8", 0, length).split("\n")) {
+      let entry;
+      try {
+        entry = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (!isUserPrompt(entry)) continue;
+      const { content } = entry.message;
+      return typeof content === "string" ? content : content.find((block) => block?.type === "text").text;
+    }
+    return null;
   } finally {
     if (descriptor !== undefined) closeSync(descriptor);
   }
 }
 
+function launchedJobFile(transcript) {
+  if (!transcript || !existsSync(transcript)) return null;
+  const [, file, role] = firstPrompt(transcript)?.match(LAUNCH_FORM) ?? [];
+  return file ? { file, role } : null;
+}
+
 function bind(input, dir, now, claude, warnings) {
   const role = input.agent_type?.match(JOB_AGENT)?.[1];
   if (!role || input.agent_id || recordOfSession(dir, input.session_id)) return;
-  let found;
-  for (const [file, named] of promptedJobFiles(input.transcript_path)) {
-    if (named !== role || !existsSync(file)) continue;
-    const path = launchRecordPath(file, dir);
-    if (!readRecord(path)) continue;
-    found ??= { process: claude() };
-    let bound = null;
-    updateRecord(path, (record) => {
-      bound = record?.session_id ?? null;
-      if (!record || bound || readJob(file).status === "closed") return undefined;
-      return { ...record, session_id: input.session_id, transcript_path: input.transcript_path, ...(found.process && { pid: found.process.pid, pid_start: found.process.start }), bound_at: now };
-    });
-    if (bound && bound !== input.session_id) warnings.push(`${file} is already bound to session ${bound}; this session is not tracked as that job`);
-    return;
-  }
+  const launched = launchedJobFile(input.transcript_path);
+  if (launched?.role !== role || !existsSync(launched.file)) return;
+  const { file } = launched;
+  const path = launchRecordPath(file, dir);
+  if (!readRecord(path)) return;
+  const found = claude();
+  let bound = null;
+  updateRecord(path, (record) => {
+    bound = record?.session_id ?? null;
+    if (!record || bound || readJob(file).status === "closed") return undefined;
+    return { ...record, session_id: input.session_id, transcript_path: input.transcript_path, ...(found && { pid: found.pid, pid_start: found.start }), bound_at: now };
+  });
+  if (bound && bound !== input.session_id) warnings.push(`${file} is already bound to session ${bound}; this session is not tracked as that job`);
 }
 
 function nextState({ hook_event_name: event, notification_type: type, tool_name: tool }) {

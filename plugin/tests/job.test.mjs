@@ -397,8 +397,8 @@ test("resume appends the note, unbinds the session into earlier, and prints a cl
   const settings = join(w.state, "jobs", "settings", "dev.json");
   assert.deepEqual(tokens.slice(0, -1), ["cd", w.root, "&&", "claude", "--resume", "s-1", "--agent", "tedy:dev", "--settings", settings, "--permission-mode", "default"]);
   const prompt = tokens.at(-1);
-  assert.match(prompt, /^Also add the line world\.\n\nThis is the latest ## Note of your job /);
-  assert.ok(prompt.includes(file));
+  assert.ok(prompt.startsWith(`/tedy:dev job ${file}. `), prompt);
+  assert.ok(prompt.endsWith("\n\nAlso add the line world."), prompt);
   const text = readFileSync(file, "utf8");
   assert.equal(parse(text).status, "running");
   assert.match(text, /\n## Note \d{4}-\d{2}-\d{2}T[\d:.]+Z\n\nAlso add the line world\.\n$/);
@@ -452,6 +452,26 @@ test("resume refuses a job whose recorded session is still open before it starts
   }
   writeFileSync(note, "  \n");
   assert.match(w.run(["resume", jobFile(w, { status: "done", name: "empty", record: { session_id: "s-5" } }), "--note-file", note]).stderr, /the note is empty/);
+});
+
+test("a resume note that names another job of the same role binds the resumed session to its own job", () => {
+  const w = world();
+  const other = jobFile(w, { status: "done", name: "other" });
+  const mine = jobFile(w, { status: "done", name: "mine", record: { session_id: "s-1", bound_at: "t", pid: DEAD_PID, pid_start: "1" } });
+  const devops = jobFile(w, { role: "devops", status: "done", name: "deploy", record: { session_id: "s-2", bound_at: "t", pid: DEAD_PID, pid_start: "1" } });
+  const note = join(w.root, "note.md");
+  writeFileSync(note, `Same fix as in ${other}, please.\n`);
+  for (const [file, role, session] of [[mine, "dev", "s-new"], [devops, "devops", "s-ops"]]) {
+    const out = w.run(["resume", file, "--note-file", note, "--json"]);
+    assert.equal(out.status, 0, out.stderr);
+    const { prompt } = JSON.parse(out.stdout);
+    assert.ok(prompt.startsWith(role === "devops" ? `Job file ${file}. ` : `/tedy:dev job ${file}. `), prompt);
+    const transcript = join(w.root, `${session}.jsonl`);
+    writeFileSync(transcript, `${JSON.stringify({ type: "user", message: { content: prompt } })}\n`);
+    handle({ hook_event_name: "PostToolUse", tool_name: "Bash", session_id: session, transcript_path: transcript, agent_type: `tedy:${role}` }, { dir: w.state, claude: () => null });
+    assert.equal(w.record(file).session_id, session);
+  }
+  assert.equal(w.record(other).session_id, undefined);
 });
 
 test("done refuses an empty outcome and otherwise appends it, and neither done nor stop runs claude", () => {
