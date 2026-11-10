@@ -287,8 +287,8 @@ const recordedTree = (record) => record?.worktree_owner === "core" && Boolean(re
 const coreWorktree = (record) => recordedTree(record) && existsSync(record.worktree);
 
 function pruneDecision(job, record, days, now) {
-  if (job.status === "closed") return { reason: "the job is closed" };
   if (alive(record)) return { why: "its session is open" };
+  if (job.status === "closed") return { reason: "the job is closed" };
   const finished = job.status === "done" || job.status === "stopped";
   if (finished && merged(record)) return { reason: `its branch is merged into origin/${record.base}` };
   const idle = now - Date.parse(record.last_event_at ?? record.bound_at ?? job.updated ?? job.created);
