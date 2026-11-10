@@ -519,6 +519,7 @@ test("close --if-ended writes nothing while the job's recorded session is alive,
     const refused = w.run(["close", file, "--if-ended"]);
     assert.equal(refused.status, 1);
     assert.equal(refused.stderr, `job: ${file}: session s-1 is still open (pid ${live.pid}), so nothing was closed; end that session in its own window, then close the job again\n`);
+    assert.equal(w.run(["close", file, "--if-ended", "x"]).status, 1);
     assert.equal(readFileSync(file, "utf8"), before.text);
     assert.equal(JSON.stringify(w.record(file)), before.record);
     assert.equal(processInfo(live.pid)?.start, live.start);

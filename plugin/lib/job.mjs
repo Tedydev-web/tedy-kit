@@ -458,7 +458,7 @@ function main([command, target, ...rest]) {
     return 0;
   }
   if (command === "close" && target) {
-    console.log(close(project(), target, text(given.reason), { ifEnded: given["if-ended"] === true }));
+    console.log(close(project(), target, text(given.reason), { ifEnded: given["if-ended"] !== undefined }));
     return 0;
   }
   if (command === "list") {
