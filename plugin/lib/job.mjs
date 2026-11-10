@@ -276,13 +276,15 @@ export function close(map, file, reason, options = {}) {
   if (job.status === "closed") throw new Error(`${file} is already closed`);
   if (job.status === "running" && !reason) throw new Error(`${file} is still running; give --reason to stop it, or wait for job.mjs done`);
   const { record, error } = readableRecord(job.real);
+  if (options.ifEnded && record?.session_id && !record.pid) throw new Error(`${file}: no claude pid was recorded for session ${record.session_id}, so the kit cannot tell that it has ended and nothing was closed; once that session has ended, close the job without --if-ended`);
   if (options.ifEnded && record && alive(record)) throw new Error(`${file}: session ${record.session_id} is still open (pid ${record.pid}), so nothing was closed; end that session in its own window, then close the job again`);
   if (job.status === "running") finish(job.path, "stopped", `Stopped: ${reason}`);
   const lines = [...(error ? [`warning: ${error}; nothing was signalled`] : []), ...endSession(record, options), ...closePane(record, options)];
   writeAtomic(job.path, setStatus(readFileSync(job.path, "utf8"), "closed", new Date().toISOString()));
   const live = Boolean(record?.pid) && alive(record);
-  const tree = !coreWorktree(record) ? [] : live ? [`kept ${record.worktree}: its session is still open`] : [removeWorktree(record, "the job is closed")];
-  if (tree.length && existsSync(record.worktree)) updateRecord(launchRecordPath(job.real), (fresh) => (live ? (fresh ?? record) : withoutSession(fresh ?? record)));
+  const keep = live || options.ifEnded;
+  const tree = !coreWorktree(record) ? [] : live ? [`kept ${record.worktree}: its session is still open`] : options.ifEnded ? [`kept ${record.worktree}: close --if-ended never removes a worktree; job.mjs prune removes it once its session is gone`] : [removeWorktree(record, "the job is closed")];
+  if (tree.length && existsSync(record.worktree)) updateRecord(launchRecordPath(job.real), (fresh) => (keep ? (fresh ?? record) : withoutSession(fresh ?? record)));
   else removeRecord(launchRecordPath(job.real));
   return [`closed: ${job.path}`, ...lines, ...tree].join("\n");
 }

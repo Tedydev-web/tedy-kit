@@ -396,6 +396,49 @@ test("close of a job whose own session is still running keeps its worktree and t
   }
 });
 
+test("close --if-ended refuses a bound job with no claude pid recorded, since it cannot tell the session has ended, and keeps its worktree and record", () => {
+  const { w, make } = pruneWorld();
+  const tree = make("nopid", { status: "done", record: { session_id: "s-live", bound_at: "t" } });
+  const file = w.jobs().find((path) => path.endsWith("-dev-nopid.md"));
+  const before = { text: readFileSync(file, "utf8"), record: JSON.stringify(w.record(file)) };
+  const out = w.run(["close", file, "--if-ended"], { extra: IDENTITY });
+  assert.equal(out.status, 1);
+  assert.equal(out.stderr, `job: ${file}: no claude pid was recorded for session s-live, so the kit cannot tell that it has ended and nothing was closed; once that session has ended, close the job without --if-ended\n`);
+  assert.equal(readFileSync(file, "utf8"), before.text);
+  assert.equal(JSON.stringify(w.record(file)), before.record);
+  assert.ok(existsSync(tree));
+});
+
+test("close --if-ended never removes a worktree: it keeps the tree and the whole record, so a second claude on the session takes the record over and prune removes the tree only once that session is gone", async () => {
+  const { w, make } = pruneWorld();
+  const first = await sleeper();
+  const second = await sleeper();
+  try {
+    const tree = make("viewed", { status: "done", record: { session_id: "s-1", bound_at: "t", pid: first.pid, pid_start: first.start } });
+    const file = w.jobs().find((path) => path.endsWith("-dev-viewed.md"));
+    first.child.kill("SIGKILL");
+    await first.exited;
+    const out = w.run(["close", file, "--if-ended"], { extra: IDENTITY });
+    assert.equal(out.status, 0, out.stderr);
+    assert.equal(out.stdout, `closed: ${file}\nkept ${tree}: close --if-ended never removes a worktree; job.mjs prune removes it once its session is gone\n`);
+    assert.equal(parse(readFileSync(file, "utf8"), JOB_KEYS).status, "closed");
+    assert.ok(existsSync(tree));
+    assert.deepEqual([w.record(file).session_id, w.record(file).pid], ["s-1", first.pid]);
+    handle({ hook_event_name: "PostToolUse", tool_name: "Bash", session_id: "s-1" }, { dir: w.state, claude: () => ({ pid: second.pid, start: second.start }) });
+    assert.equal(w.record(file).pid, second.pid);
+    assert.equal(w.run(["prune"], { extra: IDENTITY }).stdout.trim(), `kept ${tree}: its session is open`);
+    assert.ok(existsSync(tree));
+    second.child.kill("SIGKILL");
+    await second.exited;
+    assert.equal(w.run(["prune"], { extra: IDENTITY }).stdout.trim(), `removed ${tree} (the job is closed)`);
+    assert.ok(!existsSync(tree));
+    assert.equal(existsSync(launchRecordPath(file, w.state)), false);
+  } finally {
+    first.child.kill("SIGKILL");
+    second.child.kill("SIGKILL");
+  }
+});
+
 test("close run from inside the job's own worktree keeps that worktree and its record, and says so", () => {
   const { w, make } = pruneWorld();
   const tree = make("inside", { status: "done" });
