@@ -28,7 +28,7 @@ Status: accepted (2026-11-09, user decisions; built and probed 2026-11-09 to 202
   - They record the claude pid with its start time, and they record each state: `running`, `waiting: permission`, `waiting: input`, `waiting: question`, `idle`.
   - `job.mjs list` reads only these records, and shows `lost (last seen <time>)` once the pid is gone.
   - Every change to a launch record, from a hook or from `job.mjs`, reads and writes it under the kit's record lock in the same state dir, and a hook writes only while the record still holds its session. A hook that read the record before `close` deleted it, or before `resume` unbound it, writes nothing back. No lock is held across a herdr call, git or the wait for a signalled process.
-  - `stop` signals no process; it only writes the job's stopped status, so a job reports only itself. Only `close`, which is on no role's allowlist, ends a session, and it signals only the recorded pid while its start time matches.
+  - `stop` signals no process; it only writes the job's stopped status, so a job reports only itself. Only `close`, which is on no role's allowlist, ends a session, and it signals only the recorded pid while its start time matches. The role gate asks before any `job.mjs close` from a session whose `agent_type` is `tedy:<role>`, or from its subagents, of another job or its own, and names the job file. It checks this before the role gate switch and the map lookup, so the ask holds with the switch off and outside a mapped folder. The cockpit, which has no `agent_type`, is not asked.
   - No `claude agents`, `claude stop` or `claude rm` call is left.
 - **A dev job with `--repo` gets its worktree from the adapter that launched it:**
   - T3 `workspaceStrategy`
@@ -48,6 +48,10 @@ Status: accepted (2026-11-09, user decisions; built and probed 2026-11-09 to 202
   - "the job code never runs claude: no fleet list, background launch, claude stop or claude rm is left in it"
   - the list, stop, close and resume cases, including "close that may not signal the recorded process says why and leaves the job not closed with its record"
   - "a hook that read a job's record before close deleted it, or before resume unbound it, does not write the old session back".
+- `plugin/tests/role-gate.test.mjs`:
+  - "a job asks before job.mjs close of another job or of itself and names the job file, and the cockpit is not asked"
+  - "every command form the gate normalizes asks for a job's close, and the reason names the absolute job file"
+  - "the gate entry asks a job before job.mjs close with the role gate off and no map covering the folder, and lets the cockpit close".
 - `plugin/tests/record-lock.test.mjs`: "withLockSync waits for a held lock, refuses after its wait with the holder named, and releases the lock when its function returns or throws".
 - `plugin/tests/job-session-hooks.test.mjs`: binding from the transcript, no rebinding, the state each hook writes, the pid walk, and the start-time check in `alive`.
 - `plugin/tests/job-adapters.test.mjs`:
@@ -111,6 +115,7 @@ position: role-coordination conforms
   - After a typed prompt, a job shows `running` only from its first tool result.
   - A denied permission prompt leaves `waiting: permission` until the next Stop.
 - **Every session pays for the status hook.** The PostToolUse hook has no matcher, so each tool call in every session, the cockpit and ordinary sessions included, starts a node process that scans the launch records: about 40 ms per call (38 ms with no records, 42 ms with 200, measured by the review on 2026-11-10). Records are deleted only by `close`, so jobs left `done` but never closed keep growing the scan. Accepted for now.
+- **A job's `close` is a hook ask, not an ask rule.** `close` is on no allowlist, so before this only `default` mode asked, and a job under `bypassPermissions` could close and signal another job unasked: every PreToolUse Bash gate allowed it (probe, 2026-11-10). Hook asks show under `bypassPermissions` (in T3 they appear as approval cards), so the role gate asks. A close the gate does not see as a shell command, such as one run from a script file or from interpreter code, is not asked.
 - **Nothing depends on T3 or herdr.** With neither on the machine the print adapter does everything, and the suite passes with herdr off PATH.
 - **The kit now writes one file outside its profile and state:** T3's settings. It does so only on the user's yes, with a backup beside the file, and it refuses a file shape it does not know. When T3 changes that schema the write fails loudly, and the printed Launch arguments still work.
 - **herdr pane check:** the kit closes a pane only when herdr reports no agent session in it, or the job's own session. A pane id herdr reused for a plain shell cannot be told apart.

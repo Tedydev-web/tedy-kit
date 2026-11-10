@@ -6,7 +6,7 @@ import { bashInputs, classify } from "./git-gate.mjs";
 import { route } from "../lib/handoff.mjs";
 import { ask, gateSwitches, logGate, readHookInput, STATE_DIR } from "../lib/hook-io.mjs";
 import { resolveMap } from "../lib/project-map.mjs";
-import { shellWords, walkCommands } from "../lib/shell-segments.mjs";
+import { expandHome, shellWords, tokenize, walkCommands } from "../lib/shell-segments.mjs";
 
 const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 const SCRIPT_WRITES = [
@@ -130,6 +130,24 @@ export function classifyActions(input, map, role) {
 
 export const classifyAction = (input, map, role) => classifyActions(input, map, role)[0] ?? null;
 
+const JOB_SCRIPT = /(?:^|\/)job\.mjs$/;
+
+export function closeReason(input, who) {
+  if (!who) return null;
+  const cwd = input.cwd ?? process.cwd();
+  const files = [];
+  for (const item of bashInputs(input).inputs ?? []) {
+    if (item.tool_name !== "Bash") continue;
+    for (const { text, dir } of walkCommands(item.tool_input?.command ?? "", item.cwd ?? cwd).parts) {
+      const tokens = tokenize(text);
+      const at = tokens.findIndex((token, index) => JOB_SCRIPT.test(token) && tokens[index + 1] === "close");
+      if (at !== -1) files.push(tokens[at + 2] ? resolve(dir, expandHome(tokens[at + 2])) : "with no job file");
+    }
+  }
+  if (!files.length) return null;
+  return `tedy role gate: this is a ${who.role} job (${who.label}); job.mjs close ${[...new Set(files)].join(", ")} ends that job's session and marks it closed, which belongs to the cockpit. Allow it only if the user asked for it here.`;
+}
+
 export const roleOf = (map, name) => (map.sessions ?? []).find((session) => session.name === name)?.role ?? null;
 
 export function sessionName(sessionId, list) {
@@ -182,8 +200,7 @@ export function listSessions() {
   return JSON.parse(execFileSync("claude", ["agents", "--json", "--all"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 10_000 }));
 }
 
-export function judge(input, map, list = listSessions) {
-  const who = agentRole(input);
+export function judge(input, map, list = listSessions, who = agentRole(input)) {
   const actions = classifyActions(input, map, who?.role);
   if (!actions.length) return null;
   const first = (reasonOf) => {
@@ -209,8 +226,15 @@ export function judge(input, map, list = listSessions) {
 export function run() {
   const input = readHookInput({ askOnFailure: true });
   try {
+    const who = agentRole(input);
+    const closing = closeReason(input, who);
+    if (closing) {
+      logGate({ hook: "role-gate", decision: "ask", agent_type: input.agent_type, role: who.role, kind: "job-close", tool: input.tool_name });
+      ask(closing);
+      return;
+    }
     const resolved = gateSwitches().roleGate && resolveMap(input.cwd ?? process.cwd());
-    const verdict = resolved && judge(input, resolved.map);
+    const verdict = resolved && judge(input, resolved.map, listSessions, who);
     if (verdict) {
       logGate({ hook: "role-gate", decision: verdict.reason ? "ask" : "allow", session: verdict.session, agent_type: input.agent_type, role: verdict.role, kind: verdict.kind, tool: input.tool_name });
       if (verdict.reason) ask(verdict.reason);
