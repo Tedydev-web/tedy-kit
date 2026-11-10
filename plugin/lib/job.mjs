@@ -371,7 +371,8 @@ export function resume(map, file, note, { via, t3 } = {}) {
 function kitStatus(record) {
   if (!record.session_id) return "not started";
   if (!record.pid && !record.bound_at) return "lost (no pid recorded, started by an older kit)";
-  if (record.pid && !alive(record)) return `lost (last seen ${record.last_event_at ?? record.bound_at ?? "never"})`;
+  if (!record.pid) return "unknown (no pid recorded)";
+  if (!alive(record)) return `lost (last seen ${record.last_event_at ?? record.bound_at ?? "never"})`;
   return record.state ?? "running";
 }
 

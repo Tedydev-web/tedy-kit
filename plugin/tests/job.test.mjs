@@ -181,7 +181,7 @@ test("list reads only kit records: the file status when not running, else not st
       "dev · busy · running · 3h 5m",
       "dev · gone · lost (last seen 2026-11-09T03:20:53.000Z) · 3h 5m",
       "dev · reused · lost (last seen 2026-11-09T03:21:00.000Z) · 3h 5m",
-      "dev · no pid · idle · 3h 5m",
+      "dev · no pid · unknown (no pid recorded) · 3h 5m",
       "dev · older kit · lost (no pid recorded, started by an older kit) · 3h 5m",
       "dev · finished · done · 1d 2h",
     ].sort());
@@ -197,7 +197,7 @@ test("a session the hooks bind to a started job shows in list with its state", (
   const spec = JSON.parse(out.stdout);
   const transcript = join(w.root, "s-7.jsonl");
   writeFileSync(transcript, `${JSON.stringify({ type: "user", message: { content: spec.prompt } })}\n`);
-  handle({ hook_event_name: "Notification", notification_type: "permission_prompt", session_id: "s-7", transcript_path: transcript, agent_type: "tedy:review" }, { dir: w.state, claude: () => null });
+  handle({ hook_event_name: "Notification", notification_type: "permission_prompt", session_id: "s-7", transcript_path: transcript, agent_type: "tedy:review" }, { dir: w.state, claude: () => ({ pid: process.pid, start: processInfo(process.pid).start }) });
   assert.match(w.run(["list"]).stdout, /^review · Review 12 · waiting: permission · 0m · /);
 });
 
