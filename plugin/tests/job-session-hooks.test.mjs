@@ -83,6 +83,15 @@ test("a second session naming a bound job file does not rebind it and only retur
   assert.equal(w.record().pid, 4242);
 });
 
+test("a job file whose status is closed binds no session, even when its record has none, and the session does not bind a later job file it names", () => {
+  const w = world(["261109-1000-dev-add-hello", "261109-1005-dev-other"]);
+  writeFileSync(w.files[0], readFileSync(w.files[0], "utf8").replace("status: running", "status: closed"));
+  assert.deepEqual(w.fire(w.prompt(`${slash(w.files[0])} then ${w.files[1]}`)), []);
+  assert.equal(w.record(w.files[0]).session_id, undefined);
+  assert.equal(w.record(w.files[0]).pid, undefined);
+  assert.equal(w.record(w.files[1]).session_id, undefined);
+});
+
 test("a session bound to one job does not bind a second job file it names", () => {
   const w = world(["261109-1000-dev-add-hello", "261109-1005-dev-other"]);
   w.fire(w.prompt(slash(w.files[0])));

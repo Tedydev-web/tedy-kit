@@ -3,7 +3,7 @@ import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync } 
 import { basename, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { herdr, HerdrError } from "./job-adapters.mjs";
-import { launchRecordPath, readRecord, updateRecord } from "./job-files.mjs";
+import { launchRecordPath, readJob, readRecord, updateRecord } from "./job-files.mjs";
 import { isUserPrompt, logGate, readHookInput } from "./hook-io.mjs";
 import { STATE_DIR } from "./state-dir.mjs";
 
@@ -113,7 +113,7 @@ function bind(input, dir, now, claude, warnings) {
     let bound = null;
     updateRecord(path, (record) => {
       bound = record?.session_id ?? null;
-      if (!record || bound) return undefined;
+      if (!record || bound || readJob(file).status === "closed") return undefined;
       return { ...record, session_id: input.session_id, transcript_path: input.transcript_path, ...(found.process && { pid: found.process.pid, pid_start: found.process.start }), bound_at: now };
     });
     if (bound && bound !== input.session_id) warnings.push(`${file} is already bound to session ${bound}; this session is not tracked as that job`);

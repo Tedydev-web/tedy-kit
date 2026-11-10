@@ -24,7 +24,7 @@ Status: accepted (2026-11-09, user decisions; built and probed 2026-11-09 to 202
   - The cockpit never runs that command in its own Bash.
 - **Each role has one settings file**, `<state>/jobs/settings/<role>.json`. It holds the role's allowlist, the ask rules and the `TEDY_*` env, and the same file serves T3 Launch arguments, herdr agent args and a terminal.
 - **The kit writes job status itself.**
-  - Hooks bind a `tedy:<role>` session to its job file by reading the first user prompts in its transcript.
+  - Hooks bind a `tedy:<role>` session to its job file by reading the first user prompts in its transcript. They never bind one to a job file whose status is `closed`; the status is read under the record lock, so a record `close` kept for its worktree is not bound again by the closed job's still-running session.
   - They record the claude pid with its start time, and they record each state: `running`, `waiting: permission`, `waiting: input`, `waiting: question`, `idle`.
   - `job.mjs list` reads only these records, and shows `lost (last seen <time>)` once the pid is gone.
   - Every change to a launch record, from a hook or from `job.mjs`, reads and writes it under the kit's record lock in the same state dir, and a hook writes only while the record still holds its session. A hook that read the record before `close` deleted it, or before `resume` unbound it, writes nothing back. No lock is held across a herdr call, git or the wait for a signalled process.
@@ -35,7 +35,7 @@ Status: accepted (2026-11-09, user decisions; built and probed 2026-11-09 to 202
   - `herdr worktree create`
   - otherwise a core `git worktree add`, which `close` and `prune` remove on merge, after idle days or on close, never with uncommitted or unpushed work, and never while it holds an ignored file outside a regenerable folder (`node_modules`, `dist`, `build`, `out`, `.next`, `.nuxt`, `.turbo`, `.cache`, `coverage`, `.parcel-cache`, `.vite`, `target`), because `git worktree remove` deletes ignored files, such as a local-only test the user's global gitignore keeps out of commits. Those paths are printed with the reason.
   - `start` records the worktree, its owner, the branch and the base in the kit-owned launch record, and `close` and `prune` read them only from there, never from the job file header a job session can edit. A tree `close` keeps keeps a record without its session keys until `prune` removes the tree. A job started before this has no such fields, so its core worktree is left for the user to remove.
-  - Neither removes a worktree the command runs inside, so a live session's folder never vanishes under it.
+  - Neither removes a worktree the command runs inside, so the session running the command keeps its folder. A later `prune` can still remove the tree of a closed job whose own session still runs (Consequences).
 - **`close` closes the herdr pane the kit opened for a job**, once its session has ended, and never a pane the command runs in or one that now runs another session.
 - **`job.mjs t3-instance --all --write` (or `<role> --write`) adds the T3 instances.**
   - It backs up `~/.t3/userdata/settings.json` beside itself first, then upserts `providerInstances["tedy-<role>"]` with driver `claudeAgent` and Launch arguments `--agent tedy:<role> --settings <file>`, keeping every other key. An existing `tedy-<role>` entry gets only its `driver`, `enabled` and `config.launchArgs` set, and keeps the fields the user added (`displayName`, `environment`, other `config` keys). The temporary file is created with the settings file's mode before the text is written.
@@ -53,7 +53,7 @@ Status: accepted (2026-11-09, user decisions; built and probed 2026-11-09 to 202
   - "every command form the gate normalizes asks for a job's close, and the reason names the absolute job file"
   - "the gate entry asks a job before job.mjs close with the role gate off and no map covering the folder, and lets the cockpit close".
 - `plugin/tests/record-lock.test.mjs`: "withLockSync waits for a held lock, refuses after its wait with the holder named, and releases the lock when its function returns or throws".
-- `plugin/tests/job-session-hooks.test.mjs`: binding from the transcript, no rebinding, the state each hook writes, the pid walk, and the start-time check in `alive`.
+- `plugin/tests/job-session-hooks.test.mjs`: binding from the transcript, no rebinding, "a job file whose status is closed binds no session, even when its record has none, and the session does not bind a later job file it names", the state each hook writes, the pid walk, and the start-time check in `alive`.
 - `plugin/tests/job-adapters.test.mjs`:
   - adapter choice and `--via` refusals; the herdr tab, agent, fallback and list cases
   - "close ends the job's session first, then closes the herdr pane the kit opened for it; stop and a job with no kit pane make no herdr call", and the case that leaves a pane open
@@ -114,6 +114,7 @@ position: role-coordination conforms
 - **ADR 0014's ban on a kit UserPromptSubmit hook stands**, so binding reads the transcript head on the session's first hook event instead of a prompt hook.
   - After a typed prompt, a job shows `running` only from its first tool result.
   - A denied permission prompt leaves `waiting: permission` until the next Stop.
+  - A closed job's session that still runs is tracked as no job, and its hooks write no state. This happens when a job closed itself, since `close` does not signal its own session, or when `close` had no recorded pid. `prune` then sees no live session for the worktree `close` kept, so it may remove that tree while the session still runs in it. Before this rule the session re-bound on its next event, and its pid kept the tree.
 - **Every session pays for the status hook.** The PostToolUse hook has no matcher, so each tool call in every session, the cockpit and ordinary sessions included, starts a node process that scans the launch records: about 40 ms per call (38 ms with no records, 42 ms with 200, measured by the review on 2026-11-10). Records are deleted only by `close`, so jobs left `done` but never closed keep growing the scan. Accepted for now.
 - **A job's `close` is a hook ask, not an ask rule.** `close` is on no allowlist, so before this only `default` mode asked, and a job under `bypassPermissions` could close and signal another job unasked: every PreToolUse Bash gate allowed it (probe, 2026-11-10). Hook asks show under `bypassPermissions` (in T3 they appear as approval cards), so the role gate asks. A close the gate does not see as a shell command, such as one run from a script file or from interpreter code, is not asked.
 - **Nothing depends on T3 or herdr.** With neither on the machine the print adapter does everything, and the suite passes with herdr off PATH.
