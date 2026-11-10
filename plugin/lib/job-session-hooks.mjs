@@ -51,6 +51,17 @@ export function claudeProcess(from = process.ppid) {
   return null;
 }
 
+export function ancestors(from = process.ppid) {
+  const chain = [];
+  for (let pid = from; pid > 1 && !chain.some((entry) => entry.pid === pid); ) {
+    const info = processInfo(pid);
+    if (!info) break;
+    chain.push({ pid, start: info.start });
+    pid = info.ppid;
+  }
+  return chain;
+}
+
 export function alive(record) {
   if (!Number.isInteger(record?.pid) || record.pid <= 1) return false;
   try {
@@ -81,7 +92,7 @@ function findRecord(dir, matches) {
 
 export const recordOfSession = (dir, session) => (session ? findRecord(dir, (record) => record.session_id === session) : null);
 
-export const recordOfProcess = (dir, claude) => (Number.isInteger(claude?.pid) ? findRecord(dir, (record) => record.pid === claude.pid && record.pid_start === claude.start) : null);
+export const recordOfProcesses = (dir, processes) => (processes.length ? findRecord(dir, (record) => processes.some(({ pid, start }) => record.pid === pid && record.pid_start === start)) : null);
 
 function firstPrompt(transcript) {
   let descriptor;

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { test } from "node:test";
 import { parse } from "../lib/handoff.mjs";
 import { launchRecordPath, recordLaunch } from "../lib/job-files.mjs";
@@ -318,6 +318,39 @@ test("close refuses when it runs in a bound job's session, for another job or it
   } finally {
     victim.child.kill("SIGKILL");
   }
+});
+
+test("close refuses in a bound job's session even when a process named claude stands between it and the job's own claude: a shell symlinked as claude, a nested claude", { skip: process.platform !== "linux" }, async () => {
+  const w = world();
+  const shim = join(w.root, "shim");
+  mkdirSync(join(shim, "nested"), { recursive: true });
+  const nested = join(shim, "nested", "claude");
+  writeFileSync(nested, '#!/bin/sh\nsh -c "$1"\nstatus=$?\nexit $status\n');
+  chmodSync(nested, 0o755);
+  const forms = [
+    (target) => {
+      const script = join(shim, `close-${basename(target)}.sh`);
+      writeFileSync(script, `node ${SCRIPT} close ${target} --reason x\n`);
+      return `ln -sf /bin/sh ${shim}/claude && ${shim}/claude ${script}`;
+    },
+    (target) => `${nested} "node ${SCRIPT} close ${target} --reason x"`,
+  ];
+  const results = [];
+  for (const [index, form] of forms.entries()) {
+    const victim = await sleeper();
+    try {
+      const target = jobFile(w, { name: `victim-${index}`, record: { session_id: `s-v${index}`, bound_at: "t", pid: victim.pid, pid_start: victim.start } });
+      const before = { text: readFileSync(target, "utf8"), record: JSON.stringify(w.record(target)) };
+      const command = form(target);
+      const { own, status, stderr } = await inJobSession(w, `shimmed-${index}`, command);
+      const refused = status !== 0 && new RegExp(`^job: job\\.mjs close runs in the session of the job ${own}; a job never closes a job, its own included\\. Ask the user to close ${target} from the cockpit$`, "m").test(stderr);
+      const untouched = readFileSync(target, "utf8") === before.text && JSON.stringify(w.record(target)) === before.record && processInfo(victim.pid)?.start === victim.start;
+      results.push({ command, refused, untouched });
+    } finally {
+      victim.child.kill("SIGKILL");
+    }
+  }
+  assert.deepEqual(results.map(({ refused, untouched }) => [refused, untouched]), forms.map(() => [true, true]), JSON.stringify(results));
 });
 
 test("close that may not signal the recorded process says why and leaves the job not closed with its record", async () => {
