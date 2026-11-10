@@ -5,7 +5,7 @@ import { missingSections, render, setStatus, slugOf, stamp } from "./handoff.mjs
 import { age, createAtomic, JOB_ROLES, jobsDir, launchRecordPath, listJobs, readJob, readRecord, recordLaunch, removeRecord, setKey, updateRecord, withSection, writeAtomic } from "./job-files.mjs";
 import { chooseAdapter, closeHerdrPane, HerdrError, herdrAgent, herdrName, herdrState, herdrTab, herdrWorktree, onPath, t3Instance, t3SettingsPath, upsertT3Instances } from "./job-adapters.mjs";
 import { addWorktree, git as gitRun, merged, planWorktree, removeWorktree, t3Strategy } from "./job-worktrees.mjs";
-import { alive, claudeProcess, processInfo } from "./job-session-hooks.mjs";
+import { alive, claudeProcess, processInfo, recordOfProcess } from "./job-session-hooks.mjs";
 import { profileDir } from "./profile.mjs";
 import { STATE_DIR } from "./state-dir.mjs";
 import { loadMaps, resolveMap } from "./project-map.mjs";
@@ -266,7 +266,9 @@ export function stop(file, reason) {
   return `stopped: ${finish(file, "stopped", `Stopped: ${reason}`)}`;
 }
 
-export function close(map, file, reason, options) {
+export function close(map, file, reason, options = {}) {
+  const caller = recordOfProcess(STATE_DIR, (options.own ?? claudeProcess)());
+  if (caller) throw new Error(`job.mjs close runs in the session of the job ${caller.record.file}; a job never closes a job, its own included. Ask the user to close ${file} from the cockpit`);
   const job = inJobsDir(map, file);
   if (job.status === "closed") throw new Error(`${file} is already closed`);
   if (job.status === "running" && !reason) throw new Error(`${file} is still running; give --reason to stop it, or wait for job.mjs done`);

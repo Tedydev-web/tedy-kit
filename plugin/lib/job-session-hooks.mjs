@@ -63,21 +63,25 @@ export function alive(record) {
   return Boolean(info?.claude) && info.start === record.pid_start;
 }
 
-export function recordOfSession(dir, session) {
+function findRecord(dir, matches) {
   const jobs = join(dir, "jobs");
-  if (!session || !existsSync(jobs)) return null;
+  if (!existsSync(jobs)) return null;
   for (const entry of readdirSync(jobs, { withFileTypes: true })) {
     if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
     const path = join(jobs, entry.name);
     try {
       const record = readRecord(path);
-      if (record?.session_id === session) return { path, record };
+      if (record && matches(record)) return { path, record };
     } catch (error) {
       logGate({ hook: "job-session", decision: "record-skipped", error: error.message });
     }
   }
   return null;
 }
+
+export const recordOfSession = (dir, session) => (session ? findRecord(dir, (record) => record.session_id === session) : null);
+
+export const recordOfProcess = (dir, claude) => (Number.isInteger(claude?.pid) ? findRecord(dir, (record) => record.pid === claude.pid && record.pid_start === claude.start) : null);
 
 function promptedJobFiles(transcript) {
   if (!transcript || !existsSync(transcript)) return [];

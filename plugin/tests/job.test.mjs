@@ -1,13 +1,15 @@
 import "./test-isolation.mjs";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { parse } from "../lib/handoff.mjs";
 import { launchRecordPath, recordLaunch } from "../lib/job-files.mjs";
 import { handle, processInfo } from "../lib/job-session-hooks.mjs";
 import { tokenize } from "../lib/shell-segments.mjs";
-import { BODY, DEAD_PID, JOBS_DOC, jobFile, PLUGIN, sleeper, world } from "./job-world-for-tests.mjs";
+import { BODY, DEAD_PID, JOBS_DOC, jobFile, PLUGIN, SCRIPT, sleeper, world } from "./job-world-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const JOB_KEYS = ["to", "from", "status", "updated", "created", "title", "cwd", "permission_mode", "session_id"];
@@ -261,6 +263,60 @@ test("close ends the recorded claude process with SIGTERM, never a pid whose sta
     assert.equal(parse(readFileSync(mine, "utf8")).status, "closed");
   } finally {
     own.child.kill("SIGKILL");
+  }
+});
+
+async function inJobSession(w, name, command) {
+  const wrapper = join(w.bin, "session", "claude");
+  if (!existsSync(wrapper)) {
+    mkdirSync(join(w.bin, "session"), { recursive: true });
+    writeFileSync(wrapper, '#!/bin/sh\necho $$\nread go\neval "$JOB_SESSION_COMMAND"\n');
+    chmodSync(wrapper, 0o755);
+  }
+  const child = spawn(wrapper, [], { cwd: w.root, env: w.env({ JOB_SESSION_COMMAND: command }), stdio: ["pipe", "pipe", "pipe"] });
+  const exited = once(child, "exit");
+  let stdout = "";
+  let stderr = "";
+  child.stderr.on("data", (chunk) => { stderr += chunk; });
+  const pid = Number((await once(child.stdout, "data"))[0].toString().trim());
+  child.stdout.on("data", (chunk) => { stdout += chunk; });
+  const own = jobFile(w, { status: "done", name, record: { session_id: `s-${name}`, bound_at: "t", pid, pid_start: processInfo(pid).start } });
+  child.stdin.end("\n");
+  const [status] = await exited;
+  return { own, status, stdout, stderr };
+}
+
+test("close refuses when it runs in a bound job's session, for another job or its own, whatever shell form runs it, before it writes anything", { skip: process.platform !== "linux" }, async () => {
+  const w = world();
+  const victim = await sleeper();
+  try {
+    const target = jobFile(w, { name: "victim", record: { session_id: "s-v", bound_at: "t", pid: victim.pid, pid_start: victim.start } });
+    const before = { text: readFileSync(target, "utf8"), record: JSON.stringify(w.record(target)) };
+    const script = join(w.root, "closer.sh");
+    writeFileSync(script, `node ${SCRIPT} close ${target} --reason x\n`);
+    const forms = [
+      `node ${SCRIPT} close ${target} --reason x`,
+      `C=close; node ${SCRIPT} $C ${target} --reason x`,
+      `node ${SCRIPT} "$(echo close)" ${target} --reason x`,
+      `ln -sf ${SCRIPT} ${w.root}/j.mjs && node ${w.root}/j.mjs close ${target} --reason x`,
+      `printf close | xargs -I{} node ${SCRIPT} {} ${target} --reason x`,
+      `sh ${script}`,
+    ];
+    for (const [index, command] of forms.entries()) {
+      const { own, status, stderr } = await inJobSession(w, `own-${index}`, command);
+      assert.notEqual(status, 0, command);
+      assert.match(stderr, new RegExp(`^job: job\\.mjs close runs in the session of the job ${own}; a job never closes a job, its own included\\. Ask the user to close ${target} from the cockpit$`, "m"), command);
+      assert.equal(readFileSync(target, "utf8"), before.text, command);
+      assert.equal(JSON.stringify(w.record(target)), before.record, command);
+      assert.equal(processInfo(victim.pid)?.start, victim.start, command);
+    }
+    const self = await inJobSession(w, "self", `node ${SCRIPT} close ${join(w.root, "plans", "jobs", "261106-0900-dev-self.md")}`);
+    assert.notEqual(self.status, 0);
+    assert.match(self.stderr, /a job never closes a job, its own included\. Ask the user to close .*-dev-self\.md from the cockpit$/m);
+    assert.equal(parse(readFileSync(self.own, "utf8")).status, "done");
+    assert.ok(existsSync(launchRecordPath(self.own, w.state)));
+  } finally {
+    victim.child.kill("SIGKILL");
   }
 });
 
