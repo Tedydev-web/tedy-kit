@@ -229,7 +229,9 @@ function signal(record, name, kill) {
 }
 
 function endSession(record, { waitMs = 5000, own = claudeProcess, kill = process.kill } = {}) {
-  if (!record?.pid) return record?.session_id ? [`warning: no claude pid was recorded for session ${record.session_id}, so nothing was signalled`] : [];
+  if (!record) return [];
+  if (!record.session_id) return ["no session was bound to this job, so nothing was signalled; a session started later from its printed command, T3 thread or herdr pane is not tracked as this job"];
+  if (!record.pid) return [`warning: no claude pid was recorded for session ${record.session_id}, so nothing was signalled`];
   if (!alive(record)) return processInfo(record.pid) ? [`warning: pid ${record.pid} now belongs to another process, so it was not signalled`] : [];
   if (own()?.pid === record.pid) return [`this is the job's own session (pid ${record.pid}); it is not signalled and stays open for the user`];
   const gone = (until) => {

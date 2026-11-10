@@ -501,6 +501,15 @@ test("close refuses a running job without a reason, ends the session of a done o
   assert.deepEqual(w.calls(), []);
 });
 
+test("close of a job no session has bound yet says so, and that a session started later from its command is not tracked", () => {
+  const w = world();
+  const file = jobFile(w, { status: "stopped", name: "unbound" });
+  const out = w.run(["close", file]);
+  assert.equal(out.status, 0, out.stderr);
+  assert.equal(out.stdout, `closed: ${file}\nno session was bound to this job, so nothing was signalled; a session started later from its printed command, T3 thread or herdr pane is not tracked as this job\n`);
+  assert.equal(existsSync(launchRecordPath(file, w.state)), false);
+});
+
 test("close --if-ended writes nothing while the job's recorded session is alive, and closes the job once that session has ended", async () => {
   const w = world();
   const live = await sleeper();
