@@ -476,13 +476,14 @@ test("every command form the gate normalizes asks for a job's close, and the rea
     `node "/k/plugin/scripts/job".mjs 'clo''se' ${other}`,
     `node /k/plugin/scripts/job.mjs "close" ${other}`,
     `bash -c "node /k/plugin/scripts/job.mjs close ${other}"`,
-    `echo $(node /k/plugin/scripts/job.mjs close ${other})`,
     `git status; node --no-warnings /k/plugin/scripts/job.mjs close ${other}`,
   ];
-  for (const command of forms) {
+  const reason = (command) => {
     const input = { ...shell(command), ...job("tedy:dev") };
-    assert.match(gate.closeReason(input, gate.agentRole(input)) ?? "", new RegExp(`^tedy role gate: this is a dev job \\(tedy:dev\\); job\\.mjs close (?:\\S+, )?${other} ends`), command);
-  }
+    return gate.closeReason(input, gate.agentRole(input)) ?? "";
+  };
+  for (const command of forms) assert.match(reason(command), new RegExp(`^tedy role gate: this is a dev job \\(tedy:dev\\); job\\.mjs close ${other} ends`), command);
+  assert.match(reason(`echo $(node /k/plugin/scripts/job.mjs close ${other})`), new RegExp(`^tedy role gate: this is a dev job \\(tedy:dev\\); job\\.mjs close \\S+, ${other} ends`));
   const ctx = { tool_name: "mcp__plugin_context-mode_context-mode__ctx_execute", cwd: "/w/acme", tool_input: { language: "shell", code: `node /k/plugin/scripts/job.mjs close ${other}`, cwd: "/w/acme" }, ...job("tedy:review") };
   assert.match(gate.closeReason(ctx, gate.agentRole(ctx)) ?? "", /this is a review job \(tedy:review\); job\.mjs close/);
 });
@@ -497,6 +498,19 @@ test("the gate entry asks a job before job.mjs close with the role gate off and 
   assert.equal(decision.permissionDecision, "ask");
   assert.match(decision.permissionDecisionReason, new RegExp(`job\\.mjs close ${other} ends that job's session`));
   assert.equal(entry({}), "");
+});
+
+test("with the role gate off a job's subagent is asked before job.mjs close once the job's main thread has run a tool", () => {
+  const profile = tempDir("tedy-role-profile-");
+  writeFileSync(join(profile, "config.json"), JSON.stringify({ gates: { roleGate: false } }));
+  mkdirSync(join(profile, "projects"));
+  const stateDir = tempDir("tedy-state-");
+  const session = randomUUID();
+  const entry = (extra) => execFileSync("node", [new URL("../gates/role-gate.mjs", import.meta.url).pathname], { input: JSON.stringify({ cwd: "/tmp", session_id: session, ...extra }), encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: stateDir } });
+  assert.equal(entry({ tool_name: "Bash", tool_input: { command: "git status" }, agent_type: "tedy:pm" }), "");
+  const decision = JSON.parse(entry({ tool_name: "Bash", tool_input: { command: `node /k/plugin/scripts/job.mjs close ${other}` }, agent_id: "a-1", agent_type: "general-purpose" })).hookSpecificOutput;
+  assert.equal(decision.permissionDecision, "ask");
+  assert.match(decision.permissionDecisionReason, /^tedy role gate: this is a pm job \(general-purpose\); job\.mjs close /);
 });
 
 test("role-gate asks when it cannot read the project maps", () => {

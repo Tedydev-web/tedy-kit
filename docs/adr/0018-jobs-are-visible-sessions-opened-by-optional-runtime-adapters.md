@@ -51,7 +51,8 @@ Status: accepted (2026-11-09, user decisions; built and probed 2026-11-09 to 202
 - `plugin/tests/role-gate.test.mjs`:
   - "a job asks before job.mjs close of another job or of itself and names the job file, and the cockpit is not asked"
   - "every command form the gate normalizes asks for a job's close, and the reason names the absolute job file"
-  - "the gate entry asks a job before job.mjs close with the role gate off and no map covering the folder, and lets the cockpit close".
+  - "the gate entry asks a job before job.mjs close with the role gate off and no map covering the folder, and lets the cockpit close"
+  - "with the role gate off a job's subagent is asked before job.mjs close once the job's main thread has run a tool".
 - `plugin/tests/record-lock.test.mjs`: "withLockSync waits for a held lock, refuses after its wait with the holder named, and releases the lock when its function returns or throws".
 - `plugin/tests/job-session-hooks.test.mjs`: binding from the transcript, no rebinding, "a job file whose status is closed binds no session, even when its record has none, and the session does not bind a later job file it names", the state each hook writes, the pid walk, and the start-time check in `alive`.
 - `plugin/tests/job-adapters.test.mjs`:
