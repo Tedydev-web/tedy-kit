@@ -263,6 +263,15 @@ test("the docs describe each adapter and the worktree owners, and no doc still s
   }
 });
 
+test("jobs.md, the README and ADR 0018 name the same accepted ceilings of the job controls, and the ADR states the threat model", () => {
+  const read = (path) => readFileSync(join(PLUGIN, "..", path), "utf8");
+  const docs = { "jobs.md": read("plugin/shared/jobs.md"), README: read("README.md"), "ADR 0018": read("docs/adr/0018-jobs-are-visible-sessions-opened-by-optional-runtime-adapters.md") };
+  const ceilings = ["a process the job detaches", "a session before its first hook binds it", "a launch record the job rewrote first", "a `TEDY_STATE_DIR` the job", "a plain `kill`", "`herdr pane close <pane>` or `herdr agent stop <name>`", "marks another job `done` or `stopped`"];
+  const missing = Object.entries(docs).flatMap(([name, text]) => ceilings.filter((ceiling) => !text.includes(ceiling)).map((ceiling) => `${name} lacks ${ceiling}`));
+  assert.deepEqual(missing, []);
+  assert.match(docs["ADR 0018"], /\*\*Threat model\.\*\* The kit defends against a job acting on another job by mistake/);
+});
+
 test("every role may run the linked-worktree check", async () => {
   const { allowRules } = await import("../lib/job.mjs");
   for (const role of ["pm", "dev", "review", "devops"]) {
