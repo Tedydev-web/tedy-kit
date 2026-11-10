@@ -3,7 +3,7 @@ import { existsSync, realpathSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
 export function git(dir, ...args) {
-  const result = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8", timeout: 120_000 });
+  const result = spawnSync("git", ["-C", dir, ...args], { encoding: "utf8", timeout: 120_000, maxBuffer: 64 * 1024 * 1024 });
   if (result.error) throw new Error(`git ${args[0]} in ${dir}: ${result.error.message}`);
   if (result.status !== 0) throw new Error(`git ${args.join(" ")} failed in ${dir}: ${result.stderr.trim()}`);
   return result.stdout.trim();
@@ -71,16 +71,12 @@ function registered(repo, tree, branch) {
 }
 
 export function removeWorktree({ repo, worktree, branch }, reason, dryRun = false) {
-  if (inside(process.cwd(), worktree)) return `kept ${worktree}: this command runs inside it; run job.mjs prune from elsewhere to remove it`;
   try {
+    if (inside(process.cwd(), worktree)) return `kept ${worktree}: this command runs inside it; run job.mjs prune from elsewhere to remove it`;
     if (!registered(repo, worktree, branch)) return `kept ${worktree}: it is not a worktree of ${repo} on ${branch ?? "(no branch recorded)"}`;
-  } catch (error) {
-    return `kept ${worktree}: ${error.message}`;
-  }
-  const why = blocker(worktree);
-  if (why) return `kept ${worktree}: ${why}`;
-  if (dryRun) return `would remove ${worktree} (${reason})`;
-  try {
+    const why = blocker(worktree);
+    if (why) return `kept ${worktree}: ${why}`;
+    if (dryRun) return `would remove ${worktree} (${reason})`;
     git(repo, "worktree", "remove", worktree);
   } catch (error) {
     return `kept ${worktree}: ${error.message}`;

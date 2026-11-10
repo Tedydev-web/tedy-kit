@@ -423,3 +423,39 @@ test("close and prune remove the worktree, and judge the branch and base, that t
   assert.ok(existsSync(other));
   for (const tree of [closing, pruned]) assert.ok(!existsSync(tree), tree);
 });
+
+test("close removes a clean core worktree whose git ls-files output passes 1 MiB", () => {
+  const { w, make } = pruneWorld();
+  const deep = join(w.seed, ...Array.from({ length: 4 }, () => "d".repeat(200)));
+  mkdirSync(deep, { recursive: true });
+  for (let n = 0; n < 1500; n += 1) writeFileSync(join(deep, `f${n}.txt`), "x\n");
+  git(w.seed, "add", ".");
+  git(w.seed, "commit", "-q", "-m", "many files");
+  git(w.seed, "push", "-q", "origin", "HEAD:main");
+  const tree = make("large", { status: "done" });
+  assert.ok(execFileSync("git", ["-C", tree, "ls-files", "-v", "-z"], { maxBuffer: 1 << 26 }).length > 1 << 20);
+  const out = w.run(["close", w.jobs().find((path) => path.endsWith("-dev-large.md"))], { extra: IDENTITY });
+  assert.equal(out.status, 0, out.stderr);
+  assert.match(out.stdout, new RegExp(`^removed ${tree} \\(the job is closed\\)$`, "m"));
+  assert.ok(!existsSync(tree));
+});
+
+test("a git failure while close checks the worktree, after the session has ended, keeps the tree with the reason, prints every line and still closes the job", async () => {
+  const { w, make } = pruneWorld();
+  const live = await sleeper();
+  try {
+    const tree = make("broken", { status: "done", record: { session_id: "s-1", bound_at: "t", pid: live.pid, pid_start: live.start } });
+    const file = w.jobs().find((path) => path.endsWith("-dev-broken.md"));
+    writeFileSync(join(git(tree, "rev-parse", "--absolute-git-dir"), "index"), "not an index");
+    const out = w.run(["close", file], { extra: IDENTITY });
+    assert.equal(out.status, 0, out.stderr);
+    assert.match(out.stdout, new RegExp(`^closed: ${file}\\nended session s-1 \\(pid ${live.pid}\\)\\nkept ${tree}: git ls-files -v -z failed in ${tree}: .+$`, "m"));
+    assert.deepEqual(await live.exited, [null, "SIGTERM"]);
+    assert.ok(existsSync(tree));
+    assert.equal(parse(readFileSync(file, "utf8"), JOB_KEYS).status, "closed");
+    const kept = w.record(file);
+    assert.deepEqual([kept.worktree, kept.session_id, kept.pid], [tree, undefined, undefined]);
+  } finally {
+    live.child.kill("SIGKILL");
+  }
+});
