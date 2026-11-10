@@ -211,6 +211,24 @@ test("SessionStart of a second claude on a bound session keeps the recorded pid 
   }
 });
 
+test("a second claude that outlives the recorded one takes over the record on its next hook event, not only on SessionStart", { skip: process.platform !== "linux" }, async () => {
+  const w = world();
+  const first = await sleeper();
+  const second = await sleeper();
+  try {
+    const as = (proc) => ({ dir: w.state, now: "2026-11-09T06:00:00.000Z", claude: () => ({ pid: proc.pid, start: proc.start }) });
+    handle({ ...w.prompt(slash(w.files[0])), hook_event_name: "SessionStart", source: "startup" }, as(first));
+    handle({ hook_event_name: "SessionStart", source: "resume", session_id: "s-1" }, as(second));
+    first.child.kill("SIGKILL");
+    await first.exited;
+    handle({ hook_event_name: "PostToolUse", tool_name: "Bash", session_id: "s-1" }, as(second));
+    assert.deepEqual([w.record().pid, w.record().pid_start], [second.pid, second.start]);
+  } finally {
+    first.child.kill("SIGKILL");
+    second.child.kill("SIGKILL");
+  }
+});
+
 test("a corrupt record of another job does not stop the hook from updating this job", () => {
   const w = world();
   w.fire(w.prompt(slash(w.files[0])));
