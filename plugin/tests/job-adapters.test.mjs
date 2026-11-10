@@ -314,6 +314,26 @@ test("close ends the job's session first, then closes the herdr pane the kit ope
   assert.equal(w.herdrCalls().length, 4);
 });
 
+test("close keeps a kit pane and says why when no claude pid was recorded or the job's session is still running, and makes no herdr call", async () => {
+  const w = world();
+  const nopid = jobFile(w, { status: "done", name: "nopid", record: { session_id: "live-session", bound_at: "t", via: "herdr", herdr: PANE } });
+  const out = w.run(["close", nopid], { extra: { FAKE_HERDR_PANE_SESSION: "live-session" } });
+  assert.equal(out.status, 0, out.stderr);
+  assert.equal(out.stdout, `closed: ${nopid}\nwarning: no claude pid was recorded for session live-session, so nothing was signalled\nkept herdr pane w1:p7: no claude pid was recorded for session live-session, so the kit cannot tell that it has ended; close the pane by hand once it has\n`);
+  assert.deepEqual(w.herdrCalls(), []);
+  const { close } = await import("../lib/job.mjs");
+  const own = await sleeper();
+  try {
+    const mine = jobFile(w, { name: "mine", record: { session_id: "s-9", pid: own.pid, pid_start: own.start, via: "herdr", herdr: PANE } });
+    recordLaunch(mine, JSON.parse(readFileSync(launchRecordPath(mine, w.state), "utf8")));
+    const lines = close(w.map, mine, "blocked", { own: () => ({ pid: own.pid }), env: w.env({ FAKE_HERDR_PANE_SESSION: "s-9" }) }).split("\n");
+    assert.equal(lines.at(-1), `kept herdr pane w1:p7: session s-9 still runs in it (pid ${own.pid})`);
+    assert.deepEqual(w.herdrCalls(), []);
+  } finally {
+    own.child.kill("SIGKILL");
+  }
+});
+
 test("a kit pane stays open when the caller runs in it, when it now runs another session, or when herdr is missing or fails, and close still succeeds", async () => {
   const w = world();
   const job = (name) => jobFile(w, { status: "done", name, record: { session_id: "s-1", pid: DEAD_PID, pid_start: "1", via: "herdr", herdr: PANE } });
@@ -327,7 +347,7 @@ test("a kit pane stays open when the caller runs in it, when it now runs another
   assert.match(closeWith({ FAKE_HERDR_PANE_SESSION: "s-1" }).stdout, /\nclosed herdr pane w1:p7\n$/);
   assert.match(closeWith({}).stdout, /\nkept herdr pane w1:p7: herdr reports no agent session in it, not this job's s-1; close it by hand if it is the job's\n$/);
   const unbound = jobFile(w, { status: "done", name: "unbound", record: { via: "herdr", herdr: PANE } });
-  assert.match(w.run(["close", unbound], { extra: { FAKE_HERDR_PANE_SESSION: "s-1" } }).stdout, /\nkept herdr pane w1:p7: it now runs session s-1, not this job's \(none\)\n$/);
+  assert.match(w.run(["close", unbound], { extra: { FAKE_HERDR_PANE_SESSION: "s-1" } }).stdout, /\nkept herdr pane w1:p7: no claude pid was recorded for session \(none\), so the kit cannot tell that it has ended; close the pane by hand once it has\n$/);
   assert.match(closeWith({ FAKE_HERDR_FAIL: "pane get:pane_not_found" }).stdout, /\nherdr pane w1:p7 is already closed\n$/);
   const failed = closeWith({ FAKE_HERDR_FAIL: "pane close:server_error", FAKE_HERDR_PANE_SESSION: "s-1" });
   assert.equal(failed.status, 0, failed.stderr);
@@ -342,7 +362,7 @@ test("a kit pane stays open when the caller runs in it, when it now runs another
     const mine = jobFile(w, { name: "mine", record: { session_id: "s-9", pid: own.pid, pid_start: own.start, via: "herdr", herdr: PANE } });
     recordLaunch(mine, JSON.parse(readFileSync(launchRecordPath(mine, w.state), "utf8")));
     const before = w.herdrCalls().length;
-    assert.doesNotMatch(close(w.map, mine, "blocked", { own: () => ({ pid: own.pid }), env: w.env() }), /herdr/);
+    assert.match(close(w.map, mine, "blocked", { own: () => ({ pid: own.pid }), env: w.env() }), /\nkept herdr pane w1:p7: session s-9 still runs in it \(pid \d+\)$/);
     assert.equal(w.herdrCalls().length, before);
   } finally {
     own.child.kill("SIGKILL");

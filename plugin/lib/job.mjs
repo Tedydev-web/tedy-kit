@@ -257,7 +257,8 @@ function closePane(record, { env = process.env } = {}) {
   const pane = record?.herdr?.pane;
   if (!pane) return [];
   if (env.HERDR_PANE_ID === pane) return [`left herdr pane ${pane} open: this command runs inside it`];
-  if (record.pid && alive(record)) return [];
+  if (!record.pid) return [`kept herdr pane ${pane}: no claude pid was recorded for session ${record.session_id ?? "(none)"}, so the kit cannot tell that it has ended; close the pane by hand once it has`];
+  if (alive(record)) return [`kept herdr pane ${pane}: session ${record.session_id} still runs in it (pid ${record.pid})`];
   return [closeHerdrPane({ pane, session: record.session_id }, env)];
 }
 
