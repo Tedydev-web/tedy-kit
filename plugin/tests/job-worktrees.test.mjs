@@ -1,7 +1,7 @@
 import "./test-isolation.mjs";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { parse } from "../lib/handoff.mjs";
@@ -46,7 +46,8 @@ test("a dev job started by print gets a core worktree beside its repository, on 
   assert.ok(!linkedWorktree(w.fe));
   const [file] = w.jobs();
   assert.deepEqual(w.header(file), { to: "tedy:dev", status: "running", cwd: tree, repo: w.fe, branch: "feat/add-hello", base: "main", worktree: tree, worktree_owner: "core" });
-  assert.deepEqual([w.record(file).cwd, w.record(file).repo], [tree, w.fe]);
+  const record = w.record(file);
+  assert.deepEqual([record.cwd, record.repo, record.branch, record.base, record.worktree, record.worktree_owner], [tree, w.fe, "feat/add-hello", "main", tree, "core"]);
 });
 
 test("the worktree root, the branch and the integration branch follow the map and --branch, and a bad branch writes nothing", () => {
@@ -226,4 +227,33 @@ test("close removes its own job's clean core worktree and keeps a dirty one with
   assert.match(closedDirty.stdout, new RegExp(`^kept ${dirty}: it has uncommitted changes$`, "m"));
   assert.ok(existsSync(dirty));
   assert.equal(parse(readFileSync(job("dirty"), "utf8"), JOB_KEYS).status, "closed");
+  assert.equal(existsSync(launchRecordPath(job("clean"), w.state)), false);
+  const kept = w.record(job("dirty"));
+  assert.deepEqual([kept.worktree, kept.session_id, kept.pid], [dirty, undefined, undefined]);
+  rmSync(join(dirty, "new.txt"));
+  assert.equal(w.run(["prune"], { extra: IDENTITY }).stdout.trim(), `removed ${dirty} (the job is closed)`);
+  assert.ok(!existsSync(dirty));
+  assert.equal(existsSync(launchRecordPath(job("dirty"), w.state)), false);
+});
+
+test("close and prune remove the worktree, and judge the branch and base, that the launch record holds, so an edited job file header changes nothing they remove", () => {
+  const { w, make } = pruneWorld();
+  const other = join(w.root, "users-own-tree");
+  git(w.fe, "worktree", "add", "-q", "-b", "feat/users-own", other, "origin/main");
+  const job = (title) => w.jobs().find((path) => path.endsWith(`-dev-${title}.md`));
+  const point = (title, edits) => writeFileSync(job(title), Object.entries(edits).reduce((text, [key, value]) => text.replace(new RegExp(`^${key}: .*$`, "m"), `${key}: ${value}`), readFileSync(job(title), "utf8")));
+  const closing = make("closing", { status: "done" });
+  point("closing", { worktree: other });
+  const closed = w.run(["close", job("closing")], { extra: IDENTITY });
+  assert.equal(closed.status, 0, closed.stderr);
+  assert.match(closed.stdout, new RegExp(`^removed ${closing} \\(the job is closed\\)$`, "m"));
+  const pruned = make("pruned", { status: "closed" });
+  point("pruned", { worktree: other, worktree_owner: "t3" });
+  const ahead = make("ahead", { status: "done", edit: (tree) => { writeFileSync(join(tree, "notes.txt"), "pushed\n"); git(tree, "commit", "-q", "-am", "pushed"); git(tree, "push", "-q", "origin", "HEAD:refs/heads/feat/ahead"); } });
+  point("ahead", { branch: "main" });
+  const out = w.run(["prune"], { extra: IDENTITY });
+  assert.equal(out.status, 0, out.stderr);
+  assert.deepEqual(out.stdout.trim().split("\n").sort(), [`kept ${ahead}: the job is done, its branch is not merged into origin/main and it was active within 10 days`, `removed ${pruned} (the job is closed)`].sort());
+  assert.ok(existsSync(other));
+  for (const tree of [closing, pruned]) assert.ok(!existsSync(tree), tree);
 });

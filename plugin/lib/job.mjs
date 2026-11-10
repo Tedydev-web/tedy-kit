@@ -204,7 +204,7 @@ export function start(map, role, { title, body, repo, mode, via, t3, branch }) {
   const keys = [["cwd", cwd], ["permission_mode", mode], ["repo", repoPath], ["branch", tree?.branch], ["base", tree?.base], ["worktree", worktree.path], ["worktree_owner", worktree.owner]];
   const header = keys.filter(([, value]) => value).reduce((text, [key, value]) => setKey(text, key, value), setStatus(render({ to: `tedy:${role}`, from: "cockpit", title: line, body, created }), "running", created));
   const file = createJob(jobsDir(map), `${stamp()}-${role}-${slug}`, () => header);
-  recordLaunch(file, { role, cwd, permission_mode: mode, settings, created, via: opened.adapter, ...(repoPath && { repo: repoPath }) });
+  recordLaunch(file, { role, cwd, permission_mode: mode, settings, created, via: opened.adapter, ...(repoPath && { repo: repoPath }), ...(tree && { branch: tree.branch, base: tree.base, worktree_owner: worktree.owner }), ...(worktree.path && { worktree: worktree.path }) });
   const prompt = startPrompt(role, file);
   const spec = launchSpec({ role, cwd, title: jobName(map, role, file), settings, prompt, mode, via: opened.adapter, tree: worktree.owner === "t3" && tree });
   return startAgent(realpathSync(file), spec, claudeArgs({ role, settings, prompt, mode }), opened, 0);
@@ -242,15 +242,15 @@ function endSession(record, { waitMs = 5000, own = claudeProcess } = {}) {
   throw new Error(`pid ${record.pid} of session ${record.session_id} is still alive after SIGKILL`);
 }
 
-function endRecordedSession(file, options) {
-  let record;
+function readableRecord(file) {
   try {
-    record = launchRecord(file);
+    return { record: launchRecord(file) };
   } catch (error) {
-    return [`warning: ${error.message}; nothing was signalled`];
+    return { record: null, error: error.message };
   }
-  return [...endSession(record, options), ...closePane(record, options)];
 }
+
+const withoutSession = (record) => Object.fromEntries(Object.entries(record).filter(([key]) => !SESSION_KEYS.includes(key)));
 
 function closePane(record, { env = process.env } = {}) {
   const pane = record?.herdr?.pane;
@@ -270,41 +270,60 @@ export function close(map, file, reason, options) {
   if (job.status === "closed") throw new Error(`${file} is already closed`);
   if (job.status === "running" && !reason) throw new Error(`${file} is still running; give --reason to stop it, or wait for job.mjs done`);
   if (job.status === "running") finish(job.path, "stopped", `Stopped: ${reason}`);
-  const lines = endRecordedSession(job.real, options);
+  const { record, error } = readableRecord(job.real);
+  const lines = [...(error ? [`warning: ${error}; nothing was signalled`] : []), ...endSession(record, options), ...closePane(record, options)];
   writeAtomic(job.path, setStatus(readFileSync(job.path, "utf8"), "closed", new Date().toISOString()));
-  rmSync(launchRecordPath(job.real), { force: true });
-  const tree = coreWorktree(job) ? [removeWorktree(job, "the job is closed")] : [];
+  const tree = coreWorktree(record) ? [removeWorktree(record, "the job is closed")] : [];
+  if (tree.length && existsSync(record.worktree)) writeRecord(launchRecordPath(job.real), withoutSession(record));
+  else rmSync(launchRecordPath(job.real), { force: true });
   return [`closed: ${job.path}`, ...lines, ...tree].join("\n");
 }
 
 const DAY = 86_400_000;
 
-const coreWorktree = (job) => job.worktree_owner === "core" && job.worktree && job.repo && existsSync(job.worktree);
+const recordedTree = (record) => record?.worktree_owner === "core" && Boolean(record.worktree && record.repo);
 
-function pruneDecision(job, days, now) {
+const coreWorktree = (record) => recordedTree(record) && existsSync(record.worktree);
+
+function pruneDecision(job, record, days, now) {
   if (job.status === "closed") return { reason: "the job is closed" };
-  const record = launchRecord(job.path);
-  if (record && alive(record)) return { why: "its session is open" };
+  if (alive(record)) return { why: "its session is open" };
   const finished = job.status === "done" || job.status === "stopped";
-  if (finished && merged(job)) return { reason: `its branch is merged into origin/${job.base}` };
-  const idle = now - Date.parse(record?.last_event_at ?? record?.bound_at ?? job.updated ?? job.created);
+  if (finished && merged(record)) return { reason: `its branch is merged into origin/${record.base}` };
+  const idle = now - Date.parse(record.last_event_at ?? record.bound_at ?? job.updated ?? job.created);
   if (idle > days * DAY) return { reason: `idle for ${Math.floor(idle / DAY)} days` };
-  return { why: `the job is ${job.status}${finished ? `, its branch is not merged into origin/${job.base} and it` : " and"} was active within ${days} days` };
+  return { why: `the job is ${job.status}${finished ? `, its branch is not merged into origin/${record.base} and it` : " and"} was active within ${days} days` };
 }
 
-function pruneJob(job, days, dryRun, now) {
+function pruneJob({ job, record }, days, dryRun, now) {
   try {
-    const { reason, why } = pruneDecision(job, days, now);
-    return why ? `kept ${job.worktree}: ${why}` : removeWorktree(job, reason, dryRun);
+    const { reason, why } = pruneDecision(job, record, days, now);
+    if (why) return `kept ${record.worktree}: ${why}`;
+    const result = removeWorktree(record, reason, dryRun);
+    if (job.status === "closed" && !existsSync(record.worktree)) rmSync(launchRecordPath(job.path), { force: true });
+    return result;
   } catch (error) {
-    return `kept ${job.worktree}: ${error.message}`;
+    return `kept ${record.worktree}: ${error.message}`;
   }
+}
+
+function recordedJobs(map, dryRun) {
+  return listJobs(map, { closed: true }).flatMap((job) => {
+    const { record, error } = readableRecord(job.path);
+    if (error) return [{ warning: `warning: ${error}; the worktree of ${job.path} was not checked` }];
+    if (!recordedTree(record)) return [];
+    if (existsSync(record.worktree)) return [{ job, record }];
+    if (job.status === "closed" && !dryRun) rmSync(launchRecordPath(job.path), { force: true });
+    return [];
+  });
 }
 
 export function prune(map, { days = 10, dryRun = false, now = Date.now() } = {}) {
   if (!Number.isInteger(days) || days < 1) throw new Error("--days needs a whole number of days above 0");
-  const jobs = listJobs(map, { closed: true }).filter(coreWorktree);
-  const warnings = [...new Set(jobs.map((job) => job.repo))].flatMap((repo) => {
+  const found = recordedJobs(map, dryRun);
+  const jobs = found.filter((entry) => entry.job);
+  const unread = found.flatMap((entry) => (entry.warning ? [entry.warning] : []));
+  const warnings = [...new Set(jobs.map(({ record }) => record.repo))].flatMap((repo) => {
     try {
       gitRun(repo, "fetch", "-q", "origin");
       return [];
@@ -312,7 +331,7 @@ export function prune(map, { days = 10, dryRun = false, now = Date.now() } = {})
       return [`warning: ${error.message}; the merged and pushed checks use the last fetched refs`];
     }
   });
-  return [...warnings, ...jobs.map((job) => pruneJob(job, days, dryRun, now))];
+  return [...unread, ...warnings, ...jobs.map((entry) => pruneJob(entry, days, dryRun, now))];
 }
 
 export function resume(map, file, note, { via, t3 } = {}) {
