@@ -132,20 +132,31 @@ export const classifyAction = (input, map, role) => classifyActions(input, map, 
 
 const JOB_SCRIPT = /(?:^|\/)job\.mjs$/;
 
-export function closeReason(input, who) {
-  if (!who) return null;
+function jobScriptCalls(input) {
   const cwd = input.cwd ?? process.cwd();
-  const files = [];
+  const calls = [];
   for (const item of bashInputs(input).inputs ?? []) {
     if (item.tool_name !== "Bash") continue;
     for (const { text, dir } of walkCommands(item.tool_input?.command ?? "", item.cwd ?? cwd).parts) {
       const tokens = tokenize(text);
-      const at = tokens.findIndex((token, index) => JOB_SCRIPT.test(token) && tokens[index + 1] === "close");
-      if (at !== -1) files.push(tokens[at + 2] ? resolve(dir, expandHome(tokens[at + 2])) : "with no job file");
+      tokens.forEach((token, index) => {
+        if (JOB_SCRIPT.test(token)) calls.push({ args: tokens.slice(index + 1), dir });
+      });
     }
   }
+  return calls;
+}
+
+export function closeReason(input, who) {
+  if (!who) return null;
+  const files = jobScriptCalls(input).filter(({ args }) => args[0] === "close").map(({ args, dir }) => (args[1] ? resolve(dir, expandHome(args[1])) : "with no job file"));
   if (!files.length) return null;
   return `tedy role gate: this is a ${who.role} job (${who.label}); job.mjs close ${[...new Set(files)].join(", ")} ends that job's session and marks it closed, which belongs to the cockpit. Allow it only if the user asked for it here.`;
+}
+
+export function t3WriteReason(input, who) {
+  if (!who || !jobScriptCalls(input).some(({ args }) => args[0] === "t3-instance" && args.includes("--write"))) return null;
+  return `tedy role gate: this is a ${who.role} job (${who.label}); job.mjs t3-instance --write changes T3's settings file and the instances later job threads start from, which belongs to the cockpit after the user's yes. Allow it only if the user asked for it here.`;
 }
 
 export const roleOf = (map, name) => (map.sessions ?? []).find((session) => session.name === name)?.role ?? null;
@@ -228,9 +239,10 @@ export function run() {
   try {
     const who = agentRole(input);
     const closing = closeReason(input, who);
-    if (closing) {
-      logGate({ hook: "role-gate", decision: "ask", agent_type: input.agent_type, role: who.role, kind: "job-close", tool: input.tool_name });
-      ask(closing);
+    const writing = closing ? null : t3WriteReason(input, who);
+    if (closing || writing) {
+      logGate({ hook: "role-gate", decision: "ask", agent_type: input.agent_type, role: who.role, kind: closing ? "job-close" : "t3-write", tool: input.tool_name });
+      ask(closing ?? writing);
       return;
     }
     const resolved = gateSwitches().roleGate && resolveMap(input.cwd ?? process.cwd());

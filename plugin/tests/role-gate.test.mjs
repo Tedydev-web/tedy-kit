@@ -513,6 +513,23 @@ test("with the role gate off a job's subagent is asked before job.mjs close once
   assert.match(decision.permissionDecisionReason, /^tedy role gate: this is a pm job \(general-purpose\); job\.mjs close /);
 });
 
+test("a job asks before job.mjs t3-instance --write, not before it prints the instances, and the cockpit is not asked", () => {
+  const writing = (command, who = job("tedy:dev")) => gate.t3WriteReason({ ...shell(command), ...who }, gate.agentRole({ ...shell(command), ...who }));
+  const reason = "tedy role gate: this is a dev job (tedy:dev); job.mjs t3-instance --write changes T3's settings file and the instances later job threads start from, which belongs to the cockpit after the user's yes. Allow it only if the user asked for it here.";
+  for (const command of ["node /k/plugin/scripts/job.mjs t3-instance --all --write", "cd /w && node /k/plugin/scripts/job.mjs t3-instance dev --write", `node "/k/plugin/scripts/job".mjs 't3-instance' pm --write`]) assert.equal(writing(command), reason, command);
+  assert.equal(writing("node /k/plugin/scripts/job.mjs t3-instance --all"), null);
+  assert.equal(writing("node /k/plugin/scripts/job.mjs list --write"), null);
+  assert.equal(gate.t3WriteReason({ ...shell("node /k/plugin/scripts/job.mjs t3-instance --all --write"), session_id: randomUUID() }, gate.agentRole({ session_id: randomUUID() })), null);
+  const profile = tempDir("tedy-role-profile-");
+  writeFileSync(join(profile, "config.json"), JSON.stringify({ gates: { roleGate: false } }));
+  mkdirSync(join(profile, "projects"));
+  const entry = (extra) => execFileSync("node", [new URL("../gates/role-gate.mjs", import.meta.url).pathname], { input: JSON.stringify({ tool_name: "Bash", tool_input: { command: "node /k/plugin/scripts/job.mjs t3-instance --all --write" }, cwd: "/tmp", session_id: randomUUID(), ...extra }), encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: tempDir("tedy-state-") } });
+  const decision = JSON.parse(entry({ agent_type: "tedy:pm" })).hookSpecificOutput;
+  assert.equal(decision.permissionDecision, "ask");
+  assert.match(decision.permissionDecisionReason, /^tedy role gate: this is a pm job \(tedy:pm\); job\.mjs t3-instance --write changes/);
+  assert.equal(entry({}), "");
+});
+
 test("role-gate asks when it cannot read the project maps", () => {
   const profile = tempDir("tedy-role-profile-");
   writeFileSync(join(profile, "config.json"), JSON.stringify({ gates: { roleGate: true } }));

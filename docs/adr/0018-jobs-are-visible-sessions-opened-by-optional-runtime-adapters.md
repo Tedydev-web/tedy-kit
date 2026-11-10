@@ -40,7 +40,7 @@ Status: accepted (2026-11-09, user decisions; built and probed 2026-11-09 to 202
 - **`job.mjs t3-instance --all --write` (or `<role> --write`) adds the T3 instances.**
   - It backs up `~/.t3/userdata/settings.json` beside itself first, then upserts `providerInstances["tedy-<role>"]` with driver `claudeAgent` and Launch arguments `--agent tedy:<role> --settings <file>`, keeping every other key. An existing `tedy-<role>` entry gets only its `driver`, `enabled` and `config.launchArgs` set, and keeps the fields the user added (`displayName`, `environment`, other `config` keys). The temporary file is created with the settings file's mode before the text is written.
   - It refuses a file that is missing, is not JSON or has no `providerInstances` object.
-  - The cockpit and `/tedy:setup` run it only after one AskUserQuestion that names the file, because the file is outside the profile.
+  - The cockpit and `/tedy:setup` run it only after one AskUserQuestion that names the file, because the file is outside the profile. The role gate asks before a job session runs a literal `job.mjs t3-instance … --write`, by the same check as its close ask. Accepted: a job's `job.mjs start` and `resume` are not asked; "a job never starts a job" stays a rule in `jobs.md`, not a gate.
 
 ## Enforcement
 - `plugin/tests/job.test.mjs`:
@@ -52,7 +52,8 @@ Status: accepted (2026-11-09, user decisions; built and probed 2026-11-09 to 202
   - "a job asks before job.mjs close of another job or of itself and names the job file, and the cockpit is not asked"
   - "every command form the gate normalizes asks for a job's close, and the reason names the absolute job file"
   - "the gate entry asks a job before job.mjs close with the role gate off and no map covering the folder, and lets the cockpit close"
-  - "with the role gate off a job's subagent is asked before job.mjs close once the job's main thread has run a tool".
+  - "with the role gate off a job's subagent is asked before job.mjs close once the job's main thread has run a tool"
+  - "a job asks before job.mjs t3-instance --write, not before it prints the instances, and the cockpit is not asked".
 - `plugin/tests/record-lock.test.mjs`: "withLockSync waits for a held lock, refuses after its wait with the holder named, and releases the lock when its function returns or throws".
 - `plugin/tests/job-session-hooks.test.mjs`: binding from the transcript, "binding reads only the kit's launch form at the start of the first user prompt, never another job path the prompt or a later prompt names", no rebinding, "a job file whose status is closed binds no session, even when its record has none, and the session does not bind a later job file it names", the state each hook writes, the pid walk, and the start-time check in `alive`.
 - `plugin/tests/job-adapters.test.mjs`:
