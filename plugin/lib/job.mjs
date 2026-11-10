@@ -3,7 +3,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { missingSections, render, setStatus, slugOf, stamp } from "./handoff.mjs";
 import { age, createAtomic, JOB_ROLES, jobsDir, launchRecordPath, listJobs, readJob, recordLaunch, setKey, withSection, writeAtomic, writeRecord } from "./job-files.mjs";
-import { chooseAdapter, HerdrError, herdrAgent, herdrName, herdrState, herdrTab, herdrWorktree, onPath, t3Instance } from "./job-adapters.mjs";
+import { chooseAdapter, closeHerdrPane, HerdrError, herdrAgent, herdrName, herdrState, herdrTab, herdrWorktree, onPath, t3Instance } from "./job-adapters.mjs";
 import { addWorktree, git as gitRun, merged, planWorktree, removeWorktree, t3Strategy } from "./job-worktrees.mjs";
 import { alive, claudeProcess, processInfo } from "./job-session-hooks.mjs";
 import { profileDir } from "./profile.mjs";
@@ -232,7 +232,15 @@ function endRecordedSession(file, options) {
   } catch (error) {
     return [`warning: ${error.message}; nothing was signalled`];
   }
-  return endSession(record, options);
+  return [...endSession(record, options), ...closePane(record, options)];
+}
+
+function closePane(record, { env = process.env } = {}) {
+  const pane = record?.herdr?.pane;
+  if (!pane) return [];
+  if (env.HERDR_PANE_ID === pane) return [`left herdr pane ${pane} open: this command runs inside it`];
+  if (record.pid && alive(record)) return [];
+  return [closeHerdrPane({ pane, session: record.session_id }, env)];
 }
 
 export function stop(file, reason, options) {

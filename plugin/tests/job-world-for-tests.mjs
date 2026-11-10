@@ -1,10 +1,20 @@
-import { execFile, spawnSync } from "node:child_process";
+import { execFile, spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { launchRecordPath, recordLaunch } from "../lib/job-files.mjs";
+import { processInfo } from "../lib/job-session-hooks.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
+
+export async function sleeper(ignoreTerm = false) {
+  const child = spawn("node", ["-e", `${ignoreTerm ? "process.on('SIGTERM', () => {});" : ""} setInterval(() => {}, 1000); console.log("up")`], { stdio: ["ignore", "pipe", "ignore"] });
+  await once(child.stdout, "data");
+  return { child, pid: child.pid, start: processInfo(child.pid).start, exited: once(child, "exit") };
+}
+
+export const DEAD_PID = 2 ** 22 + 17;
 
 export const PLUGIN = fileURLToPath(new URL("../", import.meta.url)).replace(/\/$/, "");
 export const SCRIPT = join(PLUGIN, "scripts", "job.mjs");
@@ -29,6 +39,10 @@ case "$1 $2" in
     if [ -z "$FAKE_HERDR_STATUS" ]; then echo '{"id":"1","error":{"code":"agent_not_found","message":"no such agent"}}' >&2; exit 1; fi
     printf '{"id":"1","result":{"type":"agent_info","agent":{"agent_status":"%s"}}}\\n' "$FAKE_HERDR_STATUS" ;;
   "notification show") echo '{"id":"1","result":{"type":"notification_show","shown":true,"reason":"shown"}}' ;;
+  "pane get")
+    if [ -n "$FAKE_HERDR_PANE_SESSION" ]; then session='{"agent":"claude","kind":"id","source":"herdr:claude","value":"'"$FAKE_HERDR_PANE_SESSION"'"}'; else session=null; fi
+    printf '{"id":"1","result":{"type":"pane_info","pane":{"pane_id":"%s","agent_session":%s}}}\\n' "$3" "$session" ;;
+  "pane close") echo '{"id":"1","result":{"type":"ok"}}' ;;
   *) echo '{"id":"1","error":{"code":"unexpected","message":"unexpected call"}}' >&2; exit 1 ;;
 esac
 `;
@@ -57,7 +71,7 @@ export function world(mapExtra = { jobs: true }) {
   const herdrCalls = fakeHerdr(bin);
   const body = join(root, "body.md");
   writeFileSync(body, BODY);
-  const env = (extra = {}) => ({ ...process.env, PATH: `${bin}:${process.env.PATH}`, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: state, TEDY_JOB_PLUGIN_DIR: "", HERDR_ENV: "", HERDR_WORKSPACE_ID: "", ...extra });
+  const env = (extra = {}) => ({ ...process.env, PATH: `${bin}:${process.env.PATH}`, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: state, TEDY_JOB_PLUGIN_DIR: "", HERDR_ENV: "", HERDR_WORKSPACE_ID: "", HERDR_PANE_ID: "", ...extra });
   const run = (args, { extra } = {}) => {
     const { status, stdout, stderr } = spawnSync(process.execPath, [SCRIPT, ...args], { cwd: root, encoding: "utf8", env: env(extra) });
     return { status, stdout, stderr };

@@ -1,7 +1,5 @@
 import "./test-isolation.mjs";
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
-import { once } from "node:events";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -9,7 +7,7 @@ import { parse } from "../lib/handoff.mjs";
 import { launchRecordPath, recordLaunch } from "../lib/job-files.mjs";
 import { handle, processInfo } from "../lib/job-session-hooks.mjs";
 import { tokenize } from "../lib/shell-segments.mjs";
-import { BODY, JOBS_DOC, jobFile, PLUGIN, world } from "./job-world-for-tests.mjs";
+import { BODY, DEAD_PID, JOBS_DOC, jobFile, PLUGIN, sleeper, world } from "./job-world-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const JOB_KEYS = ["to", "from", "status", "updated", "created", "title", "cwd", "permission_mode", "session_id"];
@@ -159,14 +157,6 @@ test("every role asks before git writes a file through --output and before it ed
   assert.ok(!bash.some((pattern) => matches(pattern, "git diff origin/dev")));
   assert.ok(askRules(at).includes("Edit(//p/tedy/**)") && askRules(at).includes("Edit(//s/tedy/**)"));
 });
-
-async function sleeper(ignoreTerm = false) {
-  const child = spawn("node", ["-e", `${ignoreTerm ? "process.on('SIGTERM', () => {});" : ""} setInterval(() => {}, 1000); console.log("up")`], { stdio: ["ignore", "pipe", "ignore"] });
-  await once(child.stdout, "data");
-  return { child, pid: child.pid, start: processInfo(child.pid).start, exited: once(child, "exit") };
-}
-
-const DEAD_PID = 2 ** 22 + 17;
 
 test("list reads only kit records: the file status when not running, else not started, lost with its last event when the claude pid is gone, else the hook state", async () => {
   const w = world();
