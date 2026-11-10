@@ -348,10 +348,11 @@ export function resume(map, file, note, { via, t3 } = {}) {
   if (!job.record) throw new Error(`${file} has no launch record, so it was not started by job.mjs start here; close it and start a new job`);
   const { record } = job;
   if (!record.session_id) throw new Error(`${file} has no session yet; run the command job.mjs start printed for it, or close it and start a new job`);
-  if (!existsSync(record.cwd)) throw new Error(`${file}: its folder ${record.cwd} no longer exists; close it and start a new job`);
+  const cwd = record.session_cwd ?? record.cwd;
+  if (!existsSync(cwd)) throw new Error(`${file}: its folder ${cwd} no longer exists; close it and start a new job`);
   if (alive(record)) throw new Error(`${file}: session ${record.session_id} is still open (pid ${record.pid}); type the note in its open thread or pane, or close that session first, then run job.mjs resume again; nothing was resumed`);
   const title = jobName(map, record.role, job.path);
-  const opened = openPane(adapter, via === adapter, { cwd: record.cwd, label: title });
+  const opened = openPane(adapter, via === adapter, { cwd, label: title });
   const session = record.session_id;
   const earlier = [...(record.earlier ?? []), session];
   updateRecord(launchRecordPath(job.real), (fresh) => {
@@ -363,7 +364,7 @@ export function resume(map, file, note, { via, t3 } = {}) {
   const prompt = `${startPrompt(record.role, job.path)} The job is resumed: the latest ## Note in the job file, quoted below, is the rework request. Go on with it and end with job.mjs done or stop.\n\n${note.trim()}`;
   const settings = writeSettings(record.role, map);
   const launch = { role: record.role, settings, prompt, mode: record.permission_mode, resume: session };
-  const started = startAgent(job.real, launchSpec({ ...launch, cwd: record.cwd, title, via: opened.adapter }), claudeArgs(launch), opened, earlier.length);
+  const started = startAgent(job.real, launchSpec({ ...launch, cwd, title, via: opened.adapter }), claudeArgs(launch), opened, earlier.length);
   return started;
 }
 

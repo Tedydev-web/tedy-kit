@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync } from "node:fs";
-import { basename, join } from "node:path";
+import { basename, isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { herdr, HerdrError } from "./job-adapters.mjs";
 import { launchRecordPath, readJob, readRecord, updateRecord } from "./job-files.mjs";
@@ -147,7 +147,7 @@ function bind(input, dir, now, claude, warnings) {
   updateRecord(path, (record) => {
     bound = record?.session_id ?? null;
     if (!record || bound || readJob(file).status === "closed") return undefined;
-    return { ...record, session_id: input.session_id, transcript_path: input.transcript_path, ...(found && { pid: found.pid, pid_start: found.start }), bound_at: now };
+    return { ...record, session_id: input.session_id, transcript_path: input.transcript_path, ...(found && { pid: found.pid, pid_start: found.start }), ...(typeof input.cwd === "string" && isAbsolute(input.cwd) && { session_cwd: input.cwd }), bound_at: now };
   });
   if (bound && bound !== input.session_id) warnings.push(`${file} is already bound to session ${bound}; this session is not tracked as that job`);
 }

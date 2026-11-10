@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { parse } from "../lib/handoff.mjs";
 import { JOB_KEYS, launchRecordPath, readRecord, recordLaunch, writeRecord } from "../lib/job-files.mjs";
+import { handle } from "../lib/job-session-hooks.mjs";
 import { linkedWorktree } from "../lib/job-worktrees.mjs";
 import { tokenize } from "../lib/shell-segments.mjs";
 import { sleeper, world } from "./job-world-for-tests.mjs";
@@ -138,6 +139,39 @@ test("resume trusts a worktree job by its recorded repository and runs in its wo
   const gone = w.run(["resume", file, "--note-file", note]);
   assert.equal(gone.status, 1);
   assert.match(gone.stderr, /its folder .* no longer exists; close it and start a new job/);
+});
+
+test("a T3-owned dev job resumes in the folder its session ran in, by print, herdr or T3, and its recorded cwd stays the repository", () => {
+  const w = gitWorld();
+  const out = w.start(["--t3", "--json"]);
+  assert.equal(out.status, 0, out.stderr);
+  const spec = JSON.parse(out.stdout);
+  const [file] = w.jobs();
+  const t3Tree = join(w.root, "t3-worktrees", "fe-add-hello");
+  git(w.fe, "worktree", "add", "-q", "-b", "feat/add-hello", t3Tree, "origin/main");
+  const bindIn = (session, prompt) => {
+    const transcript = join(w.root, `${session}.jsonl`);
+    writeFileSync(transcript, `${JSON.stringify({ type: "user", message: { content: prompt } })}\n`);
+    handle({ hook_event_name: "PostToolUse", tool_name: "Bash", session_id: session, transcript_path: transcript, agent_type: "tedy:dev", cwd: t3Tree }, { dir: w.state, claude: () => null });
+  };
+  bindIn("s-1", spec.prompt);
+  const done = join(w.root, "outcome.md");
+  writeFileSync(done, "ok\n");
+  assert.equal(w.run(["done", file, "--outcome-file", done]).status, 0);
+  const note = join(w.root, "note.md");
+  writeFileSync(note, "more\n");
+  const seen = [];
+  for (const [via, extra] of [["print", {}], ["t3", {}], ["herdr", { HERDR_ENV: "1" }]]) {
+    const resumed = w.run(["resume", file, "--note-file", note, ...(via === "t3" ? ["--t3"] : ["--via", via]), "--json"], { extra });
+    assert.equal(resumed.status, 0, resumed.stderr);
+    const launch = JSON.parse(resumed.stdout);
+    seen.push([via, launch.cwd, tokenize(launch.command).slice(0, 2), w.record(file).cwd]);
+    bindIn(`s-${via}`, launch.prompt);
+  }
+  assert.deepEqual(seen, ["print", "t3", "herdr"].map((via) => [via, t3Tree, ["cd", t3Tree], w.fe]));
+  const [tab] = w.herdrCalls();
+  assert.deepEqual([tab.slice(0, 2), tab[tab.indexOf("--cwd") + 1]], [["tab", "create"], t3Tree]);
+  assert.equal(w.header(file).cwd, w.fe);
 });
 
 function pruneWorld() {
