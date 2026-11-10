@@ -405,7 +405,7 @@ test("close --if-ended refuses a bound job with no claude pid recorded, since it
   const before = { text: readFileSync(file, "utf8"), record: JSON.stringify(w.record(file)) };
   const out = w.run(["close", file, "--if-ended"], { extra: IDENTITY });
   assert.equal(out.status, 1);
-  assert.equal(out.stderr, `job: ${file}: no claude pid was recorded for session s-live, so the kit cannot tell that it has ended and nothing was closed; once that session has ended, close the job without --if-ended\n`);
+  assert.equal(out.stderr, `job: ${file}: no claude pid was recorded for session s-live, so the kit cannot tell that it has ended and nothing was closed; the user closes it with a plain job.mjs close once that session has ended\n`);
   assert.equal(readFileSync(file, "utf8"), before.text);
   assert.equal(JSON.stringify(w.record(file)), before.record);
   assert.ok(existsSync(tree));
