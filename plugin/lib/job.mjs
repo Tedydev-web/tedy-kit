@@ -59,7 +59,7 @@ export function writeSettings(role, current) {
   return file;
 }
 
-const startPrompt = (role, file) => (role === "devops" ? `Job file ${file}. Read ${JOBS_DOC}, section "Job", then do the job.` : `/tedy:${SKILLS[role]} job ${file}. First read ${JOBS_DOC}, section "Job".`);
+const startPrompt = (role, file) => (role === "devops" ? `Job file ${JSON.stringify(file)}. Read ${JOBS_DOC}, section "Job", then do the job.` : `/tedy:${SKILLS[role]} job ${JSON.stringify(file)}. First read ${JOBS_DOC}, section "Job".`);
 
 const jobName = (map, role, file) => `${role} ${map.name} ${basename(file, ".md").replace(/^\d{6}-\d{4}-/, "").slice(`${role}-`.length)}`;
 

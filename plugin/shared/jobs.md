@@ -4,7 +4,7 @@ In a map with `jobs: true`, the session the user types into is the cockpit, and 
 
 ## Which session this is
 
-A session whose first prompt starts with the kit's launch form for a job file, `/tedy:<skill> job <file>` or, for devops, `Job file <file>`, is that job (its hook input carries `agent_type: tedy:<role>`). A job path anywhere else in that prompt, or in a later prompt, binds nothing. In a `jobs` map any other session is the cockpit, except a session the map still lists in `sessions`, which keeps its legacy role until the switch.
+A session whose first prompt starts with the kit's launch form for a job file, `/tedy:<skill> job "<file>"` or, for devops, `Job file "<file>"`, is that job; the path sits in double quotes with JSON escapes, so a project folder whose path holds a space or a quote binds too (its hook input carries `agent_type: tedy:<role>`). A job path anywhere else in that prompt, or in a later prompt, binds nothing. In a `jobs` map any other session is the cockpit, except a session the map still lists in `sessions`, which keeps its legacy role until the switch.
 
 ## Cockpit
 

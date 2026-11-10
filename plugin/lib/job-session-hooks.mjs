@@ -7,7 +7,8 @@ import { launchRecordPath, readJob, readRecord, updateRecord } from "./job-files
 import { isUserPrompt, logGate, readHookInput } from "./hook-io.mjs";
 import { STATE_DIR } from "./state-dir.mjs";
 
-const LAUNCH_FORM = /^(?:<command-message>[^<]*<\/command-message>\s*<command-name>\/tedy:[a-z-]+<\/command-name>\s*<command-args>job |\/tedy:[a-z-]+ job |Job file )(\/[^\s"'\\]*?\/plans\/jobs\/\d{6}-\d{4}-(pm|dev|review|devops)-[a-z0-9-]+\.md)/;
+const LAUNCH_FORM = /^(?:<command-message>[^<]*<\/command-message>\s*<command-name>\/tedy:[a-z-]+<\/command-name>\s*<command-args>job |\/tedy:[a-z-]+ job |Job file )(?:("(?:[^"\\\n]|\\.)*")|(\/[^\s"'\\]*?\/plans\/jobs\/\d{6}-\d{4}-(?:pm|dev|review|devops)-[a-z0-9-]+\.md))/;
+const JOB_PATH = /^\/(?:.*\/)?plans\/jobs\/\d{6}-\d{4}-(pm|dev|review|devops)-[a-z0-9-]+\.md$/;
 const JOB_AGENT = /^tedy:(pm|dev|review|devops)$/;
 const TRANSCRIPT_HEAD = 1 << 20;
 const WAITING = { permission_prompt: "waiting: permission", idle_prompt: "waiting: input" };
@@ -117,10 +118,20 @@ function firstPrompt(transcript) {
   }
 }
 
+function unquoted(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
 function launchedJobFile(transcript) {
   if (!transcript || !existsSync(transcript)) return null;
-  const [, file, role] = firstPrompt(transcript)?.match(LAUNCH_FORM) ?? [];
-  return file ? { file, role } : null;
+  const [, quotedFile, bare] = firstPrompt(transcript)?.match(LAUNCH_FORM) ?? [];
+  const file = quotedFile ? unquoted(quotedFile) : bare;
+  const role = typeof file === "string" ? file.match(JOB_PATH)?.[1] : undefined;
+  return role ? { file, role } : null;
 }
 
 function bind(input, dir, now, claude, warnings) {

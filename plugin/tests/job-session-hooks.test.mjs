@@ -65,6 +65,9 @@ test("the cockpit, a subagent, another role's session, a tool result or a reply 
     w.prompt(slash(join(w.root, "plans", "jobs", "261109-1002-dev-missing.md"))),
     w.prompt(slash(unrecorded)),
     w.prompt("see plans/jobs/261109-1000-dev-add-hello.md"),
+    w.prompt(`/tedy:dev job "${named}\\q". First read the jobs doc.`),
+    w.prompt(`/tedy:dev job "${named}.txt". First read the jobs doc.`),
+    w.prompt(`/tedy:dev job "${w.root}/notes.md" ${named}. First read the jobs doc.`),
     w.prompt("hello", { extra: [{ type: "assistant", message: { content: [{ type: "text", text: named }] } }, { type: "user", message: { content: [{ type: "tool_result", content: named }] } }] }),
   ];
   for (const input of inputs) {

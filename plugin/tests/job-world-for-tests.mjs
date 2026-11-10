@@ -56,8 +56,7 @@ export function fakeHerdr(bin) {
   return () => readFileSync(log, "utf8").split("\u001e").filter(Boolean).map((line) => line.split(SEPARATOR).slice(0, -1));
 }
 
-export function world(mapExtra = { jobs: true }) {
-  const root = tempDir("tedy-job-");
+export function world(mapExtra = { jobs: true }, root = tempDir("tedy-job-")) {
   const profile = join(root, "profile");
   const state = join(root, "state");
   const bin = join(root, "bin");

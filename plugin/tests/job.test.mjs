@@ -47,11 +47,11 @@ test("start writes the running job file and its launch record, then prints one c
   const settings = join(w.state, "jobs", "settings", "dev.json");
   const line = out.stdout.trim();
   assert.equal(line.split("\n").length, 1);
-  assert.ok(line.startsWith(`cd '${w.root}' && claude --agent tedy:dev --settings '${settings}' '/tedy:dev job `), line);
+  assert.ok(line.startsWith(`cd '${w.root}' && claude --agent tedy:dev --settings '${settings}' '/tedy:dev job "`), line);
   const tokens = tokenize(line);
   assert.deepEqual(tokens.slice(0, 8), ["cd", w.root, "&&", "claude", "--agent", "tedy:dev", "--settings", settings]);
   assert.equal(tokens.length, 9);
-  assert.equal(tokens[8], `/tedy:dev job ${file}. First read ${JOBS_DOC}, section "Job".`);
+  assert.equal(tokens[8], `/tedy:dev job "${file}". First read ${JOBS_DOC}, section "Job".`);
   assert.ok(!tokens.some((token) => ["--bg", "--name", "--session-id", "-w"].includes(token)));
   const job = parse(readFileSync(file, "utf8"), JOB_KEYS);
   assert.deepEqual([job.to, job.from, job.status, job.title, job.cwd, job.session_id], ["tedy:dev", "cockpit", "running", "Add hello", w.root, undefined]);
@@ -71,7 +71,7 @@ test("start --json prints the launch spec object, and a mode or plugin dir joins
   const settings = join(w.state, "jobs", "settings", "pm.json");
   assert.deepEqual(Object.keys(spec).sort(), ["agent", "command", "cwd", "prompt", "role", "settings", "title", "via"]);
   assert.deepEqual([spec.role, spec.cwd, spec.title, spec.agent, spec.settings], ["pm", w.root, "pm acme-shop gaps", "tedy:pm", settings]);
-  assert.equal(spec.prompt, `/tedy:pm job ${file}. First read ${JOBS_DOC}, section "Job".`);
+  assert.equal(spec.prompt, `/tedy:pm job "${file}". First read ${JOBS_DOC}, section "Job".`);
   assert.deepEqual(tokenize(spec.command), ["cd", w.root, "&&", "claude", "--agent", "tedy:pm", "--settings", settings, "--permission-mode", "default", "--plugin-dir", "/opt/kit/plugin", spec.prompt]);
   assert.equal(parse(readFileSync(file, "utf8"), JOB_KEYS).permission_mode, "default");
   assert.equal(w.record(file).permission_mode, "default");
@@ -120,10 +120,10 @@ test("jobs.md has the Job section every prompt and job card names, and the skill
 test("each role's prompt names its skill, and devops, which has none, names jobs.md without a slash command", () => {
   const w = world();
   const prompt = (role) => JSON.parse(w.run(["start", role, "--title", "t", "--body-file", w.body, "--json"]).stdout).prompt;
-  assert.match(prompt("pm"), /^\/tedy:pm job \//);
-  assert.match(prompt("review"), /^\/tedy:review-pr job \//);
-  assert.match(prompt("dev"), /^\/tedy:dev job \//);
-  assert.match(prompt("devops"), new RegExp(`^Job file ${join(w.root, "plans", "jobs")}/\\d{6}-\\d{4}-devops-t\\.md\\. Read ${JOBS_DOC}, section "Job", then do the job\\.$`));
+  assert.match(prompt("pm"), /^\/tedy:pm job "\//);
+  assert.match(prompt("review"), /^\/tedy:review-pr job "\//);
+  assert.match(prompt("dev"), /^\/tedy:dev job "\//);
+  assert.match(prompt("devops"), new RegExp(`^Job file "${join(w.root, "plans", "jobs")}/\\d{6}-\\d{4}-devops-t\\.md"\\. Read ${JOBS_DOC}, section "Job", then do the job\\.$`));
 });
 
 test("each role's allowlist lets routine work run and leaves publishing, deploys and job starts on ask", async () => {
@@ -205,6 +205,40 @@ test("a session the hooks bind to a started job shows in list with its state", a
     assert.match(w.run(["list"]).stdout, /^review · Review 12 · waiting: permission · 0m · /);
   } finally {
     live.child.kill("SIGKILL");
+  }
+});
+
+test("a job in a project folder whose path holds a space or a single quote binds from its launch prompt, plain or as a slash command, for start and resume", () => {
+  for (const folder of ["My Projects", "O'Brien \"shop\""]) {
+    const w = world(undefined, join(tempDir("tedy-job-"), folder, "shop"));
+    const bound = [];
+    for (const role of ["pm", "devops"]) {
+      const out = w.run(["start", role, "--title", "Add hello", "--body-file", w.body, "--json"]);
+      assert.equal(out.status, 0, out.stderr);
+      const { prompt } = JSON.parse(out.stdout);
+      const [file] = w.jobs().filter((path) => path.includes(`-${role}-`));
+      const forms = role === "pm" ? [prompt, `<command-message>tedy:pm</command-message>\n<command-name>/tedy:pm</command-name>\n<command-args>${prompt.slice("/tedy:pm ".length)}</command-args>`] : [prompt];
+      for (const [index, content] of forms.entries()) {
+        const session = `s-${role}-${index}`;
+        if (index) writeFileSync(launchRecordPath(file, w.state), JSON.stringify(Object.fromEntries(Object.entries(w.record(file)).filter(([key]) => !["session_id", "bound_at", "pid", "pid_start", "transcript_path", "last_event_at", "state"].includes(key)))));
+        const transcript = join(w.root, `${session}.jsonl`);
+        writeFileSync(transcript, `${JSON.stringify({ type: "user", message: { content } })}\n`);
+        handle({ hook_event_name: "PostToolUse", tool_name: "Bash", session_id: session, transcript_path: transcript, agent_type: `tedy:${role}` }, { dir: w.state, claude: () => null });
+        bound.push([folder, role, index, w.record(file).session_id ?? null]);
+      }
+      const done = join(w.root, "done.md");
+      writeFileSync(done, "ok\n");
+      assert.equal(w.run(["done", file, "--outcome-file", done]).status, 0);
+      const note = join(w.root, "note.md");
+      writeFileSync(note, "more\n");
+      const resumed = w.run(["resume", file, "--note-file", note, "--json"]);
+      assert.equal(resumed.status, 0, resumed.stderr);
+      const transcript = join(w.root, `s-${role}-resumed.jsonl`);
+      writeFileSync(transcript, `${JSON.stringify({ type: "user", message: { content: JSON.parse(resumed.stdout).prompt } })}\n`);
+      handle({ hook_event_name: "PostToolUse", tool_name: "Bash", session_id: `s-${role}-resumed`, transcript_path: transcript, agent_type: `tedy:${role}` }, { dir: w.state, claude: () => null });
+      bound.push([folder, role, "resumed", w.record(file).session_id ?? null]);
+    }
+    assert.deepEqual(bound, [[folder, "pm", 0, "s-pm-0"], [folder, "pm", 1, "s-pm-1"], [folder, "pm", "resumed", "s-pm-resumed"], [folder, "devops", 0, "s-devops-0"], [folder, "devops", "resumed", "s-devops-resumed"]]);
   }
 });
 
@@ -430,7 +464,7 @@ test("resume appends the note, unbinds the session into earlier, and prints a cl
   const settings = join(w.state, "jobs", "settings", "dev.json");
   assert.deepEqual(tokens.slice(0, -1), ["cd", w.root, "&&", "claude", "--resume", "s-1", "--agent", "tedy:dev", "--settings", settings, "--permission-mode", "default"]);
   const prompt = tokens.at(-1);
-  assert.ok(prompt.startsWith(`/tedy:dev job ${file}. `), prompt);
+  assert.ok(prompt.startsWith(`/tedy:dev job "${file}". `), prompt);
   assert.ok(prompt.endsWith("\n\nAlso add the line world."), prompt);
   const text = readFileSync(file, "utf8");
   assert.equal(parse(text).status, "running");
@@ -515,7 +549,7 @@ test("a resume note that names another job of the same role binds the resumed se
     const out = w.run(["resume", file, "--note-file", note, "--json"]);
     assert.equal(out.status, 0, out.stderr);
     const { prompt } = JSON.parse(out.stdout);
-    assert.ok(prompt.startsWith(role === "devops" ? `Job file ${file}. ` : `/tedy:dev job ${file}. `), prompt);
+    assert.ok(prompt.startsWith(role === "devops" ? `Job file "${file}". ` : `/tedy:dev job "${file}". `), prompt);
     const transcript = join(w.root, `${session}.jsonl`);
     writeFileSync(transcript, `${JSON.stringify({ type: "user", message: { content: prompt } })}\n`);
     handle({ hook_event_name: "PostToolUse", tool_name: "Bash", session_id: session, transcript_path: transcript, agent_type: `tedy:${role}` }, { dir: w.state, claude: () => null });
