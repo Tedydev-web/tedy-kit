@@ -104,6 +104,7 @@ position: role-coordination conforms
 - **ADR 0014's ban on a kit UserPromptSubmit hook stands**, so binding reads the transcript head on the session's first hook event instead of a prompt hook.
   - After a typed prompt, a job shows `running` only from its first tool result.
   - A denied permission prompt leaves `waiting: permission` until the next Stop.
+- **Every session pays for the status hook.** The PostToolUse hook has no matcher, so each tool call in every session, the cockpit and ordinary sessions included, starts a node process that scans the launch records: about 40 ms per call (38 ms with no records, 42 ms with 200, measured by the review on 2026-11-10). Records are deleted only by `close`, so jobs left `done` but never closed keep growing the scan. Accepted for now.
 - **Nothing depends on T3 or herdr.** With neither on the machine the print adapter does everything, and the suite passes with herdr off PATH.
 - **The kit now writes one file outside its profile and state:** T3's settings. It does so only on the user's yes, with a backup beside the file, and it refuses a file shape it does not know. When T3 changes that schema the write fails loudly, and the printed Launch arguments still work.
 - **herdr pane check:** the kit closes a pane only when herdr reports no agent session in it, or the job's own session. A pane id herdr reused for a plain shell cannot be told apart.
