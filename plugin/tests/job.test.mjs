@@ -412,16 +412,23 @@ test("resume appends the note, unbinds the session into earlier, and prints a cl
   assert.deepEqual(w.calls(), []);
 });
 
-test("resume warns when the recorded session is still open, and refuses a closed, unrecorded, unstarted or tampered job without changing it", async () => {
+test("resume refuses a job whose recorded session is still open before it starts anything, with any adapter, and a closed, unrecorded, unstarted or tampered job, without changing it", async () => {
   const w = world();
   const note = join(w.root, "note.md");
   writeFileSync(note, "again\n");
   const live = await sleeper();
   try {
-    const open = jobFile(w, { status: "done", name: "open", record: { session_id: "s-1", pid: live.pid, pid_start: live.start } });
-    const out = w.run(["resume", open, "--note-file", note]);
-    assert.equal(out.status, 0, out.stderr);
-    assert.match(out.stderr, /^warning: session s-1 is still open \(pid \d+\); type the note in its window, or end it before you run this command/);
+    const open = jobFile(w, { status: "done", name: "open", record: { session_id: "s-1", pid: live.pid, pid_start: live.start, via: "herdr", herdr: { name: "dev-abc123", pane: "w1:p2" } } });
+    const before = { text: readFileSync(open, "utf8"), record: JSON.stringify(w.record(open)) };
+    for (const [args, extra] of [[[], {}], [[], { HERDR_ENV: "1" }], [["--via", "herdr"], { HERDR_ENV: "1" }], [["--t3"], {}]]) {
+      const out = w.run(["resume", open, "--note-file", note, ...args], { extra });
+      assert.equal(out.status, 1, JSON.stringify(args));
+      assert.equal(out.stdout, "");
+      assert.match(out.stderr, new RegExp(`^job: ${open}: session s-1 is still open \\(pid ${live.pid}\\); type the note in its open thread or pane, or close that session first, then run job\\.mjs resume again; nothing was resumed$`, "m"));
+      assert.equal(readFileSync(open, "utf8"), before.text);
+      assert.equal(JSON.stringify(w.record(open)), before.record);
+    }
+    assert.deepEqual(w.herdrCalls(), []);
   } finally {
     live.child.kill("SIGKILL");
   }

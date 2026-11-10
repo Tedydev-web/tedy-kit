@@ -349,7 +349,7 @@ export function resume(map, file, note, { via, t3 } = {}) {
   const { record } = job;
   if (!record.session_id) throw new Error(`${file} has no session yet; run the command job.mjs start printed for it, or close it and start a new job`);
   if (!existsSync(record.cwd)) throw new Error(`${file}: its folder ${record.cwd} no longer exists; close it and start a new job`);
-  const open = alive(record) ? [`warning: session ${record.session_id} is still open (pid ${record.pid}); type the note in its window, or end it before you run this command, because resuming a running session starts a copy`] : [];
+  if (alive(record)) throw new Error(`${file}: session ${record.session_id} is still open (pid ${record.pid}); type the note in its open thread or pane, or close that session first, then run job.mjs resume again; nothing was resumed`);
   const title = jobName(map, record.role, job.path);
   const opened = openPane(adapter, via === adapter, { cwd: record.cwd, label: title });
   const session = record.session_id;
@@ -364,7 +364,7 @@ export function resume(map, file, note, { via, t3 } = {}) {
   const settings = record.settings ?? writeSettings(record.role, map);
   const launch = { role: record.role, settings, prompt, mode: record.permission_mode, resume: session };
   const started = startAgent(job.real, launchSpec({ ...launch, cwd: record.cwd, title, via: opened.adapter }), claudeArgs(launch), opened, earlier.length);
-  return { spec: started.spec, warnings: [...open, ...started.warnings] };
+  return started;
 }
 
 function kitStatus(record) {
