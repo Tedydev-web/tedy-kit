@@ -276,6 +276,7 @@ export function close(map, file, reason, options = {}) {
   if (job.status === "closed") throw new Error(`${file} is already closed`);
   if (job.status === "running" && !reason) throw new Error(`${file} is still running; give --reason to stop it, or wait for job.mjs done`);
   const { record, error } = readableRecord(job.real);
+  if (options.ifEnded && error) throw new Error(`${file}: its launch record ${launchRecordPath(job.real)} cannot be read, so the kit cannot tell that its session has ended and nothing was closed (${error}); the user closes it with a plain job.mjs close once that session has ended`);
   if (options.ifEnded && record?.session_id && !record.pid) throw new Error(`${file}: no claude pid was recorded for session ${record.session_id}, so the kit cannot tell that it has ended and nothing was closed; the user closes it with a plain job.mjs close once that session has ended`);
   if (options.ifEnded && record && alive(record)) throw new Error(`${file}: session ${record.session_id} is still open (pid ${record.pid}), so nothing was closed; end that session in its own window, then close the job again`);
   if (job.status === "running") finish(job.path, "stopped", `Stopped: ${reason}`);

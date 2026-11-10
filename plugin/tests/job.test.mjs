@@ -510,6 +510,17 @@ test("close of a job no session has bound yet says so, and that a session starte
   assert.equal(existsSync(launchRecordPath(file, w.state)), false);
 });
 
+test("close --if-ended writes nothing when the job's launch record cannot be read", () => {
+  const w = world();
+  const file = jobFile(w, { status: "done", name: "unreadable", record: { session_id: "s-1", bound_at: "t" } });
+  writeFileSync(launchRecordPath(file, w.state), "{ trunc");
+  const before = readFileSync(file, "utf8");
+  const refused = w.run(["close", file, "--if-ended"]);
+  assert.equal(refused.status, 1);
+  assert.match(refused.stderr, /launch record .* cannot be read, so the kit cannot tell that its session has ended and nothing was closed/);
+  assert.equal(readFileSync(file, "utf8"), before);
+});
+
 test("close --if-ended writes nothing while the job's recorded session is alive, and closes the job once that session has ended", async () => {
   const w = world();
   const live = await sleeper();
