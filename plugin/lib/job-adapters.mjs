@@ -151,7 +151,8 @@ export function closeHerdrPane({ pane, session }, env = process.env) {
   if (!onPath("herdr", env.PATH)) return `warning: herdr is not on PATH, so pane ${pane} was left open`;
   try {
     const hosted = herdr(["pane", "get", pane], env).pane?.agent_session?.value;
-    if (hosted && hosted !== session) return `kept herdr pane ${pane}: it now runs session ${hosted}, not this job's ${session ?? "(none)"}`;
+    if (!hosted) return `kept herdr pane ${pane}: herdr reports no agent session in it, not this job's ${session ?? "(none)"}; close it by hand if it is the job's`;
+    if (hosted !== session) return `kept herdr pane ${pane}: it now runs session ${hosted}, not this job's ${session ?? "(none)"}`;
     herdr(["pane", "close", pane], env);
     return `closed herdr pane ${pane}`;
   } catch (error) {

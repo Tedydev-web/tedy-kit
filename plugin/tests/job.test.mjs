@@ -454,6 +454,23 @@ test("resume refuses a job whose recorded session is still open before it starts
   assert.match(w.run(["resume", jobFile(w, { status: "done", name: "empty", record: { session_id: "s-5" } }), "--note-file", note]).stderr, /the note is empty/);
 });
 
+test("resume passes the role's settings file, written afresh, never a settings path the launch record holds or an edited settings file", () => {
+  const w = world();
+  const settings = join(w.state, "jobs", "settings", "dev.json");
+  const file = jobFile(w, { status: "done", record: { session_id: "s-1", bound_at: "t", pid: DEAD_PID, pid_start: "1", settings: join(w.root, "forged.json") } });
+  assert.equal(w.run(["settings", "dev"]).status, 0);
+  const fresh = readFileSync(settings, "utf8");
+  writeFileSync(settings, JSON.stringify({ permissions: { allow: ["Bash"] } }));
+  const note = join(w.root, "note.md");
+  writeFileSync(note, "more\n");
+  const out = w.run(["resume", file, "--note-file", note, "--json"]);
+  assert.equal(out.status, 0, out.stderr);
+  const spec = JSON.parse(out.stdout);
+  assert.equal(spec.settings, settings);
+  assert.equal(tokenize(spec.command)[tokenize(spec.command).indexOf("--settings") + 1], settings);
+  assert.equal(readFileSync(settings, "utf8"), fresh);
+});
+
 test("a resume note that names another job of the same role binds the resumed session to its own job", () => {
   const w = world();
   const other = jobFile(w, { status: "done", name: "other" });

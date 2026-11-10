@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
 export function git(dir, ...args) {
@@ -59,8 +59,22 @@ function blocker(tree) {
 
 const inside = (dir, tree) => relative(realpathSync(tree), realpathSync(dir)).split(sep)[0] !== "..";
 
-export function removeWorktree({ repo, worktree }, reason, dryRun = false) {
+function registered(repo, tree, branch) {
+  const real = realpathSync(tree);
+  return git(repo, "worktree", "list", "--porcelain").split("\n\n").some((block) => {
+    const lines = block.split("\n");
+    const path = lines.find((line) => line.startsWith("worktree "))?.slice("worktree ".length);
+    return Boolean(path) && existsSync(path) && realpathSync(path) === real && lines.includes(`branch refs/heads/${branch}`);
+  });
+}
+
+export function removeWorktree({ repo, worktree, branch }, reason, dryRun = false) {
   if (inside(process.cwd(), worktree)) return `kept ${worktree}: this command runs inside it; run job.mjs prune from elsewhere to remove it`;
+  try {
+    if (!registered(repo, worktree, branch)) return `kept ${worktree}: it is not a worktree of ${repo} on ${branch ?? "(no branch recorded)"}`;
+  } catch (error) {
+    return `kept ${worktree}: ${error.message}`;
+  }
   const why = blocker(worktree);
   if (why) return `kept ${worktree}: ${why}`;
   if (dryRun) return `would remove ${worktree} (${reason})`;

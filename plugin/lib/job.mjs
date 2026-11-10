@@ -361,7 +361,7 @@ export function resume(map, file, note, { via, t3 } = {}) {
   const at = new Date().toISOString();
   writeAtomic(job.path, withSection(setStatus(job.text, "running", at), `Note ${at}`, note));
   const prompt = `${startPrompt(record.role, job.path)} The job is resumed: the latest ## Note in the job file, quoted below, is the rework request. Go on with it and end with job.mjs done or stop.\n\n${note.trim()}`;
-  const settings = record.settings ?? writeSettings(record.role, map);
+  const settings = writeSettings(record.role, map);
   const launch = { role: record.role, settings, prompt, mode: record.permission_mode, resume: session };
   const started = startAgent(job.real, launchSpec({ ...launch, cwd: record.cwd, title, via: opened.adapter }), claudeArgs(launch), opened, earlier.length);
   return started;

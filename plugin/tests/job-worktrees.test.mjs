@@ -328,6 +328,28 @@ test("close run from inside the job's own worktree keeps that worktree and its r
   assert.equal(w.record(file).worktree, tree);
 });
 
+test("close and prune remove a core worktree only when it is a registered worktree of the recorded repository on the recorded branch", () => {
+  const { w, make } = pruneWorld();
+  const job = (title) => w.jobs().find((path) => path.endsWith(`-dev-${title}.md`));
+  const other = join(w.root, "other");
+  git(w.root, "clone", "-q", w.origin, other);
+  const foreign = join(w.root, "foreign-tree");
+  git(other, "worktree", "add", "-q", "-b", "feat/foreign", foreign, "origin/main");
+  const sibling = join(w.root, "sibling-tree");
+  git(w.fe, "worktree", "add", "-q", "-b", "feat/sibling", sibling, "origin/main");
+  const own = make("own", { status: "done" });
+  make("elsewhere", { status: "done", record: { worktree: foreign } });
+  make("branch", { status: "closed", record: { worktree: sibling } });
+  const closed = w.run(["close", job("elsewhere")], { extra: IDENTITY });
+  assert.equal(closed.status, 0, closed.stderr);
+  assert.match(closed.stdout, new RegExp(`^kept ${foreign}: it is not a worktree of ${w.fe} on feat/elsewhere$`, "m"));
+  const pruned = w.run(["prune"], { extra: IDENTITY });
+  assert.match(pruned.stdout, new RegExp(`^kept ${sibling}: it is not a worktree of ${w.fe} on feat/branch$`, "m"));
+  assert.match(pruned.stdout, new RegExp(`^removed ${own} \\(its branch is merged into origin/main\\)$`, "m"));
+  for (const tree of [foreign, sibling]) assert.ok(existsSync(tree), tree);
+  assert.ok(!existsSync(own));
+});
+
 test("close and prune remove the worktree, and judge the branch and base, that the launch record holds, so an edited job file header changes nothing they remove", () => {
   const { w, make } = pruneWorld();
   const other = join(w.root, "users-own-tree");

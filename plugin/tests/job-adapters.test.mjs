@@ -280,7 +280,7 @@ test("close ends the job's session first, then closes the herdr pane the kit ope
   const w = world();
   const live = await sleeper();
   const done = jobFile(w, { status: "done", record: { session_id: "s-1", pid: live.pid, pid_start: live.start, via: "herdr", herdr: PANE } });
-  const out = w.run(["close", done]);
+  const out = w.run(["close", done], { extra: { FAKE_HERDR_PANE_SESSION: "s-1" } });
   assert.equal(out.status, 0, out.stderr);
   assert.match(out.stdout.trim(), /^closed: .*\nended session s-1 \(pid \d+\)\nclosed herdr pane w1:p7$/);
   assert.deepEqual(await live.exited, [null, "SIGTERM"]);
@@ -288,7 +288,7 @@ test("close ends the job's session first, then closes the herdr pane the kit ope
   const stopped = jobFile(w, { name: "runaway", record: { session_id: "s-2", pid: DEAD_PID, pid_start: "1", via: "herdr", herdr: { name: "dev-def456", pane: "w1:p9" } } });
   assert.equal(w.run(["stop", stopped, "--reason", "runaway"]).stdout, `stopped: ${stopped}\n`);
   assert.equal(w.herdrCalls().length, 2);
-  assert.match(w.run(["close", stopped]).stdout, /\nclosed herdr pane w1:p9\n$/);
+  assert.match(w.run(["close", stopped], { extra: { FAKE_HERDR_PANE_SESSION: "s-2" } }).stdout, /\nclosed herdr pane w1:p9\n$/);
   assert.deepEqual(w.herdrCalls().slice(2), [["pane", "get", "w1:p9"], ["pane", "close", "w1:p9"]]);
   const printed = jobFile(w, { status: "done", name: "printed", record: { session_id: "s-3", pid: DEAD_PID, pid_start: "1", via: "print" } });
   assert.equal(w.run(["close", printed]).stdout.trim(), `closed: ${printed}`);
@@ -306,8 +306,11 @@ test("a kit pane stays open when the caller runs in it, when it now runs another
   assert.match(closeWith({ FAKE_HERDR_PANE_SESSION: "s-other" }).stdout, /\nkept herdr pane w1:p7: it now runs session s-other, not this job's s-1\n$/);
   assert.deepEqual(w.herdrCalls(), [["pane", "get", "w1:p7"]]);
   assert.match(closeWith({ FAKE_HERDR_PANE_SESSION: "s-1" }).stdout, /\nclosed herdr pane w1:p7\n$/);
+  assert.match(closeWith({}).stdout, /\nkept herdr pane w1:p7: herdr reports no agent session in it, not this job's s-1; close it by hand if it is the job's\n$/);
+  const unbound = jobFile(w, { status: "done", name: "unbound", record: { via: "herdr", herdr: PANE } });
+  assert.match(w.run(["close", unbound], { extra: { FAKE_HERDR_PANE_SESSION: "s-1" } }).stdout, /\nkept herdr pane w1:p7: it now runs session s-1, not this job's \(none\)\n$/);
   assert.match(closeWith({ FAKE_HERDR_FAIL: "pane get:pane_not_found" }).stdout, /\nherdr pane w1:p7 is already closed\n$/);
-  const failed = closeWith({ FAKE_HERDR_FAIL: "pane close:server_error" });
+  const failed = closeWith({ FAKE_HERDR_FAIL: "pane close:server_error", FAKE_HERDR_PANE_SESSION: "s-1" });
   assert.equal(failed.status, 0, failed.stderr);
   assert.match(failed.stdout, /\nwarning: herdr pane close failed \(server_error: fake failure\); close pane w1:p7 by hand\n$/);
   const missing = closeWith({ PATH: join(w.root, "nowhere") });
