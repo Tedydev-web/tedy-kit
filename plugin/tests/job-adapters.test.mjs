@@ -1,6 +1,6 @@
 import "./test-isolation.mjs";
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, readlinkSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { launchRecordPath, recordLaunch } from "../lib/job-files.mjs";
@@ -130,6 +130,25 @@ test("t3-instance --write merges into an existing role instance, setting only it
   assert.equal(statSync(w.t3Settings).mode & 0o777, 0o600);
   assert.match(w.run(["t3-instance", "pm", "--write"]).stdout, /^tedy-pm: unchanged /m);
   assert.equal(w.backups().length, 1);
+});
+
+test("t3-instance --write through a symlinked settings file writes the file the link points to and keeps the link", () => {
+  const w = world();
+  const real = join(w.root, "dotfiles", "t3-settings.json");
+  mkdirSync(dirname(real), { recursive: true });
+  writeFileSync(real, T3_TEXT);
+  chmodSync(real, 0o640);
+  mkdirSync(dirname(w.t3Settings), { recursive: true });
+  symlinkSync(real, w.t3Settings);
+  const out = w.run(["t3-instance", "pm", "--write"]);
+  assert.equal(out.status, 0, out.stderr);
+  assert.ok(lstatSync(w.t3Settings).isSymbolicLink());
+  assert.equal(readlinkSync(w.t3Settings), real);
+  assert.deepEqual(JSON.parse(readFileSync(real, "utf8")).providerInstances["tedy-pm"], instance("pm", join(w.state, "jobs", "settings", "pm.json")));
+  assert.equal(statSync(real).mode & 0o777, 0o640);
+  const backups = readdirSync(dirname(real)).filter((name) => name.startsWith("t3-settings.json.bak-"));
+  assert.equal(backups.length, 1);
+  assert.equal(readFileSync(join(dirname(real), backups[0]), "utf8"), T3_TEXT);
 });
 
 test("t3-instance --write refuses a T3 settings file it does not recognise and writes nothing", () => {

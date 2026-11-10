@@ -38,7 +38,7 @@ Status: accepted (2026-11-09, user decisions; built and probed 2026-11-09 to 202
   - Neither removes a worktree the command runs inside, so the session running the command keeps its folder. A later `prune` can still remove the tree of a closed job whose own session still runs (Consequences).
 - **`close` closes the herdr pane the kit opened for a job**, once its session has ended, and only when `herdr pane get` reports exactly the job's recorded session in it; never a pane the command runs in, one that runs another session, or one that reports none.
 - **`job.mjs t3-instance --all --write` (or `<role> --write`) adds the T3 instances.**
-  - It backs up `~/.t3/userdata/settings.json` beside itself first, then upserts `providerInstances["tedy-<role>"]` with driver `claudeAgent` and Launch arguments `--agent tedy:<role> --settings <file>`, keeping every other key. An existing `tedy-<role>` entry gets only its `driver`, `enabled` and `config.launchArgs` set, and keeps the fields the user added (`displayName`, `environment`, other `config` keys). The temporary file is created with the settings file's mode before the text is written.
+  - It backs up `~/.t3/userdata/settings.json` beside itself first, then upserts `providerInstances["tedy-<role>"]` with driver `claudeAgent` and Launch arguments `--agent tedy:<role> --settings <file>`, keeping every other key. An existing `tedy-<role>` entry gets only its `driver`, `enabled` and `config.launchArgs` set, and keeps the fields the user added (`displayName`, `environment`, other `config` keys). The temporary file is created with the settings file's mode before the text is written. A symlinked settings file is followed to its real path, and the backup and the write go there, so the link stays a link. Accepted: a change T3 writes between the kit's re-read and its rename is lost; the window is the length of one write.
   - It refuses a file that is missing, is not JSON or has no `providerInstances` object.
   - The cockpit and `/tedy:setup` run it only after one AskUserQuestion that names the file, because the file is outside the profile. The role gate asks before a job session runs a literal `job.mjs t3-instance … --write`, by the same check as its close ask. Accepted: a job's `job.mjs start` and `resume` are not asked; "a job never starts a job" stays a rule in `jobs.md`, not a gate.
 
@@ -59,7 +59,7 @@ Status: accepted (2026-11-09, user decisions; built and probed 2026-11-09 to 202
 - `plugin/tests/job-adapters.test.mjs`:
   - adapter choice and `--via` refusals; the herdr tab, agent, fallback and list cases
   - "close ends the job's session first, then closes the herdr pane the kit opened for it; stop and a job with no kit pane make no herdr call", and the case that leaves a pane open
-  - the four `t3-instance --write` cases (upsert, idempotence, a merge into an existing `tedy-<role>` entry that keeps the file's mode, and drift refusal on a temp settings file)
+  - the `t3-instance --write` cases (upsert, idempotence, a merge into an existing `tedy-<role>` entry that keeps the file's mode, drift refusal on a temp settings file, and "t3-instance --write through a symlinked settings file writes the file the link points to and keeps the link")
   - the docs check.
 - `plugin/tests/job-worktrees.test.mjs`: the worktree owner for each adapter, prune and close, plus:
   - ignored files outside regenerable folders keep a tree, whatever `status.showUntrackedFiles` says;

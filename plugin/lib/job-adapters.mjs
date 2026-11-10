@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { accessSync, constants, readFileSync, statSync, writeFileSync } from "node:fs";
+import { accessSync, constants, readFileSync, realpathSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
 import { stamp } from "./handoff.mjs";
@@ -78,8 +78,9 @@ function merged(existing, value) {
   return { ...existing, driver: value.driver, enabled: value.enabled, config: { ...(plain(existing.config) ? existing.config : {}), launchArgs: value.config.launchArgs } };
 }
 
-export function upsertT3Instances(instances, file = t3SettingsPath()) {
-  const { text, settings } = readT3Settings(file);
+export function upsertT3Instances(instances, given = t3SettingsPath()) {
+  const { text, settings } = readT3Settings(given);
+  const file = realpathSync(given);
   const current = settings.providerInstances;
   const next = Object.fromEntries(Object.entries(instances).map(([id, value]) => [id, Object.hasOwn(current, id) ? merged(current[id], value) : value]));
   const changes = Object.keys(next).map((id) => [id, !Object.hasOwn(current, id) ? "added" : JSON.stringify(current[id]) === JSON.stringify(next[id]) ? "unchanged" : "updated"]);
