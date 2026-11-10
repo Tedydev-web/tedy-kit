@@ -175,7 +175,7 @@ export function handle(input, { dir = STATE_DIR, now = new Date().toISOString(),
   bind(input, dir, now, claude, warnings);
   const found = recordOfSession(dir, input.session_id);
   if (!found) return warnings;
-  const state = nextState(input);
+  const state = input.agent_id ? undefined : nextState(input);
   const started = input.hook_event_name === "SessionStart" ? claude() : null;
   let before = null;
   updateRecord(found.path, (record) => {

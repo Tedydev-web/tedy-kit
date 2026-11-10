@@ -144,6 +144,24 @@ test("the record's state follows the hooks: permission and idle notifications, A
   assert.deepEqual(w.record(), before);
 });
 
+test("a subagent's hook events never change the job's state, so the main thread's waiting: question and waiting: permission stay, and only its last event time moves", () => {
+  const w = world();
+  w.fire(w.prompt(slash(w.files[0])));
+  const subagent = { agent_id: "a-1", agent_type: "tedy:reviewer" };
+  const seen = [];
+  for (const [index, waiting] of [{ hook_event_name: "PreToolUse", tool_name: "AskUserQuestion" }, { hook_event_name: "Notification", notification_type: "permission_prompt" }].entries()) {
+    w.fire(waiting, `2026-11-09T07:0${index}:00.000Z`);
+    for (const [step, event] of [{ hook_event_name: "PostToolUse", tool_name: "Bash" }, { hook_event_name: "PreToolUse", tool_name: "AskUserQuestion" }, { hook_event_name: "Stop" }, { hook_event_name: "Notification", notification_type: "idle_prompt" }].entries()) {
+      const now = `2026-11-09T07:0${index}:1${step}.000Z`;
+      w.fire({ ...event, ...subagent }, now);
+      seen.push([w.record().state, w.record().last_event_at === now]);
+    }
+  }
+  assert.deepEqual(seen, [...Array(4).fill(["waiting: question", true]), ...Array(4).fill(["waiting: permission", true])]);
+  w.fire({ hook_event_name: "PostToolUse", tool_name: "AskUserQuestion" });
+  assert.equal(w.record().state, "running");
+});
+
 test("inside herdr a job that starts waiting raises one herdr notification, and outside herdr or on a failed call nothing breaks", () => {
   const w = world();
   const bin = tempDir("tedy-herdr-bin-");
