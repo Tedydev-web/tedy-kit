@@ -1,8 +1,8 @@
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { missingSections, render, setStatus, slugOf, stamp } from "./handoff.mjs";
-import { age, createAtomic, JOB_ROLES, jobsDir, launchRecordPath, listJobs, readJob, recordLaunch, setKey, withSection, writeAtomic, writeRecord } from "./job-files.mjs";
+import { age, createAtomic, JOB_ROLES, jobsDir, launchRecordPath, listJobs, readJob, readRecord, recordLaunch, removeRecord, setKey, updateRecord, withSection, writeAtomic } from "./job-files.mjs";
 import { chooseAdapter, closeHerdrPane, HerdrError, herdrAgent, herdrName, herdrState, herdrTab, herdrWorktree, onPath, t3Instance, t3SettingsPath, upsertT3Instances } from "./job-adapters.mjs";
 import { addWorktree, git as gitRun, merged, planWorktree, removeWorktree, t3Strategy } from "./job-worktrees.mjs";
 import { alive, claudeProcess, processInfo } from "./job-session-hooks.mjs";
@@ -87,15 +87,15 @@ function openPane(adapter, forced, { cwd, label, tree }) {
 
 function startAgent(file, spec, args, opened, turn) {
   if (opened.adapter !== "herdr") return { spec, warnings: opened.warnings };
-  const record = launchRecord(file);
   const herdr = { name: herdrName(spec.role, file, turn), pane: opened.pane };
+  const recordVia = (fields) => updateRecord(launchRecordPath(file), (record) => record && { ...record, ...fields });
   try {
     const warnings = herdrAgent({ ...herdr, args });
-    writeRecord(launchRecordPath(file), { ...record, via: "herdr", herdr });
+    recordVia({ via: "herdr", herdr });
     return { spec: { ...spec, via: "herdr", herdr }, warnings: [...opened.warnings, ...warnings] };
   } catch (error) {
     if (!(error instanceof HerdrError)) throw error;
-    writeRecord(launchRecordPath(file), { ...record, via: "print" });
+    recordVia({ via: "print" });
     return { spec: { ...spec, via: "print" }, warnings: [...opened.warnings, `warning: ${error.message}; run the command below in any terminal`] };
   }
 }
@@ -123,15 +123,7 @@ export function writeT3Instances(roles, current) {
   return (backup ? [`backed up ${file} to ${backup}`, ...lines, `wrote ${file}; T3 Code loads it without a restart`] : [...lines, `${file} already holds these instances; nothing was written`]).join("\n");
 }
 
-function launchRecord(file) {
-  const path = launchRecordPath(file);
-  try {
-    return JSON.parse(readFileSync(path, "utf8"));
-  } catch (error) {
-    if (error.code === "ENOENT") return null;
-    throw new Error(`the launch record ${path} cannot be read (${error.message})`);
-  }
-}
+const launchRecord = (file) => readRecord(launchRecordPath(file));
 
 const RECORDED = ["role", "cwd", "permission_mode", "repo"];
 const SESSION_KEYS = ["session_id", "transcript_path", "pid", "pid_start", "bound_at", "state", "last_event_at", "herdr"];
@@ -283,8 +275,8 @@ export function close(map, file, reason, options) {
   const lines = [...(error ? [`warning: ${error}; nothing was signalled`] : []), ...endSession(record, options), ...closePane(record, options)];
   writeAtomic(job.path, setStatus(readFileSync(job.path, "utf8"), "closed", new Date().toISOString()));
   const tree = coreWorktree(record) ? [removeWorktree(record, "the job is closed")] : [];
-  if (tree.length && existsSync(record.worktree)) writeRecord(launchRecordPath(job.real), withoutSession(record));
-  else rmSync(launchRecordPath(job.real), { force: true });
+  if (tree.length && existsSync(record.worktree)) updateRecord(launchRecordPath(job.real), (fresh) => withoutSession(fresh ?? record));
+  else removeRecord(launchRecordPath(job.real));
   return [`closed: ${job.path}`, ...lines, ...tree].join("\n");
 }
 
@@ -309,7 +301,7 @@ function pruneJob({ job, record }, days, dryRun, now) {
     const { reason, why } = pruneDecision(job, record, days, now);
     if (why) return `kept ${record.worktree}: ${why}`;
     const result = removeWorktree(record, reason, dryRun);
-    if (job.status === "closed" && !existsSync(record.worktree)) rmSync(launchRecordPath(job.path), { force: true });
+    if (job.status === "closed" && !existsSync(record.worktree)) forget(job.path);
     return result;
   } catch (error) {
     return `kept ${record.worktree}: ${error.message}`;
@@ -322,10 +314,12 @@ function recordedJobs(map, dryRun) {
     if (error) return [{ warning: `warning: ${error}; the worktree of ${job.path} was not checked` }];
     if (!recordedTree(record)) return [];
     if (existsSync(record.worktree)) return [{ job, record }];
-    if (job.status === "closed" && !dryRun) rmSync(launchRecordPath(job.path), { force: true });
+    if (job.status === "closed" && !dryRun) forget(job.path);
     return [];
   });
 }
+
+const forget = (file) => removeRecord(launchRecordPath(file));
 
 export function prune(map, { days = 10, dryRun = false, now = Date.now() } = {}) {
   if (!Number.isInteger(days) || days < 1) throw new Error("--days needs a whole number of days above 0");
@@ -355,12 +349,14 @@ export function resume(map, file, note, { via, t3 } = {}) {
   const open = alive(record) ? [`warning: session ${record.session_id} is still open (pid ${record.pid}); type the note in its window, or end it before you run this command, because resuming a running session starts a copy`] : [];
   const title = jobName(map, record.role, job.path);
   const opened = openPane(adapter, via === adapter, { cwd: record.cwd, label: title });
-  const at = new Date().toISOString();
-  writeAtomic(job.path, withSection(setStatus(job.text, "running", at), `Note ${at}`, note));
   const session = record.session_id;
   const earlier = [...(record.earlier ?? []), session];
-  const kept = Object.fromEntries(Object.entries(record).filter(([key]) => !SESSION_KEYS.includes(key)));
-  writeRecord(launchRecordPath(job.real), { ...kept, earlier, via: opened.adapter });
+  updateRecord(launchRecordPath(job.real), (fresh) => {
+    if (fresh?.session_id !== session) throw new Error(`${file}: its launch record changed while resuming (session ${fresh?.session_id ?? "none"}, not ${session}); nothing was resumed, run the command again`);
+    return { ...withoutSession(fresh), earlier, via: opened.adapter };
+  });
+  const at = new Date().toISOString();
+  writeAtomic(job.path, withSection(setStatus(job.text, "running", at), `Note ${at}`, note));
   const prompt = `${note.trim()}\n\nThis is the latest ## Note of your job ${job.path}. Go on per ${JOBS_DOC}, section "Job", and end with job.mjs done or stop.`;
   const settings = record.settings ?? writeSettings(record.role, map);
   const launch = { role: record.role, settings, prompt, mode: record.permission_mode, resume: session };

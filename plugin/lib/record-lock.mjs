@@ -98,14 +98,34 @@ function unlinkIfSame(path, text) {
 const heldRefusal = (key, held) =>
   `refused: ${key} is being written by pid ${held?.lock?.pid ?? "unknown"} (${held?.lock?.command ?? "unknown command"}) since ${held?.lock?.at ?? (held ? new Date(held.mtimeMs).toISOString() : "a moment ago")}; nothing was written and the approval is unused. Run this command again when it finishes.`;
 
-function acquire(key) {
-  const path = lockPath(key);
+function tryAcquire(key, state) {
+  const path = lockPath(key, state);
   mkdirSync(dirname(path), { recursive: true });
   const content = JSON.stringify({ key, pid: process.pid, ns: OWN_NS, start: OWN_START, at: new Date().toISOString(), command: COMMAND });
   if (create(path, content)) return { path, content };
   const held = readLock(path);
   if ((held === null || (stale(held, Date.now()) && unlinkIfSame(path, held.text))) && create(path, content)) return { path, content };
-  throw new Error(heldRefusal(key, readLock(path) ?? held));
+  return { held: readLock(path) ?? held };
+}
+
+function acquire(key) {
+  const got = tryAcquire(key);
+  if (got.path) return got;
+  throw new Error(heldRefusal(key, got.held));
+}
+
+const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+export function withLockSync(key, fn, { state = STATE_DIR, waitMs = 2000 } = {}) {
+  const until = Date.now() + waitMs;
+  let got = tryAcquire(key, state);
+  for (; !got.path && Date.now() < until; got = tryAcquire(key, state)) sleep(20);
+  if (!got.path) throw new Error(`${key} is locked by pid ${got.held?.lock?.pid ?? "unknown"} (${got.held?.lock?.command ?? "unknown command"}) for more than ${waitMs} ms; nothing was written`);
+  try {
+    return fn();
+  } finally {
+    unlinkIfSame(got.path, got.content);
+  }
 }
 
 function readLedger(key) {

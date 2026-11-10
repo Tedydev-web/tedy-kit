@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, linkSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { HANDOFF_KEYS, parse } from "./handoff.mjs";
+import { withLockSync } from "./record-lock.mjs";
 import { STATE_DIR } from "./state-dir.mjs";
 
 const temporary = (file) => join(dirname(file), `.${basename(file)}.${process.pid}.tmp`);
@@ -30,6 +31,28 @@ export function recordLaunch(file, launch, dir = STATE_DIR) {
 }
 
 export const writeRecord = (path, record) => writeAtomic(path, `${JSON.stringify(record)}\n`);
+
+export function readRecord(path) {
+  try {
+    return JSON.parse(readFileSync(path, "utf8"));
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw new Error(`the launch record ${path} cannot be read (${error.message})`);
+  }
+}
+
+const lockedRecord = (path, fn) => withLockSync(`launch-record:${path}`, fn, { state: dirname(dirname(path)) });
+
+export function updateRecord(path, change) {
+  return lockedRecord(path, () => {
+    const next = change(readRecord(path));
+    if (next === null) rmSync(path, { force: true });
+    else if (next !== undefined) writeRecord(path, next);
+    return next;
+  });
+}
+
+export const removeRecord = (path) => lockedRecord(path, () => rmSync(path, { force: true }));
 
 export const JOB_KEYS = Object.freeze([...HANDOFF_KEYS, "cwd", "permission_mode", "session_id", "repo", "branch", "base", "worktree", "worktree_owner"]);
 export const JOB_ROLES = Object.freeze(["pm", "dev", "review", "devops"]);

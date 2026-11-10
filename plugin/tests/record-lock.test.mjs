@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, readlinkSync, rmSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { jobFlag, ledgerConflicts, ledgerPath, lockPath, splitJob, withRecords } from "../lib/record-lock.mjs";
+import { jobFlag, ledgerConflicts, ledgerPath, lockPath, splitJob, withLockSync, withRecords } from "../lib/record-lock.mjs";
 import { world } from "./fake-services-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
@@ -332,4 +332,13 @@ test("two drafts on one Figma file post one after the other, with no job and wit
     assert.equal(lines.length, 2, JSON.stringify(lines));
     assert.deepEqual(lines.map((entry) => entry.job), job.length ? ["one.md", "one.md"] : [null, null]);
   }
+});
+
+test("withLockSync waits for a held lock, refuses after its wait with the holder named, and releases the lock when its function returns or throws", () => {
+  const state = tempDir("tedy-sync-lock-");
+  const inner = withLockSync("launch-record:x", () => assert.throws(() => withLockSync("launch-record:x", () => "never", { state, waitMs: 60 }), new RegExp(`^Error: launch-record:x is locked by pid ${process.pid} \\(.*\\) for more than 60 ms; nothing was written$`)), { state });
+  assert.equal(inner, undefined);
+  assert.equal(existsSync(lockPath("launch-record:x", state)), false);
+  assert.throws(() => withLockSync("launch-record:x", () => { throw new Error("boom"); }, { state }), /boom/);
+  assert.equal(withLockSync("launch-record:x", () => "ran", { state }), "ran");
 });

@@ -268,6 +268,23 @@ test("close that may not signal the recorded process says why and leaves the job
   }
 });
 
+test("a hook that read a job's record before close deleted it, or before resume unbound it, does not write the old session back", () => {
+  const w = world();
+  const me = () => ({ pid: process.pid, start: processInfo(process.pid).start });
+  const closing = jobFile(w, { status: "done", name: "closing", record: { session_id: "s-1", bound_at: "t", pid: DEAD_PID, pid_start: "1" } });
+  let closed;
+  handle({ hook_event_name: "SessionStart", source: "resume", session_id: "s-1" }, { dir: w.state, claude: () => { closed = closed ?? w.run(["close", closing]); return me(); } });
+  assert.equal(closed.status, 0, closed.stderr);
+  assert.equal(existsSync(launchRecordPath(closing, w.state)), false);
+  const resumed = jobFile(w, { status: "done", name: "resumed", record: { session_id: "s-2", bound_at: "t", pid: DEAD_PID, pid_start: "1" } });
+  const note = join(w.root, "note.md");
+  writeFileSync(note, "more\n");
+  let out;
+  handle({ hook_event_name: "SessionStart", source: "resume", session_id: "s-2" }, { dir: w.state, claude: () => { out = out ?? w.run(["resume", resumed, "--note-file", note]); return me(); } });
+  assert.equal(out.status, 0, out.stderr);
+  assert.deepEqual([w.record(resumed).session_id, w.record(resumed).pid, w.record(resumed).earlier], [undefined, undefined, ["s-2"]]);
+});
+
 test("close refuses a running job without a reason, ends the session of a done one, marks the job closed, deletes its record and keeps the transcript", async () => {
   const w = world();
   const running = jobFile(w, { name: "running" });

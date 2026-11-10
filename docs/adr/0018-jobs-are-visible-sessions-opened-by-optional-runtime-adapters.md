@@ -27,6 +27,7 @@ Status: accepted (2026-11-09, user decisions; built and probed 2026-11-09 to 202
   - Hooks bind a `tedy:<role>` session to its job file by reading the first user prompts in its transcript.
   - They record the claude pid with its start time, and they record each state: `running`, `waiting: permission`, `waiting: input`, `waiting: question`, `idle`.
   - `job.mjs list` reads only these records, and shows `lost (last seen <time>)` once the pid is gone.
+  - Every change to a launch record, from a hook or from `job.mjs`, reads and writes it under the kit's record lock in the same state dir, and a hook writes only while the record still holds its session. A hook that read the record before `close` deleted it, or before `resume` unbound it, writes nothing back. No lock is held across a herdr call, git or the wait for a signalled process.
   - `stop` signals no process; it only writes the job's stopped status, so a job reports only itself. Only `close`, which is on no role's allowlist, ends a session, and it signals only the recorded pid while its start time matches.
   - No `claude agents`, `claude stop` or `claude rm` call is left.
 - **A dev job with `--repo` gets its worktree from the adapter that launched it:**

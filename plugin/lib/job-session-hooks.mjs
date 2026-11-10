@@ -3,7 +3,7 @@ import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync } 
 import { basename, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { herdr, HerdrError } from "./job-adapters.mjs";
-import { launchRecordPath, writeRecord } from "./job-files.mjs";
+import { launchRecordPath, readRecord, updateRecord } from "./job-files.mjs";
 import { isUserPrompt, logGate, readHookInput } from "./hook-io.mjs";
 import { STATE_DIR } from "./state-dir.mjs";
 
@@ -62,15 +62,6 @@ export function alive(record) {
   return processInfo(record.pid)?.start === record.pid_start;
 }
 
-function readRecord(path) {
-  try {
-    return JSON.parse(readFileSync(path, "utf8"));
-  } catch (error) {
-    if (error.code === "ENOENT") return null;
-    throw new Error(`the launch record ${path} cannot be read (${error.message})`);
-  }
-}
-
 export function recordOfSession(dir, session) {
   const jobs = join(dir, "jobs");
   if (!session || !existsSync(jobs)) return null;
@@ -113,17 +104,19 @@ function promptedJobFiles(transcript) {
 function bind(input, dir, now, claude, warnings) {
   const role = input.agent_type?.match(JOB_AGENT)?.[1];
   if (!role || input.agent_id || recordOfSession(dir, input.session_id)) return;
+  let found;
   for (const [file, named] of promptedJobFiles(input.transcript_path)) {
     if (named !== role || !existsSync(file)) continue;
     const path = launchRecordPath(file, dir);
-    const record = readRecord(path);
-    if (!record) continue;
-    if (record.session_id) {
-      if (record.session_id !== input.session_id) warnings.push(`${file} is already bound to session ${record.session_id}; this session is not tracked as that job`);
-      return;
-    }
-    const found = claude();
-    writeRecord(path, { ...record, session_id: input.session_id, transcript_path: input.transcript_path, ...(found && { pid: found.pid, pid_start: found.start }), bound_at: now });
+    if (!readRecord(path)) continue;
+    found ??= { process: claude() };
+    let bound = null;
+    updateRecord(path, (record) => {
+      bound = record?.session_id ?? null;
+      if (!record || bound) return undefined;
+      return { ...record, session_id: input.session_id, transcript_path: input.transcript_path, ...(found.process && { pid: found.process.pid, pid_start: found.process.start }), bound_at: now };
+    });
+    if (bound && bound !== input.session_id) warnings.push(`${file} is already bound to session ${bound}; this session is not tracked as that job`);
     return;
   }
 }
@@ -153,8 +146,13 @@ export function handle(input, { dir = STATE_DIR, now = new Date().toISOString(),
   if (!found) return warnings;
   const state = nextState(input);
   const started = input.hook_event_name === "SessionStart" ? claude() : null;
-  writeRecord(found.path, { ...found.record, ...(started && { pid: started.pid, pid_start: started.start }), ...(state && { state }), last_event_at: now });
-  notifyHerdr(found.record, state, env, warnings);
+  let before = null;
+  updateRecord(found.path, (record) => {
+    if (record?.session_id !== input.session_id) return undefined;
+    before = record;
+    return { ...record, ...(started && { pid: started.pid, pid_start: started.start }), ...(state && { state }), last_event_at: now };
+  });
+  if (before) notifyHerdr(before, state, env, warnings);
   return warnings;
 }
 
