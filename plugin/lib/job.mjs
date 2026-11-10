@@ -227,7 +227,16 @@ export function done(file, outcome) {
   return finish(file, "done", outcome);
 }
 
-function endSession(record, { waitMs = 5000, own = claudeProcess } = {}) {
+function signal(record, name, kill) {
+  try {
+    kill(record.pid, name);
+  } catch (error) {
+    if (error.code !== "EPERM") throw error;
+    throw new Error(`the kit may not signal pid ${record.pid} of session ${record.session_id} (EPERM: it runs as another user); the job is not closed. End that session yourself, then run job.mjs close again`);
+  }
+}
+
+function endSession(record, { waitMs = 5000, own = claudeProcess, kill = process.kill } = {}) {
   if (!record?.pid) return record?.session_id ? [`warning: no claude pid was recorded for session ${record.session_id}, so nothing was signalled`] : [];
   if (!alive(record)) return processInfo(record.pid) ? [`warning: pid ${record.pid} now belongs to another process, so it was not signalled`] : [];
   if (own()?.pid === record.pid) return [`this is the job's own session (pid ${record.pid}); it is not signalled and stays open for the user`];
@@ -235,9 +244,9 @@ function endSession(record, { waitMs = 5000, own = claudeProcess } = {}) {
     for (; Date.now() < until; sleep(100)) if (!alive(record)) return true;
     return !alive(record);
   };
-  process.kill(record.pid, "SIGTERM");
+  signal(record, "SIGTERM", kill);
   if (gone(Date.now() + waitMs)) return [`ended session ${record.session_id} (pid ${record.pid})`];
-  process.kill(record.pid, "SIGKILL");
+  signal(record, "SIGKILL", kill);
   if (gone(Date.now() + 2000)) return [`ended session ${record.session_id} (pid ${record.pid}) with SIGKILL after it ignored SIGTERM for ${waitMs / 1000} s`];
   throw new Error(`pid ${record.pid} of session ${record.session_id} is still alive after SIGKILL`);
 }

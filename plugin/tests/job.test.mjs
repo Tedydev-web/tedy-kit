@@ -251,6 +251,23 @@ test("close ends the recorded claude process with SIGTERM, never a pid whose sta
   }
 });
 
+test("close that may not signal the recorded process says why and leaves the job not closed with its record", async () => {
+  const { close } = await import("../lib/job.mjs");
+  const w = world();
+  const live = await sleeper();
+  try {
+    const file = jobFile(w, { status: "done", record: { session_id: "s-1", pid: live.pid, pid_start: live.start } });
+    recordLaunch(file, JSON.parse(readFileSync(launchRecordPath(file, w.state), "utf8")));
+    const kill = () => { throw Object.assign(new Error("kill EPERM"), { code: "EPERM" }); };
+    assert.throws(() => close(w.map, file, undefined, { kill }), new RegExp(`^Error: the kit may not signal pid ${live.pid} of session s-1 \\(EPERM: it runs as another user\\); the job is not closed\\. End that session yourself, then run job\\.mjs close again$`));
+    assert.equal(parse(readFileSync(file, "utf8")).status, "done");
+    assert.ok(existsSync(launchRecordPath(file)));
+    assert.equal(processInfo(live.pid).start, live.start);
+  } finally {
+    live.child.kill("SIGKILL");
+  }
+});
+
 test("close refuses a running job without a reason, ends the session of a done one, marks the job closed, deletes its record and keeps the transcript", async () => {
   const w = world();
   const running = jobFile(w, { name: "running" });
