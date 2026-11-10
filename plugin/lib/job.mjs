@@ -273,8 +273,9 @@ export function close(map, file, reason, options = {}) {
   const job = inJobsDir(map, file);
   if (job.status === "closed") throw new Error(`${file} is already closed`);
   if (job.status === "running" && !reason) throw new Error(`${file} is still running; give --reason to stop it, or wait for job.mjs done`);
-  if (job.status === "running") finish(job.path, "stopped", `Stopped: ${reason}`);
   const { record, error } = readableRecord(job.real);
+  if (options.ifEnded && record && alive(record)) throw new Error(`${file}: session ${record.session_id} is still open (pid ${record.pid}), so nothing was closed; end that session in its own window, then close the job again`);
+  if (job.status === "running") finish(job.path, "stopped", `Stopped: ${reason}`);
   const lines = [...(error ? [`warning: ${error}; nothing was signalled`] : []), ...endSession(record, options), ...closePane(record, options)];
   writeAtomic(job.path, setStatus(readFileSync(job.path, "utf8"), "closed", new Date().toISOString()));
   const live = Boolean(record?.pid) && alive(record);
@@ -454,7 +455,7 @@ function main([command, target, ...rest]) {
     return 0;
   }
   if (command === "close" && target) {
-    console.log(close(project(), target, text(given.reason)));
+    console.log(close(project(), target, text(given.reason), { ifEnded: given["if-ended"] === true }));
     return 0;
   }
   if (command === "list") {
@@ -466,7 +467,7 @@ function main([command, target, ...rest]) {
     console.log(prune(project(), { days: options.days === undefined ? undefined : Number(options.days), dryRun: options["dry-run"] === true }).join("\n") || "No job worktrees to prune.");
     return 0;
   }
-  console.error("usage: job.mjs settings <pm|dev|review|devops> | t3-instance <pm|dev|review|devops>|--all [--write] | start <pm|dev|review|devops> --title <t> --body-file <f> [--repo <path>] [--branch <name>] [--permission-mode <mode>] [--via t3|herdr|print] [--t3] [--json] | done <job file> --outcome-file <f> | stop <job file> --reason <text> | resume <job file> --note-file <f> [--via t3|herdr|print] [--t3] [--json] | close <job file> [--reason <text>] | list | prune [--days <n>] [--dry-run]");
+  console.error("usage: job.mjs settings <pm|dev|review|devops> | t3-instance <pm|dev|review|devops>|--all [--write] | start <pm|dev|review|devops> --title <t> --body-file <f> [--repo <path>] [--branch <name>] [--permission-mode <mode>] [--via t3|herdr|print] [--t3] [--json] | done <job file> --outcome-file <f> | stop <job file> --reason <text> | resume <job file> --note-file <f> [--via t3|herdr|print] [--t3] [--json] | close <job file> [--reason <text>] [--if-ended] | list | prune [--days <n>] [--dry-run]");
   return 2;
 }
 

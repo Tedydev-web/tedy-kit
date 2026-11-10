@@ -501,6 +501,30 @@ test("close refuses a running job without a reason, ends the session of a done o
   assert.deepEqual(w.calls(), []);
 });
 
+test("close --if-ended writes nothing while the job's recorded session is alive, and closes the job once that session has ended", async () => {
+  const w = world();
+  const live = await sleeper();
+  try {
+    const file = jobFile(w, { status: "done", name: "finished", record: { session_id: "s-1", bound_at: "t", pid: live.pid, pid_start: live.start } });
+    const before = { text: readFileSync(file, "utf8"), record: JSON.stringify(w.record(file)) };
+    const refused = w.run(["close", file, "--if-ended"]);
+    assert.equal(refused.status, 1);
+    assert.equal(refused.stderr, `job: ${file}: session s-1 is still open (pid ${live.pid}), so nothing was closed; end that session in its own window, then close the job again\n`);
+    assert.equal(readFileSync(file, "utf8"), before.text);
+    assert.equal(JSON.stringify(w.record(file)), before.record);
+    assert.equal(processInfo(live.pid)?.start, live.start);
+    live.child.kill("SIGKILL");
+    await live.exited;
+    const closed = w.run(["close", file, "--if-ended"]);
+    assert.equal(closed.status, 0, closed.stderr);
+    assert.equal(closed.stdout, `closed: ${file}\n`);
+    assert.equal(parse(readFileSync(file, "utf8")).status, "closed");
+    assert.equal(existsSync(launchRecordPath(file, w.state)), false);
+  } finally {
+    live.child.kill("SIGKILL");
+  }
+});
+
 test("resume appends the note, unbinds the session into earlier, and prints a claude --resume command whose prompt names the job file so the hooks bind the resumed session", () => {
   const w = world();
   const file = jobFile(w, { status: "done", mode: "default", record: { session_id: "s-1", transcript_path: "/t/s-1.jsonl", pid: DEAD_PID, pid_start: "1", state: "idle" } });
