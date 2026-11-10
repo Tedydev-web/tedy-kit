@@ -236,6 +236,19 @@ test("close removes its own job's clean core worktree and keeps a dirty one with
   assert.equal(existsSync(launchRecordPath(job("dirty"), w.state)), false);
 });
 
+test("close run from inside the job's own worktree keeps that worktree and its record, and says so", () => {
+  const { w, make } = pruneWorld();
+  const tree = make("inside", { status: "done" });
+  const file = w.jobs().find((path) => path.endsWith("-dev-inside.md"));
+  mkdirSync(join(tree, "sub"));
+  const out = w.run(["close", file], { extra: IDENTITY, cwd: join(tree, "sub") });
+  assert.equal(out.status, 0, out.stderr);
+  assert.match(out.stdout, new RegExp(`^kept ${tree}: this command runs inside it; run job\\.mjs prune from elsewhere to remove it$`, "m"));
+  assert.ok(existsSync(tree));
+  assert.equal(parse(readFileSync(file, "utf8"), JOB_KEYS).status, "closed");
+  assert.equal(w.record(file).worktree, tree);
+});
+
 test("close and prune remove the worktree, and judge the branch and base, that the launch record holds, so an edited job file header changes nothing they remove", () => {
   const { w, make } = pruneWorld();
   const other = join(w.root, "users-own-tree");

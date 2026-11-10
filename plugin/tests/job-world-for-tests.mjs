@@ -73,8 +73,8 @@ export function world(mapExtra = { jobs: true }) {
   const body = join(root, "body.md");
   writeFileSync(body, BODY);
   const env = (extra = {}) => ({ ...process.env, PATH: `${bin}:${process.env.PATH}`, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: state, TEDY_JOB_PLUGIN_DIR: "", HERDR_ENV: "", HERDR_WORKSPACE_ID: "", HERDR_PANE_ID: "", TEDY_T3_SETTINGS: t3Settings, ...extra });
-  const run = (args, { extra } = {}) => {
-    const { status, stdout, stderr } = spawnSync(process.execPath, [SCRIPT, ...args], { cwd: root, encoding: "utf8", env: env(extra) });
+  const run = (args, { extra, cwd = root } = {}) => {
+    const { status, stdout, stderr } = spawnSync(process.execPath, [SCRIPT, ...args], { cwd, encoding: "utf8", env: env(extra) });
     return { status, stdout, stderr };
   };
   const runAsync = (args) => promisify(execFile)(process.execPath, [SCRIPT, ...args], { cwd: root, encoding: "utf8", env: env() });
