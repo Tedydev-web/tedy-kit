@@ -236,6 +236,24 @@ test("a core worktree holding an ignored local test file is kept with its path, 
   assert.ok(!existsSync(built));
 });
 
+test("a core worktree with a file flagged assume-unchanged or skip-worktree is kept with its paths, since git status hides an edit to it", () => {
+  const { w, make } = pruneWorld();
+  const flagged = (flags) => (tree) => {
+    for (const flag of flags) git(tree, "update-index", flag, "notes.txt");
+    writeFileSync(join(tree, "notes.txt"), "local only\n");
+    assert.equal(git(tree, "status", "--porcelain"), "");
+  };
+  const assumed = make("assumed", { status: "closed", edit: flagged(["--assume-unchanged"]) });
+  const skipped = make("skipped", { status: "closed", edit: flagged(["--skip-worktree"]) });
+  const both = make("both", { status: "closed", edit: flagged(["--assume-unchanged", "--skip-worktree"]) });
+  const clean = make("clean", { status: "closed" });
+  const reason = (tree) => `kept ${tree}: it has files flagged assume-unchanged or skip-worktree, so git status hides their edits and removing it could lose them: notes.txt`;
+  const out = w.run(["prune"], { extra: IDENTITY });
+  assert.equal(out.status, 0, out.stderr);
+  assert.deepEqual(out.stdout.trim().split("\n").sort(), [reason(assumed), reason(skipped), reason(both), `removed ${clean} (the job is closed)`].sort());
+  for (const tree of [assumed, skipped, both]) assert.equal(readFileSync(join(tree, "notes.txt"), "utf8"), "local only\n");
+});
+
 test("an ignored file counts as regenerable only inside a whole top-level ignored folder with a regenerable name, so a tracked build folder, a nested build or out folder, or a regenerable name holding only ignored files keeps the tree", () => {
   const { w, make } = pruneWorld();
   const quiet = join(w.root, "no-excludes");

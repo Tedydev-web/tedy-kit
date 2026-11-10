@@ -48,6 +48,8 @@ const regenerable = (path) => path.endsWith("/") && REGENERABLE.has(path.slice(0
 
 function blocker(tree) {
   if (!linkedWorktree(tree)) return "it is not a linked worktree";
+  const flagged = git(tree, "ls-files", "-v", "-z").split("\0").filter((entry) => /^([a-z]|S) /.test(entry)).map((entry) => entry.slice(2));
+  if (flagged.length) return `it has files flagged assume-unchanged or skip-worktree, so git status hides their edits and removing it could lose them: ${flagged.join(", ")}`;
   const entries = git(tree, "status", "--porcelain", "-z", "--untracked-files=normal", "--ignored=matching").split("\0").filter(Boolean);
   if (entries.some((entry) => !entry.startsWith("!! "))) return "it has uncommitted changes";
   const kept = entries.map((entry) => entry.slice(3)).filter((path) => !regenerable(path));
