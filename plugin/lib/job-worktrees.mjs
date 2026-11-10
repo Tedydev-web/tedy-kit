@@ -51,7 +51,7 @@ const regenerable = (path) => {
 
 function blocker(tree) {
   if (!linkedWorktree(tree)) return "it is not a linked worktree";
-  const entries = git(tree, "status", "--porcelain", "-z", "--ignored=matching").split("\0").filter(Boolean);
+  const entries = git(tree, "status", "--porcelain", "-z", "--untracked-files=normal", "--ignored=matching").split("\0").filter(Boolean);
   if (entries.some((entry) => !entry.startsWith("!! "))) return "it has uncommitted changes";
   const kept = entries.map((entry) => entry.slice(3)).filter((path) => !regenerable(path));
   if (kept.length) return `it holds ignored files that removing it would delete: ${kept.join(", ")}`;

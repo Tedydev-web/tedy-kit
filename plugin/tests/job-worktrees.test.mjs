@@ -194,6 +194,8 @@ test("a core worktree holding an ignored local test file is kept with its path, 
   writeFileSync(join(w.fe, ".git", "info", "exclude"), "*.test.mjs\nnode_modules/\ndist/\n");
   const local = make("local", { status: "closed", edit: (tree) => { mkdirSync(join(tree, "tests")); writeFileSync(join(tree, "tests", "only-here.test.mjs"), "x\n"); mkdirSync(join(tree, "node_modules")); writeFileSync(join(tree, "node_modules", "x"), "x\n"); } });
   const built = make("built", { status: "closed", edit: (tree) => { mkdirSync(join(tree, "node_modules")); writeFileSync(join(tree, "node_modules", "x"), "x\n"); mkdirSync(join(tree, "pkg", "dist"), { recursive: true }); writeFileSync(join(tree, "pkg", "dist", "a.js"), "x\n"); } });
+  const hidden = w.run(["prune", "--dry-run"], { extra: { ...IDENTITY, GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "status.showUntrackedFiles", GIT_CONFIG_VALUE_0: "no" } });
+  assert.deepEqual(hidden.stdout.trim().split("\n").sort(), [`kept ${local}: it holds ignored files that removing it would delete: tests/only-here.test.mjs`, `would remove ${built} (the job is closed)`].sort());
   const out = w.run(["prune"], { extra: IDENTITY });
   assert.equal(out.status, 0, out.stderr);
   assert.deepEqual(out.stdout.trim().split("\n").sort(), [`kept ${local}: it holds ignored files that removing it would delete: tests/only-here.test.mjs`, `removed ${built} (the job is closed)`].sort());
