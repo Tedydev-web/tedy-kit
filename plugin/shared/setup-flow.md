@@ -29,7 +29,7 @@ Any other `fail` line in the `profile.mjs doctor` output (`release-worktree`, `r
 ## Bare run: `/tedy:setup`
 
 1. `node <plugin>/scripts/project-map.mjs doctor` in the current directory.
-2. `READY`: show the result, then offer the update menu below.
+2. `READY`: show the result, run "T3 Code instances" below when the map has `jobs: true`, then offer the update menu below.
 3. No map, or `NOT_READY`: run `node <plugin>/scripts/project-map.mjs discover` from the workspace root before asking anything. It prints JSON with:
    - `repos[]`: remote, `origin/HEAD`, the integration branch with its evidence (base of the last 30 merged PRs, else `dev`/`develop`/`staging`), stack markers, and the package scripts that check code.
    - `instructions[]`: `AGENTS.md` and `CLAUDE.md` at the root and in each repository.
@@ -39,6 +39,16 @@ Any other `fail` line in the `profile.mjs doctor` output (`release-worktree`, `r
 4. Ask the tier-3 gaps, one topic per call, grouped: repositories (role, readonly), languages, PRD and Figma per epic, tracker, then optional team, gotchas and truth overrides. Offer `setup.skip` for optional groups.
 5. Write `<profile>/projects/<name>.md` with Write (`node <plugin>/scripts/profile.mjs doctor` prints the profile directory): a two-line note for people, then the ```json block. Run `doctor` again until `READY`.
 6. When the profile is a git repository, commit the map there (`git -C <profile> add projects/<name>.md`, then commit with `feat: add <name> project map` or `feat: update <name> project map`); otherwise the written file is enough. Before any push, one `AskUserQuestion` names the remote and branch; push only on yes.
+
+7. When the map has `jobs: true`, finish with "T3 Code instances" below.
+
+## T3 Code instances
+
+Only when the tool list has `t3_thread_launch` and the map has `jobs: true`; without T3 this step does nothing. Call `orchestrator_capabilities`. When it lists `tedy-pm`, `tedy-dev`, `tedy-review` and `tedy-devops`, say so and stop here. Otherwise ask one `AskUserQuestion`, header `t3.header`, with `setup.found` naming the instances missing:
+- `t3.write`: the description names the file, `~/.t3/userdata/settings.json`, and says it is backed up beside itself first and gets the four instances, each with Launch arguments `--agent tedy:<role> --settings <role settings file>`, every other setting kept.
+- `t3.skip`: nothing is written; `node <plugin>/scripts/job.mjs t3-instance <role>` prints the Launch arguments to paste by hand.
+
+On `t3.write`, run `node <plugin>/scripts/job.mjs t3-instance --all --write` and quote its output. Then call `orchestrator_capabilities` again and confirm the four instances are listed (T3 loads the file without a restart). A refusal (missing file, not JSON, no `providerInstances` object) is quoted as it is; nothing was written.
 
 ## Update: `/tedy:setup update`
 

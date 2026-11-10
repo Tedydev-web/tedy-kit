@@ -1,7 +1,7 @@
 import "./test-isolation.mjs";
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { tokenize } from "../lib/shell-segments.mjs";
 import { DEAD_PID, jobFile, PLUGIN, sleeper, world } from "./job-world-for-tests.mjs";
@@ -52,7 +52,7 @@ test("--via overrides detection, and a forced adapter that cannot run is an erro
   assert.equal(w.jobs().length, before);
 });
 
-test("t3-instance prints the instance name, the Launch arguments with the absolute settings file and the env lines to paste into T3, and writes no T3 config", () => {
+test("t3-instance without --write prints the instance name, the Launch arguments with the absolute settings file and the env lines, and leaves T3's settings alone", () => {
   const w = world();
   const out = w.run(["t3-instance", "dev"], { extra: { TEDY_JOB_PLUGIN_DIR: "/opt/kit/plugin" } });
   assert.equal(out.status, 0, out.stderr);
@@ -67,6 +67,81 @@ test("t3-instance prints the instance name, the Launch arguments with the absolu
   ].join("\n"));
   assert.ok(JSON.parse(readFileSync(settings, "utf8")).permissions.allow.includes("Edit"));
   assert.match(w.run(["t3-instance", "qa"]).stderr, /unknown role qa/);
+  assert.equal(existsSync(dirname(w.t3Settings)), false);
+});
+
+const T3_TEXT = `${JSON.stringify({ storageCleanup: { worktreeAfterDays: 10 }, providerInstances: { codex: { driver: "codex", displayName: "Codex", enabled: true, environment: [{ name: "A", value: "1" }] } }, worktreesDir: "/w", theme: null }, null, 2)}\n`;
+
+function t3World(text = T3_TEXT) {
+  const w = world();
+  mkdirSync(dirname(w.t3Settings), { recursive: true });
+  writeFileSync(w.t3Settings, text);
+  const backups = () => readdirSync(dirname(w.t3Settings)).filter((name) => name.startsWith("settings.json.bak-")).sort();
+  return { ...w, backups, t3: () => JSON.parse(readFileSync(w.t3Settings, "utf8")) };
+}
+
+const instance = (role, settings, extra = "") => ({ driver: "claudeAgent", displayName: `tedy ${role}`, enabled: true, config: { launchArgs: `--agent tedy:${role} --settings ${settings}${extra}` } });
+
+test("t3-instance --write backs up T3's settings and upserts the role's instance, keeping every other key and the file's key order", () => {
+  const w = t3World();
+  const out = w.run(["t3-instance", "pm", "--write"], { extra: { TEDY_JOB_PLUGIN_DIR: "/opt/kit/plugin" } });
+  assert.equal(out.status, 0, out.stderr);
+  const settings = join(w.state, "jobs", "settings", "pm.json");
+  const [backup] = w.backups();
+  assert.match(backup, /^settings\.json\.bak-\d{6}-\d{4}-tedy$/);
+  assert.equal(readFileSync(join(dirname(w.t3Settings), backup), "utf8"), T3_TEXT);
+  const before = JSON.parse(T3_TEXT);
+  const after = w.t3();
+  assert.deepEqual(Object.keys(after), Object.keys(before));
+  assert.deepEqual({ ...after, providerInstances: null }, { ...before, providerInstances: null });
+  assert.deepEqual(after.providerInstances, { ...before.providerInstances, "tedy-pm": instance("pm", settings, " --plugin-dir /opt/kit/plugin") });
+  assert.equal(out.stdout, [`backed up ${w.t3Settings} to ${join(dirname(w.t3Settings), backup)}`, `tedy-pm: added (Launch arguments: --agent tedy:pm --settings ${settings} --plugin-dir /opt/kit/plugin)`, `wrote ${w.t3Settings}; T3 Code loads it without a restart`, ""].join("\n"));
+  assert.ok(readFileSync(w.t3Settings, "utf8").endsWith("}\n"));
+});
+
+test("t3-instance --write again changes nothing and makes no backup, and --all upserts the four role instances in one write", () => {
+  const w = t3World();
+  assert.equal(w.run(["t3-instance", "dev", "--write"]).status, 0);
+  const written = readFileSync(w.t3Settings, "utf8");
+  const again = w.run(["t3-instance", "dev", "--write"]);
+  assert.equal(again.status, 0, again.stderr);
+  assert.match(again.stdout, /^tedy-dev: unchanged \(Launch arguments: --agent tedy:dev --settings .*\)\n.* already holds these instances; nothing was written\n$/);
+  assert.equal(readFileSync(w.t3Settings, "utf8"), written);
+  assert.equal(w.backups().length, 1);
+  const all = w.run(["t3-instance", "--all", "--write"], { extra: { TEDY_JOB_PLUGIN_DIR: "/opt/kit/plugin" } });
+  assert.equal(all.status, 0, all.stderr);
+  assert.deepEqual(all.stdout.split("\n").filter((line) => line.startsWith("tedy-")).map((line) => line.split(" (")[0]), ["tedy-pm: added", "tedy-dev: updated", "tedy-review: added", "tedy-devops: added"]);
+  assert.deepEqual(Object.keys(w.t3().providerInstances), ["codex", "tedy-dev", "tedy-pm", "tedy-review", "tedy-devops"]);
+  for (const role of ["pm", "dev", "review", "devops"]) assert.deepEqual(w.t3().providerInstances[`tedy-${role}`], instance(role, join(w.state, "jobs", "settings", `${role}.json`), " --plugin-dir /opt/kit/plugin"));
+  assert.equal(w.backups().length, 2);
+  assert.match(w.run(["t3-instance", "--all", "pm", "--write"]).stderr, /usage: job\.mjs/);
+});
+
+test("t3-instance --write refuses a T3 settings file it does not recognise and writes nothing", () => {
+  for (const [text, message] of [
+    ["{ not json", /is not JSON .*; T3's settings format may have changed, so nothing was written/],
+    ["[]\n", /has no providerInstances object; T3's settings format may have changed, so nothing was written/],
+    ['{"providerInstances":[]}\n', /has no providerInstances object/],
+    ['{"providerInstances":null}\n', /has no providerInstances object/],
+    ['{"theme":"dark"}\n', /has no providerInstances object/],
+  ]) {
+    const w = t3World(text);
+    const out = w.run(["t3-instance", "review", "--write"]);
+    assert.equal(out.status, 1, text);
+    assert.match(out.stderr, message);
+    assert.equal(readFileSync(w.t3Settings, "utf8"), text);
+    assert.deepEqual(w.backups(), []);
+  }
+  const w = world();
+  const missing = w.run(["t3-instance", "pm", "--write"]);
+  assert.equal(missing.status, 1);
+  assert.match(missing.stderr, /does not exist, so T3 Code is not set up here; nothing was written/);
+  assert.equal(existsSync(dirname(w.t3Settings)), false);
+  const spaced = t3World();
+  const out = spaced.run(["t3-instance", "pm", "--write"], { extra: { TEDY_JOB_PLUGIN_DIR: "/opt/my kit" } });
+  assert.equal(out.status, 1);
+  assert.match(out.stderr, /holds a space/);
+  assert.equal(readFileSync(spaced.t3Settings, "utf8"), T3_TEXT);
 });
 
 test("inside herdr, start opens a tab in the job's folder and starts claude there as a named herdr agent with the role, settings and prompt as separate arguments", () => {
@@ -132,6 +207,12 @@ test("the docs describe each adapter and the worktree owners, and no doc still s
   for (const phrase of ["t3_thread_launch", "job.mjs t3-instance", "--via", "--t3", "herdr agent start", "herdr worktree create", "workspaceStrategy", "job.mjs prune", "orchestrator_capabilities"]) assert.ok(jobs.includes(phrase), `jobs.md lacks ${phrase}`);
   const readme = read("README.md");
   for (const phrase of ["job.mjs t3-instance", "--via", "job.mjs prune", "herdr"]) assert.ok(readme.includes(phrase), `README lacks ${phrase}`);
+  const setup = read("plugin/shared/setup-flow.md");
+  for (const [name, text] of [["jobs.md", jobs], ["README", readme], ["setup-flow.md", setup]]) {
+    assert.ok(text.includes("job.mjs t3-instance --all --write"), `${name} lacks the T3 instance write`);
+    assert.ok(!/never writes T3 config/.test(text), `${name} still says the kit never writes T3 config`);
+  }
+  for (const text of [jobs, setup]) assert.match(text, /`t3\.header`[\s\S]*`t3\.write`[\s\S]*~\/\.t3\/userdata\/settings\.json[\s\S]*`orchestrator_capabilities`/);
   assert.ok(read("plugin/skills/dev/SKILL.md").includes("A job: `jobs.md` Job 5."), "the dev skill does not point a job at its worktree rule");
   assert.ok(jobs.includes("git rev-parse --path-format=absolute --git-dir --git-common-dir"), "jobs.md lacks the linked-worktree check");
   assert.match(jobs, /`worktree_owner: t3` or `herdr`[^.]*push the branch with `git push -u origin <branch>` right after the first commit/);

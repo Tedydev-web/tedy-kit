@@ -3,7 +3,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { missingSections, render, setStatus, slugOf, stamp } from "./handoff.mjs";
 import { age, createAtomic, JOB_ROLES, jobsDir, launchRecordPath, listJobs, readJob, recordLaunch, setKey, withSection, writeAtomic, writeRecord } from "./job-files.mjs";
-import { chooseAdapter, closeHerdrPane, HerdrError, herdrAgent, herdrName, herdrState, herdrTab, herdrWorktree, onPath, t3Instance } from "./job-adapters.mjs";
+import { chooseAdapter, closeHerdrPane, HerdrError, herdrAgent, herdrName, herdrState, herdrTab, herdrWorktree, onPath, t3Instance, t3SettingsPath, upsertT3Instances } from "./job-adapters.mjs";
 import { addWorktree, git as gitRun, merged, planWorktree, removeWorktree, t3Strategy } from "./job-worktrees.mjs";
 import { alive, claudeProcess, processInfo } from "./job-session-hooks.mjs";
 import { profileDir } from "./profile.mjs";
@@ -100,10 +100,27 @@ function startAgent(file, spec, args, opened, turn) {
   }
 }
 
+const launchArgs = (role, file) => ["--agent", `tedy:${role}`, "--settings", file, ...pluginDir()];
+
 export function t3InstanceText(role, current) {
   const file = writeSettings(role, current);
   const env = Object.entries(JSON.parse(readFileSync(file, "utf8")).env ?? {}).map(([key, value]) => `${key}=${value}`);
-  return [`Instance name: ${t3Instance(role)}`, `Launch arguments: ${["--agent", `tedy:${role}`, "--settings", file, ...pluginDir()].join(" ")}`, ...(env.length ? ["Environment:", ...env] : ["Environment: none"])].join("\n");
+  return [`Instance name: ${t3Instance(role)}`, `Launch arguments: ${launchArgs(role, file).join(" ")}`, ...(env.length ? ["Environment:", ...env] : ["Environment: none"])].join("\n");
+}
+
+function t3InstanceConfig(role, current) {
+  const args = launchArgs(role, writeSettings(role, current));
+  const spaced = args.find((arg) => /\s/.test(arg));
+  if (spaced) throw new Error(`the Launch argument ${spaced} holds a space, which T3 would split; nothing was written`);
+  return { driver: "claudeAgent", displayName: `tedy ${role}`, enabled: true, config: { launchArgs: args.join(" ") } };
+}
+
+export function writeT3Instances(roles, current) {
+  const instances = Object.fromEntries(roles.map((role) => [t3Instance(role), t3InstanceConfig(role, current)]));
+  const file = t3SettingsPath();
+  const { changes, backup } = upsertT3Instances(instances, file);
+  const lines = changes.map(([id, change]) => `${id}: ${change} (Launch arguments: ${instances[id].config.launchArgs})`);
+  return (backup ? [`backed up ${file} to ${backup}`, ...lines, `wrote ${file}; T3 Code loads it without a restart`] : [...lines, `${file} already holds these instances; nothing was written`]).join("\n");
 }
 
 function launchRecord(file) {
@@ -379,9 +396,17 @@ function main([command, target, ...rest]) {
     console.log(writeSettings(target, resolveMap(process.cwd())?.map));
     return 0;
   }
-  if (command === "t3-instance" && target) {
-    console.log(t3InstanceText(target, resolveMap(process.cwd())?.map));
-    return 0;
+  if (command === "t3-instance") {
+    const args = [target, ...rest].filter((arg) => arg !== undefined);
+    const named = args.filter((arg) => !arg.startsWith("--"));
+    const all = args.includes("--all");
+    const extra = args.filter((arg) => arg.startsWith("--") && !["--all", "--write"].includes(arg));
+    if (named.length === (all ? 0 : 1) && !extra.length) {
+      const roles = all ? [...JOB_ROLES] : named;
+      const current = resolveMap(process.cwd())?.map;
+      console.log(args.includes("--write") ? writeT3Instances(roles, current) : roles.map((role) => t3InstanceText(role, current)).join("\n\n"));
+      return 0;
+    }
   }
   if (command === "start" && target && text(given.title) && text(given["body-file"])) {
     printLaunch(start(project(), target, { title: given.title, body: readFileSync(given["body-file"], "utf8"), repo: text(given.repo), mode: text(given["permission-mode"]), branch: text(given.branch), ...adapterFlags(given) }), given.json === true);
@@ -412,7 +437,7 @@ function main([command, target, ...rest]) {
     console.log(prune(project(), { days: options.days === undefined ? undefined : Number(options.days), dryRun: options["dry-run"] === true }).join("\n") || "No job worktrees to prune.");
     return 0;
   }
-  console.error("usage: job.mjs settings <pm|dev|review|devops> | t3-instance <pm|dev|review|devops> | start <pm|dev|review|devops> --title <t> --body-file <f> [--repo <path>] [--branch <name>] [--permission-mode <mode>] [--via t3|herdr|print] [--t3] [--json] | done <job file> --outcome-file <f> | stop <job file> --reason <text> | resume <job file> --note-file <f> [--via t3|herdr|print] [--t3] [--json] | close <job file> [--reason <text>] | list | prune [--days <n>] [--dry-run]");
+  console.error("usage: job.mjs settings <pm|dev|review|devops> | t3-instance <pm|dev|review|devops>|--all [--write] | start <pm|dev|review|devops> --title <t> --body-file <f> [--repo <path>] [--branch <name>] [--permission-mode <mode>] [--via t3|herdr|print] [--t3] [--json] | done <job file> --outcome-file <f> | stop <job file> --reason <text> | resume <job file> --note-file <f> [--via t3|herdr|print] [--t3] [--json] | close <job file> [--reason <text>] | list | prune [--days <n>] [--dry-run]");
   return 2;
 }
 

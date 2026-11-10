@@ -69,9 +69,10 @@ export function world(mapExtra = { jobs: true }) {
   writeFileSync(join(bin, "claude"), `#!/bin/sh\necho "$@" >> "${log}"\n`);
   chmodSync(join(bin, "claude"), 0o755);
   const herdrCalls = fakeHerdr(bin);
+  const t3Settings = join(root, "t3", "settings.json");
   const body = join(root, "body.md");
   writeFileSync(body, BODY);
-  const env = (extra = {}) => ({ ...process.env, PATH: `${bin}:${process.env.PATH}`, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: state, TEDY_JOB_PLUGIN_DIR: "", HERDR_ENV: "", HERDR_WORKSPACE_ID: "", HERDR_PANE_ID: "", ...extra });
+  const env = (extra = {}) => ({ ...process.env, PATH: `${bin}:${process.env.PATH}`, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: state, TEDY_JOB_PLUGIN_DIR: "", HERDR_ENV: "", HERDR_WORKSPACE_ID: "", HERDR_PANE_ID: "", TEDY_T3_SETTINGS: t3Settings, ...extra });
   const run = (args, { extra } = {}) => {
     const { status, stdout, stderr } = spawnSync(process.execPath, [SCRIPT, ...args], { cwd: root, encoding: "utf8", env: env(extra) });
     return { status, stdout, stderr };
@@ -80,7 +81,7 @@ export function world(mapExtra = { jobs: true }) {
   const calls = () => readFileSync(log, "utf8").split("\n").filter(Boolean);
   const jobs = () => (existsSync(join(root, "plans", "jobs")) ? readdirSync(join(root, "plans", "jobs")).filter((name) => name.endsWith(".md")).map((name) => join(root, "plans", "jobs", name)) : []);
   const record = (file) => JSON.parse(readFileSync(launchRecordPath(file, state), "utf8"));
-  return { root, profile, state, bin, body, map, env, run, runAsync, calls, herdrCalls, jobs, record };
+  return { root, profile, state, bin, body, map, env, run, runAsync, calls, herdrCalls, jobs, record, t3Settings };
 }
 
 export function jobFile(w, { role = "dev", status = "running", mode, created = new Date(Date.now() - (3 * 60 + 5) * 60_000).toISOString(), name = "add-hello", record = {}, header = [] } = {}) {

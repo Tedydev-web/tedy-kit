@@ -1,7 +1,10 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { accessSync, constants } from "node:fs";
+import { accessSync, chmodSync, constants, readFileSync, statSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
+import { stamp } from "./handoff.mjs";
+import { writeAtomic } from "./job-files.mjs";
 
 export const ADAPTERS = Object.freeze(["t3", "herdr", "print"]);
 
@@ -35,6 +38,53 @@ export function chooseAdapter({ via, t3 = false, env = process.env } = {}) {
 }
 
 export const t3Instance = (role) => `tedy-${role}`;
+
+export const t3SettingsPath = () => process.env.TEDY_T3_SETTINGS || join(homedir(), ".t3", "userdata", "settings.json");
+
+const plain = (value) => value !== null && typeof value === "object" && !Array.isArray(value);
+
+function readT3Settings(file) {
+  let text;
+  try {
+    text = readFileSync(file, "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") throw new Error(`${file} does not exist, so T3 Code is not set up here; nothing was written`);
+    throw new Error(`${file} cannot be read (${error.message}); nothing was written`);
+  }
+  let settings;
+  try {
+    settings = JSON.parse(text);
+  } catch (error) {
+    throw new Error(`${file} is not JSON (${error.message}); T3's settings format may have changed, so nothing was written`);
+  }
+  if (!plain(settings) || !plain(settings.providerInstances)) throw new Error(`${file} has no providerInstances object; T3's settings format may have changed, so nothing was written`);
+  return { text, settings };
+}
+
+function backUp(file, text, mode) {
+  for (let n = 1; ; n += 1) {
+    const backup = `${file}.bak-${stamp()}-tedy${n === 1 ? "" : `-${n}`}`;
+    try {
+      writeFileSync(backup, text, { flag: "wx", mode });
+      return backup;
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+    }
+  }
+}
+
+export function upsertT3Instances(instances, file = t3SettingsPath()) {
+  const { text, settings } = readT3Settings(file);
+  const current = settings.providerInstances;
+  const changes = Object.entries(instances).map(([id, value]) => [id, !Object.hasOwn(current, id) ? "added" : JSON.stringify(current[id]) === JSON.stringify(value) ? "unchanged" : "updated"]);
+  if (changes.every(([, change]) => change === "unchanged")) return { changes, backup: null };
+  const mode = statSync(file).mode & 0o777;
+  const backup = backUp(file, text, mode);
+  if (readFileSync(file, "utf8") !== text) throw new Error(`${file} changed while the kit was writing it; nothing was written, run the command again`);
+  writeAtomic(file, `${JSON.stringify({ ...settings, providerInstances: { ...current, ...instances } }, null, 2)}\n`);
+  chmodSync(file, mode);
+  return { changes, backup };
+}
 
 export class HerdrError extends Error {
   constructor(command, code, message) {
