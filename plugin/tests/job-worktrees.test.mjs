@@ -1,7 +1,7 @@
 import "./test-isolation.mjs";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { parse } from "../lib/handoff.mjs";
@@ -179,12 +179,24 @@ test("prune removes the core worktrees of closed jobs, of finished jobs whose br
     `kept ${unpushed}: it has 1 commit on no remote`,
     `removed ${closed} (the job is closed)`,
     `removed ${idle} (idle for 11 days)`,
-    `removed ${ignored} (the job is closed)`,
+    `kept ${ignored}: it holds ignored files that removing it would delete: a.local.test.ts`,
     `removed ${merged} (its branch is merged into origin/main)`,
   ].sort());
-  for (const tree of [closed, merged, ignored, idle]) assert.ok(!existsSync(tree), tree);
-  for (const tree of [active, ahead, dirty, unpushed]) assert.ok(existsSync(tree), tree);
+  for (const tree of [closed, merged, idle]) assert.ok(!existsSync(tree), tree);
+  for (const tree of [active, ahead, dirty, unpushed, ignored]) assert.ok(existsSync(tree), tree);
   assert.equal(git(w.fe, "rev-parse", "--verify", "feat/unpushed").length > 0, true);
+});
+
+test("a core worktree holding an ignored local test file is kept with its path, and one whose ignored files all sit in regenerable folders is removed", () => {
+  const { w, make } = pruneWorld();
+  writeFileSync(join(w.fe, ".git", "info", "exclude"), "*.test.mjs\nnode_modules/\ndist/\n");
+  const local = make("local", { status: "closed", edit: (tree) => { mkdirSync(join(tree, "tests")); writeFileSync(join(tree, "tests", "only-here.test.mjs"), "x\n"); mkdirSync(join(tree, "node_modules")); writeFileSync(join(tree, "node_modules", "x"), "x\n"); } });
+  const built = make("built", { status: "closed", edit: (tree) => { mkdirSync(join(tree, "node_modules")); writeFileSync(join(tree, "node_modules", "x"), "x\n"); mkdirSync(join(tree, "pkg", "dist"), { recursive: true }); writeFileSync(join(tree, "pkg", "dist", "a.js"), "x\n"); } });
+  const out = w.run(["prune"], { extra: IDENTITY });
+  assert.equal(out.status, 0, out.stderr);
+  assert.deepEqual(out.stdout.trim().split("\n").sort(), [`kept ${local}: it holds ignored files that removing it would delete: tests/only-here.test.mjs`, `removed ${built} (the job is closed)`].sort());
+  assert.ok(existsSync(join(local, "tests", "only-here.test.mjs")));
+  assert.ok(!existsSync(built));
 });
 
 test("prune --days moves the idle limit, refuses a bad value, and leaves T3 and herdr worktrees to their owner", () => {

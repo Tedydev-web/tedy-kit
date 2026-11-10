@@ -32,7 +32,7 @@ Status: accepted (2026-11-09, user decisions; built and probed 2026-11-09 to 202
 - **A dev job with `--repo` gets its worktree from the adapter that launched it:**
   - T3 `workspaceStrategy`
   - `herdr worktree create`
-  - otherwise a core `git worktree add`, which `close` and `prune` remove on merge, after idle days or on close, never with uncommitted or unpushed work.
+  - otherwise a core `git worktree add`, which `close` and `prune` remove on merge, after idle days or on close, never with uncommitted or unpushed work, and never while it holds an ignored file outside a regenerable folder (`node_modules`, `dist`, `build`, `out`, `.next`, `.nuxt`, `.turbo`, `.cache`, `coverage`, `.parcel-cache`, `.vite`, `target`), because `git worktree remove` deletes ignored files, such as a local-only test the user's global gitignore keeps out of commits. Those paths are printed with the reason.
 - **`close` closes the herdr pane the kit opened for a job**, once its session has ended, and never a pane the command runs in or one that now runs another session.
 - **`job.mjs t3-instance --all --write` (or `<role> --write`) adds the T3 instances.**
   - It backs up `~/.t3/userdata/settings.json` beside itself first, then upserts `providerInstances["tedy-<role>"]` with driver `claudeAgent` and Launch arguments `--agent tedy:<role> --settings <file>`, keeping every other key.

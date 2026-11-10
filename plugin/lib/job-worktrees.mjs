@@ -41,9 +41,19 @@ export function addWorktree({ repo, branch, base, path }) {
 
 export const merged = ({ repo, branch, base }) => spawnSync("git", ["-C", repo, "merge-base", "--is-ancestor", `refs/heads/${branch}`, `refs/remotes/origin/${base}`], { encoding: "utf8" }).status === 0;
 
+const REGENERABLE = new Set(["node_modules", "dist", "build", "out", ".next", ".nuxt", ".turbo", ".cache", "coverage", ".parcel-cache", ".vite", "target"]);
+
+const regenerable = (path) => {
+  const parts = path.split("/");
+  return (path.endsWith("/") ? parts : parts.slice(0, -1)).some((part) => REGENERABLE.has(part));
+};
+
 function blocker(tree) {
   if (!linkedWorktree(tree)) return "it is not a linked worktree";
-  if (git(tree, "status", "--porcelain")) return "it has uncommitted changes";
+  const entries = git(tree, "status", "--porcelain", "-z", "--ignored=matching").split("\0").filter(Boolean);
+  if (entries.some((entry) => !entry.startsWith("!! "))) return "it has uncommitted changes";
+  const kept = entries.map((entry) => entry.slice(3)).filter((path) => !regenerable(path));
+  if (kept.length) return `it holds ignored files that removing it would delete: ${kept.join(", ")}`;
   const ahead = Number(git(tree, "rev-list", "--count", "HEAD", "--not", "--remotes"));
   if (ahead) return `it has ${ahead} commit${ahead === 1 ? "" : "s"} on no remote`;
   return null;
