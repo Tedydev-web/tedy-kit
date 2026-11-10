@@ -357,7 +357,7 @@ export function resume(map, file, note, { via, t3 } = {}) {
   const cwd = record.session_cwd ?? record.cwd;
   if (!existsSync(cwd)) throw new Error(`${file}: its folder ${cwd} no longer exists; close it and start a new job`);
   if (alive(record)) throw new Error(`${file}: session ${record.session_id} is still open (pid ${record.pid}); type the note in its open thread or pane, or close that session first, then run job.mjs resume again; nothing was resumed`);
-  const strategy = adapter === "t3" && Boolean(record.worktree_owner) && cwd !== record.repo && linkedWorktree(cwd) && { type: "existing_worktree", worktreePath: cwd };
+  const strategy = adapter === "t3" && Boolean(record.worktree_owner) && cwd !== record.repo && linkedWorktree(cwd) && { type: "existing_worktree", worktreePath: gitRun(cwd, "rev-parse", "--show-toplevel") };
   const title = jobName(map, record.role, job.path);
   const opened = openPane(adapter, via === adapter, { cwd, label: title });
   const session = record.session_id;

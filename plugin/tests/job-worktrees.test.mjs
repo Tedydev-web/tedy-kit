@@ -1,7 +1,7 @@
 import "./test-isolation.mjs";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { parse } from "../lib/handoff.mjs";
@@ -198,6 +198,8 @@ test("a T3 resume of a dev job whose worktree still exists binds that worktree t
   const t3Tree = join(w.root, "t3-worktrees", "fe-in-t3");
   git(w.fe, "worktree", "add", "-q", "-b", "feat/in-t3", t3Tree, "origin/main");
   assert.deepEqual(resumeT3("in-t3", t3Tree).workspaceStrategy, { type: "existing_worktree", worktreePath: t3Tree });
+  mkdirSync(join(t3Tree, "pkg"));
+  assert.deepEqual(resumeT3("in-t3-sub", join(t3Tree, "pkg")).workspaceStrategy, { type: "existing_worktree", worktreePath: realpathSync(t3Tree) });
   assert.equal(Object.hasOwn(resumeT3("in-repo", w.fe), "workspaceStrategy"), false);
   const core = resumeT3("core", undefined, []);
   assert.deepEqual(core.workspaceStrategy, { type: "existing_worktree", worktreePath: join(w.root, ".worktrees", "fe-core") });
