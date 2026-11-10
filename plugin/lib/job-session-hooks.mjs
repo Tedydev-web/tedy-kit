@@ -59,7 +59,8 @@ export function alive(record) {
     if (error.code === "ESRCH") return false;
     if (error.code !== "EPERM") throw error;
   }
-  return processInfo(record.pid)?.start === record.pid_start;
+  const info = processInfo(record.pid);
+  return Boolean(info?.claude) && info.start === record.pid_start;
 }
 
 export function recordOfSession(dir, session) {

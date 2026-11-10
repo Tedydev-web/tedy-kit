@@ -4,7 +4,6 @@ import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, 
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { launchRecordPath, recordLaunch } from "../lib/job-files.mjs";
-import { processInfo } from "../lib/job-session-hooks.mjs";
 import { tokenize } from "../lib/shell-segments.mjs";
 import { DEAD_PID, jobFile, PLUGIN, sleeper, world } from "./job-world-for-tests.mjs";
 
@@ -206,16 +205,21 @@ test("a herdr agent blocked at startup keeps its pane; a failed herdr call falls
   assert.equal(w.jobs().length, 3);
 });
 
-test("list adds herdr's state for a job herdr runs, unless the kit's own record says it waits", () => {
+test("list adds herdr's state for a job herdr runs, unless the kit's own record says it waits", async () => {
   const w = world();
-  const live = { pid: process.pid, pid_start: processInfo(process.pid).start };
-  jobFile(w, { name: "working", record: { session_id: "s-1", bound_at: "t", ...live, state: "running", herdr: { name: "dev-abc123", pane: "w1:p7" } } });
-  jobFile(w, { name: "asking", record: { session_id: "s-2", bound_at: "t", ...live, state: "waiting: question", herdr: { name: "dev-def456", pane: "w1:p8" } } });
-  jobFile(w, { name: "plain", record: { session_id: "s-3", bound_at: "t", ...live, state: "idle" } });
-  const lines = (extra) => w.run(["list"], { extra }).stdout.trim().split("\n").map((line) => line.split(" · ").slice(1, 3).join(" · ")).sort();
-  assert.deepEqual(lines({ FAKE_HERDR_STATUS: "blocked" }), ["asking · waiting: question", "plain · idle", "working · running (herdr: blocked)"]);
-  assert.deepEqual(w.herdrCalls(), [["agent", "get", "dev-abc123"]]);
-  assert.deepEqual(lines({}), ["asking · waiting: question", "plain · idle", "working · running (herdr: agent_not_found)"]);
+  const session = await sleeper();
+  try {
+    const live = { pid: session.pid, pid_start: session.start };
+    jobFile(w, { name: "working", record: { session_id: "s-1", bound_at: "t", ...live, state: "running", herdr: { name: "dev-abc123", pane: "w1:p7" } } });
+    jobFile(w, { name: "asking", record: { session_id: "s-2", bound_at: "t", ...live, state: "waiting: question", herdr: { name: "dev-def456", pane: "w1:p8" } } });
+    jobFile(w, { name: "plain", record: { session_id: "s-3", bound_at: "t", ...live, state: "idle" } });
+    const lines = (extra) => w.run(["list"], { extra }).stdout.trim().split("\n").map((line) => line.split(" · ").slice(1, 3).join(" · ")).sort();
+    assert.deepEqual(lines({ FAKE_HERDR_STATUS: "blocked" }), ["asking · waiting: question", "plain · idle", "working · running (herdr: blocked)"]);
+    assert.deepEqual(w.herdrCalls(), [["agent", "get", "dev-abc123"]]);
+    assert.deepEqual(lines({}), ["asking · waiting: question", "plain · idle", "working · running (herdr: agent_not_found)"]);
+  } finally {
+    session.child.kill("SIGKILL");
+  }
 });
 
 test("the docs describe each adapter and the worktree owners, and no doc still sends jobs to --bg or agent view", () => {

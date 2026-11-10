@@ -8,8 +8,8 @@ import { launchRecordPath, recordLaunch } from "../lib/job-files.mjs";
 import { processInfo } from "../lib/job-session-hooks.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
-export async function sleeper(ignoreTerm = false) {
-  const child = spawn("node", ["-e", `${ignoreTerm ? "process.on('SIGTERM', () => {});" : ""} setInterval(() => {}, 1000); console.log("up")`], { stdio: ["ignore", "pipe", "ignore"] });
+export async function sleeper({ ignoreTerm = false, claude = true } = {}) {
+  const child = spawn("node", ["-e", `${ignoreTerm ? "process.on('SIGTERM', () => {});" : ""} setInterval(() => {}, 1000); console.log("up")`], { stdio: ["ignore", "pipe", "ignore"], argv0: claude ? "claude" : "node" });
   await once(child.stdout, "data");
   return { child, pid: child.pid, start: processInfo(child.pid).start, exited: once(child, "exit") };
 }

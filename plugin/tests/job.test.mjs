@@ -191,14 +191,19 @@ test("list reads only kit records: the file status when not running, else not st
   }
 });
 
-test("a session the hooks bind to a started job shows in list with its state", () => {
+test("a session the hooks bind to a started job shows in list with its state", async () => {
   const w = world();
   const out = w.run(["start", "review", "--title", "Review 12", "--body-file", w.body, "--json"]);
   const spec = JSON.parse(out.stdout);
   const transcript = join(w.root, "s-7.jsonl");
   writeFileSync(transcript, `${JSON.stringify({ type: "user", message: { content: spec.prompt } })}\n`);
-  handle({ hook_event_name: "Notification", notification_type: "permission_prompt", session_id: "s-7", transcript_path: transcript, agent_type: "tedy:review" }, { dir: w.state, claude: () => ({ pid: process.pid, start: processInfo(process.pid).start }) });
-  assert.match(w.run(["list"]).stdout, /^review · Review 12 · waiting: permission · 0m · /);
+  const live = await sleeper();
+  try {
+    handle({ hook_event_name: "Notification", notification_type: "permission_prompt", session_id: "s-7", transcript_path: transcript, agent_type: "tedy:review" }, { dir: w.state, claude: () => ({ pid: live.pid, start: live.start }) });
+    assert.match(w.run(["list"]).stdout, /^review · Review 12 · waiting: permission · 0m · /);
+  } finally {
+    live.child.kill("SIGKILL");
+  }
 });
 
 test("stop only writes stopped with its reason and signals no process, not even another job's live session", async () => {
@@ -234,7 +239,15 @@ test("close ends the recorded claude process with SIGTERM, never a pid whose sta
   } finally {
     other.child.kill("SIGKILL");
   }
-  const stubborn = await sleeper(true);
+  const plain = await sleeper({ claude: false });
+  try {
+    const forged = jobFile(w, { status: "done", name: "forged", record: { session_id: "s-4", pid: plain.pid, pid_start: plain.start } });
+    assert.match(w.run(["close", forged]).stdout, /warning: pid \d+ now belongs to another process, so it was not signalled/);
+    assert.equal(processInfo(plain.pid).start, plain.start);
+  } finally {
+    plain.child.kill("SIGKILL");
+  }
+  const stubborn = await sleeper({ ignoreTerm: true });
   const file = jobFile(w, { record: { session_id: "s-1", pid: stubborn.pid, pid_start: stubborn.start } });
   recordLaunch(file, JSON.parse(readFileSync(launchRecordPath(file, w.state), "utf8")));
   assert.match(close(w.map, file, "runaway", { waitMs: 300 }), /with SIGKILL after it ignored SIGTERM/);

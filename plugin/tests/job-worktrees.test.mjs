@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { parse } from "../lib/handoff.mjs";
 import { JOB_KEYS, launchRecordPath, readRecord, recordLaunch, writeRecord } from "../lib/job-files.mjs";
-import { processInfo } from "../lib/job-session-hooks.mjs";
 import { linkedWorktree } from "../lib/job-worktrees.mjs";
 import { tokenize } from "../lib/shell-segments.mjs";
 import { sleeper, world } from "./job-world-for-tests.mjs";
@@ -283,11 +282,16 @@ test("close removes its own job's clean core worktree and keeps a dirty one with
   assert.equal(existsSync(launchRecordPath(job("dirty"), w.state)), false);
 });
 
-test("prune keeps the worktree of a job whose recorded session is alive, even when its file says closed", () => {
+test("prune keeps the worktree of a job whose recorded session is alive, even when its file says closed", async () => {
   const { w, make } = pruneWorld();
-  const tree = make("live", { status: "closed", record: { session_id: "s-1", bound_at: "t", pid: process.pid, pid_start: processInfo(process.pid).start } });
-  assert.equal(w.run(["prune"], { extra: IDENTITY }).stdout.trim(), `kept ${tree}: its session is open`);
-  assert.ok(existsSync(tree));
+  const live = await sleeper();
+  try {
+    const tree = make("live", { status: "closed", record: { session_id: "s-1", bound_at: "t", pid: live.pid, pid_start: live.start } });
+    assert.equal(w.run(["prune"], { extra: IDENTITY }).stdout.trim(), `kept ${tree}: its session is open`);
+    assert.ok(existsSync(tree));
+  } finally {
+    live.child.kill("SIGKILL");
+  }
 });
 
 test("close of a job whose own session is still running keeps its worktree and the session's pid, so a later prune keeps it too", async () => {

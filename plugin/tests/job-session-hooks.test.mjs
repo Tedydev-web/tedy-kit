@@ -177,16 +177,20 @@ test("the hook script walks its parents to the nearest claude process, records t
   assert.equal(alive(w.record()), false);
 });
 
-test("alive needs the recorded pid to exist with the recorded start time, so a reused pid is not taken for the job", { skip: process.platform !== "linux" }, async () => {
-  const child = spawn("sleep", ["30"]);
+test("alive needs the recorded pid to be a claude process with the recorded start time, so a reused or forged pid is not taken for the job", { skip: process.platform !== "linux" }, async () => {
+  const child = spawn("sleep", ["30"], { argv0: "claude" });
+  const plain = spawn("sleep", ["30"]);
   try {
     const info = processInfo(child.pid);
     assert.equal(info.ppid, process.pid);
     assert.equal(alive({ pid: child.pid, pid_start: info.start }), true);
     assert.equal(alive({ pid: child.pid, pid_start: `${info.start}0` }), false);
     assert.equal(alive({ pid: undefined }), false);
-    assert.notEqual(claudeProcess(child.pid)?.pid, child.pid);
+    assert.equal(alive({ pid: plain.pid, pid_start: processInfo(plain.pid).start }), false);
+    assert.equal(alive({ pid: process.pid, pid_start: processInfo(process.pid).start }), false);
+    assert.notEqual(claudeProcess(plain.pid)?.pid, plain.pid);
   } finally {
     child.kill("SIGKILL");
+    plain.kill("SIGKILL");
   }
 });
