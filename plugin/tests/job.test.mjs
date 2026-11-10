@@ -201,46 +201,51 @@ test("a session the hooks bind to a started job shows in list with its state", (
   assert.match(w.run(["list"]).stdout, /^review · Review 12 · waiting: permission · 0m · /);
 });
 
-test("stop writes stopped and ends the recorded claude process with SIGTERM, never a pid whose start time differs", async () => {
+test("stop only writes stopped with its reason and signals no process, not even another job's live session", async () => {
   const w = world();
   const live = await sleeper();
-  const file = jobFile(w, { record: { session_id: "s-1", pid: live.pid, pid_start: live.start } });
-  const out = w.run(["stop", file, "--reason", "the PRD tab is gone"]);
-  assert.equal(out.status, 0, out.stderr);
-  assert.match(out.stdout.trim(), /^stopped: .*\nended session s-1 \(pid \d+\)$/);
-  assert.deepEqual(await live.exited, [null, "SIGTERM"]);
-  const text = readFileSync(file, "utf8");
-  assert.equal(parse(text).status, "stopped");
-  assert.match(text, /\n## Outcome\n\nStopped: the PRD tab is gone\n$/);
-  const other = await sleeper();
   try {
-    const reused = jobFile(w, { name: "reused", record: { session_id: "s-2", pid: other.pid, pid_start: `${other.start}9` } });
-    const kept = w.run(["stop", reused, "--reason", "x"]);
-    assert.match(kept.stdout, /warning: pid \d+ now belongs to another process, so it was not signalled/);
-    assert.equal(processInfo(other.pid).start, other.start);
+    const file = jobFile(w, { record: { session_id: "s-1", pid: live.pid, pid_start: live.start } });
+    const before = JSON.stringify(w.record(file));
+    const out = w.run(["stop", file, "--reason", "the PRD tab is gone"]);
+    assert.equal(out.status, 0, out.stderr);
+    assert.equal(out.stdout, `stopped: ${file}\n`);
+    const text = readFileSync(file, "utf8");
+    assert.equal(parse(text).status, "stopped");
+    assert.match(text, /\n## Outcome\n\nStopped: the PRD tab is gone\n$/);
+    assert.equal(processInfo(live.pid).start, live.start);
+    assert.equal(JSON.stringify(w.record(file)), before);
   } finally {
-    other.child.kill("SIGKILL");
+    live.child.kill("SIGKILL");
   }
   const unrecorded = jobFile(w, { name: "by-hand", record: null });
   assert.equal(w.run(["stop", unrecorded, "--reason", "x"]).stdout.trim(), `stopped: ${unrecorded}`);
   assert.deepEqual(w.calls(), []);
 });
 
-test("stop sends SIGKILL to a session that ignores SIGTERM, and leaves the caller's own session alone", async () => {
-  const { stop } = await import("../lib/job.mjs");
+test("close ends the recorded claude process with SIGTERM, never a pid whose start time differs, sends SIGKILL to one that ignores SIGTERM, and leaves the caller's own session alone", async () => {
+  const { close } = await import("../lib/job.mjs");
   const w = world();
+  const other = await sleeper();
+  try {
+    const reused = jobFile(w, { status: "done", name: "reused", record: { session_id: "s-2", pid: other.pid, pid_start: `${other.start}9` } });
+    assert.match(w.run(["close", reused]).stdout, /warning: pid \d+ now belongs to another process, so it was not signalled/);
+    assert.equal(processInfo(other.pid).start, other.start);
+  } finally {
+    other.child.kill("SIGKILL");
+  }
   const stubborn = await sleeper(true);
   const file = jobFile(w, { record: { session_id: "s-1", pid: stubborn.pid, pid_start: stubborn.start } });
   recordLaunch(file, JSON.parse(readFileSync(launchRecordPath(file, w.state), "utf8")));
-  assert.match(stop(file, "runaway", { waitMs: 300 }), /with SIGKILL after it ignored SIGTERM/);
+  assert.match(close(w.map, file, "runaway", { waitMs: 300 }), /with SIGKILL after it ignored SIGTERM/);
   assert.deepEqual(await stubborn.exited, [null, "SIGKILL"]);
   const own = await sleeper();
   try {
-    const mine = jobFile(w, { name: "mine", record: { session_id: "s-2", pid: own.pid, pid_start: own.start } });
+    const mine = jobFile(w, { name: "mine", record: { session_id: "s-3", pid: own.pid, pid_start: own.start } });
     recordLaunch(mine, JSON.parse(readFileSync(launchRecordPath(mine, w.state), "utf8")));
-    assert.match(stop(mine, "blocked", { own: () => ({ pid: own.pid }) }), /this is the job's own session \(pid \d+\); it is not signalled and stays open for the user/);
+    assert.match(close(w.map, mine, "blocked", { own: () => ({ pid: own.pid }) }), /this is the job's own session \(pid \d+\); it is not signalled and stays open for the user/);
     assert.equal(processInfo(own.pid).start, own.start);
-    assert.equal(parse(readFileSync(mine, "utf8")).status, "stopped");
+    assert.equal(parse(readFileSync(mine, "utf8")).status, "closed");
   } finally {
     own.child.kill("SIGKILL");
   }

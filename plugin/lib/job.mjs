@@ -260,10 +260,9 @@ function closePane(record, { env = process.env } = {}) {
   return [closeHerdrPane({ pane, session: record.session_id }, env)];
 }
 
-export function stop(file, reason, options) {
+export function stop(file, reason) {
   if (!String(reason ?? "").trim()) throw new Error("--reason needs a line");
-  const path = finish(file, "stopped", `Stopped: ${reason}`);
-  return [`stopped: ${path}`, ...endRecordedSession(path, options)].join("\n");
+  return `stopped: ${finish(file, "stopped", `Stopped: ${reason}`)}`;
 }
 
 export function close(map, file, reason, options) {

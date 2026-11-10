@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
+import { launchRecordPath, recordLaunch } from "../lib/job-files.mjs";
 import { tokenize } from "../lib/shell-segments.mjs";
 import { DEAD_PID, jobFile, PLUGIN, sleeper, world } from "./job-world-for-tests.mjs";
 
@@ -255,7 +256,7 @@ test("resume inside herdr opens a new tab and starts the resumed session under a
 
 const PANE = { name: "dev-abc123", pane: "w1:p7" };
 
-test("close and stop end the job's session first, then close the herdr pane the kit opened for it; a job with no kit pane makes no herdr call", async () => {
+test("close ends the job's session first, then closes the herdr pane the kit opened for it; stop and a job with no kit pane make no herdr call", async () => {
   const w = world();
   const live = await sleeper();
   const done = jobFile(w, { status: "done", record: { session_id: "s-1", pid: live.pid, pid_start: live.start, via: "herdr", herdr: PANE } });
@@ -265,7 +266,9 @@ test("close and stop end the job's session first, then close the herdr pane the 
   assert.deepEqual(await live.exited, [null, "SIGTERM"]);
   assert.deepEqual(w.herdrCalls(), [["pane", "get", "w1:p7"], ["pane", "close", "w1:p7"]]);
   const stopped = jobFile(w, { name: "runaway", record: { session_id: "s-2", pid: DEAD_PID, pid_start: "1", via: "herdr", herdr: { name: "dev-def456", pane: "w1:p9" } } });
-  assert.match(w.run(["stop", stopped, "--reason", "runaway"]).stdout, /\nclosed herdr pane w1:p9\n$/);
+  assert.equal(w.run(["stop", stopped, "--reason", "runaway"]).stdout, `stopped: ${stopped}\n`);
+  assert.equal(w.herdrCalls().length, 2);
+  assert.match(w.run(["close", stopped]).stdout, /\nclosed herdr pane w1:p9\n$/);
   assert.deepEqual(w.herdrCalls().slice(2), [["pane", "get", "w1:p9"], ["pane", "close", "w1:p9"]]);
   const printed = jobFile(w, { status: "done", name: "printed", record: { session_id: "s-3", pid: DEAD_PID, pid_start: "1", via: "print" } });
   assert.equal(w.run(["close", printed]).stdout.trim(), `closed: ${printed}`);
@@ -291,12 +294,13 @@ test("a kit pane stays open when the caller runs in it, when it now runs another
   assert.equal(missing.status, 0, missing.stderr);
   assert.match(missing.stdout, /\nwarning: herdr is not on PATH, so pane w1:p7 was left open\n$/);
   assert.ok(w.jobs().every((file) => readFileSync(file, "utf8").includes("status: closed")));
-  const { stop } = await import("../lib/job.mjs");
+  const { close } = await import("../lib/job.mjs");
   const own = await sleeper();
   try {
     const mine = jobFile(w, { name: "mine", record: { session_id: "s-9", pid: own.pid, pid_start: own.start, via: "herdr", herdr: PANE } });
+    recordLaunch(mine, JSON.parse(readFileSync(launchRecordPath(mine, w.state), "utf8")));
     const before = w.herdrCalls().length;
-    assert.doesNotMatch(stop(mine, "blocked", { own: () => ({ pid: own.pid }), env: w.env() }), /herdr/);
+    assert.doesNotMatch(close(w.map, mine, "blocked", { own: () => ({ pid: own.pid }), env: w.env() }), /herdr/);
     assert.equal(w.herdrCalls().length, before);
   } finally {
     own.child.kill("SIGKILL");

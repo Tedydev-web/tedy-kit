@@ -27,13 +27,13 @@ Status: accepted (2026-11-09, user decisions; built and probed 2026-11-09 to 202
   - Hooks bind a `tedy:<role>` session to its job file by reading the first user prompts in its transcript.
   - They record the claude pid with its start time, and they record each state: `running`, `waiting: permission`, `waiting: input`, `waiting: question`, `idle`.
   - `job.mjs list` reads only these records, and shows `lost (last seen <time>)` once the pid is gone.
-  - `stop` and `close` signal only the recorded pid while its start time matches.
+  - `stop` signals no process; it only writes the job's stopped status, so a job reports only itself. Only `close`, which is on no role's allowlist, ends a session, and it signals only the recorded pid while its start time matches.
   - No `claude agents`, `claude stop` or `claude rm` call is left.
 - **A dev job with `--repo` gets its worktree from the adapter that launched it:**
   - T3 `workspaceStrategy`
   - `herdr worktree create`
   - otherwise a core `git worktree add`, which `close` and `prune` remove on merge, after idle days or on close, never with uncommitted or unpushed work.
-- **`close` and `stop` close the herdr pane the kit opened for a job**, once its session has ended, and never a pane the command runs in or one that now runs another session.
+- **`close` closes the herdr pane the kit opened for a job**, once its session has ended, and never a pane the command runs in or one that now runs another session.
 - **`job.mjs t3-instance --all --write` (or `<role> --write`) adds the T3 instances.**
   - It backs up `~/.t3/userdata/settings.json` beside itself first, then upserts `providerInstances["tedy-<role>"]` with driver `claudeAgent` and Launch arguments `--agent tedy:<role> --settings <file>`, keeping every other key.
   - It refuses a file that is missing, is not JSON or has no `providerInstances` object.
@@ -47,7 +47,7 @@ Status: accepted (2026-11-09, user decisions; built and probed 2026-11-09 to 202
 - `plugin/tests/job-session-hooks.test.mjs`: binding from the transcript, no rebinding, the state each hook writes, the pid walk, and the start-time check in `alive`.
 - `plugin/tests/job-adapters.test.mjs`:
   - adapter choice and `--via` refusals; the herdr tab, agent, fallback and list cases
-  - "close and stop end the job's session first, then close the herdr pane the kit opened for it; a job with no kit pane makes no herdr call", and the case that leaves a pane open
+  - "close ends the job's session first, then closes the herdr pane the kit opened for it; stop and a job with no kit pane make no herdr call", and the case that leaves a pane open
   - the three `t3-instance --write` cases (upsert, idempotence and drift refusal on a temp settings file)
   - the docs check.
 - `plugin/tests/job-worktrees.test.mjs`: the worktree owner for each adapter, prune and close.
@@ -127,4 +127,4 @@ OBSERVED, from probe runs on 2026-11-09 and 2026-11-10. The kit was frozen at on
 - `--agent` and `--settings` in a T3 instance's `config.launchArgs` reach Claude through T3's Agent SDK path.
 - T3 loaded an instance added to its settings file without a restart: the instance appeared in `orchestrator_capabilities`. The schema read from the 0.1.8 nightly is `{ driver, displayName, enabled, environment, config: { launchArgs } }`.
 - Folder trust is per folder: the herdr job stopped at the trust dialog of the new probe folder.
-- After `close`, the herdr pane stayed open on an idle shell. That observation is why `close` and `stop` now close it.
+- After `close`, the herdr pane stayed open on an idle shell. That observation is why `close` now closes it.
