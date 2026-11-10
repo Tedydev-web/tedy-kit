@@ -193,7 +193,7 @@ test("a core worktree holding an ignored local test file is kept with its path, 
   const { w, make } = pruneWorld();
   writeFileSync(join(w.fe, ".git", "info", "exclude"), "*.test.mjs\nnode_modules/\ndist/\n");
   const local = make("local", { status: "closed", edit: (tree) => { mkdirSync(join(tree, "tests")); writeFileSync(join(tree, "tests", "only-here.test.mjs"), "x\n"); mkdirSync(join(tree, "node_modules")); writeFileSync(join(tree, "node_modules", "x"), "x\n"); } });
-  const built = make("built", { status: "closed", edit: (tree) => { mkdirSync(join(tree, "node_modules")); writeFileSync(join(tree, "node_modules", "x"), "x\n"); mkdirSync(join(tree, "pkg", "dist"), { recursive: true }); writeFileSync(join(tree, "pkg", "dist", "a.js"), "x\n"); } });
+  const built = make("built", { status: "closed", edit: (tree) => { mkdirSync(join(tree, "node_modules")); writeFileSync(join(tree, "node_modules", "x"), "x\n"); mkdirSync(join(tree, "dist")); writeFileSync(join(tree, "dist", "a.js"), "x\n"); } });
   const hidden = w.run(["prune", "--dry-run"], { extra: { ...IDENTITY, GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "status.showUntrackedFiles", GIT_CONFIG_VALUE_0: "no" } });
   assert.deepEqual(hidden.stdout.trim().split("\n").sort(), [`kept ${local}: it holds ignored files that removing it would delete: tests/only-here.test.mjs`, `would remove ${built} (the job is closed)`].sort());
   const out = w.run(["prune"], { extra: IDENTITY });
@@ -201,6 +201,50 @@ test("a core worktree holding an ignored local test file is kept with its path, 
   assert.deepEqual(out.stdout.trim().split("\n").sort(), [`kept ${local}: it holds ignored files that removing it would delete: tests/only-here.test.mjs`, `removed ${built} (the job is closed)`].sort());
   assert.ok(existsSync(join(local, "tests", "only-here.test.mjs")));
   assert.ok(!existsSync(built));
+});
+
+test("an ignored file counts as regenerable only inside a whole top-level ignored folder with a regenerable name, so a tracked build folder, a nested build or out folder, or a regenerable name holding only ignored files keeps the tree", () => {
+  const { w, make } = pruneWorld();
+  const quiet = join(w.root, "no-excludes");
+  writeFileSync(quiet, "");
+  const env = { ...IDENTITY, GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.excludesFile", GIT_CONFIG_VALUE_0: quiet };
+  mkdirSync(join(w.seed, "build"));
+  writeFileSync(join(w.seed, "build", "webpack.config.js"), "x\n");
+  git(w.seed, "add", "build");
+  git(w.seed, "commit", "-q", "-m", "build config");
+  git(w.seed, "push", "-q", "origin", "HEAD:main");
+  writeFileSync(join(w.fe, ".git", "info", "exclude"), "*.local.test.js\n*.local.test.mjs\n*.local.md\nnode_modules/\ndist/\nbuild/\nout/\n");
+  const put = (tree, path) => { mkdirSync(join(tree, path, ".."), { recursive: true }); writeFileSync(join(tree, path), "x\n"); };
+  const tracked = make("tracked", { status: "closed", edit: (tree) => put(tree, "build/webpack.local.test.js") });
+  const nested = make("nested", { status: "closed", edit: (tree) => { put(tree, "scripts/build/release.local.test.mjs"); put(tree, "src/out/notes.local.md"); put(tree, "pkg/dist/a.js"); } });
+  const named = make("named", { status: "closed", edit: (tree) => put(tree, "target/only.local.test.js") });
+  const whole = make("whole", { status: "closed", edit: (tree) => { put(tree, "node_modules/x/index.js"); put(tree, "dist/a.js"); } });
+  const out = w.run(["prune"], { extra: env });
+  assert.equal(out.status, 0, out.stderr);
+  assert.deepEqual(out.stdout.trim().split("\n").sort(), [
+    `kept ${tracked}: it holds ignored files that removing it would delete: build/webpack.local.test.js`,
+    `kept ${nested}: it holds ignored files that removing it would delete: pkg/dist/, scripts/build/, src/out/`,
+    `kept ${named}: it holds ignored files that removing it would delete: target/only.local.test.js`,
+    `removed ${whole} (the job is closed)`,
+  ].sort());
+  for (const path of ["build/webpack.local.test.js"].map((rel) => join(tracked, rel)).concat(["scripts/build/release.local.test.mjs", "src/out/notes.local.md"].map((rel) => join(nested, rel)), join(named, "target/only.local.test.js"))) assert.ok(existsSync(path), path);
+  assert.ok(!existsSync(whole));
+});
+
+test("close keeps a core worktree whose ignored file sits in a tracked build folder", () => {
+  const { w, make } = pruneWorld();
+  mkdirSync(join(w.seed, "build"));
+  writeFileSync(join(w.seed, "build", "webpack.config.js"), "x\n");
+  writeFileSync(join(w.seed, ".gitignore"), "*.local.test.ts\n*.local.test.js\n");
+  git(w.seed, "add", ".");
+  git(w.seed, "commit", "-q", "-m", "build config");
+  git(w.seed, "push", "-q", "origin", "HEAD:main");
+  const tree = make("vue", { status: "done", edit: (dir) => writeFileSync(join(dir, "build", "webpack.local.test.js"), "x\n") });
+  const file = w.jobs().find((path) => path.endsWith("-dev-vue.md"));
+  const out = w.run(["close", file], { extra: IDENTITY });
+  assert.equal(out.status, 0, out.stderr);
+  assert.match(out.stdout, new RegExp(`^kept ${tree}: it holds ignored files that removing it would delete: build/webpack\\.local\\.test\\.js$`, "m"));
+  assert.ok(existsSync(join(tree, "build", "webpack.local.test.js")));
 });
 
 test("prune --days moves the idle limit, refuses a bad value, and leaves T3 and herdr worktrees to their owner", () => {

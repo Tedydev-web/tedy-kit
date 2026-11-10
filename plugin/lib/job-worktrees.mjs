@@ -44,10 +44,7 @@ export const merged = ({ repo, branch, base }) => spawnSync("git", ["-C", repo, 
 
 const REGENERABLE = new Set(["node_modules", "dist", "build", "out", ".next", ".nuxt", ".turbo", ".cache", "coverage", ".parcel-cache", ".vite", "target"]);
 
-const regenerable = (path) => {
-  const parts = path.split("/");
-  return (path.endsWith("/") ? parts : parts.slice(0, -1)).some((part) => REGENERABLE.has(part));
-};
+const regenerable = (path) => path.endsWith("/") && REGENERABLE.has(path.slice(0, -1));
 
 function blocker(tree) {
   if (!linkedWorktree(tree)) return "it is not a linked worktree";
