@@ -460,6 +460,8 @@ function main([command, target, ...rest]) {
     return 0;
   }
   if (command === "close" && target) {
+    const unknown = rest.find((arg) => arg.startsWith("--") && !["--reason", "--if-ended"].includes(arg));
+    if (unknown) throw new Error(`close takes only --reason <text> and --if-ended, not ${unknown}; nothing was closed`);
     console.log(close(project(), target, text(given.reason), { ifEnded: given["if-ended"] !== undefined }));
     return 0;
   }

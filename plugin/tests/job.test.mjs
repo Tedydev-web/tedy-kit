@@ -535,6 +535,25 @@ test("close --if-ended writes nothing while the job's recorded session is alive,
   }
 });
 
+test("close refuses an unknown flag or a --flag=value form before it writes or signals anything", async () => {
+  const w = world();
+  const live = await sleeper();
+  try {
+    const file = jobFile(w, { status: "done", name: "forms", record: { session_id: "s-1", bound_at: "t", pid: live.pid, pid_start: live.start } });
+    const before = { text: readFileSync(file, "utf8"), record: JSON.stringify(w.record(file)) };
+    for (const [form, flag] of [[["--if-ended=true"], "--if-ended=true"], [["--reason=why"], "--reason=why"], [["--ifended"], "--ifended"], [["--if-ended", "--force"], "--force"]]) {
+      const out = w.run(["close", file, ...form]);
+      assert.equal(out.status, 1, JSON.stringify(form));
+      assert.equal(out.stderr, `job: close takes only --reason <text> and --if-ended, not ${flag}; nothing was closed\n`);
+    }
+    assert.equal(readFileSync(file, "utf8"), before.text);
+    assert.equal(JSON.stringify(w.record(file)), before.record);
+    assert.equal(processInfo(live.pid)?.start, live.start);
+  } finally {
+    live.child.kill("SIGKILL");
+  }
+});
+
 test("resume appends the note, unbinds the session into earlier, and prints a claude --resume command whose prompt names the job file so the hooks bind the resumed session", () => {
   const w = world();
   const file = jobFile(w, { status: "done", mode: "default", record: { session_id: "s-1", transcript_path: "/t/s-1.jsonl", pid: DEAD_PID, pid_start: "1", state: "idle" } });
