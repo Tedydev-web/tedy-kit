@@ -1,6 +1,6 @@
 import "./test-isolation.mjs";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { launchRecordPath, recordLaunch } from "../lib/job-files.mjs";
@@ -117,6 +117,20 @@ test("t3-instance --write again changes nothing and makes no backup, and --all u
   for (const role of ["pm", "dev", "review", "devops"]) assert.deepEqual(w.t3().providerInstances[`tedy-${role}`], instance(role, join(w.state, "jobs", "settings", `${role}.json`), " --plugin-dir /opt/kit/plugin"));
   assert.equal(w.backups().length, 2);
   assert.match(w.run(["t3-instance", "--all", "pm", "--write"]).stderr, /usage: job\.mjs/);
+});
+
+test("t3-instance --write merges into an existing role instance, setting only its driver, enabled and Launch arguments, and keeps the file's mode", () => {
+  const mine = { driver: "claudeAgent", displayName: "my pm", enabled: false, environment: [{ name: "B", value: "2" }], config: { launchArgs: "--old", model: "x" } };
+  const w = t3World(`${JSON.stringify({ providerInstances: { "tedy-pm": mine } }, null, 2)}\n`);
+  chmodSync(w.t3Settings, 0o600);
+  const out = w.run(["t3-instance", "pm", "--write"]);
+  assert.equal(out.status, 0, out.stderr);
+  assert.match(out.stdout, /^tedy-pm: updated /m);
+  const launchArgs = `--agent tedy:pm --settings ${join(w.state, "jobs", "settings", "pm.json")}`;
+  assert.deepEqual(w.t3().providerInstances["tedy-pm"], { ...mine, enabled: true, config: { launchArgs, model: "x" } });
+  assert.equal(statSync(w.t3Settings).mode & 0o777, 0o600);
+  assert.match(w.run(["t3-instance", "pm", "--write"]).stdout, /^tedy-pm: unchanged /m);
+  assert.equal(w.backups().length, 1);
 });
 
 test("t3-instance --write refuses a T3 settings file it does not recognise and writes nothing", () => {

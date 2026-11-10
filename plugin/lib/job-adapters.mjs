@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { accessSync, chmodSync, constants, readFileSync, statSync, writeFileSync } from "node:fs";
+import { accessSync, constants, readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { delimiter, join } from "node:path";
 import { stamp } from "./handoff.mjs";
@@ -73,16 +73,21 @@ function backUp(file, text, mode) {
   }
 }
 
+function merged(existing, value) {
+  if (!plain(existing)) return value;
+  return { ...existing, driver: value.driver, enabled: value.enabled, config: { ...(plain(existing.config) ? existing.config : {}), launchArgs: value.config.launchArgs } };
+}
+
 export function upsertT3Instances(instances, file = t3SettingsPath()) {
   const { text, settings } = readT3Settings(file);
   const current = settings.providerInstances;
-  const changes = Object.entries(instances).map(([id, value]) => [id, !Object.hasOwn(current, id) ? "added" : JSON.stringify(current[id]) === JSON.stringify(value) ? "unchanged" : "updated"]);
+  const next = Object.fromEntries(Object.entries(instances).map(([id, value]) => [id, Object.hasOwn(current, id) ? merged(current[id], value) : value]));
+  const changes = Object.keys(next).map((id) => [id, !Object.hasOwn(current, id) ? "added" : JSON.stringify(current[id]) === JSON.stringify(next[id]) ? "unchanged" : "updated"]);
   if (changes.every(([, change]) => change === "unchanged")) return { changes, backup: null };
   const mode = statSync(file).mode & 0o777;
   const backup = backUp(file, text, mode);
   if (readFileSync(file, "utf8") !== text) throw new Error(`${file} changed while the kit was writing it; nothing was written, run the command again`);
-  writeAtomic(file, `${JSON.stringify({ ...settings, providerInstances: { ...current, ...instances } }, null, 2)}\n`);
-  chmodSync(file, mode);
+  writeAtomic(file, `${JSON.stringify({ ...settings, providerInstances: { ...current, ...next } }, null, 2)}\n`, mode);
   return { changes, backup };
 }
 

@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, linkSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { closeSync, existsSync, fchmodSync, linkSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { HANDOFF_KEYS, parse } from "./handoff.mjs";
 import { withLockSync } from "./record-lock.mjs";
@@ -7,9 +7,18 @@ import { STATE_DIR } from "./state-dir.mjs";
 
 const temporary = (file) => join(dirname(file), `.${basename(file)}.${process.pid}.tmp`);
 
-export function writeAtomic(file, text) {
+export function writeAtomic(file, text, mode) {
   const tmp = temporary(file);
-  writeFileSync(tmp, text);
+  if (mode === undefined) writeFileSync(tmp, text);
+  else {
+    const fd = openSync(tmp, "w", mode);
+    try {
+      fchmodSync(fd, mode);
+      writeFileSync(fd, text);
+    } finally {
+      closeSync(fd);
+    }
+  }
   renameSync(tmp, file);
 }
 

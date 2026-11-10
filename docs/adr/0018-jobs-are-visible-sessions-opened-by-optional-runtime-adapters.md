@@ -38,7 +38,7 @@ Status: accepted (2026-11-09, user decisions; built and probed 2026-11-09 to 202
   - Neither removes a worktree the command runs inside, so a live session's folder never vanishes under it.
 - **`close` closes the herdr pane the kit opened for a job**, once its session has ended, and never a pane the command runs in or one that now runs another session.
 - **`job.mjs t3-instance --all --write` (or `<role> --write`) adds the T3 instances.**
-  - It backs up `~/.t3/userdata/settings.json` beside itself first, then upserts `providerInstances["tedy-<role>"]` with driver `claudeAgent` and Launch arguments `--agent tedy:<role> --settings <file>`, keeping every other key.
+  - It backs up `~/.t3/userdata/settings.json` beside itself first, then upserts `providerInstances["tedy-<role>"]` with driver `claudeAgent` and Launch arguments `--agent tedy:<role> --settings <file>`, keeping every other key. An existing `tedy-<role>` entry gets only its `driver`, `enabled` and `config.launchArgs` set, and keeps the fields the user added (`displayName`, `environment`, other `config` keys). The temporary file is created with the settings file's mode before the text is written.
   - It refuses a file that is missing, is not JSON or has no `providerInstances` object.
   - The cockpit and `/tedy:setup` run it only after one AskUserQuestion that names the file, because the file is outside the profile.
 
