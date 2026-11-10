@@ -46,14 +46,20 @@ Status: accepted (2026-11-09, user decisions; built and probed 2026-11-09 to 202
 - `plugin/tests/job.test.mjs`:
   - "start writes the running job file and its launch record, then prints one cd-and-claude command for the user and never runs claude"
   - "the job code never runs claude: no fleet list, background launch, claude stop or claude rm is left in it"
-  - the list, stop, close and resume cases.
+  - the list, stop, close and resume cases, including "close that may not signal the recorded process says why and leaves the job not closed with its record"
+  - "a hook that read a job's record before close deleted it, or before resume unbound it, does not write the old session back".
+- `plugin/tests/record-lock.test.mjs`: "withLockSync waits for a held lock, refuses after its wait with the holder named, and releases the lock when its function returns or throws".
 - `plugin/tests/job-session-hooks.test.mjs`: binding from the transcript, no rebinding, the state each hook writes, the pid walk, and the start-time check in `alive`.
 - `plugin/tests/job-adapters.test.mjs`:
   - adapter choice and `--via` refusals; the herdr tab, agent, fallback and list cases
   - "close ends the job's session first, then closes the herdr pane the kit opened for it; stop and a job with no kit pane make no herdr call", and the case that leaves a pane open
-  - the three `t3-instance --write` cases (upsert, idempotence and drift refusal on a temp settings file)
+  - the four `t3-instance --write` cases (upsert, idempotence, a merge into an existing `tedy-<role>` entry that keeps the file's mode, and drift refusal on a temp settings file)
   - the docs check.
-- `plugin/tests/job-worktrees.test.mjs`: the worktree owner for each adapter, prune and close.
+- `plugin/tests/job-worktrees.test.mjs`: the worktree owner for each adapter, prune and close, plus:
+  - ignored files outside regenerable folders keep a tree, whatever `status.showUntrackedFiles` says;
+  - a live recorded session keeps a tree;
+  - a closing command inside the tree keeps it;
+  - an edited job file header changes nothing close or prune removes.
 - `plugin/tests/job-probes.test.mjs`: the eval probes keep no background launch.
 - `plugin/tests/git-gate-script-names-in-data.test.mjs`: "a sed -i edit of a draft holding a publish line asks, and so does a sed whose later operand becomes a script".
 - `plugin/tests/canon-checks.test.mjs`: "a kit hook on an event that adds text to every prompt or every subagent spawn fails" keeps UserPromptSubmit out of hooks.json.
