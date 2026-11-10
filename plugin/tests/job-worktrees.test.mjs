@@ -174,6 +174,35 @@ test("a T3-owned dev job resumes in the folder its session ran in, by print, her
   assert.equal(w.header(file).cwd, w.fe);
 });
 
+test("a T3 resume of a dev job whose worktree still exists binds that worktree through workspaceStrategy, and a job whose session ran in the repository gets none", () => {
+  const w = gitWorld();
+  const note = join(w.root, "note.md");
+  writeFileSync(note, "more\n");
+  const outcome = join(w.root, "outcome.md");
+  writeFileSync(outcome, "ok\n");
+  const bindIn = (session, prompt, cwd) => {
+    const transcript = join(w.root, `${session}.jsonl`);
+    writeFileSync(transcript, `${JSON.stringify({ type: "user", message: { content: prompt } })}\n`);
+    handle({ hook_event_name: "PostToolUse", tool_name: "Bash", session_id: session, transcript_path: transcript, agent_type: "tedy:dev", cwd }, { dir: w.state, claude: () => null });
+  };
+  const resumeT3 = (title, cwd, args = ["--t3"]) => {
+    const started = w.start(["--title", title, ...args, "--json"]);
+    assert.equal(started.status, 0, started.stderr);
+    const file = w.jobs().find((path) => path.endsWith(`-dev-${title}.md`));
+    bindIn(`s-${title}`, JSON.parse(started.stdout).prompt, cwd ?? w.record(file).cwd);
+    assert.equal(w.run(["done", file, "--outcome-file", outcome]).status, 0);
+    const resumed = w.run(["resume", file, "--note-file", note, "--t3", "--json"]);
+    assert.equal(resumed.status, 0, resumed.stderr);
+    return JSON.parse(resumed.stdout).t3;
+  };
+  const t3Tree = join(w.root, "t3-worktrees", "fe-in-t3");
+  git(w.fe, "worktree", "add", "-q", "-b", "feat/in-t3", t3Tree, "origin/main");
+  assert.deepEqual(resumeT3("in-t3", t3Tree).workspaceStrategy, { type: "existing_worktree", worktreePath: t3Tree });
+  assert.equal(Object.hasOwn(resumeT3("in-repo", w.fe), "workspaceStrategy"), false);
+  const core = resumeT3("core", undefined, []);
+  assert.deepEqual(core.workspaceStrategy, { type: "existing_worktree", worktreePath: join(w.root, ".worktrees", "fe-core") });
+});
+
 function pruneWorld() {
   const w = gitWorld();
   const make = (title, { status, record, edit } = {}) => {

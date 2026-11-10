@@ -4,7 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { missingSections, render, setStatus, slugOf, stamp } from "./handoff.mjs";
 import { age, createAtomic, JOB_ROLES, jobsDir, launchRecordPath, listJobs, readJob, readRecord, recordLaunch, removeRecord, setKey, updateRecord, withSection, writeAtomic } from "./job-files.mjs";
 import { chooseAdapter, closeHerdrPane, HerdrError, herdrAgent, herdrName, herdrState, herdrTab, herdrWorktree, onPath, t3Instance, t3SettingsPath, upsertT3Instances } from "./job-adapters.mjs";
-import { addWorktree, git as gitRun, merged, planWorktree, removeWorktree, t3Strategy } from "./job-worktrees.mjs";
+import { addWorktree, git as gitRun, linkedWorktree, merged, planWorktree, removeWorktree, t3Strategy } from "./job-worktrees.mjs";
 import { alive, ancestors, claudeProcess, processInfo, recordOfProcesses } from "./job-session-hooks.mjs";
 import { profileDir } from "./profile.mjs";
 import { STATE_DIR } from "./state-dir.mjs";
@@ -69,9 +69,9 @@ const pluginDir = () => (process.env.TEDY_JOB_PLUGIN_DIR ? ["--plugin-dir", proc
 
 const claudeArgs = ({ role, settings, prompt, mode, resume }) => [...(resume ? ["--resume", resume] : []), "--agent", `tedy:${role}`, "--settings", settings, ...(mode ? ["--permission-mode", mode] : []), ...pluginDir(), prompt];
 
-function launchSpec({ role, cwd, title, settings, prompt, mode, resume, via, tree }) {
+function launchSpec({ role, cwd, title, settings, prompt, mode, resume, via, strategy }) {
   const args = claudeArgs({ role, settings, prompt, mode, resume });
-  const t3 = { instanceId: t3Instance(role), title, message: prompt, ...(tree && { workspaceStrategy: t3Strategy(tree) }) };
+  const t3 = { instanceId: t3Instance(role), title, message: prompt, ...(strategy && { workspaceStrategy: strategy }) };
   return { role, cwd, title, agent: `tedy:${role}`, settings, prompt, ...(resume && { resume }), via, ...(via === "t3" && { t3 }), command: `cd ${quoted(cwd)} && claude ${args.map(word).join(" ")}` };
 }
 
@@ -198,7 +198,7 @@ export function start(map, role, { title, body, repo, mode, via, t3, branch }) {
   const file = createJob(jobsDir(map), `${stamp()}-${role}-${slug}`, () => header);
   recordLaunch(file, { role, cwd, permission_mode: mode, settings, created, via: opened.adapter, ...(repoPath && { repo: repoPath }), ...(tree && { branch: tree.branch, base: tree.base, worktree_owner: worktree.owner }), ...(worktree.path && { worktree: worktree.path }) });
   const prompt = startPrompt(role, file);
-  const spec = launchSpec({ role, cwd, title: jobName(map, role, file), settings, prompt, mode, via: opened.adapter, tree: worktree.owner === "t3" && tree });
+  const spec = launchSpec({ role, cwd, title: jobName(map, role, file), settings, prompt, mode, via: opened.adapter, strategy: worktree.owner === "t3" && t3Strategy(tree) });
   return startAgent(realpathSync(file), spec, claudeArgs({ role, settings, prompt, mode }), opened, 0);
 }
 
@@ -353,6 +353,7 @@ export function resume(map, file, note, { via, t3 } = {}) {
   const cwd = record.session_cwd ?? record.cwd;
   if (!existsSync(cwd)) throw new Error(`${file}: its folder ${cwd} no longer exists; close it and start a new job`);
   if (alive(record)) throw new Error(`${file}: session ${record.session_id} is still open (pid ${record.pid}); type the note in its open thread or pane, or close that session first, then run job.mjs resume again; nothing was resumed`);
+  const strategy = adapter === "t3" && Boolean(record.worktree_owner) && cwd !== record.repo && linkedWorktree(cwd) && { type: "existing_worktree", worktreePath: cwd };
   const title = jobName(map, record.role, job.path);
   const opened = openPane(adapter, via === adapter, { cwd, label: title });
   const session = record.session_id;
@@ -366,7 +367,7 @@ export function resume(map, file, note, { via, t3 } = {}) {
   const prompt = `${startPrompt(record.role, job.path)} The job is resumed: the latest ## Note in the job file, quoted below, is the rework request. Go on with it and end with job.mjs done or stop.\n\n${note.trim()}`;
   const settings = writeSettings(record.role, map);
   const launch = { role: record.role, settings, prompt, mode: record.permission_mode, resume: session };
-  const started = startAgent(job.real, launchSpec({ ...launch, cwd, title, via: opened.adapter }), claudeArgs(launch), opened, earlier.length);
+  const started = startAgent(job.real, launchSpec({ ...launch, cwd, title, via: opened.adapter, strategy }), claudeArgs(launch), opened, earlier.length);
   return started;
 }
 
