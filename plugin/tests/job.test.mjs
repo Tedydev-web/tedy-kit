@@ -300,7 +300,7 @@ test("close ends the recorded claude process with SIGTERM, never a pid whose sta
   }
 });
 
-async function inJobSession(w, name, command) {
+async function inJobSession(w, name, command, before = async () => {}) {
   const wrapper = join(w.bin, "session", "claude");
   if (!existsSync(wrapper)) {
     mkdirSync(join(w.bin, "session"), { recursive: true });
@@ -315,7 +315,11 @@ async function inJobSession(w, name, command) {
   const pid = Number((await once(child.stdout, "data"))[0].toString().trim());
   child.stdout.on("data", (chunk) => { stdout += chunk; });
   const own = jobFile(w, { status: "done", name, record: { session_id: `s-${name}`, bound_at: "t", pid, pid_start: processInfo(pid).start } });
-  child.stdin.end("\n");
+  try {
+    await before(own);
+  } finally {
+    child.stdin.end("\n");
+  }
   const [status] = await exited;
   return { own, status, stdout, stderr };
 }
@@ -385,6 +389,51 @@ test("close refuses in a bound job's session even when a process named claude st
     }
   }
   assert.deepEqual(results.map(({ refused, untouched }) => [refused, untouched]), forms.map(() => [true, true]), JSON.stringify(results));
+});
+
+test("close still refuses in a bound job's session after a nested claude resumed that session and exited", { skip: process.platform !== "linux" }, async () => {
+  const w = world();
+  const victim = await sleeper();
+  try {
+    const target = jobFile(w, { name: "victim", record: { session_id: "s-v", bound_at: "t", pid: victim.pid, pid_start: victim.start } });
+    const before = { text: readFileSync(target, "utf8"), record: JSON.stringify(w.record(target)) };
+    const nestedResume = async () => {
+      const nested = await sleeper();
+      handle({ hook_event_name: "SessionStart", source: "resume", session_id: "s-nested" }, { dir: w.state, claude: () => ({ pid: nested.pid, start: nested.start }) });
+      nested.child.kill("SIGKILL");
+      await nested.exited;
+    };
+    const { own, status, stderr } = await inJobSession(w, "nested", `node ${SCRIPT} close ${target} --reason x`, nestedResume);
+    assert.notEqual(status, 0);
+    assert.match(stderr, new RegExp(`^job: job\\.mjs close runs in the session of the job ${own}; a job never closes a job, its own included\\.`, "m"));
+    assert.equal(readFileSync(target, "utf8"), before.text);
+    assert.equal(JSON.stringify(w.record(target)), before.record);
+    assert.equal(processInfo(victim.pid)?.start, victim.start);
+  } finally {
+    victim.child.kill("SIGKILL");
+  }
+});
+
+test("a user who views a live job with claude --resume and quits leaves list showing the job's own session, and resume still refuses it", async () => {
+  const w = world();
+  const job = await sleeper();
+  const viewer = await sleeper();
+  try {
+    const file = jobFile(w, { name: "viewed", record: { session_id: "s-1", bound_at: "t", pid: job.pid, pid_start: job.start, state: "idle" } });
+    handle({ hook_event_name: "SessionStart", source: "resume", session_id: "s-1" }, { dir: w.state, claude: () => ({ pid: viewer.pid, start: viewer.start }) });
+    viewer.child.kill("SIGKILL");
+    await viewer.exited;
+    assert.deepEqual([w.record(file).pid, w.record(file).pid_start], [job.pid, job.start]);
+    assert.match(w.run(["list"]).stdout, /^dev · viewed · running · /);
+    const note = join(w.root, "note.md");
+    writeFileSync(note, "more\n");
+    const resumed = w.run(["resume", file, "--note-file", note]);
+    assert.equal(resumed.status, 1);
+    assert.match(resumed.stderr, new RegExp(`session s-1 is still open \\(pid ${job.pid}\\)`));
+  } finally {
+    job.child.kill("SIGKILL");
+    viewer.child.kill("SIGKILL");
+  }
 });
 
 test("close that may not signal the recorded process says why and leaves the job not closed with its record", async () => {

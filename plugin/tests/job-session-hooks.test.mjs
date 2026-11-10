@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { launchRecordPath, recordLaunch } from "../lib/job-files.mjs";
 import { alive, claudeProcess, handle, processInfo } from "../lib/job-session-hooks.mjs";
-import { fakeHerdr } from "./job-world-for-tests.mjs";
+import { fakeHerdr, sleeper } from "./job-world-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const PLUGIN = fileURLToPath(new URL("../", import.meta.url)).replace(/\/$/, "");
@@ -189,6 +189,26 @@ test("SessionStart of a bound session records its claude pid again", () => {
   assert.equal(w.record().pid, 5151);
   assert.equal(w.record().pid_start, "888");
   assert.equal(w.record().state, "running");
+});
+
+test("SessionStart of a second claude on a bound session keeps the recorded pid while the recorded claude is alive, and takes over only once it has ended", { skip: process.platform !== "linux" }, async () => {
+  const w = world();
+  const first = await sleeper();
+  const second = await sleeper();
+  try {
+    const as = (proc) => ({ dir: w.state, now: "2026-11-09T06:00:00.000Z", claude: () => ({ pid: proc.pid, start: proc.start }) });
+    handle({ ...w.prompt(slash(w.files[0])), hook_event_name: "SessionStart", source: "startup" }, as(first));
+    assert.deepEqual([w.record().pid, w.record().pid_start], [first.pid, first.start]);
+    handle({ hook_event_name: "SessionStart", source: "resume", session_id: "s-1" }, as(second));
+    assert.deepEqual([w.record().pid, w.record().pid_start, w.record().state], [first.pid, first.start, "running"]);
+    first.child.kill("SIGKILL");
+    await first.exited;
+    handle({ hook_event_name: "SessionStart", source: "resume", session_id: "s-1" }, as(second));
+    assert.deepEqual([w.record().pid, w.record().pid_start], [second.pid, second.start]);
+  } finally {
+    first.child.kill("SIGKILL");
+    second.child.kill("SIGKILL");
+  }
 });
 
 test("a corrupt record of another job does not stop the hook from updating this job", () => {
