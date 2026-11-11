@@ -1,5 +1,6 @@
 import "./test-isolation.mjs";
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
@@ -105,6 +106,14 @@ test("jobs.md has the Job section every prompt names, and the skills point a job
     const text = readFileSync(join(PLUGIN, "skills", skill, "SKILL.md"), "utf8");
     assert.match(text, /When the map sets `jobs` or `sessions`, follow `\$\{CLAUDE_PLUGIN_ROOT\}\/shared\/jobs\.md` or `handoff\.md` instead of switching skills here\./, skill);
   }
+});
+
+test("jobs.md gives the cockpit its subagent rules, and no plugin file outside the tests names a removed launch adapter", () => {
+  const doc = readFileSync(JOBS_DOC, "utf8");
+  for (const rule of ["Spawn with Agent.", "Questions go through question cards.", "Answers and rework go through SendMessage.", "Never answer a job's permission card for the user.", "Jobs end when the cockpit session ends"]) assert.ok(doc.includes(rule), rule);
+  const files = execFileSync("git", ["-C", PLUGIN, "ls-files"], { encoding: "utf8" }).split("\n").filter((file) => file && !file.startsWith("tests/"));
+  assert.ok(files.includes("shared/jobs.md"));
+  assert.deepEqual(files.filter((file) => /herdr|t3-instance|launchArgs|--via/.test(readFileSync(join(PLUGIN, file), "utf8"))), []);
 });
 
 test("a job agent the hooks bind to a started job shows in list with its state", async () => {
