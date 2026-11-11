@@ -266,7 +266,7 @@ test("close refuses while the job's agent still runs or waits in a live cockpit,
   }
 });
 
-test("close refuses a job not started while the cockpit that started it runs, and a job whose record holds no cockpit pid; a job file with no launch record still closes", async () => {
+test("close refuses a job not started while the cockpit that started it runs, and a bound job whose record holds no cockpit pid; an unbound job with no cockpit pid closes and says nothing was signalled, and a job file with no launch record still closes", async () => {
   const w = world();
   const live = await sleeper();
   try {
@@ -275,9 +275,12 @@ test("close refuses a job not started while the cockpit that started it runs, an
     const boundNoPid = jobFile(w, { status: "done", name: "bound-no-pid", record: bound({}, { state: "idle" }) });
     const refusals = [
       [starting, `job: ${starting}: its agent dev-starting has made no tool call yet while the cockpit that started it (claude pid ${live.pid}) still runs, so it may be starting; end that agent or the cockpit session, then close it again; nothing was closed\n`],
-      [noPid, `job: ${noPid}: its launch record holds no cockpit claude pid, so the kit cannot tell whether its agent still runs; end that agent or the cockpit session, then close it again; nothing was closed\n`],
       [boundNoPid, `job: ${boundNoPid}: its launch record holds no cockpit claude pid, so the kit cannot tell whether its agent still runs; end that agent or the cockpit session, then close it again; nothing was closed\n`],
     ];
+    const unbound = w.run(["close", noPid]);
+    assert.equal(unbound.status, 0, unbound.stderr);
+    assert.equal(unbound.stdout, `closed: ${noPid}\nnothing was bound to this job, so nothing was signalled\n`);
+    assert.equal(existsSync(launchRecordPath(noPid, w.state)), false);
     for (const [file, message] of refusals) {
       const before = { text: readFileSync(file, "utf8"), record: JSON.stringify(w.record(file)) };
       const out = w.run(["close", file, "--reason", "x"]);

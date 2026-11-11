@@ -135,7 +135,21 @@ export function stop(file, reason) {
 
 const withoutAgent = (record) => Object.fromEntries(Object.entries(record).filter(([key]) => !AGENT_KEYS.includes(key)));
 
-const runningRefusal = (file, record) => `${file}: its agent ${record.agent_name ?? record.agent_id} (${record.agent_id}) is ${record.state ?? "running"} in cockpit session ${record.session_id} (claude pid ${record.cockpit_pid})`;
+const ENDING = "end that agent or the cockpit session, then close it again";
+
+function agentHold(record) {
+  if (agentRunning(record)) return { why: `its agent ${record.agent_name ?? record.agent_id} (${record.agent_id}) is ${record.state ?? "running"} in cockpit session ${record.session_id} (claude pid ${record.cockpit_pid})`, then: "stop it with TaskStop in that session, then close it again" };
+  if (record?.agent_id && !record.cockpit_pid) return { why: "its launch record holds no cockpit claude pid, so the kit cannot tell whether its agent still runs", then: ENDING };
+  if (record && !record.agent_id && cockpitAlive(record)) return { why: `its agent ${record.agent_name} has made no tool call yet while the cockpit that started it (claude pid ${record.cockpit_pid}) still runs, so it may be starting`, then: ENDING };
+  return null;
+}
+
+const OLDER_KIT = "this job came from an older kit; nothing was signalled, and any session it had (a T3 thread, a terminal pane or a claude session) is the user's to end";
+
+function unsignalled(record) {
+  if (!record || record.agent_id || record.cockpit_pid) return [];
+  return [record.agent_name ? "nothing was bound to this job, so nothing was signalled" : OLDER_KIT];
+}
 
 export function close(map, file, reason) {
   const job = inJobsDir(map, file);
@@ -147,16 +161,14 @@ export function close(map, file, reason) {
   } catch (error) {
     throw new Error(`${file}: its launch record ${launchRecordPath(job.real)} cannot be read, so the kit cannot tell whether its agent still runs; nothing was closed (${error.message})`);
   }
-  if (agentRunning(record)) throw new Error(`${runningRefusal(file, record)}; stop it with TaskStop in that session, then close it again; nothing was closed`);
-  const ending = "end that agent or the cockpit session, then close it again; nothing was closed";
-  if (record && !record.cockpit_pid) throw new Error(`${file}: its launch record holds no cockpit claude pid, so the kit cannot tell whether its agent still runs; ${ending}`);
-  if (record && !record.agent_id && cockpitAlive(record)) throw new Error(`${file}: its agent ${record.agent_name} has made no tool call yet while the cockpit that started it (claude pid ${record.cockpit_pid}) still runs, so it may be starting; ${ending}`);
+  const held = agentHold(record);
+  if (held) throw new Error(`${file}: ${held.why}; ${held.then}; nothing was closed`);
   if (job.status === "running") finish(job.path, "stopped", `Stopped: ${reason}`);
   writeAtomic(job.path, setStatus(readFileSync(job.path, "utf8"), "closed", new Date().toISOString()));
   const tree = coreWorktree(record) ? [removeWorktree(record, "the job is closed")] : [];
   if (tree.length && existsSync(record.worktree)) updateRecord(launchRecordPath(job.real), (fresh) => withoutAgent(fresh ?? record));
   else removeRecord(launchRecordPath(job.real));
-  return [`closed: ${job.path}`, ...tree].join("\n");
+  return [`closed: ${job.path}`, ...unsignalled(record), ...tree].join("\n");
 }
 
 const DAY = 86_400_000;
@@ -237,16 +249,17 @@ export function resume(map, file, note, { caller = claudeProcess } = {}) {
   const cockpit = caller();
   if (live && !sameProcess(cockpit, record)) throw new Error(`${file}: its agent ${record.agent_name ?? record.agent_id} (${record.agent_id}) belongs to another live cockpit session, ${record.session_id} (claude pid ${record.cockpit_pid}); resume it there with SendMessage; nothing was resumed`);
   const agent = record.agent_id;
+  const name = record.agent_name ?? agentName(record.role, job.path);
   updateRecord(launchRecordPath(job.real), (fresh) => {
     if (fresh?.agent_id !== agent) throw new Error(`${file}: its launch record changed while resuming (agent ${fresh?.agent_id ?? "none"}, not ${agent ?? "none"}); nothing was resumed, run the command again`);
     if (live) return { ...fresh, state: "running" };
-    return { ...withoutAgent(fresh), ...cockpitOf(cockpit), ...(agent && { earlier: [...(fresh.earlier ?? []), agent] }) };
+    return { ...withoutAgent(fresh), agent_name: name, ...cockpitOf(cockpit), ...(agent && { earlier: [...(fresh.earlier ?? []), agent] }) };
   });
   const at = new Date().toISOString();
   writeAtomic(job.path, withSection(setStatus(job.text, "running", at), `Note ${at}`, note));
   if (live) return { tool: "SendMessage", to: record.agent_id, message: `Job file ${JSON.stringify(job.path)} ${RESUMED}\n\n${note.trim()}` };
   const prompt = `${startPrompt(record.role, job.path)} The job ${RESUMED}\n\n${note.trim()}`;
-  return { tool: "Agent", ...agentSpec(record.role, job.title ?? record.role, record.agent_name ?? agentName(record.role, job.path), prompt) };
+  return { tool: "Agent", ...agentSpec(record.role, job.title ?? record.role, name, prompt) };
 }
 
 function kitStatus(record) {

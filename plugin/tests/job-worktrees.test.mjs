@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { parse } from "../lib/handoff.mjs";
 import { JOB_KEYS, launchRecordPath, writeRecord } from "../lib/job-files.mjs";
 import { linkedWorktree } from "../lib/job-worktrees.mjs";
-import { bound, DEAD_PID, sleeper, world } from "./job-world-for-tests.mjs";
+import { bound, DEAD_PID, sleeper, v0225Job, world } from "./job-world-for-tests.mjs";
 
 const IDENTITY = { GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t" };
 const HEADER = ["to", "status", "cwd", "repo", "branch", "base", "worktree", "worktree_owner"];
@@ -370,3 +370,25 @@ test("close removes a clean core worktree whose git ls-files output passes 1 MiB
   assert.ok(!existsSync(tree));
 });
 
+
+test("close of a dev job v0.2.25 started with a core worktree removes that tree only through the prune checks, and keeps a dirty one with the reason", () => {
+  const w = gitWorld();
+  const tree = (name) => {
+    const path = join(w.root, ".worktrees", `fe-${name}`);
+    git(w.fe, "worktree", "add", "-q", "--no-track", "-b", `feat/${name}`, path, "origin/main");
+    return path;
+  };
+  const clean = tree("old-clean");
+  const dirty = tree("old-dirty");
+  writeFileSync(join(dirty, "new.txt"), "x\n");
+  const files = [v0225Job(w, { name: "old-clean", tree: clean, branch: "feat/old-clean" }), v0225Job(w, { name: "old-dirty", tree: dirty, branch: "feat/old-dirty" })];
+  const [removed, kept] = files.map((file) => w.run(["close", file], { extra: IDENTITY }));
+  assert.equal(removed.status, 0, removed.stderr);
+  assert.match(removed.stdout, new RegExp(`^removed ${clean} \\(the job is closed\\)$`, "m"));
+  assert.ok(!existsSync(clean));
+  assert.equal(existsSync(launchRecordPath(files[0], w.state)), false);
+  assert.match(kept.stdout, new RegExp(`^kept ${dirty}: it has uncommitted changes$`, "m"));
+  assert.ok(existsSync(dirty));
+  assert.equal(w.record(files[1]).worktree, dirty);
+  for (const file of files) assert.equal(parse(readFileSync(file, "utf8"), JOB_KEYS).status, "closed");
+});
