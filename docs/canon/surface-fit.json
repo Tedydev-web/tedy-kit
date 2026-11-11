@@ -70,7 +70,7 @@
     },
     {
       "need": "report after a push (source comments, push target)",
-      "uses": { "hooks": "PostToolUse on Bash, Monitor and context-mode execute tools reads the pushed diff" },
+      "uses": { "hooks": "PostToolUse on Bash and context-mode execute tools reads the pushed diff" },
       "rejected": {
         "skill": "the push may come from any step, so a check tied to one skill would miss it",
         "subagent": "the report must follow the push in the same session",
