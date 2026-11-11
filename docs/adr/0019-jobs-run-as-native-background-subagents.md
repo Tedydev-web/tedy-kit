@@ -1,6 +1,6 @@
 # 0019: Jobs run as native background subagents
 
-Status: accepted (2026-11-11, user decision; probed 2026-11-11, built 2026-11-11); supersedes the launch adapters of [ADR 0018](0018-jobs-are-visible-sessions-opened-by-optional-runtime-adapters.md) (T3 thread, herdr pane, printed command)
+Status: accepted (2026-11-11, user decision; probed 2026-11-11, built 2026-11-11); supersedes the launch adapters of [ADR 0018](0018-jobs-are-visible-sessions-opened-by-optional-runtime-adapters.md) (T3 thread, herdr pane, printed command); its questions part is amended by [ADR 0021](0021-the-cockpit-asks-each-jobs-open-cards-on-arrival.md): the cockpit asks each job's open cards on arrival, and `/tedy:pending` is the manual view
 
 ## Context
 - ADR 0018 opened each job as a session of its own: a T3 thread on a `tedy-<role>` provider instance, a herdr pane, or a `claude --agent tedy:<role> --settings <file>` command the user ran. That needed four T3 instances written into T3's settings file, a settings file per role, a launch spec, per-job claude pids and the kit signalling them, and herdr calls.

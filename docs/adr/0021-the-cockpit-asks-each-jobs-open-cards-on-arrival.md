@@ -23,7 +23,14 @@ Status: accepted 2026-11-12 (user decisions); amends the questions part of [ADR 
 - **Approval by ticket labels only.** Every kit write a skill runs after a question is approved by an `approve.all` (or `post.asIs`) option whose `preview` holds that exact command, quoted per `plugin/shared/decision-points.md` (ADR 0020). `merge.yes` approves the merge alone; after `gh pr merge` succeeds, each status `set` is previewed again and asked as its own `approve.all` question. `approve.trim` and `post.trim` lead to a new dry run and a new question, never to the write.
 
 ## Enforcement
-- To be listed with the tests that hold each part.
+- `plugin/tests/pending-ask-cards.test.mjs`: "list --job prints only that job's line and cards, and nothing from another job, the drafts or git", "the ask list holds a question of a job whose agent ended its turn, even when its file still says running, and leaves out one whose agent still runs", "the ask list holds a publish card only once its job file is not running, and a held one only when asked to", "the ask list leaves out answered, refused, started and notice cards, and a card with no job counts as not running".
+- `plugin/tests/cockpit-asks-cards.test.mjs`: "the cockpit's session start asks the open cards of jobs that are not running by the pending skill's steps 2 and 3, and logs that it listed them", "a session start with no card to ask prints no ask block, and a role session started as a tedy job never gets one", "each prompt in the cockpit, a job's report-back turn included, gets the askable cards as UserPromptSubmit context, and nothing when none is askable", "the per-prompt list leaves out a held publish card that the session start still asks, and lists at most ten cards per group".
+- `plugin/tests/hooks.test.mjs`: "the ask-cards hook runs on every prompt in a plain command group, never blocking, with a short timeout".
+- `plugin/tests/canon-checks.test.mjs`: "a kit hook on an event that adds text to every prompt or every subagent spawn fails, except the cockpit's one ask-cards prompt hook".
+- `plugin/tests/role-gate.test.mjs`: "a job's role card names jobs.md and never a hand-off, and the cockpit card tells it to ask the jobs' open cards".
+- `plugin/tests/skill-contracts.test.mjs`: "the cockpit asks each job's open cards by the pending skill's steps, a job stops only for what the user must decide, and /tedy:pending is the manual view", "every kit write a skill runs after a question is approved by an approve.all or post.asIs option, never by the merge or next-step answer", "a review job asks to run PR code on a question card that the cockpit asks with the run header, and the answer goes back through SendMessage".
+- `plugin/tests/job.test.mjs`: "decision-points.md tells a job it never asks the user and writes a card instead, as jobs.md Job 2 says".
+- Not machine-checked: that the model asks the listed cards in the turn they are injected, and that SubagentStop marks a job idle before the notification's UserPromptSubmit runs. The live check after release covers both.
 
 ## Prior art
 
