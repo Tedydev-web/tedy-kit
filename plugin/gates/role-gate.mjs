@@ -198,10 +198,10 @@ export function agentReason(who, action, map = {}) {
   return `tedy role gate: this is a ${who.role} job (${who.label}); ${WHAT[action.kind]} belongs to the ${owner} role. Write a card, or a question card to start a ${owner} job, per ${JOBS_DOC}, unless the user allows this one here.`;
 }
 
-export const cockpitCard = (map) => `This is the cockpit of ${map.name}: start jobs per ${JOBS_DOC}, approve with /tedy:pending.`;
+export const cockpitCard = (map) => `This is the cockpit of ${map.name}: start jobs and ask their open cards per ${JOBS_DOC}, section "Cockpit".`;
 
 export function jobCard(map, who, gateOn = true) {
-  return `Role: this session is a ${who.role} job (${who.label}) of ${map.name}. Work it per ${JOBS_DOC}, section "Job": read the job file your prompt names, turn each decision into a question card and each write that needs approval into a publish card, and end with job.mjs done or stop.${gateOn ? " A write that belongs to another role asks the user first." : ""}`;
+  return `Role: this session is a ${who.role} job (${who.label}) of ${map.name}. Work it per ${JOBS_DOC}, section "Job": read the job file your prompt names, decide each local, reversible choice yourself and record it with its reason in the outcome, turn each decision the user must make into a question card and each write that needs approval into a publish card, and end with job.mjs done or stop.${gateOn ? " A write that belongs to another role asks the user first." : ""}`;
 }
 
 export function judge(input, map, who = agentRole(input) ?? spawnedRole(input)) {

@@ -312,13 +312,13 @@ test("only kit script writes are marked as scripts", () => {
   assert.equal(bash("cd acme-shop-fe && git commit -m x").script, undefined);
 });
 
-test("a job's role card names jobs.md and never a hand-off, and the cockpit card names /tedy:pending", () => {
+test("a job's role card names jobs.md and never a hand-off, and the cockpit card tells it to ask the jobs' open cards", () => {
   const card = gate.jobCard(map, { role: "dev", label: "tedy:dev" });
   assert.ok(card.startsWith(`Role: this session is a dev job (tedy:dev) of acme-shop. Work it per ${JOBS_DOC}, section "Job":`), card);
-  assert.match(card, /turn each decision into a question card and each write that needs approval into a publish card/);
+  assert.match(card, /decide each local, reversible choice yourself and record it with its reason in the outcome, turn each decision the user must make into a question card and each write that needs approval into a publish card/);
   assert.doesNotMatch(card, /never call AskUserQuestion|AskUserQuestion in this window/);
   assert.doesNotMatch(card, /handoff/);
-  assert.equal(gate.cockpitCard(map), `This is the cockpit of acme-shop: start jobs per ${JOBS_DOC}, approve with /tedy:pending.`);
+  assert.equal(gate.cockpitCard(map), `This is the cockpit of acme-shop: start jobs and ask their open cards per ${JOBS_DOC}, section "Cockpit".`);
 });
 
 const other = "/w/acme/plans/jobs/261110-1200-dev-other.md";

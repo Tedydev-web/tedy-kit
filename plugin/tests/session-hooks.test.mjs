@@ -239,7 +239,7 @@ test("the cockpit's session start lists cards and jobs with their age and prints
   const { existsSync } = await import("node:fs");
   const fixture = await jobsFixture();
   const text = fixture.start();
-  assert.match(text, new RegExp(`^This is the cockpit of shop: start jobs per ${JOBS_DOC.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}, approve with /tedy:pending\\.$`, "m"));
+  assert.match(text, new RegExp(`^This is the cockpit of shop: start jobs and ask their open cards per ${JOBS_DOC.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}, section "Cockpit"\\.$`, "m"));
   assert.match(text, /^Jobs:\n- dev: Add hello \(running, 2h 5m\) .*261106-0900-dev-add-hello\.md$/m);
   assert.match(text, /^For your information:\n- CI is green /m);
   assert.doesNotMatch(text, /Pending hand-offs|ListAgents/);
@@ -249,7 +249,7 @@ test("the cockpit's session start lists cards and jobs with their age and prints
 test("a job's session start prints only its job card, naming jobs.md", async () => {
   const fixture = await jobsFixture();
   const text = fixture.start({ agent_type: "tedy:dev" });
-  assert.equal(text, `Role: this session is a dev job (tedy:dev) of shop. Work it per ${JOBS_DOC}, section "Job": read the job file your prompt names, turn each decision into a question card and each write that needs approval into a publish card, and end with job.mjs done or stop.`);
+  assert.equal(text, `Role: this session is a dev job (tedy:dev) of shop. Work it per ${JOBS_DOC}, section "Job": read the job file your prompt names, decide each local, reversible choice yourself and record it with its reason in the outcome, turn each decision the user must make into a question card and each write that needs approval into a publish card, and end with job.mjs done or stop.`);
 });
 
 test("a session start in a map that still holds sessions, a jobs key and hand-off files gives every session the cockpit card without a fleet lookup and lists no hand-off", async () => {
