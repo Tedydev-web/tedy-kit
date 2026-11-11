@@ -168,6 +168,14 @@ export function olderKitStatus(record) {
   return alive(record) ? "older kit (session open)" : "older kit";
 }
 
+export function jobBusy(file) {
+  const job = readJob(file);
+  if (job.status !== "running") return false;
+  const record = launchRecord(job.path);
+  if (!record || isTombstone(record)) return false;
+  return Boolean(agentHold(record) || (fromOlderKit(record) && olderSession(record)));
+}
+
 function unsignalled(record) {
   if (!record || record.agent_id || record.cockpit_pid) return [];
   return [fromOlderKit(record) ? OLDER_KIT : "nothing was bound to this job, so nothing was signalled"];

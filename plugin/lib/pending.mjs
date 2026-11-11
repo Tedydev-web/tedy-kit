@@ -4,7 +4,7 @@ import { appendFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFile
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { age, launchRecordPath, listJobs, parse, readRecord, slugOf, stamp } from "./job-files.mjs";
-import { olderKitStatus } from "./job.mjs";
+import { jobBusy, olderKitStatus } from "./job.mjs";
 import { cardRefusal, headerLength, oneLine, readCard } from "./pending-cards.mjs";
 import { resolveMap } from "./project-map.mjs";
 
@@ -131,7 +131,8 @@ function judged(path, text, root, ownClaim = false) {
     found.status === "refused" ? `refused: ${found.refused ?? "no reason given"}`
     : found.status === "started" ? `started at ${found.started ?? "an unknown time"}: its commands may already have written; check their read-backs, then pending.mjs done the card, or card-note --refuse it`
     : cardRefusal(found, root);
-  return { path, ...found, refusal, running: jobRunning(found.job, root) };
+  const running = jobRunning(found.job, root);
+  return { path, ...found, refusal, running, busy: running && found.kind === "question" ? jobBusy(resolve(root, found.job)) : running };
 }
 
 function cardsIn(files, root, problems = []) {
@@ -251,44 +252,76 @@ function jobState(job, problems) {
   }
 }
 
-export function waitingText(map, { offline = false, limit = Infinity, budgetMs = Infinity } = {}) {
+function realOrNull(path) {
+  try {
+    return realpathSync(path);
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+}
+
+function ofJob(job) {
+  if (job === undefined) return null;
+  const real = realOrNull(resolve(job));
+  if (!real) throw new Error(`the job file ${job} does not exist`);
+  return (path) => realOrNull(path) === real;
+}
+
+const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
+const publishLine = (item) => `${item.title} (${item.preview}, ${plural(item.blocks.length, "command")}${item.running ? ", job running" : ""}${item.answer ? `, held: ${item.answer}` : ""}) ${item.path}`;
+const questionLine = (item) => `${item.title}${item.answer ? ` (answered: ${item.answer})` : item.busy ? " (job running)" : ""} ${item.path}`;
+const askable = (item, held) => !item.refusal && (item.kind === "publish" ? !item.running && (held || !item.answer) : item.kind === "question" && !item.answer && !item.busy);
+const render = (groups, limit) => groups.filter(([, items]) => items.length).map(([title, items]) => `${title}:\n${items.slice(0, limit).map((item) => `- ${item}`).join("\n")}${items.length > limit ? `\n- … ${items.length - limit} more` : ""}`).join("\n\n");
+
+export function waitingText(map, { offline = false, limit = Infinity, budgetMs = Infinity, job, ask = false, held = true } = {}) {
   const dirs = repoDirs(map);
   const deadline = Date.now() + budgetMs;
   const problems = [];
   const drafts = draftFiles(dirs, problems);
-  const found = cardsIn(drafts, map.paths[0], problems);
+  const root = map.paths[0];
+  const named = ofJob(job);
+  const found = cardsIn(drafts, root, problems).filter((item) => !named || (item.job !== "none" && named(resolve(root, item.job))));
+  if (ask) {
+    const asked = found.filter((item) => askable(item, held));
+    return render([["To publish", asked.filter((item) => item.kind === "publish").map(publishLine)], ["Questions", asked.filter((item) => item.kind === "question").map(questionLine)]], limit);
+  }
   const typed = new Set(found.map((item) => item.path));
   const open = found.filter((item) => !item.refusal);
-  const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
-  const unpushed = dirs.flatMap((dir) => {
-    if (Date.now() > deadline) {
-      problems.push(`${relative(map.paths[0], dir) || "."} git: skipped, the session-start time budget ran out`);
-      return [];
-    }
-    return gitWaiting(dir).map((line) => `${relative(map.paths[0], dir) || "."} ${line}`);
-  });
-  const label = (dir) => relative(map.paths[0], dir) || ".";
-  const prs = offline ? [] : dirs.filter(isRepoRoot).map((dir) => ({ dir, ...draftPrs(dir) }));
-  const groups = [
-    ["Jobs", listJobs(map).map((job) => `${job.role}: ${job.title} (${jobState(job, problems)}, ${age(job.created)}) ${job.path}`)],
-    ["To publish", open.filter((item) => item.kind === "publish").map((item) => `${item.title} (${item.preview}, ${plural(item.blocks.length, "command")}${item.running ? ", job running" : ""}) ${item.path}`)],
-    ["Questions", open.filter((item) => item.kind === "question").map((item) => `${item.title}${item.answer ? ` (answered: ${item.answer})` : ""} ${item.path}`)],
+  const cardGroups = [
+    ["Jobs", listJobs(map).filter((item) => !named || named(item.path)).map((item) => `${item.role}: ${item.title} (${jobState(item, problems)}, ${age(item.created)}) ${item.path}`)],
+    ["To publish", open.filter((item) => item.kind === "publish").map(publishLine)],
+    ["Questions", open.filter((item) => item.kind === "question").map(questionLine)],
     ["For your information", open.filter((item) => item.kind === "notify").map((item) => `${item.title} ${item.path}`)],
     ["Started, not closed", found.filter((item) => item.status === "started").map((item) => `${item.title} (started ${item.started ?? "an unknown time"}) ${item.path}`)],
     ["Refused cards", found.filter((item) => item.refusal && item.status !== "started").map((item) => `${item.title ?? "untitled"}: ${item.refusal} ${item.path}`)],
+  ];
+  if (named) return render([...cardGroups, ["Could not check", problems]], limit);
+  const unpushed = dirs.flatMap((dir) => {
+    if (Date.now() > deadline) {
+      problems.push(`${relative(root, dir) || "."} git: skipped, the session-start time budget ran out`);
+      return [];
+    }
+    return gitWaiting(dir).map((line) => `${relative(root, dir) || "."} ${line}`);
+  });
+  const label = (dir) => relative(root, dir) || ".";
+  const prs = offline ? [] : dirs.filter(isRepoRoot).map((dir) => ({ dir, ...draftPrs(dir) }));
+  return render([
+    ...cardGroups,
     ["Drafts waiting on the user", drafts.filter((path) => !typed.has(path))],
     ["Unpushed work", unpushed],
     ["Draft PRs", prs.flatMap(({ dir, items }) => items.map((line) => `${label(dir)} ${line}`))],
     ["Could not check", [...problems, ...prs.filter(({ error }) => error).map(({ dir, error }) => `${label(dir)} draft PRs: ${error}`)]],
-  ];
-  return groups.filter(([, items]) => items.length).map(([title, items]) => `${title}:\n${items.slice(0, limit).map((item) => `- ${item}`).join("\n")}${items.length > limit ? `\n- … ${items.length - limit} more` : ""}`).join("\n\n");
+  ], limit);
 }
 
 function main([command, ...args]) {
   const resolved = resolveMap(process.cwd());
   if (!resolved) throw new Error(`no project map covers ${process.cwd()}; run /tedy:setup`);
-  if (command === "list") {
-    console.log(waitingText(resolved.map, { offline: args.includes("--offline") }) || "Nothing waits on the user.");
+  const flag = (name) => (args.includes(`--${name}`) ? args[args.indexOf(`--${name}`) + 1] : undefined);
+  if (command === "list" && !(args.includes("--job") && !flag("job"))) {
+    const job = flag("job");
+    console.log(waitingText(resolved.map, { offline: args.includes("--offline"), job }) || (job ? `Nothing waits on the user from ${job}.` : "Nothing waits on the user."));
     return 0;
   }
   if (command === "done" && args[0]) {
@@ -299,7 +332,6 @@ function main([command, ...args]) {
     console.log(stub(resolved.map, args.join(" ")));
     return 0;
   }
-  const flag = (name) => (args.includes(`--${name}`) ? args[args.indexOf(`--${name}`) + 1] : undefined);
   if (command === "card" && args[0] && flag("title") && flag("body-file")) {
     console.log(card(resolved.map, args[0], { title: flag("title"), job: flag("job"), draft: flag("draft"), records: flag("records"), preview: flag("preview"), body: readFileSync(flag("body-file"), "utf8") }));
     return 0;
@@ -316,7 +348,7 @@ function main([command, ...args]) {
     console.log(`started: ${args[0]} (${cardStart(args[0], resolved.map, String(flag("approved") ?? "").split(",").filter(Boolean))} block(s) to run in order)`);
     return 0;
   }
-  console.error('usage: pending.mjs list [--offline] | done <file under plans/> | stub "<action>" | card <publish|question|notify> --title <t> --body-file <f> [--job <f>] [--draft <f>] [--records <k,k>] [--preview ready|run] | card-note <card> --text <line> [--refuse] | card-check <card> | card-start <card> --approved <n,n,…>');
+  console.error('usage: pending.mjs list [--offline] [--job <job file>] | done <file under plans/> | stub "<action>" | card <publish|question|notify> --title <t> --body-file <f> [--job <f>] [--draft <f>] [--records <k,k>] [--preview ready|run] | card-note <card> --text <line> [--refuse] | card-check <card> | card-start <card> --approved <n,n,…>');
   return 2;
 }
 
