@@ -4,7 +4,8 @@ import { appendFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFile
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { listPending, parse, reportsDir, slugOf, stamp } from "./handoff.mjs";
-import { age, listJobs } from "./job-files.mjs";
+import { age, launchRecordPath, listJobs, readRecord } from "./job-files.mjs";
+import { olderKitStatus } from "./job.mjs";
 import { cardRefusal, headerLength, oneLine, readCard } from "./pending-cards.mjs";
 import { resolveMap } from "./project-map.mjs";
 
@@ -243,6 +244,16 @@ export function done(file, map) {
   return moved;
 }
 
+function jobState(job, problems) {
+  if (job.status !== "running") return job.status;
+  try {
+    return olderKitStatus(readRecord(launchRecordPath(job.path))) ?? job.status;
+  } catch (error) {
+    problems.push(`jobs: ${error.message}`);
+    return job.status;
+  }
+}
+
 export function waitingText(map, { offline = false, handoffs = true, limit = Infinity, budgetMs = Infinity } = {}) {
   const dirs = repoDirs(map);
   const deadline = Date.now() + budgetMs;
@@ -263,7 +274,7 @@ export function waitingText(map, { offline = false, handoffs = true, limit = Inf
   const prs = offline ? [] : dirs.filter(isRepoRoot).map((dir) => ({ dir, ...draftPrs(dir) }));
   const groups = [
     ["Hand-offs not taken yet", (handoffs ? listPending(reportsDir(map)) : []).map((item) => `to ${item.to}: ${item.title} ${item.path}`)],
-    ["Jobs", listJobs(map).map((job) => `${job.role}: ${job.title} (${job.status}, ${age(job.created)}) ${job.path}`)],
+    ["Jobs", listJobs(map).map((job) => `${job.role}: ${job.title} (${jobState(job, problems)}, ${age(job.created)}) ${job.path}`)],
     ["To publish", open.filter((item) => item.kind === "publish").map((item) => `${item.title} (${item.preview}, ${plural(item.blocks.length, "command")}${item.running ? ", job running" : ""}) ${item.path}`)],
     ["Questions", open.filter((item) => item.kind === "question").map((item) => `${item.title}${item.answer ? ` (answered: ${item.answer})` : ""} ${item.path}`)],
     ["For your information", open.filter((item) => item.kind === "notify").map((item) => `${item.title} ${item.path}`)],

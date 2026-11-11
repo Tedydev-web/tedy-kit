@@ -1,12 +1,13 @@
 import "./test-isolation.mjs";
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { parse } from "../lib/handoff.mjs";
 import { launchRecordPath, readJob } from "../lib/job-files.mjs";
 import { processInfo } from "../lib/job-session-hooks.mjs";
-import { sleeper, v0224Job, v0225Job, world } from "./job-world-for-tests.mjs";
+import { PLUGIN, sleeper, v0224Job, v0225Job, world } from "./job-world-for-tests.mjs";
 
 const note = (w) => {
   const file = join(w.root, "note.md");
@@ -131,5 +132,49 @@ test("resume of a job an older kit started refuses and writes nothing while the 
   assert.equal(spec.tool, "Agent");
   assert.match(spec.prompt, /\n\ngo on with the second screen$/);
   assert.equal(w.record(file).agent_name, spec.name);
+  assert.deepEqual(w.calls(), []);
+});
+
+const PENDING = join(PLUGIN, "scripts", "pending.mjs");
+
+test("list and the pending listing show a running job an older kit started as older kit, with (session open) while its recorded session runs, and a finished one by its status", async () => {
+  const w = world();
+  const session = await sleeper();
+  const jobs = join(w.root, "plans", "jobs");
+  try {
+    v0224Job(w, { status: "running" });
+    v0225Job(w, { name: "old-gone", status: "running" });
+    v0225Job(w, { name: "old-open", status: "running", session: { pid: session.pid, start: session.start } });
+    v0225Job(w, { name: "old-reused", status: "running", session: { pid: session.pid, start: `${session.start}9` } });
+    v0225Job(w, { name: "old-finished", session: { pid: session.pid, start: session.start } });
+    const out = w.run(["list"]);
+    assert.equal(out.status, 0, out.stderr);
+    assert.deepEqual(out.stdout.trim().split("\n").map((line) => line.replace(/ · [^·]+ · \/.*$/, "")), [
+      "dev · old finished · done",
+      "dev · old gone · older kit",
+      "dev · old open · older kit (session open)",
+      "dev · old reused · older kit",
+      "pm · old gaps · older kit",
+    ]);
+    const pending = spawnSync(process.execPath, [PENDING, "list", "--offline"], { cwd: w.root, encoding: "utf8", env: w.env() });
+    assert.equal(pending.status, 0, pending.stderr);
+    const listed = pending.stdout.match(/^Jobs:\n((?:- .*\n)+)/m)?.[1].trim().split("\n").map((line) => line.replace(/, [^,)]+\) \/.*$/, ")"));
+    assert.deepEqual(listed, [
+      "- dev: old finished (done)",
+      "- dev: old gone (older kit)",
+      "- dev: old open (older kit (session open))",
+      "- dev: old reused (older kit)",
+      "- pm: old gaps (older kit)",
+    ]);
+    assert.match(pending.stdout, new RegExp(`^- dev: old finished \\(done, \\d+d \\d+h\\) ${join(jobs, "261110-1000-dev-old-finished.md")}$`, "m"));
+    writeFileSync(launchRecordPath(join(jobs, "261110-1000-dev-old-gone.md"), w.state), "{not json");
+    const unread = spawnSync(process.execPath, [PENDING, "list", "--offline"], { cwd: w.root, encoding: "utf8", env: w.env() });
+    assert.equal(unread.status, 0, unread.stderr);
+    assert.match(unread.stdout, /^- dev: old gone \(running, /m);
+    assert.match(unread.stdout, /^Could not check:\n(?:- .*\n)*- jobs: the launch record \S+ cannot be read /m);
+  } finally {
+    session.child.kill("SIGKILL");
+    await session.exited;
+  }
   assert.deepEqual(w.calls(), []);
 });

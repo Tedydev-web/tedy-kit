@@ -276,7 +276,7 @@ test("the publish verbs are exported and the ask rules built from them stay as t
   assert.ok(Object.isFrozen(KIT_PUBLISH_WRITE_VERBS["github-write.mjs"]) && Object.isFrozen(KIT_PUBLISH_APPLY_VERBS));
 });
 
-test("the waiting list has a Jobs group of every job that is not closed, with its age, read from the job files alone", async () => {
+test("the waiting list has a Jobs group of every job that is not closed, with its age, read from the job files and launch records without running claude", async () => {
   const { chmodSync } = await import("node:fs");
   const { root, map } = project();
   const jobs = join(root, "plans", "jobs");

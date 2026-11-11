@@ -150,6 +150,11 @@ const olderSession = (record) => (alive(record) ? `the session an older kit reco
 
 const fromOlderKit = (record) => Boolean(record) && !record.agent_name && !record.agent_id && !record.cockpit_pid;
 
+export function olderKitStatus(record) {
+  if (!fromOlderKit(record)) return null;
+  return alive(record) ? "older kit (session open)" : "older kit";
+}
+
 function unsignalled(record) {
   if (!record || record.agent_id || record.cockpit_pid) return [];
   return [fromOlderKit(record) ? OLDER_KIT : "nothing was bound to this job, so nothing was signalled"];
@@ -271,6 +276,8 @@ export function resume(map, file, note, { caller = claudeProcess } = {}) {
 }
 
 function kitStatus(record) {
+  const older = olderKitStatus(record);
+  if (older) return older;
   if (!record.agent_id) return "not started";
   if (!record.cockpit_pid) return "unknown (no cockpit pid recorded)";
   if (!cockpitAlive(record)) return "lost (cockpit gone)";
