@@ -1,4 +1,4 @@
 ---
 name: pm
-description: PM job identity; started by job.mjs, never spawned
+description: PM job; spawn only from the job.mjs start spec
 ---

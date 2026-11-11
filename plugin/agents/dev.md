@@ -1,4 +1,4 @@
 ---
 name: dev
-description: Dev job identity; started by job.mjs, never spawned
+description: Dev job; spawn only from the job.mjs start spec
 ---

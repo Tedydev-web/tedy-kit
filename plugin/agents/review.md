@@ -1,4 +1,4 @@
 ---
 name: review
-description: Review job identity; started by job.mjs, never spawned
+description: Review job; spawn only from the job.mjs start spec
 ---

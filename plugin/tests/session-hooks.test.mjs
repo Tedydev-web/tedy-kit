@@ -255,7 +255,7 @@ test("the cockpit's session start lists cards and jobs with their age and prints
 test("a job's session start in a jobs map prints only its job card, naming jobs.md", async () => {
   const fixture = await jobsFixture();
   const text = fixture.start({ agent_type: "tedy:dev" });
-  assert.equal(text, `Role: this session is a dev job (tedy:dev) of shop. Work it per ${JOBS_DOC}, section "Job": read the job file your prompt names, ask the user with AskUserQuestion in this window when a decision is needed, turn each write that needs approval into a publish card, and end with job.mjs done or stop.`);
+  assert.equal(text, `Role: this session is a dev job (tedy:dev) of shop. Work it per ${JOBS_DOC}, section "Job": read the job file your prompt names, turn each decision into a question card and each write that needs approval into a publish card, and end with job.mjs done or stop.`);
 });
 
 test("in a jobs map that still lists sessions, a listed session gets its legacy role card and an unlisted one the cockpit card", async () => {

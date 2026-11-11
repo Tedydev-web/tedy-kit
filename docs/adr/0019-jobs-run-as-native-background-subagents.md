@@ -1,0 +1,69 @@
+# 0019: Jobs run as native background subagents
+
+Status: accepted (2026-11-11, user decision; probed 2026-11-11, built 2026-11-11); supersedes the launch adapters of [ADR 0018](0018-jobs-are-visible-sessions-opened-by-optional-runtime-adapters.md) (T3 thread, herdr pane, printed command)
+
+## Context
+- ADR 0018 opened each job as a session of its own: a T3 thread on a `tedy-<role>` provider instance, a herdr pane, or a `claude --agent tedy:<role> --settings <file>` command the user ran. That needed four T3 instances written into T3's settings file, a settings file per role, a launch spec, per-job claude pids and the kit signalling them, and herdr calls.
+- The user decided on 2026-11-11: "Tôi thích phương án sub-agent hơn vì nó native hơn", and chose "Subagent cho mọi job" over keeping the thread and pane adapters, knowing that the user cannot type into a native subagent inside T3, that a background subagent cannot ask, and that a job ends with the cockpit session.
+- A probe in a T3 cockpit on 2026-11-11 (Probe evidence below) showed a body-less `tedy:pm` background subagent keeps the Claude Code system prompt, sees the kit skills it may invoke, has no AskUserQuestion, has its role-gate ask surfaced in the cockpit thread, and resumes with its history through SendMessage.
+
+## Decision
+- **Every job is a background subagent of the cockpit.** `job.mjs start` writes the job file and its launch record as before, makes a dev job's core worktree, and prints one Agent call spec: `{ subagent_type: "tedy:<role>", run_in_background: true, name: "<role>-<slug>" (at most 32 characters), description: "<role> <up to four title words>", prompt }`. The cockpit calls the Agent tool with it.
+- **The prompt starts with the launch form `Job file "<file>"`**, names the plugin root and `jobs.md` section "Job", and then the role's skill: pm and review invoke `tedy:pm` and `tedy:review-pr` with the Skill tool; dev reads the absolute path of `skills/dev/SKILL.md`, because that skill sets `disable-model-invocation` and the probe's Skill tool did not list it; devops has no skill.
+- **Binding by agent id.** A hook event whose `agent_type` is `tedy:<role>` and that carries `agent_id` binds that id to the job named by the launch form at the head of the agent's own transcript: `agent_transcript_path` on SubagentStop, else `<project>/<session_id>/subagents/agent-<agent_id>.jsonl` beside the main transcript. The record gets `agent_id`, the parent `session_id`, the agent transcript and the cockpit's claude pid and start time. No SubagentStart hook: the canon keeps per-spawn events out of `hooks.json`, and the first PostToolUse binds instead.
+- **Status.** `running` after a tool of the agent, `waiting: permission` on a Notification of that agent, `idle` on SubagentStop (matcher `^tedy:(pm|dev|review|devops)$`), `stopped` when the cockpit's TaskStop names the agent id or name. `list` shows `lost (cockpit gone)` once the recorded cockpit claude has ended and the job is not done.
+- **Questions go through question cards, answers and rework through SendMessage.** A job writes a `question` card and ends its turn. `job.mjs resume` appends the note and prints a SendMessage call to the agent id when the caller is the cockpit that runs the agent, refuses when another live cockpit runs it, and otherwise prints a fresh Agent spec carrying the note.
+- **Close.** `close` refuses while the job's agent is running or waiting in a live cockpit; the cockpit stops a running job with TaskStop first. It then marks the file closed and prunes the core worktree with the same safety checks as before. `prune` keeps a worktree whose agent still runs.
+- **Role gate.** A `tedy:<role>` agent the cockpit spawned takes its role from `agent_type`, since the cockpit's session holds no role file; the gate writes none for it.
+- **Removed:** the t3, herdr and print adapters (`job-adapters.mjs`), `job.mjs t3-instance` and `--write`, `job.mjs settings` and the role settings files, the launch spec command line, per-job pid signalling and the close refusal by process ancestry (a job no longer is a process of its own), `--via`, `--t3`, `--json`, `--permission-mode`, `--if-ended`, the herdr notification, the T3 instance labels and setup step, and the status hooks on SessionStart, Stop and around AskUserQuestion.
+
+## Enforcement
+- `plugin/tests/job.test.mjs`: "start writes the running job file and its launch record, then prints only the Agent call spec for a background job agent and never runs claude", "each role's prompt names the job file, the plugin root and jobs.md section Job; pm and review invoke their skill with the Skill tool, dev and devops get a file to read", "close refuses while the job's agent still runs or waits in a live cockpit, and closes once it is idle, stopped or its cockpit has gone", "resume run from the cockpit that runs the job's agent appends the note and prints a SendMessage call to that agent", "resume of a job whose cockpit has gone, or whose agent never bound, appends the note, moves the old agent into earlier and prints a fresh Agent spec carrying the note", "list reads only kit records: the file status when not running, else not started, lost once the cockpit's claude is gone, else the hook state", "the job code runs no claude, signals no process and keeps no launch adapter, settings file or T3 instance".
+- `plugin/tests/job-session-hooks.test.mjs`: "a job agent's first tool event binds its agent id, the cockpit's session and the cockpit's claude pid from the launch form in the agent's own transcript", "SubagentStop binds from its agent_transcript_path and marks the job idle", "the record's state follows the job agent: running after a tool, waiting on its permission notification, idle when it stops, and the cockpit's own events change nothing", "the cockpit's TaskStop of a job agent, by its agent id or its name, marks the job stopped; a TaskStop of anything else changes nothing".
+- `plugin/tests/job-worktrees.test.mjs`: "prune keeps the worktree of a job whose agent still runs in a live cockpit, even when its file says closed, and close refuses that job and keeps its tree".
+- `plugin/tests/role-gate.test.mjs`: "a tedy job agent the cockpit spawned takes its role from agent_type, and the cockpit's session gets no role file", "the gate entry asks a job agent the cockpit spawned before job.mjs close with the role gate off, and lets the cockpit close".
+- `plugin/tests/hooks.test.mjs`: "the job status hook runs after every tool, on the permission notification and when a tedy job agent stops, never blocking and never on a per-prompt or subagent-start event".
+
+## Prior art
+
+- Claude Code subagents docs (Anthropic docs, studied 2026-11-11, via web)
+  - https://code.claude.com/docs/en/sub-agents "Background subagents surface every permission prompt in your main session."
+  - https://code.claude.com/docs/en/sub-agents "a background subagent keeps every MCP tool but only these built-in tools: `Read`, `Grep`, `Glob`, `LSP`, `Bash`, `PowerShell`, `Edit`, `Write`, `NotebookEdit`, `WebFetch`, `WebSearch`, `TodoWrite`, `Skill`, `ToolSearch`, `EnterWorktree`, `ExitWorktree`, `Monitor`, `TaskStop`, `SendMessage`, and `Artifact`"
+  - https://code.claude.com/docs/en/sub-agents "When Claude sends a completed subagent a message with the `SendMessage` tool, the subagent resumes in the background without a new `Agent` invocation."
+  - https://code.claude.com/docs/en/sub-agents "Each transcript is stored as `agent-{agentId}.jsonl`."
+  - Lesson: a background subagent's prompts land in the cockpit, it cannot ask, and SendMessage is native rework with the agent's history. ADR 0018 read the first fact as a reason against subagents; the user weighed it the other way.
+  - Taken: jobs as background subagents, questions on cards, rework through SendMessage, binding from the agent's own transcript.
+- Claude Code hooks reference (Anthropic docs, studied 2026-11-11, via web)
+  - https://code.claude.com/docs/en/hooks "The `transcript_path` is the main session's transcript, while `agent_transcript_path` is the subagent's own transcript stored in a nested `subagents/` folder."
+  - https://code.claude.com/docs/en/hooks "SubagentStart hooks receive `agent_id` with the unique identifier for the subagent and `agent_type` with the agent name that the matcher filters on."
+  - Lesson: SubagentStart carries no prompt, so the prompt comes from the agent's transcript; tool events inside a subagent carry `agent_id` and `agent_type`.
+  - Taken: bind on the agent's first PostToolUse or its SubagentStop, matcher anchored as `^tedy:(pm|dev|review|devops)$` for the plugin-scoped name.
+
+no social prior art: 2026-11-11 reddit: "claude code background subagent permission prompt main session SendMessage resume"; x: "claude code background subagents SendMessage resume subagent"
+
+position: role-coordination conforms
+
+## Consequences
+- **Supersedes ADR 0018's launch adapters.** These no longer apply: the T3 thread and its `tedy-<role>` instances, `t3-instance --write` and the kit's write to T3's settings file, the herdr pane, agent and notification, the printed command, the role settings files and their allowlists, `--via`, `--t3`, `--json`, `--permission-mode`, `--if-ended`, signalling a job's claude process, and the close refusal by process ancestry. ADR 0018's "jobs ask in their own window" is reversed again: a job cannot ask.
+- **Kept from ADR 0015 and 0018:** job files and their sections, the launch record keyed by the job file, the inbox cards, the role gate and its close ask, record locks, core worktrees and their prune safety, `done` and `stop`.
+- **Jobs end when the cockpit session ends.** A long dev job dies with the cockpit; `resume` then starts a fresh agent from the job file and its note.
+- **Permissions follow the cockpit.** Claude Code ignores `permissionMode` for plugin subagents, so a job runs in the cockpit's mode. In `default` mode each prompt waits in the cockpit, and a grant for the session covers the cockpit and every job. The cockpit never answers a job's permission card for the user.
+- **Cost:** a job's tool output stays out of the cockpit's context; each completion notification enters it.
+- **Threat model.** The kit defends against a job acting on another job by mistake: the role gate asks before a literal `job.mjs close` from a job in every mode, and `close` refuses any job whose agent still runs. Not stopped: a job that marks another job `done` or `stopped`, rewrites a launch record through a shell command, or points `TEDY_STATE_DIR` elsewhere. A subagent a job spawns itself has another `agent_type` and the cockpit's session, so the role gate judges it as the cockpit. A job that deliberately attacks another job under `bypassPermissions` is beyond what a same-user hook can prevent.
+- **Not yet exercised live:**
+  - whether a Notification for a background subagent's permission prompt carries its `agent_id` (if not, `waiting: permission` never shows and the job reads `running`);
+  - whether SubagentStop fires after TaskStop, and the TaskStop input field that names the agent (the hook matches any string value of `tool_input` against the agent id and name);
+  - that the hook's `agent_id` is the id SendMessage takes (derived from the docs naming transcripts `agent-{agentId}.jsonl` and from the transcripts read on this machine, below);
+  - a real dev job working in its core worktree through `git -C`;
+  - an agent that dies without SubagentStop leaves its job `running`, so `close` refuses it until the cockpit session ends.
+
+## Probe evidence
+OBSERVED, from a probe in a T3 cockpit on 2026-11-11, reported by the user:
+- A body-less `tedy:pm` background subagent keeps the Claude Code system prompt, so the agent files need no body.
+- Its Skill tool lists `tedy:pm` and `tedy:review-pr`, but not `tedy:dev` (the dev skill is not model-invocable).
+- Its tools are Agent, Bash, Edit, Read, Skill, ToolSearch, Write, MCP tools, and deferred EnterWorktree, ExitWorktree, Monitor, SendMessage, TaskStop, WebFetch and WebSearch. AskUserQuestion is missing.
+- A role-gate `ask` on its Write was logged with agent `tedy:pm` and surfaced in the cockpit thread as a T3 approval card.
+- SendMessage resumed it with its history.
+- No session-roles file was written for it.
+
+OBSERVED on 2026-11-11 while building: the subagent transcripts of a live session on this machine sit at `<project>/<session id>/subagents/agent-<id>.jsonl`, each first line a `user` entry with `isSidechain: true`, the agent id without an `agent-` prefix, and the spawning prompt as its string content.

@@ -100,7 +100,7 @@ test("two concurrent identical starts write two job files with a record each and
 
 test("jobs.md has the Job section every prompt names, and the skills point a jobs map at it", () => {
   const headings = readFileSync(JOBS_DOC, "utf8").split("\n").filter((line) => line.startsWith("## "));
-  assert.deepEqual(headings, ["## Which session this is", "## Cockpit", "## Job", "## Permissions"]);
+  assert.deepEqual(headings, ["## Which agent this is", "## Cockpit", "## Job", "## Permissions"]);
   for (const skill of ["pm", "dev", "review-pr"]) {
     const text = readFileSync(join(PLUGIN, "skills", skill, "SKILL.md"), "utf8");
     assert.match(text, /When the map sets `jobs` or `sessions`, follow `\$\{CLAUDE_PLUGIN_ROOT\}\/shared\/jobs\.md` or `handoff\.md` instead of switching skills here\./, skill);

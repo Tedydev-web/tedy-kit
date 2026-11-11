@@ -189,7 +189,7 @@ export function agentReason(who, action, map = {}) {
 export const cockpitCard = (map) => `This is the cockpit of ${map.name}: start jobs per ${JOBS_DOC}, approve with /tedy:pending.`;
 
 export function jobCard(map, who, gateOn = true) {
-  if (map.jobs) return `Role: this session is a ${who.role} job (${who.label}) of ${map.name}. Work it per ${JOBS_DOC}, section "Job": read the job file your prompt names, ask the user with AskUserQuestion in this window when a decision is needed, turn each write that needs approval into a publish card, and end with job.mjs done or stop.${gateOn ? " A write that belongs to another role asks the user first." : ""}`;
+  if (map.jobs) return `Role: this session is a ${who.role} job (${who.label}) of ${map.name}. Work it per ${JOBS_DOC}, section "Job": read the job file your prompt names, turn each decision into a question card and each write that needs approval into a publish card, and end with job.mjs done or stop.${gateOn ? " A write that belongs to another role asks the user first." : ""}`;
   return `Role: this session is a ${who.role} job (${who.label}) of ${map.name}. When work for another role turns up (a PRD or Figma question, a tracker task, a PR review, code another role owns), stop looking into it, write what you saw and where (file:line, PRD locator, frame) into a draft under plans/drafts, and return to this job's task; the owning role does the research.${gateOn ? " A write that belongs to another role asks the user first." : ""}`;
 }
 

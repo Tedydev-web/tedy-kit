@@ -15,7 +15,7 @@
     "mod": "it changes the interface; the blocking point Claude Code documents is the PreToolUse hook",
     "model / effort pin": "the user's settings remap aliases, so a pin needs its own eval; quota work decides it",
     "sandbox": "a user setting that covers shell commands only, not their meaning (branch, profile path, publish target)",
-    "settings": "the kit writes only permission rules and an optional TEDY_PROFILE_DIR to the user's settings; a job's launch-line --settings is judged under permission rule; no need is met by another key",
+    "settings": "the kit writes only permission rules and an optional TEDY_PROFILE_DIR to the user's settings; no need is met by another key",
     "Agent SDK": "nothing embeds the agent loop; evals drive claude -p as a subprocess",
     "advisor": "a session choice of the user; a plugin cannot set it",
     "fast mode": "a session choice of the user; a plugin cannot set it",
@@ -91,11 +91,11 @@
       }
     },
     {
-      "need": "one short-lived session per job, with a role identity that hooks can read",
+      "need": "one short-lived agent per job, with a role identity that hooks can read",
       "uses": {
-        "subagent": "a body-less tedy:<role> agent started as the main thread with claude --agent tedy:<role>, in a T3 thread, a herdr pane or a terminal the user runs; hook input carries agent_type. Not spawned through the Agent tool, whose subagent ends with the cockpit's turn and shares its context",
-        "hooks": "SessionStart gives the job its card and PreToolUse role-gates it from agent_type, with no fleet lookup",
-        "permission rule": "the role's allowlist and the TEDY_* env reach the job through --settings <role settings file> on its launch line or in T3's Launch arguments, because plugin agents ignore permissionMode and a plugin settings.json carries no permissions"
+        "subagent": "a body-less tedy:<role> agent the cockpit spawns in the background with the Agent tool from the spec job.mjs start prints; hook input carries agent_type and agent_id, its permission prompts surface in the cockpit, and SendMessage resumes it with its history",
+        "hooks": "PostToolUse and SubagentStop bind the agent to its job by agent_id and write its state, and PreToolUse role-gates it from agent_type, with no fleet lookup",
+        "permission rule": "the user's own rules and the kit's ask rules apply as in the cockpit, because a plugin subagent ignores permissionMode and runs in the cockpit's mode"
       },
       "rejected": {
         "skill": "runs inside the session that loads it, so it gives no separate session or identity",
