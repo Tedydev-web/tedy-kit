@@ -42,6 +42,14 @@ test("the cockpit asks each job's open cards by the pending skill's steps, a job
   assert.match(pending, /`approve\.hold` → `pending\.mjs card-note <card>/);
 });
 
+test("the cockpit closes a finished job on its notification turn with close --if-finished, and a dev job with an open PR stays open for rework", () => {
+  const jobs = read("shared/jobs.md");
+  const cockpit = jobs.match(/^5\. Questions go through question cards.*$/m)?.[0] ?? "";
+  assert.ok(cockpit.includes("job.mjs close <job file> --if-finished"), "Cockpit 5");
+  const close = jobs.match(/^7\. Close: .*$/m)?.[0] ?? "";
+  for (const phrase of ["close --if-finished", "no open card names", "a dev job whose PR", "merged or closed", "when the user asks", "every refusal of `close`"]) assert.ok(close.includes(phrase), phrase);
+});
+
 test("every kit write a skill runs after a question is approved by an approve.all or post.asIs option, never by the merge or next-step answer", () => {
   const flow = read("shared/status-flow.md");
   assert.doesNotMatch(flow, /ride in the|yes there approves/);

@@ -1,7 +1,7 @@
 {
   "version": 4,
   "history": [
-    { "version": 4, "date": "2026-11-12", "trigger": "ADR 0021: the user decided on 2026-11-12 that a hook on UserPromptSubmit in the cockpit lists the open cards of jobs that are not running and prints nothing when no card is open, which per-turn-hooks forbade.", "change": "per-turn-hooks allows exactly one per-turn registration: UserPromptSubmit running only session-hooks.mjs ask-cards, which prints nothing unless a card is askable and lists at most ten cards per group. Every other per-turn hook still fails. ADR 0021 is registered at version 4, because it is new since the release.", "redid": [] },
+    { "version": 4, "date": "2026-11-12", "trigger": "ADR 0021: the user decided on 2026-11-12 that a hook on UserPromptSubmit in the cockpit lists the open cards of jobs that are not running and prints nothing when no card is open, which per-turn-hooks forbade.", "change": "per-turn-hooks allows exactly one per-turn registration: UserPromptSubmit running only session-hooks.mjs ask-cards, which prints nothing unless a card is askable or a finished job waits to be closed, and lists at most ten per group. Every other per-turn hook still fails. ADR 0021 is registered at version 4, because it is new since the release.", "redid": [] },
     { "version": 3, "date": "2026-11-03", "trigger": "ADR 0013 and ADR 0014: S27 and S32 move from partial to covered, because the kit now checks surface fit against a committed inventory and meets the quota techniques the user chose.", "change": "Seven rules: surface-fit, inventory-version, footprint-budget, per-turn-hooks, skill-model, reviewer-spawn and cost-gate, each held by a test. The seven skills are re-registered at version 3, because skill-model judges them. ADRs 0013 and 0014 and the fifteen cards they cite are registered at version 3, because they are new since the release.", "redid": ["plugin/skills/dev/SKILL.md", "plugin/skills/learn/SKILL.md", "plugin/skills/pending/SKILL.md", "plugin/skills/pm/SKILL.md", "plugin/skills/reconcile/SKILL.md", "plugin/skills/review-pr/SKILL.md", "plugin/skills/setup/SKILL.md"] },
     { "version": 2, "date": "2026-10-28", "trigger": "The canon plan left open whether sweep records name a role or a topic; the user chose topic, since a sweep studies a topic and roles reuse topics.", "change": "Sweep records say '- Topic: <topic>' instead of '- Role: <role>'; the renderers write it for every record not registered at version 1.", "redid": [] },
     { "version": 1, "date": "2026-10-28", "trigger": "ADR 0011 option A: the canon study found rules held by prose or by one check each.", "change": "The first ledger: 29 rules from the README authoring rules, the gates and the tests, each naming its enforcing test or why it is reviewed; three authoring rules gained checks; every skill, ADR, card and sweep record is registered at version 1 in conformance.json.", "redid": [] }
@@ -406,14 +406,14 @@
     },
     {
       "id": "per-turn-hooks",
-      "text": "The kit registers no hook on an event whose output enters the context on every prompt or every subagent spawn, except one UserPromptSubmit group that runs only session-hooks.mjs ask-cards, which prints nothing unless a card waits on the user and lists at most ten per group.",
+      "text": "The kit registers no hook on an event whose output enters the context on every prompt or every subagent spawn, except one UserPromptSubmit group that runs only session-hooks.mjs ask-cards, which prints nothing unless a card waits on the user or a finished job waits to be closed, and lists at most ten per group.",
       "since": 3,
       "scope": "repo",
       "reason": "Text added on every turn is paid on every turn.",
       "class": "platform",
       "problems": ["S32"],
       "enforced": { "kind": "test", "file": "plugin/tests/canon-checks.test.mjs", "title": "a kit hook on an event that adds text to every prompt or every subagent spawn fails, except the cockpit's one ask-cards prompt hook" },
-      "notCovered": "How long the text of an allowed session-start, compaction or Stop hook grows is not bounded; the ask-cards text is bounded by card count, not by the length of a card title.",
+      "notCovered": "How long the text of an allowed session-start, compaction or Stop hook grows is not bounded; the ask-cards text is bounded by card and job count, not by the length of a title.",
       "approved": "2026-10-30"
     },
     {

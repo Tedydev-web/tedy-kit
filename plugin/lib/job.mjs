@@ -168,6 +168,14 @@ export function olderKitStatus(record) {
   return alive(record) ? "older kit (session open)" : "older kit";
 }
 
+export function closeHold(file) {
+  try {
+    return agentHold(launchRecord(file))?.why ?? null;
+  } catch (error) {
+    return error.message;
+  }
+}
+
 export function jobBusy(file) {
   const job = readJob(file);
   if (job.status !== "running") return false;
@@ -382,6 +390,15 @@ function main([command, target, ...rest]) {
       return 0;
     }
   }
+  if (command === "close" && [target, ...rest].includes("--if-finished")) {
+    const named = [target, ...rest].filter((arg) => arg !== undefined && arg !== "--if-finished");
+    const wrong = named.find((arg) => arg.startsWith("--")) ?? named[1];
+    if (wrong) throw new Error(`close --if-finished takes at most one job file and no other flag, not ${wrong}; nothing was closed`);
+    return import("./pending.mjs").then(({ closeFinished }) => {
+      console.log(closeFinished(project(), named[0]).join("\n") || "No finished job waits to be closed.");
+      return 0;
+    });
+  }
   if (command === "close" && target) {
     only("close", rest, ["--reason"], "closed");
     console.log(close(project(), target, text(given.reason)));
@@ -396,13 +413,13 @@ function main([command, target, ...rest]) {
     console.log(prune(project(), { days: options.days === undefined ? undefined : Number(options.days), dryRun: options["dry-run"] === true }).join("\n") || "No job worktrees to prune.");
     return 0;
   }
-  console.error("usage: job.mjs start <pm|dev|review|devops> --title <t> --body-file <f> [--repo <path>] [--branch <name>] | done <job file> --outcome-file <f> | stop <job file> --reason <text> | resume <job file> --note-file <f> | close <job file> [--reason <text>] | list | prune [--days <n>] [--dry-run]");
+  console.error("usage: job.mjs start <pm|dev|review|devops> --title <t> --body-file <f> [--repo <path>] [--branch <name>] | done <job file> --outcome-file <f> | stop <job file> --reason <text> | resume <job file> --note-file <f> | close <job file> [--reason <text>] | close [<job file>] --if-finished | list | prune [--days <n>] [--dry-run]");
   return 2;
 }
 
-export function run() {
+export async function run() {
   try {
-    process.exit(main(process.argv.slice(2)));
+    process.exit(await main(process.argv.slice(2)));
   } catch (error) {
     console.error(`job: ${error.message}`);
     process.exit(1);

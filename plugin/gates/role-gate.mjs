@@ -184,7 +184,7 @@ export function kitStateReason(input, who) {
 
 export function closeReason(input, who) {
   if (!who) return null;
-  const files = jobScriptCalls(input).filter(({ args }) => args[0] === "close").map(({ args, dir }) => (args[1] ? resolve(dir, expandHome(args[1])) : "with no job file"));
+  const files = jobScriptCalls(input).filter(({ args }) => args[0] === "close").map(({ args, dir }) => (args[1] === "--if-finished" ? "--if-finished (every finished job)" : args[1] ? resolve(dir, expandHome(args[1])) : "with no job file"));
   if (!files.length) return null;
   return `tedy role gate: this is a ${who.role} job (${who.label}); job.mjs close ${[...new Set(files)].join(", ")} marks that job closed and removes its worktree, which belongs to the cockpit. Allow it only if the user asked for it here.`;
 }

@@ -89,3 +89,18 @@ test("the per-prompt list leaves out a held publish card that the session start 
   assert.equal(text.split("\n").filter((line) => line.startsWith("- Question ")).length, 10, text);
   assert.ok(text.endsWith("\n- … 2 more"), text);
 });
+
+test("each prompt and the session start tell the cockpit to close finished jobs no open card names, and only the session start lists a dev job whose outcome names a PR", () => {
+  const c = cockpit();
+  const pm = join(c.work, "plans", "jobs", "261106-0930-pm-gaps.md");
+  writeFileSync(pm, "to: tedy:pm\nfrom: cockpit\nstatus: done\ncreated: 2026-11-06T02:30:00.000Z\ntitle: Gaps\n\nbody\n\n## Outcome\n\nreport plans/reports/gaps.md\n");
+  const dev = c.job("done");
+  writeFileSync(dev, `${readFileSync(dev, "utf8")}\n## Outcome\n\nDraft PR https://github.com/o/r/pull/7\n`);
+  const head = `Finished jobs with no open card wait to be closed: run \`node ${join(PLUGIN, "scripts", "job.mjs")} close --if-finished\` from the project folder in this turn and quote its lines. It closes each done job no open card names, keeps a dev job whose PR is still open, and refuses whatever job.mjs close refuses.`;
+  assert.equal(context(c.hook("ask-cards", prompt())), `${head}\n- pm: Gaps ${pm}`);
+  const start = context(c.hook("pending-handoffs"));
+  assert.ok(start.includes(`${head}\n- dev: Add hello ${dev}\n- pm: Gaps ${pm}`), start);
+  assert.match(c.log(), /"hook":"ask-cards","decision":"close-listed","jobs":1/);
+  c.question(pm);
+  assert.equal(c.hook("ask-cards", prompt()).hookSpecificOutput.additionalContext.includes("Finished jobs"), false);
+});

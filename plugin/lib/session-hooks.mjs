@@ -2,7 +2,8 @@ import { closeSync, existsSync, fstatSync, openSync, readSync, statSync } from "
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { layoutOverride, memoryStats } from "./memory-stats.mjs";
-import { waitingText } from "./pending.mjs";
+import { finishedJobs, waitingText } from "./pending.mjs";
+import { closeHold } from "./job.mjs";
 import { currentTurn, gateSwitches, logGate, readHookInput, readTranscriptTail, toolUses } from "./hook-io.mjs";
 import { loadConfig, profileDir } from "./profile.mjs";
 import { resolveMap } from "./project-map.mjs";
@@ -181,6 +182,21 @@ export function askCardsNotice(map, { held }) {
   return `${ASK_HEAD}\n${text}`;
 }
 
+const CLOSE_HEAD = `Finished jobs with no open card wait to be closed: run \`node ${join(PLUGIN, "scripts", "job.mjs")} close --if-finished\` from the project folder in this turn and quote its lines. It closes each done job no open card names, keeps a dev job whose PR is still open, and refuses whatever job.mjs close refuses.`;
+
+export function closeJobsNotice(map, { perPrompt }) {
+  let jobs;
+  try {
+    jobs = finishedJobs(map).filter((job) => !perPrompt || (!job.prs.length && !closeHold(job.path)));
+  } catch (error) {
+    logGate({ hook: "ask-cards", decision: "close-skipped", error: error.message });
+    return "";
+  }
+  if (!jobs.length) return "";
+  logGate({ hook: "ask-cards", decision: "close-listed", jobs: jobs.length });
+  return `${CLOSE_HEAD}\n${jobs.slice(0, 10).map((job) => `- ${job.role}: ${job.title} ${job.path}`).join("\n")}`;
+}
+
 export const LEARN_THRESHOLD = 5;
 
 export function learnNotice({ feedbackNewer, since, source, entrypoint, today, nudged, held }) {
@@ -220,7 +236,7 @@ function runPendingHandoffs() {
       return;
     }
     const learn = resolved ? learnLine(input, resolved.map) : "";
-    const notice = [configWarning(), resolved && sessionRoleCard(input), resolved && waitingNotice(resolved.map), resolved && isCockpit(input) && askCardsNotice(resolved.map, { held: true }), learn].filter(Boolean).join("\n\n");
+    const notice = [configWarning(), resolved && sessionRoleCard(input), resolved && waitingNotice(resolved.map), resolved && isCockpit(input) && askCardsNotice(resolved.map, { held: true }), resolved && isCockpit(input) && closeJobsNotice(resolved.map, { perPrompt: false }), learn].filter(Boolean).join("\n\n");
     if (notice) process.stdout.write(JSON.stringify({ ...(learn && { systemMessage: learn }), hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: notice } }));
     if (learn) writeState(resolved.map.name, "learn_nudged", localDate());
   } catch (error) {
@@ -233,7 +249,7 @@ function runAskCards() {
   try {
     if (!isCockpit(input)) return;
     const resolved = resolveMap(input.cwd ?? process.cwd());
-    const notice = resolved ? askCardsNotice(resolved.map, { held: false }) : "";
+    const notice = resolved ? [askCardsNotice(resolved.map, { held: false }), closeJobsNotice(resolved.map, { perPrompt: true })].filter(Boolean).join("\n\n") : "";
     if (notice) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: input.hook_event_name ?? "UserPromptSubmit", additionalContext: notice } }));
   } catch (error) {
     logGate({ hook: "ask-cards", decision: "skip-on-error", error: error.message });
