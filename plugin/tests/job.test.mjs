@@ -122,6 +122,12 @@ test("two concurrent identical starts write two job files with a record each and
   assert.deepEqual(outs.map((o) => JSON.parse(o.stdout).name).sort(), [`pm-${day}${time}-gaps-in-epic-3`, `pm-${day}${time}-gaps-in-epic-3-2`]);
 });
 
+test("decision-points.md tells a job it never asks the user and writes a card instead, as jobs.md Job 2 says", () => {
+  const text = readFileSync(join(PLUGIN, "shared", "decision-points.md"), "utf8");
+  assert.doesNotMatch(text, /A job asks in its own window/);
+  assert.match(text, /A job never asks the user: it writes a `question` card and ends its turn \(`shared\/jobs\.md`, Job 2\)\./);
+});
+
 test("jobs.md has the Job section every prompt names, and the skills point a jobs map at it", () => {
   const headings = readFileSync(JOBS_DOC, "utf8").split("\n").filter((line) => line.startsWith("## "));
   assert.deepEqual(headings, ["## Which agent this is", "## Cockpit", "## Job", "## Permissions"]);
