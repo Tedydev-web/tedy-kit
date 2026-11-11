@@ -65,7 +65,15 @@ export function alive(record) {
 
 export const cockpitAlive = (record) => alive({ pid: record?.cockpit_pid, pid_start: record?.cockpit_pid_start });
 
-export const agentRunning = (record) => Boolean(record?.agent_id) && record.state !== "idle" && record.state !== "stopped" && cockpitAlive(record);
+export const agentsOf = (record) => ({ ...record?.agents, ...(record?.agent_id && { [record.agent_id]: record.state }) });
+
+const knows = (record, agent) => Object.hasOwn(agentsOf(record), agent);
+
+export const withAgentState = (record, agent, state) => (agent === record.agent_id ? { ...record, state } : { ...record, agents: { ...record.agents, [agent]: state } });
+
+export const busyAgents = (record) => Object.entries(agentsOf(record)).filter(([, state]) => state !== "idle" && state !== "stopped");
+
+export const agentRunning = (record) => busyAgents(record).length > 0 && cockpitAlive(record);
 
 function findRecord(dir, matches) {
   const jobs = join(dir, "jobs");
@@ -83,7 +91,7 @@ function findRecord(dir, matches) {
   return null;
 }
 
-const recordOfAgent = (dir, agent) => findRecord(dir, (record) => record.agent_id === agent);
+const recordOfAgent = (dir, agent) => findRecord(dir, (record) => knows(record, agent));
 
 function firstPrompt(transcript) {
   let descriptor;
@@ -142,7 +150,7 @@ export function jobOfAgent(input, dir = STATE_DIR) {
   return record?.role === role ? record : null;
 }
 
-function bind(input, role, dir, now, claude, warnings) {
+function bind(input, role, dir, now, claude) {
   if (recordOfAgent(dir, input.agent_id)) return;
   const transcript = agentTranscript(input);
   const launched = launchedJobFile(transcript);
@@ -151,13 +159,11 @@ function bind(input, role, dir, now, claude, warnings) {
   const path = launchRecordPath(file, dir);
   if (!readRecord(path)) return;
   const cockpit = claude();
-  let taken = null;
   updateRecord(path, (record) => {
-    taken = record?.agent_id ?? null;
-    if (!record || taken || readJob(file).status === "closed") return undefined;
+    if (!record || record.state === "closed" || knows(record, input.agent_id) || readJob(file).status === "closed") return undefined;
+    if (record.agent_id) return withAgentState(record, input.agent_id, "running");
     return { ...record, agent_id: input.agent_id, session_id: input.session_id, transcript_path: transcript, ...(cockpit && { cockpit_pid: cockpit.pid, cockpit_pid_start: cockpit.start }), bound_at: now };
   });
-  if (taken && taken !== input.agent_id) warnings.push(`${file} is already bound to agent ${taken}; agent ${input.agent_id} is not tracked as that job`);
 }
 
 function nextState({ hook_event_name: event, notification_type: type }) {
@@ -170,33 +176,38 @@ function nextState({ hook_event_name: event, notification_type: type }) {
 function stopped(input, dir, now) {
   if (input.hook_event_name !== "PostToolUse" || input.tool_name !== "TaskStop") return;
   const named = Object.values(input.tool_input ?? {}).filter((value) => typeof value === "string" && value);
-  const found = findRecord(dir, (record) => Boolean(record.agent_id) && record.session_id === input.session_id && named.includes(record.agent_id));
-  if (found) updateRecord(found.path, (record) => (record?.agent_id === found.record.agent_id ? { ...record, state: "stopped", last_event_at: now } : undefined));
+  const namedAgent = (record) => named.find((value) => knows(record, value));
+  const found = findRecord(dir, (record) => record.session_id === input.session_id && Boolean(namedAgent(record)));
+  if (!found) return;
+  updateRecord(found.path, (record) => {
+    const agent = record?.session_id === input.session_id ? namedAgent(record) : undefined;
+    return agent ? { ...withAgentState(record, agent, "stopped"), last_event_at: now } : undefined;
+  });
 }
 
 export function handle(input, { dir = STATE_DIR, now = new Date().toISOString(), claude = claudeProcess } = {}) {
-  const warnings = [];
   if (!input.agent_id) {
     stopped(input, dir, now);
-    return warnings;
+    return;
   }
   const role = input.agent_type?.match(JOB_AGENT)?.[1];
-  if (role) bind(input, role, dir, now, claude, warnings);
+  if (role) bind(input, role, dir, now, claude);
   const found = recordOfAgent(dir, input.agent_id);
-  if (!found) return warnings;
+  if (!found) return;
   const state = nextState(input);
   const cockpit = cockpitAlive(found.record) ? null : claude();
   updateRecord(found.path, (record) => {
-    if (record?.agent_id !== input.agent_id) return undefined;
-    return { ...record, ...(cockpit && !cockpitAlive(record) && { cockpit_pid: cockpit.pid, cockpit_pid_start: cockpit.start }), ...(state && record.state !== "stopped" && { state }), last_event_at: now };
+    if (!record || !knows(record, input.agent_id)) return undefined;
+    const current = agentsOf(record)[input.agent_id];
+    const next = state && current !== "stopped" ? state : current;
+    return { ...withAgentState(record, input.agent_id, next), ...(cockpit && !cockpitAlive(record) && { cockpit_pid: cockpit.pid, cockpit_pid_start: cockpit.start }), last_event_at: now };
   });
-  return warnings;
 }
 
 export function run() {
   const input = readHookInput();
   try {
-    for (const warning of handle(input)) process.stderr.write(`tedy: ${warning}\n`);
+    handle(input);
   } catch (error) {
     logGate({ hook: "job-session", decision: "skip-on-error", event: input.hook_event_name, error: error.message });
     process.stderr.write(`tedy job status: ${error.message}\n`);

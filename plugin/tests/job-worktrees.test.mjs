@@ -1,11 +1,12 @@
 import "./test-isolation.mjs";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { parse } from "../lib/handoff.mjs";
 import { JOB_KEYS, launchRecordPath, writeRecord } from "../lib/job-files.mjs";
+import { handle } from "../lib/job-session-hooks.mjs";
 import { linkedWorktree } from "../lib/job-worktrees.mjs";
 import { bound, DEAD_PID, sleeper, v0225Job, world } from "./job-world-for-tests.mjs";
 
@@ -252,13 +253,35 @@ test("close removes its own job's clean core worktree and keeps a dirty one with
   assert.match(closedDirty.stdout, new RegExp(`^kept ${dirty}: it has uncommitted changes$`, "m"));
   assert.ok(existsSync(dirty));
   assert.equal(parse(readFileSync(job("dirty"), "utf8"), JOB_KEYS).status, "closed");
-  assert.equal(existsSync(launchRecordPath(job("clean"), w.state)), false);
+  assert.deepEqual(w.record(job("clean")), { file: realpathSync(job("clean")), role: "dev", agents: {}, state: "closed" });
   const kept = w.record(job("dirty"));
   assert.deepEqual([kept.worktree, kept.session_id, kept.pid], [dirty, undefined, undefined]);
   rmSync(join(dirty, "new.txt"));
   assert.equal(w.run(["prune"], { extra: IDENTITY }).stdout.trim(), `removed ${dirty} (the job is closed)`);
   assert.ok(!existsSync(dirty));
-  assert.equal(existsSync(launchRecordPath(job("dirty"), w.state)), false);
+  assert.deepEqual(w.record(job("dirty")), { file: realpathSync(job("dirty")), role: "dev", agents: {}, state: "closed" });
+});
+
+test("prune keeps the kept core worktree of a closed job while an agent the job recorded runs again in its live cockpit, and removes it once that agent stops", async () => {
+  const { w, make } = pruneWorld();
+  const live = await sleeper();
+  try {
+    const tree = make("straggler", { status: "done", record: bound(live, { state: "idle", agents: { b2: "idle" } }), edit: (dir) => writeFileSync(join(dir, "new.txt"), "x\n") });
+    const file = w.jobs().find((path) => path.endsWith("-dev-straggler.md"));
+    assert.match(w.run(["close", file], { extra: IDENTITY }).stdout, new RegExp(`^kept ${tree}: it has uncommitted changes$`, "m"));
+    const kept = w.record(file);
+    assert.deepEqual([kept.state, kept.agents, kept.agent_id, kept.worktree, kept.cockpit_pid, kept.session_id], ["closed", { a1b2c3: "idle", b2: "idle" }, undefined, tree, live.pid, "s-cockpit"]);
+    rmSync(join(tree, "new.txt"));
+    const event = (hook_event_name) => handle({ hook_event_name, tool_name: "Bash", session_id: "s-cockpit", agent_id: "b2", agent_type: "tedy:dev" }, { dir: w.state, claude: () => live });
+    event("PostToolUse");
+    assert.equal(w.run(["prune"], { extra: IDENTITY }).stdout.trim(), `kept ${tree}: its agent b2 is running in cockpit session s-cockpit (claude pid ${live.pid})`);
+    assert.ok(existsSync(tree));
+    event("SubagentStop");
+    assert.equal(w.run(["prune"], { extra: IDENTITY }).stdout.trim(), `removed ${tree} (the job is closed)`);
+    assert.deepEqual([w.record(file).state, w.record(file).agents, w.record(file).worktree], ["closed", { a1b2c3: "idle", b2: "idle" }, undefined]);
+  } finally {
+    live.child.kill("SIGKILL");
+  }
 });
 
 test("prune keeps the worktree of a job whose agent still runs in a live cockpit, even when its file says closed, and close refuses that job and keeps its tree", async () => {
@@ -333,7 +356,7 @@ test("prune keeps the worktree of every job close would refuse: not started whil
   }
 });
 
-test("a git failure while close checks the worktree keeps the tree with the reason and its record without the agent, and still closes the job", () => {
+test("a git failure while close checks the worktree keeps the tree with the reason and its record as a closed tombstone that still names the agent, and still closes the job", () => {
   const { w, make } = pruneWorld();
   const tree = make("broken", { status: "done", record: bound({ pid: DEAD_PID, start: "1" }, { state: "idle" }) });
   const file = w.jobs().find((path) => path.endsWith("-dev-broken.md"));
@@ -344,7 +367,7 @@ test("a git failure while close checks the worktree keeps the tree with the reas
   assert.ok(existsSync(tree));
   assert.equal(parse(readFileSync(file, "utf8"), JOB_KEYS).status, "closed");
   const kept = w.record(file);
-  assert.deepEqual([kept.worktree, kept.agent_id, kept.session_id, kept.cockpit_pid, kept.state], [tree, undefined, undefined, undefined, undefined]);
+  assert.deepEqual([kept.worktree, kept.agent_id, kept.agents, kept.session_id, kept.cockpit_pid, kept.state], [tree, undefined, { a1b2c3: "idle" }, "s-cockpit", DEAD_PID, "closed"]);
 });
 
 test("close run from inside the job's own worktree keeps that worktree and its record, and says so", () => {
@@ -436,7 +459,7 @@ test("close of a dev job v0.2.25 started with a core worktree removes that tree 
   assert.equal(removed.status, 0, removed.stderr);
   assert.match(removed.stdout, new RegExp(`^removed ${clean} \\(the job is closed\\)$`, "m"));
   assert.ok(!existsSync(clean));
-  assert.equal(existsSync(launchRecordPath(files[0], w.state)), false);
+  assert.deepEqual(w.record(files[0]), { file: realpathSync(files[0]), role: "dev", agents: {}, state: "closed" });
   assert.match(kept.stdout, new RegExp(`^kept ${dirty}: it has uncommitted changes$`, "m"));
   assert.ok(existsSync(dirty));
   assert.equal(w.record(files[1]).worktree, dirty);

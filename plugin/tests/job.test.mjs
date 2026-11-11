@@ -1,11 +1,11 @@
 import "./test-isolation.mjs";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { HANDOFF_KEYS, parse, stamp } from "../lib/handoff.mjs";
-import { JOB_KEYS as FILE_KEYS, launchRecordPath, readRecord, recordLaunch } from "../lib/job-files.mjs";
+import { JOB_KEYS as FILE_KEYS, launchRecordPath, readRecord, recordLaunch, updateRecord } from "../lib/job-files.mjs";
 import { handle, processInfo } from "../lib/job-session-hooks.mjs";
 import { BODY, bound, DEAD_PID, JOBS_DOC, jobFile, PLUGIN, sleeper, world } from "./job-world-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
@@ -263,7 +263,7 @@ test("close refuses while the job's agent still runs or waits in a live cockpit,
       assert.equal(out.status, 0, `${name}: ${out.stderr}`);
       assert.equal(out.stdout, `closed: ${file}\n`);
       assert.equal(parse(readFileSync(file, "utf8")).status, "closed");
-      assert.equal(existsSync(launchRecordPath(file, w.state)), false);
+      assert.deepEqual(w.record(file), { file: realpathSync(file), role: "dev", agents: { a1b2c3: record.state }, state: "closed" });
     }
     assert.equal(processInfo(live.pid).start, live.start);
   } finally {
@@ -285,7 +285,7 @@ test("close refuses a job not started while the cockpit that started it runs, an
     const unbound = w.run(["close", noPid]);
     assert.equal(unbound.status, 0, unbound.stderr);
     assert.equal(unbound.stdout, `closed: ${noPid}\nnothing was bound to this job, so nothing was signalled\n`);
-    assert.equal(existsSync(launchRecordPath(noPid, w.state)), false);
+    assert.deepEqual(w.record(noPid), { file: realpathSync(noPid), role: "dev", agents: {}, state: "closed" });
     for (const [file, message] of refusals) {
       const before = { text: readFileSync(file, "utf8"), record: JSON.stringify(w.record(file)) };
       const out = w.run(["close", file, "--reason", "x"]);
@@ -403,6 +403,37 @@ test("resume refuses and writes nothing in every state close refuses: an agent r
   }
 });
 
+test("close and resume refuse while a second agent recorded on the job runs in a live cockpit; close then keeps a closed tombstone, so that agent keeps its job asks, and list, pending and resume ignore the tombstone", async () => {
+  const w = world();
+  const live = await sleeper();
+  const note = join(w.root, "note.md");
+  writeFileSync(note, "more\n");
+  try {
+    const file = jobFile(w, { status: "done", name: "two", record: bound(live, { state: "idle", agents: { b2: "running" } }) });
+    const held = `its agent b2 is running in cockpit session s-cockpit (claude pid ${live.pid}); `;
+    const refused = w.run(["close", file]);
+    assert.equal(refused.status, 1, refused.stdout);
+    assert.equal(refused.stderr, `job: ${file}: ${held}stop it with TaskStop in that session, then close it again; nothing was closed\n`);
+    const notResumed = w.run(["resume", file, "--note-file", note]);
+    assert.equal(notResumed.stderr, `job: ${file}: ${held}wait until it is idle, or stop it with TaskStop in that session, then resume it again; nothing was resumed\n`);
+    updateRecord(launchRecordPath(file, w.state), (record) => ({ ...record, agents: { b2: "idle" } }));
+    const closed = w.run(["close", file]);
+    assert.equal(closed.status, 0, closed.stderr);
+    assert.equal(closed.stdout, `closed: ${file}\n`);
+    assert.deepEqual(w.record(file), { file: realpathSync(file), role: "dev", agents: { a1b2c3: "idle", b2: "idle" }, state: "closed" });
+    const gate = (agent) => execFileSync(process.execPath, [join(PLUGIN, "scripts", "role-gate.mjs")], { input: JSON.stringify({ hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: `node ${join(PLUGIN, "scripts", "job.mjs")} close ${file}` }, cwd: w.root, session_id: "s-cockpit", agent_id: agent, agent_type: "tedy:dev" }), encoding: "utf8", env: w.env() });
+    for (const agent of ["a1b2c3", "b2"]) assert.equal(JSON.parse(gate(agent)).hookSpecificOutput.permissionDecision, "ask", agent);
+    assert.equal(gate("z9"), "");
+    writeFileSync(file, readFileSync(file, "utf8").replace(/^status: closed$/m, "status: running"));
+    assert.match(w.run(["list"]).stdout, new RegExp(`^dev · two · lost \\(no launch record\\) · .* · ${file}$`, "m"));
+    const pending = execFileSync(process.execPath, [join(PLUGIN, "scripts", "pending.mjs"), "list", "--offline"], { cwd: w.root, encoding: "utf8", env: w.env() });
+    assert.match(pending, /^- dev: two \(running, /m);
+    assert.equal(w.run(["resume", file, "--note-file", note]).stderr, `job: ${file} has no launch record, so it was not started by job.mjs start here; close it and start a new job\n`);
+  } finally {
+    live.child.kill("SIGKILL");
+  }
+});
+
 test("resume of a job whose cockpit has gone, or whose agent never bound, appends the note, moves the old agent into earlier, records the resuming cockpit and prints a fresh Agent spec carrying the note", () => {
   const w = world();
   const file = jobFile(w, { status: "done", record: bound({ pid: DEAD_PID, start: "1" }, { state: "idle" }) });
@@ -454,13 +485,13 @@ test("resume refuses a closed, unrecorded or tampered job and an empty note or u
   assert.match(w.run(["resume", jobFile(w, { status: "done", name: "empty" }), "--note-file", note]).stderr, /the note is empty/);
 });
 
-test("a hook that read a job's record before close deleted it, or before resume unbound it, does not write the old agent back", () => {
+test("a hook that read a job's record before close made it a tombstone writes that agent's state only into the tombstone, and one that read it before resume unbound it does not write the old agent back", () => {
   const w = world();
   const closing = jobFile(w, { status: "done", name: "closing", record: bound({ pid: DEAD_PID, start: "1" }, { state: "idle", agent_id: "c1" }) });
   let closed;
   handle({ hook_event_name: "PostToolUse", tool_name: "Bash", session_id: "s-cockpit", agent_id: "c1", agent_type: "tedy:dev" }, { dir: w.state, claude: () => { closed = closed ?? w.run(["close", closing]); return { pid: process.pid, start: processInfo(process.pid).start }; } });
   assert.equal(closed.status, 0, closed.stderr);
-  assert.equal(existsSync(launchRecordPath(closing, w.state)), false);
+  assert.deepEqual([w.record(closing).agent_id, w.record(closing).state, w.record(closing).agents], [undefined, "closed", { c1: "running" }]);
   const resumed = jobFile(w, { status: "done", name: "resumed", record: bound({ pid: DEAD_PID, start: "1" }, { state: "idle", agent_id: "c2" }) });
   const note = join(w.root, "note.md");
   writeFileSync(note, "more\n");

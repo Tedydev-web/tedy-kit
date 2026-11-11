@@ -2,9 +2,9 @@ import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from "node:
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { missingSections, render, setStatus, slugOf, stamp } from "./handoff.mjs";
-import { age, createAtomic, JOB_ROLES, jobsDir, launchRecordPath, listJobs, readJob, readRecord, recordLaunch, removeRecord, setKey, updateRecord, withSection, writeAtomic } from "./job-files.mjs";
+import { age, createAtomic, JOB_ROLES, jobsDir, launchRecordPath, listJobs, readJob, readRecord, recordLaunch, setKey, updateRecord, withSection, writeAtomic } from "./job-files.mjs";
 import { addWorktree, git as gitRun, linkedWorktreeOf, merged, planWorktree, removeWorktree } from "./job-worktrees.mjs";
-import { agentRunning, alive, claudeProcess, cockpitAlive } from "./job-session-hooks.mjs";
+import { agentRunning, agentsOf, alive, busyAgents, claudeProcess, cockpitAlive } from "./job-session-hooks.mjs";
 import { resolveMap } from "./project-map.mjs";
 
 const SKILLS = { pm: "tedy:pm", review: "tedy:review-pr" };
@@ -41,7 +41,7 @@ const agentSpec = (role, title, name, prompt) => ({ subagent_type: `tedy:${role}
 const launchRecord = (file) => readRecord(launchRecordPath(file));
 
 const RECORDED = ["role", "cwd", "repo"];
-const AGENT_KEYS = ["agent_id", "session_id", "transcript_path", "cockpit_pid", "cockpit_pid_start", "bound_at", "state", "last_event_at"];
+const AGENT_KEYS = ["agent_id", "agents", "session_id", "transcript_path", "cockpit_pid", "cockpit_pid_start", "bound_at", "state", "last_event_at"];
 
 const differences = (file, job, record) => RECORDED.filter((key) => job[key] !== record[key]).map((key) => `${file}: its ${key}: ${job[key] ?? "(none)"} differs from the launch record (${record[key] ?? "none"})`);
 
@@ -59,7 +59,7 @@ function trusted(map, file) {
   const named = basename(job.real).match(NAMED_ROLE)?.[1];
   if (named !== job.role) throw new Error(`${file}: its to: ${job.to} does not match the role ${named ?? "(none)"} in its file name`);
   const record = launchRecord(job.real);
-  if (!record) return { ...job, record: null };
+  if (!record || isTombstone(record)) return { ...job, record: null };
   const [different] = differences(file, job, record);
   if (different) throw new Error(`${different}; a job file may not change it`);
   const repo = record.repo ?? record.cwd;
@@ -135,11 +135,27 @@ export function stop(file, reason) {
 
 const withoutAgent = (record) => Object.fromEntries(Object.entries(record).filter(([key]) => !AGENT_KEYS.includes(key)));
 
+const isTombstone = (record) => record?.state === "closed";
+
+const TOMBSTONE_KEYS = ["file", "role"];
+const HOLD_KEYS = ["session_id", "cockpit_pid", "cockpit_pid_start"];
+
+function buried(record, keepTree) {
+  const keys = keepTree ? [...TOMBSTONE_KEYS, ...HOLD_KEYS] : TOMBSTONE_KEYS;
+  const kept = Object.fromEntries(keys.filter((key) => record[key] !== undefined).map((key) => [key, record[key]]));
+  return { ...(keepTree && withoutAgent(record)), ...kept, agents: agentsOf(record), state: "closed" };
+}
+
+const agentLabel = (record, agent) => (agent === record.agent_id ? `${record.agent_name ?? agent} (${agent})` : agent);
+
 function agentHold(record, verb = "close") {
   const ending = `end that agent or the cockpit session, then ${verb} it again`;
-  if (agentRunning(record)) return { why: `its agent ${record.agent_name ?? record.agent_id} (${record.agent_id}) is ${record.state ?? "running"} in cockpit session ${record.session_id} (claude pid ${record.cockpit_pid})`, then: `${verb === "resume" ? "wait until it is idle, or " : ""}stop it with TaskStop in that session, then ${verb} it again` };
+  if (agentRunning(record)) {
+    const busy = busyAgents(record).map(([agent, state]) => `its agent ${agentLabel(record, agent)} is ${state ?? "running"}`).join(" and ");
+    return { why: `${busy} in ${record.session_id ? `cockpit session ${record.session_id}` : "the cockpit"} (claude pid ${record.cockpit_pid})`, then: `${verb === "resume" ? "wait until it is idle, or " : ""}stop it with TaskStop in that session, then ${verb} it again` };
+  }
   if (record?.agent_id && !record.cockpit_pid) return { why: "its launch record holds no cockpit claude pid, so the kit cannot tell whether its agent still runs", then: ending };
-  if (record && !record.agent_id && cockpitAlive(record)) return { why: `its agent ${record.agent_name} has made no tool call yet while the cockpit that started it (claude pid ${record.cockpit_pid}) still runs, so it may be starting`, then: ending };
+  if (record && !record.agent_id && !isTombstone(record) && cockpitAlive(record)) return { why: `its agent ${record.agent_name} has made no tool call yet while the cockpit that started it (claude pid ${record.cockpit_pid}) still runs, so it may be starting`, then: ending };
   return null;
 }
 
@@ -147,7 +163,7 @@ const OLDER_KIT = "this job came from an older kit; nothing was signalled, and a
 
 const olderSession = (record) => (alive(record) ? `the session an older kit recorded for this job (claude pid ${record.pid}) is still open` : null);
 
-const fromOlderKit = (record) => Boolean(record) && !record.agent_name && !record.agent_id && !record.cockpit_pid;
+const fromOlderKit = (record) => Boolean(record) && !isTombstone(record) && !record.agent_name && !record.agent_id && !record.cockpit_pid;
 
 export function olderKitStatus(record) {
   if (!fromOlderKit(record)) return null;
@@ -175,8 +191,8 @@ export function close(map, file, reason) {
   writeAtomic(job.path, setStatus(readFileSync(job.path, "utf8"), "closed", new Date().toISOString()));
   const open = olderSession(record);
   const tree = coreWorktree(record) ? [open ? `kept ${record.worktree}: ${open}` : removeWorktree(record, "the job is closed")] : [];
-  if (tree.length && existsSync(record.worktree)) updateRecord(launchRecordPath(job.real), (fresh) => withoutAgent(fresh ?? record));
-  else removeRecord(launchRecordPath(job.real));
+  const keepTree = tree.length > 0 && existsSync(record.worktree);
+  updateRecord(launchRecordPath(job.real), (fresh) => (fresh ? buried(fresh, keepTree) : undefined));
   return [`closed: ${job.path}`, ...unsignalled(record), ...tree].join("\n");
 }
 
@@ -204,7 +220,7 @@ function pruneJob({ job, record }, days, dryRun, now) {
     const { reason, why } = pruneDecision(job, record, days, now);
     if (why) return `kept ${record.worktree}: ${why}`;
     const result = removeWorktree(record, reason, dryRun);
-    if (job.status === "closed" && !existsSync(record.worktree)) forget(job.path);
+    if (job.status === "closed" && !existsSync(record.worktree)) bury(job.path);
     return result;
   } catch (error) {
     return `kept ${record.worktree}: ${error.message}`;
@@ -225,12 +241,12 @@ function recordedJobs(map, dryRun) {
     if (error) return [{ warning: `warning: ${error}; the worktree of ${job.path} was not checked` }];
     if (!recordedTree(record)) return [];
     if (existsSync(record.worktree)) return [{ job, record }];
-    if (job.status === "closed" && !dryRun) forget(job.path);
+    if (job.status === "closed" && !dryRun) bury(job.path);
     return [];
   });
 }
 
-const forget = (file) => removeRecord(launchRecordPath(file));
+const bury = (file) => updateRecord(launchRecordPath(file), (record) => (record ? buried(record, false) : undefined));
 
 export function prune(map, { days = 10, dryRun = false, now = Date.now() } = {}) {
   if (!Number.isInteger(days) || days < 1) throw new Error("--days needs a whole number of days above 0");
@@ -280,7 +296,8 @@ export function resume(map, file, note, { caller = claudeProcess } = {}) {
   updateRecord(launchRecordPath(job.real), (fresh) => {
     if (fresh?.agent_id !== agent) throw new Error(`${file}: its launch record changed while resuming (agent ${fresh?.agent_id ?? "none"}, not ${agent ?? "none"}); nothing was resumed, run the command again`);
     if (live) return { ...fresh, state: "running" };
-    return { ...withoutAgent(fresh), agent_name: name, ...cockpitOf(cockpit), ...(agent && { earlier: [...(fresh.earlier ?? []), agent] }) };
+    const earlier = Object.keys(agentsOf(fresh));
+    return { ...withoutAgent(fresh), agent_name: name, ...cockpitOf(cockpit), ...(earlier.length && { earlier: [...(fresh.earlier ?? []), ...earlier] }) };
   });
   const at = new Date().toISOString();
   writeAtomic(job.path, withSection(setStatus(job.text, "running", at), `Note ${at}`, note));
@@ -302,7 +319,7 @@ function status(job) {
   if (job.status !== "running") return job.status;
   try {
     const record = launchRecord(job.path);
-    return record ? kitStatus(record) : "lost (no launch record)";
+    return record && !isTombstone(record) ? kitStatus(record) : "lost (no launch record)";
   } catch (error) {
     return `unknown (${error.message})`;
   }

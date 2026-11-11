@@ -42,7 +42,7 @@ const launch = (file) => `Job file ${JSON.stringify(file)}. Plugin root: /k/plug
 test("a job agent's first tool event binds its agent id, the cockpit's session and the cockpit's claude pid from the launch form in the agent's own transcript", () => {
   const w = world();
   const input = w.agent(launch(w.files[0]));
-  assert.deepEqual(w.fire(input), []);
+  w.fire(input);
   const record = w.record();
   assert.equal(record.agent_id, "a1b2c3");
   assert.equal(record.session_id, "s-1");
@@ -84,17 +84,25 @@ test("the cockpit, another plugin's agent, another role's agent, a launch form l
     w.agent(launch(closed)),
     w.agent([{ type: "tool_result", content: launch(named) }]),
   ];
-  for (const input of cases) assert.deepEqual(w.fire(input), [], JSON.stringify(input));
+  for (const input of cases) w.fire(input);
   assert.equal(w.record().agent_id, undefined);
-  assert.equal(JSON.parse(readFileSync(launchRecordPath(closed, w.state), "utf8")).agent_id, undefined);
+  assert.deepEqual([w.record().agents, JSON.parse(readFileSync(launchRecordPath(closed, w.state), "utf8")).agent_id], [undefined, undefined]);
 });
 
-test("a second agent naming a bound job file does not rebind it and only returns a warning for stderr", () => {
+test("a second agent whose launch form names a bound job is recorded beside the first, and each agent's events, its TaskStop included, move only its own state", () => {
   const w = world();
   w.fire(w.agent(launch(w.files[0])));
-  const warnings = w.fire(w.agent(launch(w.files[0]), { id: "b2" }));
-  assert.deepEqual(warnings, [`${w.files[0]} is already bound to agent a1b2c3; agent b2 is not tracked as that job`]);
-  assert.equal(w.record().agent_id, "a1b2c3");
+  w.fire(w.agent(launch(w.files[0]), { id: "b2" }));
+  assert.deepEqual([w.record().agent_id, w.record().state, w.record().agents], ["a1b2c3", "running", { b2: "running" }]);
+  w.fire({ hook_event_name: "SubagentStop", agent_id: "a1b2c3", agent_type: "tedy:dev" });
+  assert.deepEqual([w.record().state, w.record().agents], ["idle", { b2: "running" }]);
+  w.fire({ hook_event_name: "Notification", notification_type: "permission_prompt", agent_id: "b2" });
+  assert.deepEqual([w.record().state, w.record().agents], ["idle", { b2: "waiting: permission" }]);
+  w.fire({ hook_event_name: "PostToolUse", tool_name: "TaskStop", tool_input: { task_id: "b2" } });
+  w.fire({ hook_event_name: "PostToolUse", tool_name: "Bash", agent_id: "b2", agent_type: "tedy:dev" });
+  assert.deepEqual([w.record().agent_id, w.record().state, w.record().agents], ["a1b2c3", "idle", { b2: "stopped" }]);
+  w.fire(w.agent(launch(w.files[0]), { id: "c3" }));
+  assert.deepEqual(w.record().agents, { b2: "stopped", c3: "running" });
 });
 
 test("the record's state follows the job agent: running after a tool, waiting on its permission notification, idle when it stops, and the cockpit's own events change nothing", () => {

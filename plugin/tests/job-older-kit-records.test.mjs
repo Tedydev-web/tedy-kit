@@ -104,7 +104,7 @@ test("close closes a job that v0.2.24 or v0.2.25 wrote without signalling its se
       assert.equal(out.status, 0, `${file}: ${out.stderr}`);
       assert.equal(out.stdout, `closed: ${file}\n${OLDER_KIT}\n`, file);
       assert.equal(parse(readFileSync(file, "utf8")).status, "closed", file);
-      assert.equal(existsSync(launchRecordPath(file, w.state)), false, file);
+      assert.deepEqual([w.record(file).state, w.record(file).agents], ["closed", {}], file);
     }
     assert.equal(readFileSync(join(tree, "work.txt"), "utf8"), "x\n");
     assert.equal(processInfo(session.pid).start, session.start);
