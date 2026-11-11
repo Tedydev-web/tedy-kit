@@ -413,3 +413,25 @@ test("close of a dev job v0.2.25 started with a core worktree removes that tree 
   assert.equal(w.record(files[1]).worktree, dirty);
   for (const file of files) assert.equal(parse(readFileSync(file, "utf8"), JOB_KEYS).status, "closed");
 });
+
+test("close and prune keep the core worktree of a job v0.2.25 started while the session it recorded is still open, and prune removes it once that session ends", async () => {
+  const w = gitWorld();
+  const tree = join(w.root, ".worktrees", "fe-old-open");
+  git(w.fe, "worktree", "add", "-q", "--no-track", "-b", "feat/old-open", tree, "origin/main");
+  const session = await sleeper();
+  const file = v0225Job(w, { name: "old-open", tree, branch: "feat/old-open", session: { pid: session.pid, start: session.start } });
+  const open = `kept ${tree}: the session an older kit recorded for this job (claude pid ${session.pid}) is still open`;
+  try {
+    const out = w.run(["close", file], { extra: IDENTITY });
+    assert.equal(out.status, 0, out.stderr);
+    assert.match(out.stdout, new RegExp(`^${open.replace(/[()]/g, "\\$&")}$`, "m"));
+    assert.equal(parse(readFileSync(file, "utf8"), JOB_KEYS).status, "closed");
+    assert.equal(w.run(["prune"], { extra: IDENTITY }).stdout.trim(), open);
+    assert.ok(existsSync(tree));
+  } finally {
+    session.child.kill("SIGKILL");
+    await session.exited;
+  }
+  assert.equal(w.run(["prune"], { extra: IDENTITY }).stdout.trim(), `removed ${tree} (the job is closed)`);
+  assert.ok(!existsSync(tree));
+});

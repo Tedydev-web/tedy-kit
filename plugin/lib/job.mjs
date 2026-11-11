@@ -4,7 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { missingSections, render, setStatus, slugOf, stamp } from "./handoff.mjs";
 import { age, createAtomic, JOB_ROLES, jobsDir, launchRecordPath, listJobs, readJob, readRecord, recordLaunch, removeRecord, setKey, updateRecord, withSection, writeAtomic } from "./job-files.mjs";
 import { addWorktree, git as gitRun, merged, planWorktree, removeWorktree } from "./job-worktrees.mjs";
-import { agentRunning, claudeProcess, cockpitAlive } from "./job-session-hooks.mjs";
+import { agentRunning, alive, claudeProcess, cockpitAlive } from "./job-session-hooks.mjs";
 import { resolveMap } from "./project-map.mjs";
 
 const SKILLS = { pm: "tedy:pm", review: "tedy:review-pr" };
@@ -146,6 +146,8 @@ function agentHold(record) {
 
 const OLDER_KIT = "this job came from an older kit; nothing was signalled, and any session it had (a T3 thread, a terminal pane or a claude session) is the user's to end";
 
+const olderSession = (record) => (alive(record) ? `the session an older kit recorded for this job (claude pid ${record.pid}) is still open` : null);
+
 function unsignalled(record) {
   if (!record || record.agent_id || record.cockpit_pid) return [];
   return [record.agent_name ? "nothing was bound to this job, so nothing was signalled" : OLDER_KIT];
@@ -165,7 +167,8 @@ export function close(map, file, reason) {
   if (held) throw new Error(`${file}: ${held.why}; ${held.then}; nothing was closed`);
   if (job.status === "running") finish(job.path, "stopped", `Stopped: ${reason}`);
   writeAtomic(job.path, setStatus(readFileSync(job.path, "utf8"), "closed", new Date().toISOString()));
-  const tree = coreWorktree(record) ? [removeWorktree(record, "the job is closed")] : [];
+  const open = olderSession(record);
+  const tree = coreWorktree(record) ? [open ? `kept ${record.worktree}: ${open}` : removeWorktree(record, "the job is closed")] : [];
   if (tree.length && existsSync(record.worktree)) updateRecord(launchRecordPath(job.real), (fresh) => withoutAgent(fresh ?? record));
   else removeRecord(launchRecordPath(job.real));
   return [`closed: ${job.path}`, ...unsignalled(record), ...tree].join("\n");
@@ -178,8 +181,8 @@ const recordedTree = (record) => record?.worktree_owner === "core" && Boolean(re
 const coreWorktree = (record) => recordedTree(record) && existsSync(record.worktree);
 
 function pruneDecision(job, record, days, now) {
-  const held = agentHold(record);
-  if (held) return { why: held.why };
+  const why = agentHold(record)?.why ?? olderSession(record);
+  if (why) return { why };
   if (job.status === "closed") return { reason: "the job is closed" };
   const finished = job.status === "done" || job.status === "stopped";
   if (finished && merged(record)) return { reason: `its branch is merged into origin/${record.base}` };
