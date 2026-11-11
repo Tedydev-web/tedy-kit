@@ -96,6 +96,15 @@ test("with no annotations in the response, as T3 Code returns, a ticket needs th
   assert.equal(minted(unannotated([said([text("Trả lời thread 2:"), text(fenced(PREVIEW))])])), 1);
   assert.equal(minted(unannotated([said([text(`> ok a\n>   thêm   dòng 2\n\n${REPLY}`)])])), 1);
   assert.equal(minted(unannotated([], { questionText: `Đăng?\n${PREVIEW}` })), 1);
+  assert.equal(minted(unannotated([said([text(`Em sẽ đăng:\r\n\r\n\`\`\`\r\n${PREVIEW.replaceAll("\n", "\r\n")}\r\n\`\`\``)])])), 1);
+});
+
+test("with no annotations, the approval window runs back from when the question was asked, so a late answer still gets its ticket", () => {
+  const now = Date.now();
+  const askedAt = now - 50 * 60_000;
+  const question = { ...said([{ type: "tool_use", name: "AskUserQuestion", id: "toolu_1", input: {} }], askedAt) };
+  assert.equal(minted(unannotated([said([text(fenced(PREVIEW))], askedAt - 60_000), question]), now), 1);
+  assert.equal(minted(unannotated([said([text(fenced(PREVIEW))], askedAt - APPROVAL_TTL_MS - 60_000), question]), now), 0);
 });
 
 test("with no annotations, a preview that only the AskUserQuestion previews, thinking, tool input or an old reply showed gives no ticket", () => {
@@ -109,6 +118,9 @@ test("with no annotations, a preview that only the AskUserQuestion previews, thi
     ["the command line missing from the chat", [said([text("ok a\nthêm dòng 2")])]],
     ["the command inline, not on a line of its own", [said([text(`ok a\nthêm dòng 2\nchạy \`${REPLY}\``)])]],
     ["the body lines out of order", [said([text(`thêm dòng 2\nok a\n${REPLY}`)])]],
+    ["only in an earlier AskUserQuestion's question text, which may have failed and never been drawn", [said([{ type: "tool_use", name: "AskUserQuestion", id: "toolu_0", input: { questions: [{ question: PREVIEW, header: "x", options: [{ label: "a", description: "b" }] }] } }])]],
+    ["only in a subagent's reply", [{ ...said([text(fenced(PREVIEW))]), isSidechain: true }]],
+    ["stitched from two reply blocks", [said([text("ok a\nthêm dòng 2")]), said([text(REPLY)])]],
     ["a refusal", [said([text(fenced(PREVIEW))])], { answer: VI["post.hold"] }],
     ["an AFK auto-resolve", [said([text(fenced(PREVIEW))])], { extra: { afkTimeoutMs: 600000 } }],
   ]) assert.equal(minted(unannotated(entries, options)), 0, name);

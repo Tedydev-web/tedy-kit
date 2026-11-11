@@ -4,15 +4,15 @@ Status: accepted 2026-11-11; live check pending (Consequences)
 
 ## Context
 - ADR 0016 issues a one-use ticket only when AskUserQuestion's `tool_response.annotations[question].preview` equals the chosen option's preview: the terminal client reports which preview the user had in front of them.
-- T3 Code returns `{questions, answers}` and no `annotations`. On 2026-11-11 the gate log held nine approving answers from T3, every one `"decision":"no-ticket"` with `response_keys: ["questions","answers"]`, so every answer-mode write in T3 was refused (PR review comments included).
+- T3 Code returns `{questions, answers}` and no `annotations`. On 2026-11-11 the gate log held nine AskUserQuestion answers from T3 in answer mode, every one `"decision":"no-ticket"` with `response_keys: ["questions","answers"]`; at least one was a real publish approval (PR review comments), and its write was refused.
 - A first fix (never released) took the chosen preview as shown whenever `annotations` was absent and `publishQuote` was on. An independent review failed it: the publish-quote gate counts every string in an AskUserQuestion input as shown, previews included, so it passed on the preview itself; and it judges only `github-write.mjs post|reply|edit`, leaving `pr-body`, `openproject.mjs`, `gdoc-comments.mjs`, `figma-comments.mjs` and `doc-comment-file.mjs` with no check of what the user saw.
 - T3 Code issue 14237, closed 2026-10-20, says T3's Claude adapter dropped option previews before its question card, so until that fix a T3 user approved previews they never saw, and after it T3 still reports no annotations, so the kit cannot tell whether a preview was drawn.
 - The absent key means the answering client attested nothing, not that the client is T3; any client that omits it is treated the same way.
 
 ## Decision
 - A response that carries `annotations` (an object, `{}` and `null` included) is judged as ADR 0016 says; nothing changes for the terminal.
-- A response with no `annotations` key gets a ticket only when the chosen option's whole preview, normalised as the ticket matcher does (quote marks dropped, whitespace folded, blank lines skipped), appears as a run of whole lines in what the chat showed within the 30-minute approval window: the text blocks of the main session's assistant turns, and the question, option labels and descriptions of AskUserQuestion calls, this one included. Option previews, thinking, any other tool's input and user turns never count.
-- The ticket hook reads at most the last 16 MB of the transcript; a missing or unreadable transcript gives no ticket.
+- A response with no `annotations` key gets a ticket only when the chosen option's whole preview, normalised as the ticket matcher does (quote marks dropped, whitespace folded, blank lines skipped), appears as a run of whole lines inside one block the chat showed: one text block of the main session's assistant turns (not a sidechain entry) from the 30 minutes before the question was asked (the window runs back from the timestamp of this call's own `tool_use` entry, else from the answer), or one question, option label or description string of the call being answered. Option previews, thinking, any other tool's input, earlier AskUserQuestion calls (one may have failed validation and never been drawn) and user turns never count, and a preview stitched from two blocks does not match.
+- The ticket hook reads at most the last 16 MB of the transcript; with a missing or unreadable transcript only the call's own question, label and description strings count.
 - A skill that asks for a publish approval quotes the whole preview verbatim in a fenced block of its reply right before the question; the scripts' refusal says so.
 
 ## Prior art
@@ -34,5 +34,7 @@ position: approval-to-absent-user conforms
 ## Consequences
 - In T3 an approval is one AskUserQuestion after the reply quotes the preview, so the second prompt stays gone.
 - The chat carries the command line and target of each write, which the user reads before approving.
-- Markdown rendering can hide text in a reply as it can in a preview (an HTML comment); quoting inside a fenced block avoids it, and the skill rule asks for one.
+- Markdown rendering can hide text in a reply as it can in a preview (an HTML comment, a collapsed details block). The hook does not check for a fence; the skill rule asks for one, which protects only against an agent that follows it. This is the same ceiling the README states for previews.
+- The transcript becomes evidence, and the kit's deny rules protect only its state folders. Under `bypassPermissions` an agent could append a forged assistant line to the session transcript; that sits inside ADR 0016's accepted ceiling (in bypass mode a write outside the kit scripts meets no prompt either), and in other modes an Edit, Write or shell redirect into `~/.claude/projects` prompts.
+- A reply quoted long before the question no longer counts once more than 30 minutes separate it from the question; the refusal then says to quote again. An answer given late (after the user was away) still counts, because the window runs back from the question, not from the answer.
 - Weakest link: the hook was exercised with transcript fixtures and the real T3 response shape from the gate log, not yet by a live T3 answer. The live check after release: one approving answer in T3 must log `"decision":"ticket"`.

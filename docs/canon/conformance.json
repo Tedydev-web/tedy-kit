@@ -19,6 +19,7 @@
     "docs/adr/0017-position-pages-over-the-knowledge-base.md": 3,
     "docs/adr/0018-jobs-are-visible-sessions-opened-by-optional-runtime-adapters.md": 3,
     "docs/adr/0019-jobs-run-as-native-background-subagents.md": 3,
+    "docs/adr/0020-answer-tickets-without-annotations-need-the-preview-shown-in-chat.md": 3,
     "docs/prior-art/affaan-m-ecc.md": 3,
     "docs/prior-art/agent-ready-template.md": 1,
     "docs/prior-art/agent-skill-eval.md": 3,

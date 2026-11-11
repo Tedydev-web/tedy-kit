@@ -38,21 +38,26 @@ const askedTexts = (input) =>
     .flatMap((question) => [question?.question, ...(Array.isArray(question?.options) ? question.options : []).flatMap((option) => [option?.label, option?.description])])
     .filter((value) => typeof value === "string");
 
-function chatLines(input, now) {
-  const since = now - APPROVAL_TTL_MS;
-  const said = readTranscriptTail(input?.transcript_path, TRANSCRIPT_BYTES)
-    .filter((entry) => entry?.type === "assistant" && Date.parse(entry.timestamp ?? "") >= since)
-    .flatMap((entry) => (Array.isArray(entry.message?.content) ? entry.message.content : []))
-    .flatMap((block) => (block?.type === "text" && typeof block.text === "string" ? [block.text] : block?.type === "tool_use" && block.name === "AskUserQuestion" ? askedTexts(block.input) : []));
-  return [...said, ...askedTexts(input?.tool_input)].flatMap(contentLines);
+const contentOf = (entry) => (Array.isArray(entry?.message?.content) ? entry.message.content : []);
+
+function chatBlocks(input, now) {
+  const entries = readTranscriptTail(input?.transcript_path, TRANSCRIPT_BYTES).filter((entry) => entry?.type === "assistant" && !entry.isSidechain);
+  const asked = entries.find((entry) => contentOf(entry).some((block) => block?.type === "tool_use" && block.id === input?.tool_use_id));
+  const askedAt = Date.parse(asked?.timestamp ?? "");
+  const since = (Number.isNaN(askedAt) ? now : askedAt) - APPROVAL_TTL_MS;
+  const said = entries
+    .filter((entry) => Date.parse(entry.timestamp ?? "") >= since)
+    .flatMap(contentOf)
+    .flatMap((block) => (block?.type === "text" && typeof block.text === "string" ? [block.text] : []));
+  return [...said, ...askedTexts(input?.tool_input)].map(contentLines);
 }
 
 function approvedPreviews(input, accepted, now) {
   const found = answered(input).filter(({ answer, chosen }) => accepted.includes(answer) && typeof chosen.preview === "string" && chosen.preview.trim());
   if (!found.length) return [];
   if (input.tool_response.annotations !== undefined) return found.filter(({ chosen, shown }) => shown === chosen.preview).map(({ chosen }) => chosen.preview);
-  const chat = chatLines(input, now);
-  return found.filter(({ chosen }) => holdsBlock(chat, contentLines(chosen.preview))).map(({ chosen }) => chosen.preview);
+  const blocks = chatBlocks(input, now);
+  return found.filter(({ chosen }) => blocks.some((lines) => holdsBlock(lines, contentLines(chosen.preview)))).map(({ chosen }) => chosen.preview);
 }
 
 export const runApprovalsDir = (state = STATE_DIR) => join(state, "review-runs");
