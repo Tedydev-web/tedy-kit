@@ -540,7 +540,7 @@ test("a role session's tedy:<role> subagent is judged as that session, so its wr
   assert.equal(gate.agentRole(bound.input), null);
 });
 
-test("in a jobs map a tedy job agent takes its role only when a kit launch record of that role binds it, and the cockpit's session gets no role file", () => {
+test("in a jobs map a tedy job agent takes its role when a kit launch record of that role holds its id or its own transcript names that record's job file, bound to it or not, and the cockpit's session gets no role file", () => {
   const byTranscript = spawnedJob("pm");
   assert.deepEqual(gate.spawnedRole(byTranscript.input, jobsMap, counted()), { role: "pm", label: "tedy:pm" });
   assert.equal(gate.judge({ ...postReview, ...byTranscript.input }, jobsMap, counted()).reason, `tedy role gate: this is a pm job (tedy:pm); posting or resolving PR review comments belongs to the review role. Write a card, or a question card to start a review job, per ${JOBS_DOC}, unless the user allows this one here.`);
@@ -556,9 +556,36 @@ test("in a jobs map a tedy job agent takes its role only when a kit launch recor
   asCockpit({ agent_type: "tedy:dev", agent_id: "a-none", session_id: randomUUID() });
   asCockpit(spawnedJob("dev", { record: null }).input);
   asCockpit(spawnedJob("dev", { launchRole: "pm" }).input);
-  asCockpit(spawnedJob("dev", { record: { agent_id: "a-other" } }).input);
+  assert.deepEqual(gate.spawnedRole(spawnedJob("dev", { record: { agent_id: "a-other" } }).input, jobsMap, counted()), { role: "dev", label: "tedy:dev" });
   assert.equal(gate.spawnedRole(spawnedJob("dev").input, noSessions, counted()), null);
   assert.equal(gate.spawnedRole({ ...spawnedJob("dev").input, agent_type: "Explore" }, jobsMap, counted()), null);
+});
+
+test("the gate entry gives a job's every ask both to the agent its record binds and to a second agent whose launch form names the same job file", () => {
+  const root = tempDir("tedy-role-root-");
+  const profile = tempDir("tedy-role-profile-");
+  writeFileSync(join(profile, "config.json"), JSON.stringify({ gates: { roleGate: true } }));
+  mkdirSync(join(profile, "projects"));
+  writeFileSync(join(profile, "projects", "shop.md"), `# map\n\n\`\`\`json\n${JSON.stringify({ name: "shop", paths: [root], repos: [], jobs: true })}\n\`\`\`\n`);
+  const stateDir = tempDir("tedy-state-");
+  const first = spawnedJob("pm", { state: stateDir, root, agent: "a1first", record: { agent_id: "a1first", state: "running" } });
+  writeFileSync(join(root, "projects", first.input.session_id, "subagents", "agent-a2second.jsonl"), `${JSON.stringify({ type: "user", isSidechain: true, agentId: "a2second", message: { role: "user", content: `Job file ${JSON.stringify(first.file)}. Plugin root: /k/plugin. The job is resumed: the latest ## Note in the job file, quoted below, is the rework request.\n\nalso epic 4` } })}\n`);
+  const second = { ...first.input, agent_id: "a2second" };
+  const entry = (who, call) => execFileSync("node", [new URL("../gates/role-gate.mjs", import.meta.url).pathname], { input: JSON.stringify({ hook_event_name: "PreToolUse", cwd: root, ...who, ...call }), encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: stateDir } });
+  const calls = {
+    close: { tool_name: "Bash", tool_input: { command: `node /k/plugin/scripts/job.mjs close ${other}` } },
+    kitState: { tool_name: "Write", tool_input: { file_path: join(stateDir, "jobs", "x.json"), content: "{}" } },
+    prReview: { tool_name: "Bash", tool_input: { command: "node /k/scripts/github-write.mjs post plans/reports/review-x.md" } },
+  };
+  for (const [name, call] of Object.entries(calls)) {
+    for (const who of [first.input, second]) {
+      const out = entry(who, call);
+      assert.notEqual(out, "", `${name} ${who.agent_id}`);
+      const decision = JSON.parse(out).hookSpecificOutput;
+      assert.equal(decision.permissionDecision, "ask", `${name} ${who.agent_id}`);
+      assert.match(decision.permissionDecisionReason, /^tedy role gate: this is a pm job \(tedy:pm\); /, `${name} ${who.agent_id}`);
+    }
+  }
 });
 
 test("in a jobs map with sessions a bound job agent takes its role unless its parent is a listed role session", () => {

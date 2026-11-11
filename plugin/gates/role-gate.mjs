@@ -4,7 +4,7 @@ import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { bashInputs, classify } from "./git-gate.mjs";
 import { route } from "../lib/handoff.mjs";
-import { boundJob } from "../lib/job-session-hooks.mjs";
+import { jobOfAgent } from "../lib/job-session-hooks.mjs";
 import { profileDir } from "../lib/profile.mjs";
 import { ask, gateSwitches, logGate, readHookInput, STATE_DIR } from "../lib/hook-io.mjs";
 import { resolveMap } from "../lib/project-map.mjs";
@@ -95,7 +95,7 @@ export function agentRole(input) {
 const jobAgentType = (input) => Boolean(input.agent_id) && Object.hasOwn(AGENT_ROLES, input.agent_type);
 
 export function spawnedRole(input, map, list = listSessions) {
-  if (!jobAgentType(input) || map?.jobs !== true || !boundJob(input)) return null;
+  if (!jobAgentType(input) || map?.jobs !== true || !jobOfAgent(input)) return null;
   if (map.sessions?.length && roleOf(map, sessionName(input.session_id, list()))) return null;
   return { role: AGENT_ROLES[input.agent_type], label: input.agent_type };
 }

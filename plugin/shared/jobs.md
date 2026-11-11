@@ -4,7 +4,7 @@ In a map with `jobs: true`, the session the user types into is the cockpit, and 
 
 ## Which agent this is
 
-A subagent whose `agent_type` is `tedy:<role>` and whose prompt starts with the kit's launch form `Job file "<file>"` is that job; the path sits in double quotes with JSON escapes, so a project folder whose path holds a space or a quote binds too. The hooks read that form at the head of the agent's own transcript on its first tool event and bind its `agent_id` to the job. A job path anywhere else in the prompt binds nothing. In a `jobs` map the main thread of any session is the cockpit, except a session the map still lists in `sessions`, which keeps its legacy role until the switch.
+A subagent whose `agent_type` is `tedy:<role>` and whose prompt starts with the kit's launch form `Job file "<file>"` is that job; the path sits in double quotes with JSON escapes, so a project folder whose path holds a space or a quote binds too. The hooks read that form at the head of the agent's own transcript on its first tool event and bind its `agent_id` to the job. Binding only drives the job's state: the role gate gives the agent its job's role from that form whether the record is bound to it, to another agent or to none, so a second agent sent to the same job keeps every job ask. A job path anywhere else in the prompt binds nothing. In a `jobs` map the main thread of any session is the cockpit, except a session the map still lists in `sessions`, which keeps its legacy role until the switch.
 
 ## Cockpit
 
