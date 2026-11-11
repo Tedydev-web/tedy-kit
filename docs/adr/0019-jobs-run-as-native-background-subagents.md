@@ -98,7 +98,7 @@ OBSERVED, from a live probe of this kit on 2026-11-11, run by the controller ses
 - About 10 seconds in, `job.mjs list` showed the pm job `running` (bound on a tool event) and the dev job `not started`. Both later showed `done`.
 - The pm job invoked the Skill tool with `tedy:pm`. The dev job read the dev `SKILL.md` by path, worked in the core worktree `start` made, committed and pushed `feat/live-dev-probe`, then ran `job.mjs done`.
 - SendMessage to the pm agent's id returned `{"success":true,"message":"Resuming agent …","resumedAgentId":…}`, and the agent replied PONG.
-- `close` closed both while the cockpit still ran. The dev close printed `removed <worktree> (the job is closed)`, and `list` then said `No jobs are open.` DERIVED: since `close` refuses an unbound job while its cockpit runs, and a running one, the dev job had bound and its SubagentStop had marked it idle.
+- `close` closed both while the cockpit still ran. The dev close printed `removed <worktree> (the job is closed)`, and `list` then said `No jobs are open.` DERIVED, assuming `start` recorded the cockpit's claude pid as it does when run under claude: since `close` refuses an unbound job while its cockpit runs, and a running one, the dev job had bound and its SubagentStop had marked it idle.
 - The gate log held `role-gate allow` with `agent_type tedy:dev`, `role dev` and `kind code`.
 - The post-push report logged a `cwd` equal to the cockpit's folder, not the worktree, while the dev agent ran `git -C <worktree> push`: a job agent's hook `cwd` stayed the cockpit's folder.
 
