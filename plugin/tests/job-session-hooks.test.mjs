@@ -5,7 +5,7 @@ import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { launchRecordPath, recordLaunch } from "../lib/job-files.mjs";
+import { launchRecordPath, recordLaunch, updateRecord } from "../lib/job-files.mjs";
 import { alive, claudeProcess, handle, processInfo } from "../lib/job-session-hooks.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
@@ -127,6 +127,20 @@ test("the cockpit's TaskStop of a job agent by its exact agent id marks the job 
   assert.deepEqual([w.record(w.files[0]).state, w.record(w.files[1]).state], ["stopped", "stopped"]);
   w.fire({ ...w.agent(launch(w.files[0])), hook_event_name: "PostToolUse", agent_id: "zz", agent_type: "tedy:dev" });
   assert.equal(w.record(w.files[0]).state, "stopped");
+});
+
+test("a stopped job stays stopped through its agent's later tool, permission and stop events until a resume marks it running", () => {
+  const w = world();
+  w.fire(w.agent(launch(w.files[0])));
+  w.fire({ hook_event_name: "PostToolUse", tool_name: "TaskStop", tool_input: { task_id: "a1b2c3" } });
+  for (const event of [{ hook_event_name: "PostToolUse", tool_name: "Bash" }, { hook_event_name: "Notification", notification_type: "permission_prompt" }, { hook_event_name: "SubagentStop" }]) {
+    w.fire({ ...event, agent_id: "a1b2c3", agent_type: "tedy:dev" }, "2026-11-11T05:00:00.000Z");
+    assert.equal(w.record().state, "stopped", JSON.stringify(event));
+  }
+  assert.equal(w.record().last_event_at, "2026-11-11T05:00:00.000Z");
+  updateRecord(launchRecordPath(w.files[0], w.state), (record) => ({ ...record, state: "running" }));
+  w.fire({ hook_event_name: "SubagentStop", agent_id: "a1b2c3", agent_type: "tedy:dev" });
+  assert.equal(w.record().state, "idle");
 });
 
 test("a TaskStop marks stopped only the job agent of the cockpit session that ran it", () => {

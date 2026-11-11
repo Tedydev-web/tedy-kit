@@ -188,7 +188,7 @@ export function handle(input, { dir = STATE_DIR, now = new Date().toISOString(),
   const cockpit = cockpitAlive(found.record) ? null : claude();
   updateRecord(found.path, (record) => {
     if (record?.agent_id !== input.agent_id) return undefined;
-    return { ...record, ...(cockpit && !cockpitAlive(record) && { cockpit_pid: cockpit.pid, cockpit_pid_start: cockpit.start }), ...(state && { state }), last_event_at: now };
+    return { ...record, ...(cockpit && !cockpitAlive(record) && { cockpit_pid: cockpit.pid, cockpit_pid_start: cockpit.start }), ...(state && record.state !== "stopped" && { state }), last_event_at: now };
   });
   return warnings;
 }
