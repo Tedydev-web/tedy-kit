@@ -7,6 +7,7 @@ import { chmodSync, existsSync, linkSync, mkdirSync, readdirSync, readFileSync, 
 import { dirname, join } from "node:path";
 import { classifyAction, decide, roleCard, roleOf, sessionName } from "../gates/role-gate.mjs";
 import * as gate from "../gates/role-gate.mjs";
+import { recordLaunch } from "../lib/job-files.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const map = {
@@ -513,31 +514,78 @@ test("with the role gate off a job's subagent is asked before job.mjs close once
   assert.match(decision.permissionDecisionReason, /^tedy role gate: this is a pm job \(general-purpose\); job\.mjs close /);
 });
 
-test("a tedy job agent the cockpit spawned takes its role from agent_type, and the cockpit's session gets no role file", () => {
-  const cockpit = randomUUID();
-  const sub = (agent_type) => ({ agent_type, agent_id: "a-10", session_id: cockpit });
-  assert.deepEqual(gate.agentRole(sub("tedy:pm")), { role: "pm", label: "tedy:pm" });
-  assert.equal(gate.judge({ ...postReview, ...sub("tedy:pm") }, jobsMap, counted()).reason, `tedy role gate: this is a pm job (tedy:pm); posting or resolving PR review comments belongs to the review role. Write a card, or a question card to start a review job, per ${JOBS_DOC}, unless the user allows this one here.`);
-  assert.match(gate.judge({ ...comment, ...sub("tedy:dev") }, jobsMap, counted()).reason, /^tedy role gate: this is a dev job \(tedy:dev\); writing to the tracker belongs to the pm role/);
-  assert.equal(gate.judge({ ...editCode, ...sub("tedy:dev") }, jobsMap, counted()).reason, null);
-  assert.equal(existsSync(roleFile(cockpit)), false);
-  assert.equal(gate.agentRole({ session_id: cockpit }), null);
-  assert.equal(gate.agentRole(sub("Explore")), null);
-  assert.equal(gate.agentRole(sub("tedy:reviewer")), null);
+function spawnedJob(role, { state = process.env.TEDY_STATE_DIR, agent = `a${randomUUID().slice(0, 8)}`, session = randomUUID(), record = {}, launchRole = role, root = tempDir("tedy-role-job-") } = {}) {
+  const file = join(root, "plans", "jobs", `261111-1000-${launchRole}-x.md`);
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, `to: tedy:${launchRole}\nfrom: cockpit\nstatus: running\ncreated: 2026-11-11T03:00:00.000Z\ntitle: x\n\nbody\n`);
+  if (record) recordLaunch(file, { role: launchRole, cwd: root, ...record }, state);
+  const transcript = join(root, "projects", session, "subagents", `agent-${agent}.jsonl`);
+  mkdirSync(dirname(transcript), { recursive: true });
+  writeFileSync(transcript, `${JSON.stringify({ type: "user", isSidechain: true, agentId: agent, message: { role: "user", content: `Job file ${JSON.stringify(file)}. Plugin root: /k/plugin.` } })}\n`);
+  return { root, file, input: { agent_type: `tedy:${role}`, agent_id: agent, session_id: session, transcript_path: join(root, "projects", `${session}.jsonl`) } };
+}
+
+test("a role session's tedy:<role> subagent is judged as that session, so its writes for another role still ask", () => {
+  const sessions = { ...map, sessions: [{ name: "Review PR - Shop", role: "review" }, { name: "Dispatch - Shop", role: "dispatch" }] };
+  const list = () => [{ sessionId: "s-review", name: "Review PR - Shop" }, { sessionId: "s-dispatch", name: "Dispatch - Shop" }];
+  const devChild = gate.judge({ ...editCode, session_id: "s-review", agent_id: "a-1", agent_type: "tedy:dev" }, sessions, list);
+  assert.deepEqual([devChild.role, devChild.session], ["review", "Review PR - Shop"]);
+  assert.match(devChild.reason, /this is "Review PR - Shop", the review session; changing or committing product code belongs to the dev session/);
+  const pmChild = gate.judge({ ...shell("node /k/scripts/openproject.mjs apply d.json"), session_id: "s-dispatch", agent_id: "a-2", agent_type: "tedy:pm" }, sessions, list);
+  assert.deepEqual([pmChild.role, pmChild.session], ["dispatch", "Dispatch - Shop"]);
+  assert.match(pmChild.reason, /this is "Dispatch - Shop", the dispatch session; writing to the tracker belongs to the pm session/);
+  const bound = spawnedJob("dev", { session: "s-review" });
+  assert.equal(gate.judge({ ...editCode, ...bound.input }, sessions, list).role, "review");
+  assert.equal(gate.agentRole(bound.input), null);
 });
 
-test("the gate entry asks a job agent the cockpit spawned before job.mjs close with the role gate off, and lets the cockpit close", () => {
+test("in a jobs map a tedy job agent takes its role only when a kit launch record of that role binds it, and the cockpit's session gets no role file", () => {
+  const byTranscript = spawnedJob("pm");
+  assert.deepEqual(gate.spawnedRole(byTranscript.input, jobsMap, counted()), { role: "pm", label: "tedy:pm" });
+  assert.equal(gate.judge({ ...postReview, ...byTranscript.input }, jobsMap, counted()).reason, `tedy role gate: this is a pm job (tedy:pm); posting or resolving PR review comments belongs to the review role. Write a card, or a question card to start a review job, per ${JOBS_DOC}, unless the user allows this one here.`);
+  const byId = spawnedJob("dev", { record: { agent_id: "a-bound" }, agent: "a-bound" });
+  writeFileSync(join(byId.root, "projects", byId.input.session_id, "subagents", "agent-a-bound.jsonl"), "");
+  assert.match(gate.judge({ ...comment, ...byId.input }, jobsMap, counted()).reason, /^tedy role gate: this is a dev job \(tedy:dev\); writing to the tracker belongs to the pm role/);
+  assert.equal(gate.judge({ ...editCode, ...byId.input }, jobsMap, counted()).reason, null);
+  assert.equal(existsSync(roleFile(byId.input.session_id)), false);
+  const asCockpit = (input) => {
+    assert.equal(gate.spawnedRole(input, jobsMap, counted()), null);
+    assert.equal(gate.judge({ ...editCode, ...input }, jobsMap, counted()).role, "cockpit");
+  };
+  asCockpit({ agent_type: "tedy:dev", agent_id: "a-none", session_id: randomUUID() });
+  asCockpit(spawnedJob("dev", { record: null }).input);
+  asCockpit(spawnedJob("dev", { launchRole: "pm" }).input);
+  asCockpit(spawnedJob("dev", { record: { agent_id: "a-other" } }).input);
+  assert.equal(gate.spawnedRole(spawnedJob("dev").input, noSessions, counted()), null);
+  assert.equal(gate.spawnedRole({ ...spawnedJob("dev").input, agent_type: "Explore" }, jobsMap, counted()), null);
+});
+
+test("in a jobs map with sessions a bound job agent takes its role unless its parent is a listed role session", () => {
+  const both = { ...map, jobs: true };
+  const listed = spawnedJob("dev", { session: "s-pm" });
+  const list = counted([{ sessionId: "s-pm", name: "PM - Shop" }]);
+  assert.equal(gate.spawnedRole(listed.input, both, list), null);
+  assert.deepEqual([gate.judge({ ...editCode, ...listed.input }, both, list).role, gate.judge({ ...editCode, ...listed.input }, both, list).session], ["pm", "PM - Shop"]);
+  const cockpitChild = spawnedJob("dev");
+  assert.deepEqual(gate.spawnedRole(cockpitChild.input, both, list), { role: "dev", label: "tedy:dev" });
+  assert.equal(gate.judge({ ...editCode, ...cockpitChild.input }, both, list).reason, null);
+});
+
+test("the gate entry asks a bound job agent before job.mjs close with the role gate off, and lets the cockpit and an unbound agent close", () => {
+  const root = tempDir("tedy-role-root-");
   const profile = tempDir("tedy-role-profile-");
   writeFileSync(join(profile, "config.json"), JSON.stringify({ gates: { roleGate: false } }));
   mkdirSync(join(profile, "projects"));
+  writeFileSync(join(profile, "projects", "shop.md"), `# map\n\n\`\`\`json\n${JSON.stringify({ name: "shop", paths: [root], repos: [], jobs: true })}\n\`\`\`\n`);
   const stateDir = tempDir("tedy-state-");
-  const cockpit = randomUUID();
-  const entry = (extra) => execFileSync("node", [new URL("../gates/role-gate.mjs", import.meta.url).pathname], { input: JSON.stringify({ tool_name: "Bash", tool_input: { command: `node /k/plugin/scripts/job.mjs close ${other}` }, cwd: "/tmp", session_id: cockpit, ...extra }), encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: stateDir } });
-  const decision = JSON.parse(entry({ agent_id: "a-11", agent_type: "tedy:review" })).hookSpecificOutput;
+  const job = spawnedJob("review", { state: stateDir, root });
+  const entry = (extra) => execFileSync("node", [new URL("../gates/role-gate.mjs", import.meta.url).pathname], { input: JSON.stringify({ tool_name: "Bash", tool_input: { command: `node /k/plugin/scripts/job.mjs close ${other}` }, cwd: root, session_id: job.input.session_id, ...extra }), encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: stateDir } });
+  const decision = JSON.parse(entry(job.input)).hookSpecificOutput;
   assert.equal(decision.permissionDecision, "ask");
   assert.match(decision.permissionDecisionReason, new RegExp(`^tedy role gate: this is a review job \\(tedy:review\\); job\\.mjs close ${other} marks that job closed`));
   assert.equal(entry({}), "");
-  assert.equal(existsSync(join(stateDir, "session-roles", cockpit)), false);
+  assert.equal(entry({ agent_id: "a-unbound", agent_type: "tedy:review" }), "");
+  assert.equal(existsSync(join(stateDir, "session-roles", job.input.session_id)), false);
 });
 
 test("role-gate asks when it cannot read the project maps", () => {

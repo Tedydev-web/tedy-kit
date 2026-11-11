@@ -131,6 +131,17 @@ function launchedJobFile(transcript) {
   return role ? { file, role } : null;
 }
 
+export function boundJob(input, dir = STATE_DIR) {
+  const role = input.agent_type?.match(JOB_AGENT)?.[1];
+  if (!role || !input.agent_id) return null;
+  const bound = recordOfAgent(dir, input.agent_id);
+  if (bound) return bound.record.role === role ? bound.record : null;
+  const launched = launchedJobFile(agentTranscript(input));
+  if (launched?.role !== role || !existsSync(launched.file)) return null;
+  const record = readRecord(launchRecordPath(launched.file, dir));
+  return record?.role === role && !record.agent_id ? record : null;
+}
+
 function bind(input, role, dir, now, claude, warnings) {
   if (recordOfAgent(dir, input.agent_id)) return;
   const transcript = agentTranscript(input);

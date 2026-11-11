@@ -4,6 +4,7 @@ import { isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { bashInputs, classify } from "./git-gate.mjs";
 import { route } from "../lib/handoff.mjs";
+import { boundJob } from "../lib/job-session-hooks.mjs";
 import { ask, gateSwitches, logGate, readHookInput, STATE_DIR } from "../lib/hook-io.mjs";
 import { resolveMap } from "../lib/project-map.mjs";
 import { expandHome, shellWords, tokenize, walkCommands } from "../lib/shell-segments.mjs";
@@ -86,8 +87,16 @@ export function agentRole(input) {
     logGate({ hook: "role-gate", decision: "session-role-unreadable", agent_type: input.agent_type, error: error.message });
     return { role: "reader", label: input.agent_type ?? "subagent" };
   }
-  if (!JOB_ROLES.has(parent)) return Object.hasOwn(AGENT_ROLES, input.agent_type) ? { role: AGENT_ROLES[input.agent_type], label: input.agent_type } : null;
+  if (!JOB_ROLES.has(parent)) return null;
   return input.agent_type === "tedy:reviewer" ? { role: "reader", label: input.agent_type } : { role: parent, label: input.agent_type ?? "subagent" };
+}
+
+const jobAgentType = (input) => Boolean(input.agent_id) && Object.hasOwn(AGENT_ROLES, input.agent_type);
+
+export function spawnedRole(input, map, list = listSessions) {
+  if (!jobAgentType(input) || map?.jobs !== true || !boundJob(input)) return null;
+  if (map.sessions?.length && roleOf(map, sessionName(input.session_id, list()))) return null;
+  return { role: AGENT_ROLES[input.agent_type], label: input.agent_type };
 }
 
 function repoOf(map, path) {
@@ -206,7 +215,7 @@ export function listSessions() {
   return JSON.parse(execFileSync("claude", ["agents", "--json", "--all"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 10_000 }));
 }
 
-export function judge(input, map, list = listSessions, who = agentRole(input)) {
+export function judge(input, map, list = listSessions, who = agentRole(input) ?? spawnedRole(input, map, list)) {
   const actions = classifyActions(input, map, who?.role);
   if (!actions.length) return null;
   const first = (reasonOf) => {
@@ -232,14 +241,21 @@ export function judge(input, map, list = listSessions, who = agentRole(input)) {
 export function run() {
   const input = readHookInput({ askOnFailure: true });
   try {
-    const who = agentRole(input);
+    const cwd = input.cwd ?? process.cwd();
+    let who = agentRole(input);
+    let resolved;
+    if (!who && jobAgentType(input)) {
+      resolved = resolveMap(cwd);
+      who = resolved ? spawnedRole(input, resolved.map) : null;
+    }
     const closing = closeReason(input, who);
     if (closing) {
       logGate({ hook: "role-gate", decision: "ask", agent_type: input.agent_type, role: who.role, kind: "job-close", tool: input.tool_name });
       ask(closing);
       return;
     }
-    const resolved = gateSwitches().roleGate && resolveMap(input.cwd ?? process.cwd());
+    if (!gateSwitches().roleGate) return;
+    if (resolved === undefined) resolved = resolveMap(cwd);
     const verdict = resolved && judge(input, resolved.map, listSessions, who);
     if (verdict) {
       logGate({ hook: "role-gate", decision: verdict.reason ? "ask" : "allow", session: verdict.session, agent_type: input.agent_type, role: verdict.role, kind: verdict.kind, tool: input.tool_name });
