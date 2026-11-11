@@ -18,6 +18,14 @@ test("every numbered list in a skill's sections starts at 1 and runs on without 
   }
 });
 
+test("a review job asks to run PR code on a question card that /tedy:pending asks with the run header, and the answer goes back through SendMessage", () => {
+  const checkout = read("skills/review-pr/references/checkout.md");
+  assert.doesNotMatch(checkout, /own window/);
+  for (const phrase of ["`question` card", "full head sha", "`run.none`, `run.lint` and `run.all`", "header `run.header`", "/tedy:pending", "SendMessage", "verify not run: awaiting the run question"]) assert.ok(checkout.includes(phrase), phrase);
+  const questions = read("skills/pending/SKILL.md").match(/^3\. \*\*Questions\.\*\*.*$/m)?.[0] ?? "";
+  for (const phrase of ["`run.none`, `run.lint` and `run.all`", "header `run.header`", "head sha"]) assert.ok(questions.includes(phrase), phrase);
+});
+
 test("every role that moves a work package's status follows one status procedure, and review merges only on the user's yes", () => {
   const procedure = read("shared/status-flow.md");
   for (const phrase of ["op-status.mjs plan", "--started", "--merging", "without `--apply`", "--apply --lock"]) assert.ok(procedure.includes(phrase), phrase);
