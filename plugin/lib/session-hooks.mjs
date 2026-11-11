@@ -162,6 +162,25 @@ export function waitingNotice(map) {
   return text && `Waiting on the user in this project (\`pending.mjs list\` adds draft PRs; \`pending.mjs done <file>\` archives a draft once the publishing tool confirms it):\n${text}`;
 }
 
+const PLUGIN = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
+const PENDING_SKILL = join(PLUGIN, "skills", "pending", "SKILL.md");
+const ASK_HEAD = `Open cards wait on the user's answer: ask them in this turn. Read ${PENDING_SKILL}, with \${CLAUDE_PLUGIN_ROOT} read as ${PLUGIN}, and do its step 2 for the cards under "To publish" and its step 3 for those under "Questions". Never take an option for the user; a question that times out or goes unanswered keeps its card and is listed again.`;
+
+export const isCockpit = (input) => !input.agent_id && !Object.hasOwn(AGENT_ROLES, input.agent_type);
+
+export function askCardsNotice(map, { held }) {
+  let text;
+  try {
+    text = waitingText(map, { ask: true, held, limit: 10 });
+  } catch (error) {
+    logGate({ hook: "ask-cards", decision: "skip-on-error", error: error.message });
+    return "";
+  }
+  if (!text) return "";
+  logGate({ hook: "ask-cards", decision: "listed", cards: text.split("\n").filter((line) => line.startsWith("- ")).length });
+  return `${ASK_HEAD}\n${text}`;
+}
+
 export const LEARN_THRESHOLD = 5;
 
 export function learnNotice({ feedbackNewer, since, source, entrypoint, today, nudged, held }) {
@@ -201,7 +220,7 @@ function runPendingHandoffs() {
       return;
     }
     const learn = resolved ? learnLine(input, resolved.map) : "";
-    const notice = [configWarning(), resolved && sessionRoleCard(input), resolved && waitingNotice(resolved.map), learn].filter(Boolean).join("\n\n");
+    const notice = [configWarning(), resolved && sessionRoleCard(input), resolved && waitingNotice(resolved.map), resolved && isCockpit(input) && askCardsNotice(resolved.map, { held: true }), learn].filter(Boolean).join("\n\n");
     if (notice) process.stdout.write(JSON.stringify({ ...(learn && { systemMessage: learn }), hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: notice } }));
     if (learn) writeState(resolved.map.name, "learn_nudged", localDate());
   } catch (error) {
