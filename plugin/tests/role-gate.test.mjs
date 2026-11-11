@@ -618,6 +618,20 @@ test("the gate entry finds a job agent's project map from its job file, never fr
   }
 });
 
+test("a job agent whose job file no map covers any more is judged by the map of the hook's cwd, as the cockpit, so its code edit still asks", () => {
+  const root = tempDir("tedy-role-root-");
+  const profile = tempDir("tedy-role-profile-");
+  writeFileSync(join(profile, "config.json"), JSON.stringify({ gates: { roleGate: true } }));
+  mkdirSync(join(profile, "projects"));
+  writeFileSync(join(profile, "projects", "shop.md"), `# map\n\n\`\`\`json\n${JSON.stringify({ name: "shop", paths: [root], repos: [{ path: "fe" }], jobs: true })}\n\`\`\`\n`);
+  const stateDir = tempDir("tedy-state-");
+  const moved = spawnedJob("review", { state: stateDir, record: { cwd: root } });
+  const call = { hook_event_name: "PreToolUse", cwd: root, tool_name: "Edit", tool_input: { file_path: join(root, "fe", "src", "a.ts") } };
+  const out = execFileSync("node", [new URL("../gates/role-gate.mjs", import.meta.url).pathname], { input: JSON.stringify({ ...moved.input, ...call }), encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: stateDir } });
+  assert.notEqual(out, "");
+  assert.equal(JSON.parse(out).hookSpecificOutput.permissionDecision, "ask");
+});
+
 test("in a jobs map with sessions a bound job agent takes its role unless its parent is a listed role session", () => {
   const both = { ...map, jobs: true };
   const listed = spawnedJob("dev", { session: "s-pm" });

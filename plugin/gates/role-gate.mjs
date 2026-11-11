@@ -301,7 +301,8 @@ export function run() {
       return;
     }
     if (!gateSwitches().roleGate) return;
-    if (resolved === undefined) resolved = resolveMap(cwd);
+    if (resolved === null) logGate({ hook: "role-gate", decision: "job-map-missing", agent_type: input.agent_type });
+    if (!resolved) resolved = resolveMap(cwd);
     const verdict = resolved && judge(input, resolved.map, listSessions, who);
     if (verdict) {
       logGate({ hook: "role-gate", decision: verdict.reason ? "ask" : "allow", session: verdict.session, agent_type: input.agent_type, role: verdict.role, kind: verdict.kind, tool: input.tool_name });
