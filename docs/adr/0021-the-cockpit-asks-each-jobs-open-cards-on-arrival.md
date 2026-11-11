@@ -1,6 +1,6 @@
 # 0021: The cockpit asks each job's open cards on arrival, and a job stops only for what the user must decide
 
-Status: accepted 2026-11-12 (user decisions); amends the questions part of [ADR 0019](0019-jobs-run-as-native-background-subagents.md); live check pending (Consequences)
+Status: accepted 2026-11-12 (user decisions); amends the questions part of [ADR 0019](0019-jobs-run-as-native-background-subagents.md), the approval path of [ADR 0015](0015-jobs-replace-standing-role-sessions.md) and T2 of [ADR 0014](0014-kit-artifacts-meet-quota-techniques.md); live check pending (Consequences)
 
 ## Context
 - ADR 0019 made every job a background subagent. A job writes a `question` or `publish` card and ends its turn, and the user answers the cards by typing `/tedy:pending` in the cockpit. A research pass on 2026-11-11 found the problem is not the subagents but the second place the user must visit: Claude Code removes AskUserQuestion from every subagent, so the one session that holds the user has to ask for them. It also found that the job step turned every decision, the next-step menu included, into a question card.
@@ -65,5 +65,7 @@ position: approval-to-absent-user conforms
 ## Consequences
 - The user answers a job's question in the cockpit seconds after the job stops, and never needs `/tedy:pending`; it stays as the manual and recovery view.
 - A timed-out or unanswered question costs nothing but a re-ask: the card stays on disk, and a publish never runs on a timeout.
+- Cost of the per-prompt hook: one node process per prompt, 46 ms median (45 ms from an unmapped folder, 18 ms for a bare `node -e 0`), measured 2026-11-12 on the build machine with a mapped project holding one notice card; it adds no text to the context while no card is askable.
+- A job that ends with no card (the common case once rulings stay in the job) is listed by no hook, and nothing closes it on its own; `job.mjs close` stays the cockpit's step (`plugin/shared/jobs.md`, Cockpit 7).
 - Fewer questions: a job's reversible rulings arrive as a report on the notification, not as questions. A wrong ruling costs rework the user can see in the outcome.
 - Weakest link: no live cockpit has run this yet. The live check after release must show a question card asked on the job's notification turn, the answer reaching the job through SendMessage, and the gate log's `ask-cards` lines.
