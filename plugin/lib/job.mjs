@@ -148,9 +148,11 @@ const OLDER_KIT = "this job came from an older kit; nothing was signalled, and a
 
 const olderSession = (record) => (alive(record) ? `the session an older kit recorded for this job (claude pid ${record.pid}) is still open` : null);
 
+const fromOlderKit = (record) => Boolean(record) && !record.agent_name && !record.agent_id && !record.cockpit_pid;
+
 function unsignalled(record) {
   if (!record || record.agent_id || record.cockpit_pid) return [];
-  return [record.agent_name ? "nothing was bound to this job, so nothing was signalled" : OLDER_KIT];
+  return [fromOlderKit(record) ? OLDER_KIT : "nothing was bound to this job, so nothing was signalled"];
 }
 
 export function close(map, file, reason) {
@@ -249,6 +251,8 @@ export function resume(map, file, note, { caller = claudeProcess } = {}) {
   if (!job.record) throw new Error(`${file} has no launch record, so it was not started by job.mjs start here; close it and start a new job`);
   const { record } = job;
   if (!existsSync(record.cwd)) throw new Error(`${file}: its folder ${record.cwd} no longer exists; close it and start a new job`);
+  const older = fromOlderKit(record) && olderSession(record);
+  if (older) throw new Error(`${file}: ${older}; end that session first, then resume it again; nothing was resumed`);
   const live = Boolean(record.agent_id) && cockpitAlive(record);
   const cockpit = caller();
   if (live && !sameProcess(cockpit, record)) throw new Error(`${file}: its agent ${record.agent_name ?? record.agent_id} (${record.agent_id}) belongs to another live cockpit session, ${record.session_id} (claude pid ${record.cockpit_pid}); resume it there with SendMessage; nothing was resumed`);

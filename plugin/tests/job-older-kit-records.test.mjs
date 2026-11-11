@@ -103,3 +103,33 @@ test("a job that v0.2.25 wrote, once resumed, keeps its agent name in its record
   assert.equal(out.status, 0, out.stderr);
   assert.equal(out.stdout, `closed: ${file}\n`);
 });
+
+test("resume of a job an older kit started refuses and writes nothing while the claude session it recorded is still open, and prints a fresh Agent spec once that session has ended", async () => {
+  const w = world();
+  const session = await sleeper();
+  const file = v0225Job(w, { name: "old-open", status: "running", session: { pid: session.pid, start: session.start } });
+  const reused = v0225Job(w, { name: "old-reused", session: { pid: session.pid, start: `${session.start}9` } });
+  const text = readFileSync(file, "utf8");
+  const record = readFileSync(launchRecordPath(file, w.state), "utf8");
+  try {
+    const refused = w.run(["resume", file, "--note-file", note(w)]);
+    assert.equal(refused.status, 1, refused.stdout);
+    assert.equal(refused.stdout, "");
+    assert.equal(refused.stderr, `job: ${file}: the session an older kit recorded for this job (claude pid ${session.pid}) is still open; end that session first, then resume it again; nothing was resumed\n`);
+    assert.equal(readFileSync(file, "utf8"), text);
+    assert.equal(readFileSync(launchRecordPath(file, w.state), "utf8"), record);
+    const other = w.run(["resume", reused, "--note-file", note(w)]);
+    assert.equal(other.status, 0, other.stderr);
+    assert.equal(JSON.parse(other.stdout).tool, "Agent");
+  } finally {
+    session.child.kill("SIGKILL");
+    await session.exited;
+  }
+  const out = w.run(["resume", file, "--note-file", note(w)]);
+  assert.equal(out.status, 0, out.stderr);
+  const spec = JSON.parse(out.stdout);
+  assert.equal(spec.tool, "Agent");
+  assert.match(spec.prompt, /\n\ngo on with the second screen$/);
+  assert.equal(w.record(file).agent_name, spec.name);
+  assert.deepEqual(w.calls(), []);
+});
