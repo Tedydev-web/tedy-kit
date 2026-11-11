@@ -1,6 +1,6 @@
 # 0015: Short-lived job agents replace standing role sessions
 
-Status: accepted (2026-11-04); not yet implemented, and the platform facts it rests on are not yet probed; amended by [ADR 0018](0018-jobs-are-visible-sessions-opened-by-optional-runtime-adapters.md) (2026-11-09), which replaces the `--bg` launch and keeps the inbox, the locks and `agent_type`
+Status: accepted (2026-11-04); implemented in v0.2.24; superseded in part by [ADR 0018](0018-jobs-are-visible-sessions-opened-by-optional-runtime-adapters.md) (2026-11-09), which replaced the `--bg` launch and kept the inbox, the locks and `agent_type`, and by [ADR 0019](0019-jobs-run-as-native-background-subagents.md) (2026-11-11), which runs every job as a background subagent of the cockpit
 
 ## Context
 - ADR 0003 gives each role (PM, Dev, review) its own long-running session, and the sessions pass work through hand-off files and cross-session messages. One month of the user's own transcripts on a mapped project (read 2026-11-03) shows what that costs:

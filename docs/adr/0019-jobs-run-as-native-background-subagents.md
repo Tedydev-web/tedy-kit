@@ -53,6 +53,15 @@ Status: accepted (2026-11-11, user decision; probed 2026-11-11, built 2026-11-11
   - https://code.claude.com/docs/en/hooks "SubagentStart hooks receive `agent_id` with the unique identifier for the subagent and `agent_type` with the agent name that the matcher filters on."
   - Lesson: SubagentStart carries no prompt, so the prompt comes from the agent's transcript; tool events inside a subagent carry `agent_id` and `agent_type`.
   - Taken: bind on the agent's first PostToolUse or its SubagentStop, matcher anchored as `^tedy:(pm|dev|review|devops)$` for the plugin-scoped name.
+- obra/superpowers (MIT, studied 2026-11-11, via github)
+  - card: superpowers
+  - https://github.com/obra/superpowers/blob/bb92a77741419a4ab5f06e711a283343f1ada0c3/skills/subagent-driven-development/SKILL.md#L282 "Never dispatch multiple implementation subagents in parallel (conflicts)."
+  - Lesson: a controller session that dispatches implementation subagents runs one at a time, because parallel writers conflict.
+  - Taken: one dev job per repository at a time (Consequences); the kit does not block a second one.
+- Cognition, Don't Build Multi-Agents (public post by Walden Yan, 2025-06-12, studied 2026-11-11, via web)
+  - https://cognition.com/blog/dont-build-multi-agents "Actions carry implicit decisions, and conflicting decisions carry bad results"
+  - Lesson: agents that act in parallel make decisions the others do not see; a worktree per job stops file collisions, not conflicting decisions.
+  - Taken: the same Consequences line; each job's decisions go to cards the user answers in one place.
 
 no social prior art: 2026-11-11 reddit: "claude code background subagent permission prompt main session SendMessage resume"; x: "claude code background subagents SendMessage resume subagent"
 
@@ -64,14 +73,15 @@ position: role-coordination conforms
 - **Jobs end when the cockpit session ends.** A long dev job dies with the cockpit; `resume` then starts a fresh agent from the job file and its note.
 - **Permissions follow the cockpit.** Claude Code ignores `permissionMode` for plugin subagents, so a job runs in the cockpit's mode. In `default` mode each prompt waits in the cockpit, and a grant for the session covers the cockpit and every job. The cockpit never answers a job's permission card for the user.
 - **Cost:** a job's tool output stays out of the cockpit's context; each completion notification enters it.
+- **Parallel dev jobs.** Two dev jobs on one repository at once are allowed but discouraged: each has its own worktree and branch, which stops file collisions but not conflicting decisions. The cockpit starts one dev job per repository at a time.
 - **Threat model.** The kit defends against a job acting on another job by mistake: the role gate asks before a literal `job.mjs close` from a job in every mode, and `close` refuses any job whose agent still runs. Not stopped: a job that marks another job `done` or `stopped`, rewrites a launch record through a shell command, or points `TEDY_STATE_DIR` elsewhere. Accepted ceiling: a subagent a job spawns itself whose type is not `tedy:` has the cockpit's session, so the role gate judges it as the cockpit, and the `job.mjs close` and kit-state asks do not reach it; a job that routes work through a general subagent, deliberately or by mistake, gets the cockpit's verdicts. A `tedy:reviewer` child stays under the reviewer gate, which refuses its Bash commands other than reads. A job that deliberately attacks another job under `bypassPermissions` is beyond what a same-user hook can prevent.
-- **Not yet exercised live:**
-  - which transcript `transcript_path` names on a tool event inside a subagent: the docs define it as the main transcript only for SubagentStop, so binding takes it as the agent's own when its name is `agent-<agent_id>.jsonl` and derives the agent's path from it otherwise; if both miss, the job binds only at its first SubagentStop and reads `not started` until then, and `close` refuses it while the cockpit that started it is alive; the publish-quote gate reads the main transcript in either case, and asks when an agent file lies outside `subagents/`;
-  - a Monitor call's hook input: the gates read `tool_input.command`, the input the tools reference names;
+- **Not yet exercised live** (the live probe below settled binding on a tool event, a dev job working in its core worktree through `git -C`, SendMessage by agent id and the hook `cwd` of a job agent):
+  - which transcript `transcript_path` names on a tool event inside a subagent: the docs define it as the main transcript only for SubagentStop, so binding takes it as the agent's own when its name is `agent-<agent_id>.jsonl` and derives the agent's path from it otherwise. The probe bound the pm job on a tool event, so one of the two found the agent's transcript; which one was not recorded. If both miss, the job binds only at its first SubagentStop and reads `not started` until then, and `close` refuses it while the cockpit that started it is alive; the publish-quote gate reads the main transcript in either case, and asks when an agent file lies outside `subagents/`;
+  - a Monitor call's hook input: the gates read `tool_input.command`, the input the tools reference names; and its PostToolUse `tool_response`, whose `stdout` and `stderr` the post-push report reads to skip a failed push;
   - whether a Notification for a background subagent's permission prompt carries its `agent_id` (if not, `waiting: permission` never shows and the job reads `running`);
   - whether SubagentStop fires after TaskStop, and the TaskStop input field that names the agent (the docs name none; the hook matches any string value of `tool_input` against the agent id only);
-  - that the hook's `agent_id` is the id SendMessage takes (derived from the docs naming transcripts `agent-{agentId}.jsonl` and from the transcripts read on this machine, below);
-  - a real dev job working in its core worktree through `git -C`;
+  - whether the id the probe's SendMessage took was read from the launch record, where the hooks wrote their `agent_id`, or from the Agent call's result; the kit takes the two to be the same id;
+  - whether a subagent's hook `cwd` ever differs from the cockpit's folder, for example after `EnterWorktree`; the role gate no longer reads it for a job agent's map;
   - an agent that dies without SubagentStop leaves its job `running`, so `close` refuses it until the cockpit session ends.
 
 ## Probe evidence
@@ -82,5 +92,14 @@ OBSERVED, from a probe in a T3 cockpit on 2026-11-11, reported by the user:
 - A role-gate `ask` on its Write was logged with agent `tedy:pm` and surfaced in the cockpit thread as a T3 approval card.
 - SendMessage resumed it with its history.
 - No session-roles file was written for it.
+
+OBSERVED, from a live probe of this kit on 2026-11-11, run by the controller session that coordinated the build. A T3 cockpit loaded the kit's branch with `--plugin-dir`, an isolated `TEDY_STATE_DIR` and `TEDY_PROFILE_DIR`, and a single-repo map with `jobs: true`. Cost about USD 0.5 on Sonnet 5.5, about 180k subagent tokens. The procedure is `plugin/evals/probes/job-probe.md`.
+- `job.mjs start pm` and `job.mjs start dev --repo .` printed Agent specs, and the cockpit spawned both as background subagents.
+- About 10 seconds in, `job.mjs list` showed the pm job `running` (bound on a tool event) and the dev job `not started`. Both later showed `done`.
+- The pm job invoked the Skill tool with `tedy:pm`. The dev job read the dev `SKILL.md` by path, worked in the core worktree `start` made, committed and pushed `feat/live-dev-probe`, then ran `job.mjs done`.
+- SendMessage to the pm agent's id returned `{"success":true,"message":"Resuming agent …","resumedAgentId":…}`, and the agent replied PONG.
+- `close` closed both while the cockpit still ran. The dev close printed `removed <worktree> (the job is closed)`, and `list` then said `No jobs are open.` DERIVED: since `close` refuses an unbound job while its cockpit runs, and a running one, the dev job had bound and its SubagentStop had marked it idle.
+- The gate log held `role-gate allow` with `agent_type tedy:dev`, `role dev` and `kind code`.
+- The post-push report logged a `cwd` equal to the cockpit's folder, not the worktree, while the dev agent ran `git -C <worktree> push`: a job agent's hook `cwd` stayed the cockpit's folder.
 
 OBSERVED on 2026-11-11 while building: the subagent transcripts of a live session on this machine sit at `<project>/<session id>/subagents/agent-<id>.jsonl`, each first line a `user` entry with `isSidechain: true`, the agent id without an `agent-` prefix, and the spawning prompt as its string content.

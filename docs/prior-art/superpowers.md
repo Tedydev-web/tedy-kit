@@ -25,6 +25,7 @@ use-when: you need test-first work, fresh verification evidence before claiming 
 - https://github.com/obra/superpowers/blob/bb92a77741419a4ab5f06e711a283343f1ada0c3/RELEASE-NOTES.md#L100 "sessions ran only that file in 11 of 12 probe runs"
 - https://github.com/obra/superpowers/blob/bb92a77741419a4ab5f06e711a283343f1ada0c3/RELEASE-NOTES.md#L178 "Trivial code and human prose earn no test"
 - https://github.com/obra/superpowers/blob/bb92a77741419a4ab5f06e711a283343f1ada0c3/RELEASE-NOTES.md#L179 "Deleting the section outright measurably degraded test-first behavior"
+- https://github.com/obra/superpowers/blob/bb92a77741419a4ab5f06e711a283343f1ada0c3/skills/subagent-driven-development/SKILL.md#L282 "Never dispatch multiple implementation subagents in parallel (conflicts)."
 
 ## Issues and changelog
 - https://github.com/obra/superpowers/issues/633 "Subagents create files and commit their work"
@@ -40,6 +41,7 @@ use-when: you need test-first work, fresh verification evidence before claiming 
 - Changelog v6.4.1 (RELEASE-NOTES.md#L100, #2110): sessions told one test file ran only that file; the skill now requires the project's own test command and naming every failure. v6.2.0 (#L179): deleting the "why order matters" prose lowered test-first compliance (8/10 to 5/10), so the arguments moved into rationalization rows.
 
 ## Lessons
+- One implementation subagent at a time (`skills/subagent-driven-development/SKILL.md#L282`, read 2026-11-11): touches `plugin/shared/jobs.md:13` (Cockpit 3, which starts a dev job per request and names no limit per repository); gap, recorded in ADR 0019 as one dev job per repository at a time, not enforced; cost low.
 - Test-first, proven red, keyed to an observable predicate (bug fix or logic change, not copy or styling): touches `plugin/skills/dev/SKILL.md:35` (Build) and `:39` (report records the red run); missing; cost low (one step clause plus one anti-rationalization row). Key it to the predicate, not to task text, because #1576 shows "if the task says so" means never.
 - Regression proof by reverting the fix and watching the test fail: touches `plugin/skills/dev/SKILL.md:37`; missing; cost low, but only meaningful once test-first exists.
 - Project suite defines green: overlap with `plugin/skills/dev/SKILL.md:37` (all `package.json` test scripts on the commit); no change.

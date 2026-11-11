@@ -89,6 +89,7 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - Prompt the positive and hunt no-ops sentence by sentence, deleting any line the model already obeys by default
   - Not taken
 - [obra/superpowers](superpowers.md): you need test-first work, fresh verification evidence before claiming done, or skill-writing discipline
+  - One implementation subagent at a time (`skills/subagent-driven-development/SKILL.md#L282`, read 2026-11-11)
   - Test-first, proven red, keyed to an observable predicate (bug fix or logic change, not copy or styling)
   - Regression proof by reverting the fix and watching the test fail
   - Project suite defines green
@@ -871,6 +872,7 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - A guard that errors fails closed and says why
   - Strict test-first needs carve-outs or it loops
 - [obra/superpowers](superpowers.md): you need test-first work, fresh verification evidence before claiming done, or skill-writing discipline
+  - One implementation subagent at a time (`skills/subagent-driven-development/SKILL.md#L282`, read 2026-11-11)
   - Test-first, proven red, keyed to an observable predicate (bug fix or logic change, not copy or styling)
   - Regression proof by reverting the fix and watching the test fail
   - Project suite defines green
