@@ -4,10 +4,8 @@
    {"type":"command","if":"Bash(git *)","command":"node \"${CLAUDE_PLUGIN_ROOT}/log.mjs\" if-git"},
    {"type":"command","if":"Bash(rtk *)","command":"node \"${CLAUDE_PLUGIN_ROOT}/log.mjs\" if-rtk"},
    {"type":"command","command":"node \"${CLAUDE_PLUGIN_ROOT}/log.mjs\" all-bash"},
-   {"type":"command","command":"node \"${CLAUDE_PLUGIN_ROOT}/log.mjs\" hook-ask"}]},
-  {"matcher":".*","hooks":[{"type":"command","command":"node \"${CLAUDE_PLUGIN_ROOT}/log.mjs\" any-tool"}]}],
+   {"type":"command","command":"node \"${CLAUDE_PLUGIN_ROOT}/log.mjs\" hook-ask"}]}],
  "SessionStart":[
-   {"matcher":"startup","hooks":[{"type":"command","command":"node \"${CLAUDE_PLUGIN_ROOT}/log.mjs\" startup"}]},
    {"matcher":"resume","hooks":[{"type":"command","command":"node \"${CLAUDE_PLUGIN_ROOT}/log.mjs\" resume"}]},
    {"matcher":"compact","hooks":[{"type":"command","command":"node \"${CLAUDE_PLUGIN_ROOT}/log.mjs\" compact"}]}],
  "Stop":[{"hooks":[{"type":"command","command":"node \"${CLAUDE_PLUGIN_ROOT}/log.mjs\" stop"}]}]
