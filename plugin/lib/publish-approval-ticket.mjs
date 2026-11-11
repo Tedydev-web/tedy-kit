@@ -40,26 +40,30 @@ const askedTexts = (input) =>
 
 const contentOf = (entry) => (Array.isArray(entry?.message?.content) ? entry.message.content : []);
 
-function turnTexts(input) {
+function textRightBefore(input) {
   const entries = readTranscriptTail(input?.transcript_path, TRANSCRIPT_BYTES).filter((entry) => !entry?.isSidechain);
-  const at = entries.findIndex((entry) => entry?.type === "assistant" && contentOf(entry).some((block) => block?.type === "tool_use" && block.id === input?.tool_use_id));
+  const at = entries.findLastIndex((entry) => entry?.type === "assistant" && contentOf(entry).some((block) => block?.type === "tool_use" && block.id === input?.tool_use_id));
   if (at === -1) return [];
-  const texts = [];
   for (let index = at; index >= 0 && entries[index]?.type !== "user"; index -= 1) {
     if (entries[index]?.type !== "assistant") continue;
     const content = contentOf(entries[index]);
     const end = index === at ? content.findIndex((block) => block?.type === "tool_use" && block.id === input.tool_use_id) : content.length;
-    texts.unshift(...content.slice(0, end).flatMap((block) => (block?.type === "text" && typeof block.text === "string" ? [block.text] : [])));
+    for (const block of content.slice(0, end).reverse()) {
+      if (block?.type === "text" && typeof block.text === "string") return [block.text];
+      if (block?.type === "tool_use") return [];
+    }
   }
-  return texts;
+  return [];
 }
 
 function approvedPreviews(input, accepted) {
   const found = answered(input).filter(({ answer, chosen }) => accepted.includes(answer) && typeof chosen.preview === "string" && chosen.preview.trim());
   if (!found.length) return [];
   if (input.tool_response.annotations !== undefined) return found.filter(({ chosen, shown }) => shown === chosen.preview).map(({ chosen }) => chosen.preview);
-  const blocks = [...turnTexts(input), ...askedTexts(input?.tool_input)].map(contentLines);
-  return found.filter(({ chosen }) => blocks.some((lines) => holdsBlock(lines, contentLines(chosen.preview)))).map(({ chosen }) => chosen.preview);
+  const before = textRightBefore(input);
+  return found
+    .filter(({ question, chosen }) => [...before, ...askedTexts({ questions: [question] })].some((text) => holdsBlock(contentLines(text), contentLines(chosen.preview))))
+    .map(({ chosen }) => chosen.preview);
 }
 
 export const runApprovalsDir = (state = STATE_DIR) => join(state, "review-runs");

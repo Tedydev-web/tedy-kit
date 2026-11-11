@@ -105,6 +105,7 @@ test("with no annotations in the response, as T3 Code returns, a ticket needs th
   assert.equal(minted(unannotated([], { questionText: `Đăng?\n${PREVIEW}` })), 1);
   assert.equal(minted(unannotated([], { description: PREVIEW })), 1);
   assert.equal(minted(unannotated([said([text(fenced(PREVIEW))], Date.now() - 3 * 60 * 60_000)])), 1, "an answer given hours later");
+  assert.equal(minted(unannotated([said([text(fenced(PREVIEW))]), { type: "attachment", attachment: { type: "hook_success" } }, { type: "system", content: "x" }])), 1, "hook attachments and system entries between the quote and the question");
 });
 
 test("with no annotations, a preview from another turn, a hidden place or a split quote gives no ticket", () => {
@@ -124,12 +125,18 @@ test("with no annotations, a preview from another turn, a hidden place or a spli
     ["only in a subagent's reply", [{ ...said([text(fenced(PREVIEW))]), isSidechain: true }]],
     ["stitched from two reply blocks", [said([text("ok a\nthêm dòng 2")]), said([text(REPLY)])]],
     ["no entry for this question in the transcript", [said([text(fenced(PREVIEW))])], { ask: false }],
+    ["a later reply block in the same turn, as after a Stop hook continuation, showing another draft", [said([text(fenced(PREVIEW))]), { type: "system", content: "Stop hook" }, said([text(fenced("ok b"))])]],
+    ["a parallel tool call between the quote and the question", [said([text(fenced(PREVIEW))]), said([{ type: "tool_use", name: "Bash", id: "toolu_b", input: { command: "ls" } }])]],
+    ["an older entry reusing this question's id, the newest showing another draft", [said([text(fenced(PREVIEW)), ASK]), userTurn("ok"), said([text(fenced("ok b"))])]],
     ["a refusal", [said([text(fenced(PREVIEW))])], { answer: VI["post.hold"] }],
     ["an AFK auto-resolve", [said([text(fenced(PREVIEW))])], { extra: { afkTimeoutMs: 600000 } }],
   ]) {
     const input = options?.after ? unannotated([said([ASK]), said([text(fenced(PREVIEW))])], { ask: false }) : unannotated(entries, options);
     assert.equal(minted(input), 0, name);
   }
+  const two = hookInput([{ ...question("A", "Câu 1?"), options: [{ label: VI["post.hold"], description: PREVIEW }, { label: "x", description: "y" }] }, question(PREVIEW, "Câu 2?")], { "Câu 1?": VI["post.hold"], "Câu 2?": VI["post.asIs"] }, {});
+  delete two.tool_response.annotations;
+  assert.equal(minted({ ...two, transcript_path: join(tempDir("tedy-none-"), "missing.jsonl") }), 0, "another question's description in the same call");
   const gone = unannotated([said([text(fenced(PREVIEW))])]);
   assert.equal(minted({ ...gone, transcript_path: join(tempDir("tedy-none-"), "missing.jsonl") }), 0, "no transcript");
   const annotatedNull = unannotated([said([text(fenced(PREVIEW))])]);

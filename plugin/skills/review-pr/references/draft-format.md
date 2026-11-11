@@ -19,7 +19,7 @@ Follow `pr-comment.md`: the samples carry the voice, the avoid list carries the 
 
 ## Approval menu
 
-One `AskUserQuestion`, header `post.header`, after the whole draft is quoted in the reply:
+One `AskUserQuestion`, header `post.header`, right after the reply quotes `post.asIs`'s whole preview in one fenced block:
 
 - `post.asIs`: posts K comments as they are. Its `preview` holds the whole draft, verbatim, as the file stands now, then the `pinned:`, `warning:` and `notice:` lines the last lint printed, then the exact `github-write.mjs post` command line on a line of its own; one approval covers one post. The reply quotes this whole preview, lines and command included, in one fenced block right before the question (`shared/decision-points.md`), in place of a separate quote of the draft.
 - `post.trim`: a follow-up question lists comment numbers (multiSelect; more than four comments → the user types numbers in "Other").
