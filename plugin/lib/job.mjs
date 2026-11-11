@@ -186,8 +186,10 @@ const recordedTree = (record) => record?.worktree_owner === "core" && Boolean(re
 
 const coreWorktree = (record) => recordedTree(record) && existsSync(record.worktree);
 
+const resumable = (job, record) => (job.status !== "closed" && record.agent_id && cockpitAlive(record) ? `its agent ${record.agent_name ?? record.agent_id} (${record.agent_id}) is ${record.state} in cockpit session ${record.session_id} (claude pid ${record.cockpit_pid}), which can still resume it with SendMessage` : null);
+
 function pruneDecision(job, record, days, now) {
-  const why = agentHold(record)?.why ?? olderSession(record);
+  const why = agentHold(record)?.why ?? resumable(job, record) ?? olderSession(record);
   if (why) return { why };
   if (job.status === "closed") return { reason: "the job is closed" };
   const finished = job.status === "done" || job.status === "stopped";

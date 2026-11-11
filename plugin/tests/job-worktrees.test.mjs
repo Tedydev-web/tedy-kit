@@ -283,6 +283,35 @@ test("prune keeps the worktree of a job whose agent still runs in a live cockpit
   }
 });
 
+test("prune keeps the core worktree of a finished job whose agent is idle or stopped in a live cockpit, which SendMessage can still resume, and removes it once that cockpit has gone or the job is closed", async () => {
+  const { w, make } = pruneWorld();
+  const live = await sleeper();
+  let idle;
+  let stopped;
+  try {
+    idle = make("idle", { status: "done", record: bound(live, { state: "idle" }) });
+    stopped = make("stopped", { status: "stopped", record: bound(live, { state: "stopped" }) });
+    const closed = make("closed", { status: "closed", record: bound(live, { state: "idle" }) });
+    const out = w.run(["prune"], { extra: IDENTITY });
+    assert.equal(out.status, 0, out.stderr);
+    const lines = out.stdout.trim().split("\n");
+    for (const [tree, state] of [[idle, "idle"], [stopped, "stopped"]]) {
+      assert.ok(lines.some((line) => new RegExp(`^kept ${tree}: its agent dev-\\d{10}-${state} \\(a1b2c3\\) is ${state} in cockpit session s-cockpit \\(claude pid ${live.pid}\\), which can still resume it with SendMessage$`).test(line)), out.stdout);
+      assert.ok(existsSync(tree), tree);
+    }
+    assert.ok(lines.includes(`removed ${closed} (the job is closed)`), out.stdout);
+  } finally {
+    live.child.kill("SIGKILL");
+  }
+  await live.exited;
+  const after = w.run(["prune"], { extra: IDENTITY });
+  assert.equal(after.status, 0, after.stderr);
+  for (const tree of [idle, stopped]) {
+    assert.ok(after.stdout.includes(`removed ${tree} (its branch is merged into origin/main)`), after.stdout);
+    assert.ok(!existsSync(tree), tree);
+  }
+});
+
 test("prune keeps the worktree of every job close would refuse: not started while its cockpit runs, a bound agent with no cockpit pid, and an agent a resume set running", async () => {
   const { w, make } = pruneWorld();
   const live = await sleeper();
