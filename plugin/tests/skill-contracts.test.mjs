@@ -1,11 +1,22 @@
 import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { SPARSE_PATTERNS } from "../lib/review-worktree.mjs";
 
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 const script = (name) => existsSync(new URL(`../scripts/${name}.mjs`, import.meta.url));
+
+test("every numbered list in a skill's sections starts at 1 and runs on without a gap, each step on its own line", () => {
+  const skills = new URL("../skills/", import.meta.url);
+  for (const name of readdirSync(skills)) {
+    if (!existsSync(new URL(`${name}/SKILL.md`, skills))) continue;
+    for (const section of read(`skills/${name}/SKILL.md`).split(/^## /m).slice(1)) {
+      const numbers = section.split("\n").flatMap((line) => line.match(/^(\d+)\. /)?.[1] ?? []).map(Number);
+      assert.deepEqual(numbers, numbers.map((_, index) => index + 1), `${name}: ${section.split("\n")[0]}`);
+    }
+  }
+});
 
 test("every role that moves a work package's status follows one status procedure, and review merges only on the user's yes", () => {
   const procedure = read("shared/status-flow.md");
