@@ -14,6 +14,6 @@ test("the job probe is a manual cockpit procedure: no claude -p --agent probe or
   for (const word of ["--agent", "job-probes", "zz-job-probe", "--bg"]) assert.ok(!runner.includes(word), `run-probes.sh has ${word}`);
   assert.match(runner, /case "\$\{1:-\}" in jobs\) exec cat "\$HERE\/job-probe\.md" ;; esac/);
   const procedure = read("../evals/probes/job-probe.md");
-  for (const word of ["claude --plugin-dir", "TEDY_STATE_DIR", "TEDY_PROFILE_DIR", '"jobs":true', "job.mjs list", "SendMessage", "job.mjs close", "gate-log.jsonl", "push-report", "ADR 0019"]) assert.ok(procedure.includes(word), `job-probe.md lacks ${word}`);
+  for (const word of ["claude --plugin-dir", "TEDY_STATE_DIR", "TEDY_PROFILE_DIR", "job.mjs list", "SendMessage", "job.mjs close", "gate-log.jsonl", "push-report", "ADR 0019"]) assert.ok(procedure.includes(word), `job-probe.md lacks ${word}`);
   for (const word of ["claude -p", "--agent "]) assert.ok(!procedure.includes(word), `job-probe.md has ${word}`);
 });

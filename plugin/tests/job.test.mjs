@@ -134,6 +134,8 @@ test("decision-points.md tells a job it never asks the user and writes a card in
 test("jobs.md has the Job section every prompt names, and the skills send work for another role to it, never to a role session", () => {
   const headings = readFileSync(JOBS_DOC, "utf8").split("\n").filter((line) => line.startsWith("## "));
   assert.deepEqual(headings, ["## Which agent this is", "## Cockpit", "## Job", "## Permissions"]);
+  assert.doesNotMatch(readFileSync(JOBS_DOC, "utf8"), /hand-?off|jobs: true|`sessions`/i);
+  assert.doesNotMatch(readFileSync(join(PLUGIN, "evals", "probes", "job-probe.md"), "utf8"), /"jobs": ?true|jobs: true/);
   for (const skill of ["pm", "dev", "review-pr"]) {
     const text = readFileSync(join(PLUGIN, "skills", skill, "SKILL.md"), "utf8");
     assert.match(text, /Work for another role goes through `\$\{CLAUDE_PLUGIN_ROOT\}\/shared\/jobs\.md` instead of switching skills here\./, skill);

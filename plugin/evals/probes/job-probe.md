@@ -8,7 +8,7 @@ Cost on 2026-11-11: about USD 0.5 on `claude-sonnet-5-5`, about 180k subagent to
 
 ## Set up an isolated world
 
-The probe uses its own state dir, profile dir and a single-repo map with `"jobs":true`, so no real project, job record or gate log is touched. `K` is the `plugin` folder of the kit checkout under test.
+The probe uses its own state dir, profile dir and a single-repo map, so no real project, job record or gate log is touched. `K` is the `plugin` folder of the kit checkout under test.
 
 ~~~sh
 K=/path/to/tedy-kit/plugin
@@ -22,7 +22,7 @@ git -C "$W/proj" push -q origin HEAD:main
 git -C "$W/proj" remote set-head origin main
 mkdir -p "$W/profile/projects" "$W/state"
 printf '{"gates":{"roleGate":true}}\n' > "$W/profile/config.json"
-printf '# probe\n\n```json\n{"name":"probe","paths":["%s"],"repos":[{"path":".","role":"probe","branch":"main"}],"jobs":true,"language":{"pr_review":"en"}}\n```\n' "$W/proj" > "$W/profile/projects/probe.md"
+printf '# probe\n\n```json\n{"name":"probe","paths":["%s"],"repos":[{"path":".","role":"probe","branch":"main"}],"language":{"pr_review":"en"}}\n```\n' "$W/proj" > "$W/profile/projects/probe.md"
 cd "$W/proj" && TEDY_STATE_DIR="$W/state" TEDY_PROFILE_DIR="$W/profile" claude --plugin-dir "$K" --model claude-sonnet-5-5
 ~~~
 
