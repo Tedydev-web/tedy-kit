@@ -58,3 +58,32 @@ export function jobFile(w, { role = "dev", status = "running", created = new Dat
 }
 
 export const bound = (cockpit, extra = {}) => ({ agent_id: "a1b2c3", session_id: "s-cockpit", cockpit_pid: cockpit.pid, cockpit_pid_start: cockpit.start, bound_at: "2026-11-11T02:00:00.000Z", state: "running", ...extra });
+
+const OLDER_CREATED = "2026-11-10T03:00:00.000Z";
+const OLDER_UPDATED = "2026-11-10T04:00:00.000Z";
+
+function olderKitFile(w, { role, name, status }, keys) {
+  mkdirSync(join(w.root, "plans", "jobs"), { recursive: true });
+  const file = join(w.root, "plans", "jobs", `261110-1000-${role}-${name}.md`);
+  const header = [`to: tedy:${role}`, "from: cockpit", `status: ${status}`, `updated: ${OLDER_UPDATED}`, `created: ${OLDER_CREATED}`, `title: ${name.replaceAll("-", " ")}`, ...keys.filter(([, value]) => value).map(([key, value]) => `${key}: ${value}`)];
+  writeFileSync(file, `${header.join("\n")}\n\n${BODY}${status === "running" ? "" : "\n## Outcome\n\nthe older kit's outcome\n"}`);
+  return file;
+}
+
+export function v0224Job(w, { role = "pm", name = "old-gaps", status = "done", mode, session = "4f0c2a7e-0224" } = {}) {
+  const file = olderKitFile(w, { role, name, status }, [["cwd", w.root], ["permission_mode", mode], ["session_id", session]]);
+  recordLaunch(file, { role, cwd: w.root, permission_mode: mode, ...(session && { session_id: session }) }, w.state);
+  return file;
+}
+
+export function v0225Job(w, { role = "dev", name = "old-hello", status = "done", mode, via = "print", tree, branch = "feat/old-hello", session = { pid: DEAD_PID, start: "1" } } = {}) {
+  const repo = join(w.root, "fe");
+  const owner = tree && (via === "print" ? "core" : via);
+  const worktree = owner === "t3" ? undefined : tree;
+  const cwd = worktree ?? repo;
+  const file = olderKitFile(w, { role, name, status }, [["cwd", cwd], ["permission_mode", mode], ["repo", repo], ["branch", tree && branch], ["base", tree && "main"], ["worktree", worktree], ["worktree_owner", owner]]);
+  const herdr = via === "herdr" && { name: `tedy-${role}-${name}`, pane: "p-7" };
+  const bind = session && { session_id: "9d1e5b3c-0225", transcript_path: join(w.root, "projects", "9d1e5b3c-0225.jsonl"), pid: session.pid, pid_start: session.start, session_cwd: cwd, bound_at: OLDER_UPDATED, state: "idle", last_event_at: OLDER_UPDATED };
+  recordLaunch(file, { role, cwd, permission_mode: mode, settings: join(w.state, "settings", `${role}.json`), created: OLDER_CREATED, via, repo, ...(tree && { branch, base: "main", worktree_owner: owner }), ...(worktree && { worktree }), ...(herdr && { herdr }), ...bind }, w.state);
+  return file;
+}

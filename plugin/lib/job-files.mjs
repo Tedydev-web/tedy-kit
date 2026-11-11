@@ -65,7 +65,8 @@ export const removeRecord = (path) => lockedRecord(path, () => rmSync(path, { fo
 
 export const JOB_KEYS = Object.freeze([...HANDOFF_KEYS, "cwd", "repo", "branch", "base", "worktree", "worktree_owner"]);
 export const JOB_ROLES = Object.freeze(["pm", "dev", "review", "devops"]);
-const HEADER = new RegExp(`^(${JOB_KEYS.join("|")}): `);
+const HEADER_KEYS = [...JOB_KEYS, "permission_mode", "session_id"];
+const HEADER = new RegExp(`^(${HEADER_KEYS.join("|")}): `);
 
 export const jobsDir = (map) => join(map.paths[0], "plans", "jobs");
 
@@ -87,7 +88,7 @@ export function withoutKey(text, key) {
 export const withSection = (text, heading, body) => `${text.replace(/\s+$/, "")}\n\n## ${heading}\n\n${body.trim()}\n`;
 
 function fields(text) {
-  const found = parse(text, JOB_KEYS);
+  const found = parse(text, HEADER_KEYS);
   const role = found.to?.startsWith("tedy:") ? found.to.slice("tedy:".length) : null;
   return JOB_ROLES.includes(role) && found.from === "cockpit" && found.status ? { ...found, role } : null;
 }
