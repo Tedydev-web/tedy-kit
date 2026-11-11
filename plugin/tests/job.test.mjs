@@ -131,6 +131,12 @@ test("jobs.md has the Job section every prompt names, and the skills point a job
   }
 });
 
+test("the pm, review and devops job agents cannot spawn subagents, and the dev job agent keeps the Agent tool", () => {
+  const front = (role) => readFileSync(join(PLUGIN, "agents", `${role}.md`), "utf8").split("---")[1];
+  for (const role of ["pm", "review", "devops"]) assert.match(front(role), /^disallowedTools: Agent$/m, role);
+  assert.doesNotMatch(front("dev"), /^(tools|disallowedTools):/m);
+});
+
 test("jobs.md gives the cockpit its subagent rules, and no plugin file outside the tests names a removed launch adapter", () => {
   const doc = readFileSync(JOBS_DOC, "utf8");
   for (const rule of ["Spawn with Agent.", "Questions go through question cards.", "Answers and rework go through SendMessage.", "Never answer a job's permission card for the user.", "Jobs end when the cockpit session ends"]) assert.ok(doc.includes(rule), rule);
