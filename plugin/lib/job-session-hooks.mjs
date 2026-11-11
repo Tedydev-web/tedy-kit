@@ -69,7 +69,7 @@ export const agentsOf = (record) => ({ ...record?.agents, ...(record?.agent_id &
 
 const knows = (record, agent) => Object.hasOwn(agentsOf(record), agent);
 
-export const withAgentState = (record, agent, state) => (agent === record.agent_id ? { ...record, state } : { ...record, agents: { ...record.agents, [agent]: state } });
+const withAgentState = (record, agent, state) => (agent === record.agent_id ? { ...record, state } : { ...record, agents: { ...record.agents, [agent]: state } });
 
 export const busyAgents = (record) => Object.entries(agentsOf(record)).filter(([, state]) => state !== "idle" && state !== "stopped");
 

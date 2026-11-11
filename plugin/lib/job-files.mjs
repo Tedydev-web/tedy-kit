@@ -77,12 +77,6 @@ export function setKey(text, key, value) {
   return lines.join("\n");
 }
 
-export function withoutKey(text, key) {
-  const lines = text.split("\n");
-  const end = lines.findIndex((line) => !HEADER.test(line));
-  return lines.filter((line, index) => index >= end || !line.startsWith(`${key}: `)).join("\n");
-}
-
 export const withSection = (text, heading, body) => `${text.replace(/\s+$/, "")}\n\n## ${heading}\n\n${body.trim()}\n`;
 
 function fields(text) {
