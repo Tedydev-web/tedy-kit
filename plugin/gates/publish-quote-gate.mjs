@@ -1,5 +1,5 @@
 import { closeSync, fstatSync, openSync, readFileSync, statSync } from "node:fs";
-import { resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { githubWriteDryRun, parseFlags } from "../lib/cli-flags.mjs";
 import { parseDraft } from "../lib/draft-lint.mjs";
 import { classify, dataOnlyCommand, kitScriptCall, splitSegments, tokenize } from "./git-gate.mjs";
@@ -93,15 +93,25 @@ function transcriptSince(path, sinceMs) {
   }
 }
 
+function mainTranscript({ transcript_path: path, agent_id: agent }) {
+  if (!agent || typeof path !== "string") return path;
+  if (!/^agent-.*\.jsonl$/.test(basename(path))) return path;
+  const subagents = dirname(path);
+  if (basename(subagents) !== "subagents") return null;
+  const session = dirname(subagents);
+  return join(dirname(session), `${basename(session)}.jsonl`);
+}
+
 export function check(input) {
   const command = input.tool_input?.command ?? "";
   if (!/github-write\.mjs/.test(command)) return null;
   const read = (file) => readFileSync(file, "utf8");
   const found = publishes(command, input.cwd ?? process.cwd(), read);
   if (!found.length) return null;
-  if (!input.transcript_path) return { ask: true, reason: "tedy gate: cannot read this session's transcript to confirm the user saw the exact draft; allow only if they did." };
+  const transcript = mainTranscript(input);
+  if (!transcript) return { ask: true, reason: "tedy gate: cannot read this session's transcript to confirm the user saw the exact draft; allow only if they did." };
   const mtime = (file) => statSync(file).mtimeMs;
   const since = Math.min(...found.map(({ file }) => (file ? mtime(file) : 0)));
-  const missing = unshown(found, transcriptSince(input.transcript_path, since), mtime);
+  const missing = unshown(found, transcriptSince(transcript, since), mtime);
   return missing.length ? { ask: false, reason: reasonFor(missing) } : null;
 }

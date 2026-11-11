@@ -124,6 +124,32 @@ test("the quote check asks when there is no transcript path to confirm what the 
   assert.match(result.reason, /cannot read this session's transcript/);
 });
 
+test("a subagent's publish is checked against the cockpit's main transcript, so a body quoted only in a job's own transcript does not pass", () => {
+  const root = tempDir("tedy-quote-subagent-");
+  const main = join(root, "projects", "s-cockpit.jsonl");
+  const own = join(root, "projects", "s-cockpit", "subagents", "agent-a1job.jsonl");
+  mkdirSync(join(root, "projects", "s-cockpit", "subagents"), { recursive: true });
+  const shown = JSON.stringify({ type: "assistant", timestamp: new Date().toISOString(), message: { content: [{ type: "text", text: "Reply: Fixed it." }] } });
+  const input = (transcript_path, extra = { agent_id: "a1job", agent_type: "tedy:review" }) => ({ tool_name: "Bash", tool_input: { command: 'node /k/github-write.mjs reply 1 2 --body "Fixed it."' }, cwd: "/w", session_id: "s-cockpit", transcript_path, ...extra });
+  writeFileSync(main, "");
+  writeFileSync(own, `${shown}\n`);
+  for (const path of [own, main]) {
+    const result = check(input(path));
+    assert.equal(result?.ask, false, path);
+    assert.match(result.reason, /has not seen the exact text/, path);
+  }
+  assert.equal(check(input(own, {})), null);
+  writeFileSync(main, `${shown}\n`);
+  writeFileSync(own, "");
+  assert.equal(check(input(own)), null);
+  assert.equal(check(input(main)), null);
+  const stray = join(root, "agent-a1job.jsonl");
+  writeFileSync(stray, `${shown}\n`);
+  const unknown = check(input(stray));
+  assert.equal(unknown?.ask, true);
+  assert.match(unknown.reason, /cannot read this session's transcript/);
+});
+
 test("an OpenProject comment already on the work package is refused as a duplicate", () => {
   const activities = [{ id: 1, comment: { raw: "" } }, { id: 7, comment: { raw: "Đã fix ở PR #744\n" } }];
   assert.equal(sameComment(activities, "Đã fix ở PR #744")?.id, 7);
