@@ -266,7 +266,7 @@ test("prune keeps the worktree of a job whose agent still runs in a live cockpit
   const live = await sleeper();
   try {
     const tree = make("live", { status: "closed", record: bound(live) });
-    assert.equal(w.run(["prune"], { extra: IDENTITY }).stdout.trim(), `kept ${tree}: its agent still runs in the cockpit`);
+    assert.match(w.run(["prune"], { extra: IDENTITY }).stdout.trim(), new RegExp(`^kept ${tree}: its agent dev-\\d{10}-live \\(a1b2c3\\) is running in cockpit session s-cockpit \\(claude pid ${live.pid}\\)$`));
     assert.ok(existsSync(tree));
     const busy = make("busy", { status: "done", record: bound(live, { state: "waiting: permission" }) });
     const file = w.jobs().find((path) => path.endsWith("-dev-busy.md"));
@@ -278,6 +278,27 @@ test("prune keeps the worktree of a job whose agent still runs in a live cockpit
     const closed = w.run(["close", file], { extra: IDENTITY });
     assert.equal(closed.status, 0, closed.stderr);
     assert.equal(closed.stdout, `closed: ${file}\nremoved ${busy} (the job is closed)\n`);
+  } finally {
+    live.child.kill("SIGKILL");
+  }
+});
+
+test("prune keeps the worktree of every job close would refuse: not started while its cockpit runs, a bound agent with no cockpit pid, and an agent a resume set running", async () => {
+  const { w, make } = pruneWorld();
+  const live = await sleeper();
+  try {
+    const starting = make("starting", { status: "closed", record: { cockpit_pid: live.pid, cockpit_pid_start: live.start } });
+    const unknown = make("unknown", { status: "closed", record: bound({}, { state: "idle" }) });
+    const resumed = make("resumed", { status: "running", record: bound(live, { state: "running", last_event_at: new Date(Date.now() - 11 * DAY).toISOString() }) });
+    const name = w.record(w.jobs().find((path) => path.endsWith("-dev-starting.md"))).agent_name;
+    const out = w.run(["prune"], { extra: IDENTITY });
+    assert.equal(out.status, 0, out.stderr);
+    const lines = out.stdout.trim().split("\n");
+    assert.ok(lines.includes(`kept ${starting}: its agent ${name} has made no tool call yet while the cockpit that started it (claude pid ${live.pid}) still runs, so it may be starting`), out.stdout);
+    assert.ok(lines.includes(`kept ${unknown}: its launch record holds no cockpit claude pid, so the kit cannot tell whether its agent still runs`), out.stdout);
+    assert.ok(lines.some((line) => line.startsWith(`kept ${resumed}: its agent dev-`) && line.endsWith(`(a1b2c3) is running in cockpit session s-cockpit (claude pid ${live.pid})`)), out.stdout);
+    assert.equal(lines.length, 3, out.stdout);
+    for (const tree of [starting, unknown, resumed]) assert.ok(existsSync(tree), tree);
   } finally {
     live.child.kill("SIGKILL");
   }

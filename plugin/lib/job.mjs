@@ -178,7 +178,8 @@ const recordedTree = (record) => record?.worktree_owner === "core" && Boolean(re
 const coreWorktree = (record) => recordedTree(record) && existsSync(record.worktree);
 
 function pruneDecision(job, record, days, now) {
-  if (agentRunning(record)) return { why: "its agent still runs in the cockpit" };
+  const held = agentHold(record);
+  if (held) return { why: held.why };
   if (job.status === "closed") return { reason: "the job is closed" };
   const finished = job.status === "done" || job.status === "stopped";
   if (finished && merged(record)) return { reason: `its branch is merged into origin/${record.base}` };
