@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { parse } from "../lib/handoff.mjs";
 import { launchRecordPath, readJob } from "../lib/job-files.mjs";
 import { processInfo } from "../lib/job-session-hooks.mjs";
+import { commitFile, git } from "./git-sibling-for-tests.mjs";
 import { PLUGIN, sleeper, v0224Job, v0225Job, world } from "./job-world-for-tests.mjs";
 
 const note = (w) => {
@@ -50,6 +51,33 @@ test("resume of a job that v0.2.24 or v0.2.25 wrote prints a fresh Agent spec ca
     assert.equal(parse(text).status, "running", file);
     assert.match(text, /\n## Note [^\n]+\n\ngo on with the second screen\n$/, file);
   }
+  assert.deepEqual(w.calls(), []);
+});
+
+test("resume of a T3 dev job v0.2.25 started sends every fresh agent to the worktree its session recorded, and to the job file's folder when that path is no worktree of its repository", () => {
+  const w = world();
+  const fe = join(w.root, "fe");
+  git(w.root, "init", "-q", "-b", "main", fe);
+  commitFile(fe, "notes.txt", "start\n");
+  const t3Tree = join(w.root, ".t3-worktrees", "fe-old-hello");
+  git(fe, "worktree", "add", "-q", "-b", "feat/old-hello", t3Tree);
+  commitFile(t3Tree, "notes.txt", "start\nhello\n", "work done by the T3 job");
+  const plain = join(w.root, "elsewhere");
+  mkdirSync(plain);
+  const file = v0225Job(w, { via: "t3", tree: t3Tree, sessionCwd: t3Tree });
+  const other = v0225Job(w, { name: "old-plain", via: "t3", tree: t3Tree, sessionCwd: plain });
+  const folder = `Work in ${JSON.stringify(t3Tree)}: the older kit's session worked this job there, so its branch and commits are there, not in the folder the job file's cwd names.`;
+  for (const round of [1, 2]) {
+    const out = w.run(["resume", file, "--note-file", note(w)]);
+    assert.equal(out.status, 0, `${round}: ${out.stderr}`);
+    const spec = JSON.parse(out.stdout);
+    assert.equal(spec.tool, "Agent", `${round}`);
+    assert.ok(spec.prompt.startsWith(`Job file ${JSON.stringify(file)}`), `${round}`);
+    assert.ok(spec.prompt.includes(` ${folder} The job is resumed:`), `${round}: ${spec.prompt}`);
+  }
+  assert.equal(readJob(file).cwd, fe);
+  const plainSpec = JSON.parse(w.run(["resume", other, "--note-file", note(w)]).stdout);
+  assert.ok(!plainSpec.prompt.includes("Work in "), plainSpec.prompt);
   assert.deepEqual(w.calls(), []);
 });
 

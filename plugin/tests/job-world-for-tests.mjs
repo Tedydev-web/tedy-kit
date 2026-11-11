@@ -76,14 +76,14 @@ export function v0224Job(w, { role = "pm", name = "old-gaps", status = "done", m
   return file;
 }
 
-export function v0225Job(w, { role = "dev", name = "old-hello", status = "done", mode, via = "print", tree, branch = "feat/old-hello", session = { pid: DEAD_PID, start: "1" } } = {}) {
+export function v0225Job(w, { role = "dev", name = "old-hello", status = "done", mode, via = "print", tree, branch = "feat/old-hello", session = { pid: DEAD_PID, start: "1" }, sessionCwd } = {}) {
   const repo = join(w.root, "fe");
   const owner = tree && (via === "print" ? "core" : via);
   const worktree = owner === "t3" ? undefined : tree;
   const cwd = worktree ?? repo;
   const file = olderKitFile(w, { role, name, status }, [["cwd", cwd], ["permission_mode", mode], ["repo", repo], ["branch", tree && branch], ["base", tree && "main"], ["worktree", worktree], ["worktree_owner", owner]]);
   const herdr = via === "herdr" && { name: `tedy-${role}-${name}`, pane: "p-7" };
-  const bind = session && { session_id: "9d1e5b3c-0225", transcript_path: join(w.root, "projects", "9d1e5b3c-0225.jsonl"), pid: session.pid, pid_start: session.start, session_cwd: cwd, bound_at: OLDER_UPDATED, state: "idle", last_event_at: OLDER_UPDATED };
+  const bind = session && { session_id: "9d1e5b3c-0225", transcript_path: join(w.root, "projects", "9d1e5b3c-0225.jsonl"), pid: session.pid, pid_start: session.start, session_cwd: sessionCwd ?? cwd, bound_at: OLDER_UPDATED, state: "idle", last_event_at: OLDER_UPDATED };
   recordLaunch(file, { role, cwd, permission_mode: mode, settings: join(w.state, "settings", `${role}.json`), created: OLDER_CREATED, via, repo, ...(tree && { branch, base: "main", worktree_owner: owner }), ...(worktree && { worktree }), ...(herdr && { herdr }), ...bind }, w.state);
   return file;
 }

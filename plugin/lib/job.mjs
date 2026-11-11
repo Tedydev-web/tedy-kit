@@ -3,7 +3,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { missingSections, render, setStatus, slugOf, stamp } from "./handoff.mjs";
 import { age, createAtomic, JOB_ROLES, jobsDir, launchRecordPath, listJobs, readJob, readRecord, recordLaunch, removeRecord, setKey, updateRecord, withSection, writeAtomic } from "./job-files.mjs";
-import { addWorktree, git as gitRun, merged, planWorktree, removeWorktree } from "./job-worktrees.mjs";
+import { addWorktree, git as gitRun, linkedWorktreeOf, merged, planWorktree, removeWorktree } from "./job-worktrees.mjs";
 import { agentRunning, alive, claudeProcess, cockpitAlive } from "./job-session-hooks.mjs";
 import { resolveMap } from "./project-map.mjs";
 
@@ -248,6 +248,16 @@ export function prune(map, { days = 10, dryRun = false, now = Date.now() } = {})
   return [...unread, ...warnings, ...jobs.map((entry) => pruneJob(entry, days, dryRun, now))];
 }
 
+function olderWorktree(file, record) {
+  const dir = record.session_cwd;
+  if (typeof dir !== "string" || !record.repo || dir === record.cwd) return "";
+  try {
+    return linkedWorktreeOf(record.repo, dir) ? ` Work in ${JSON.stringify(dir)}: the older kit's session worked this job there, so its branch and commits are there, not in the folder the job file's cwd names.` : "";
+  } catch (error) {
+    throw new Error(`${file}: the kit cannot tell whether ${dir}, where an older kit's session worked this job, is a worktree of ${record.repo} (${error.message}); nothing was resumed`);
+  }
+}
+
 const sameProcess = (found, record) => Boolean(found) && found.pid === record.cockpit_pid && found.start === record.cockpit_pid_start;
 
 export function resume(map, file, note, { caller = claudeProcess } = {}) {
@@ -264,6 +274,7 @@ export function resume(map, file, note, { caller = claudeProcess } = {}) {
   const live = Boolean(record.agent_id) && cockpitAlive(record);
   const cockpit = caller();
   if (live && !sameProcess(cockpit, record)) throw new Error(`${file}: its agent ${record.agent_name ?? record.agent_id} (${record.agent_id}) belongs to another live cockpit session, ${record.session_id} (claude pid ${record.cockpit_pid}); resume it there with SendMessage; nothing was resumed`);
+  const folder = live ? "" : olderWorktree(file, record);
   const agent = record.agent_id;
   const name = record.agent_name ?? agentName(record.role, job.path);
   updateRecord(launchRecordPath(job.real), (fresh) => {
@@ -274,7 +285,7 @@ export function resume(map, file, note, { caller = claudeProcess } = {}) {
   const at = new Date().toISOString();
   writeAtomic(job.path, withSection(setStatus(job.text, "running", at), `Note ${at}`, note));
   if (live) return { tool: "SendMessage", to: record.agent_id, message: `Job file ${JSON.stringify(job.path)} ${RESUMED}\n\n${note.trim()}` };
-  const prompt = `${startPrompt(record.role, job.path)} The job ${RESUMED}\n\n${note.trim()}`;
+  const prompt = `${startPrompt(record.role, job.path)}${folder} The job ${RESUMED}\n\n${note.trim()}`;
   return { tool: "Agent", ...agentSpec(record.role, job.title ?? record.role, name, prompt) };
 }
 

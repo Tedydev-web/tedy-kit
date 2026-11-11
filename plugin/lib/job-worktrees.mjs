@@ -61,14 +61,17 @@ function blocker(tree) {
 
 const inside = (dir, tree) => relative(realpathSync(tree), realpathSync(dir)).split(sep)[0] !== "..";
 
-function registered(repo, tree, branch) {
+function listed(repo, tree) {
   const real = realpathSync(tree);
-  return git(repo, "worktree", "list", "--porcelain").split("\n\n").some((block) => {
-    const lines = block.split("\n");
+  return git(repo, "worktree", "list", "--porcelain").split("\n\n").map((block) => block.split("\n")).find((lines) => {
     const path = lines.find((line) => line.startsWith("worktree "))?.slice("worktree ".length);
-    return Boolean(path) && existsSync(path) && realpathSync(path) === real && lines.includes(`branch refs/heads/${branch}`);
+    return Boolean(path) && existsSync(path) && realpathSync(path) === real;
   });
 }
+
+const registered = (repo, tree, branch) => Boolean(listed(repo, tree)?.includes(`branch refs/heads/${branch}`));
+
+export const linkedWorktreeOf = (repo, dir) => existsSync(dir) && Boolean(listed(repo, dir)) && linkedWorktree(dir);
 
 export function removeWorktree({ repo, worktree, branch }, reason, dryRun = false) {
   try {
