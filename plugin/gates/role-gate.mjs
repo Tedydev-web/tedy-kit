@@ -1,13 +1,14 @@
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
-import { basename, isAbsolute, join, relative, resolve } from "node:path";
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { bashInputs, classify } from "./git-gate.mjs";
 import { route } from "../lib/handoff.mjs";
+import { jobsDir } from "../lib/job-files.mjs";
 import { jobOfAgent } from "../lib/job-session-hooks.mjs";
 import { profileDir } from "../lib/profile.mjs";
 import { ask, gateSwitches, logGate, readHookInput, STATE_DIR } from "../lib/hook-io.mjs";
-import { resolveMap } from "../lib/project-map.mjs";
+import { loadMaps, resolveMap } from "../lib/project-map.mjs";
 import { expandHome, shellWords, tokenize, walkCommands } from "../lib/shell-segments.mjs";
 
 const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
@@ -94,8 +95,13 @@ export function agentRole(input) {
 
 const jobAgentType = (input) => Boolean(input.agent_id) && Object.hasOwn(AGENT_ROLES, input.agent_type);
 
-export function spawnedRole(input, map, list = listSessions) {
-  if (!jobAgentType(input) || map?.jobs !== true || !jobOfAgent(input)) return null;
+function jobMap(file) {
+  const dir = dirname(file);
+  return loadMaps().find(({ map }) => map.paths?.length && existsSync(jobsDir(map)) && realpathSync(jobsDir(map)) === dir) ?? null;
+}
+
+export function spawnedRole(input, map, list = listSessions, job = jobOfAgent(input)) {
+  if (!jobAgentType(input) || map?.jobs !== true || !job) return null;
   if (map.sessions?.length && roleOf(map, sessionName(input.session_id, list()))) return null;
   return { role: AGENT_ROLES[input.agent_type], label: input.agent_type };
 }
@@ -271,17 +277,21 @@ export function run() {
     let resolved;
     let spawned = null;
     if (!who && jobAgentType(input)) {
-      try {
-        resolved = resolveMap(cwd);
-      } catch (error) {
-        if (gateSwitches().roleGate) throw error;
-        logGate({ hook: "role-gate", decision: "skip-map-unreadable", agent_type: input.agent_type, error: error.message });
-        return;
-      }
       const probe = { role: AGENT_ROLES[input.agent_type], label: input.agent_type };
-      const needed = resolved && (closeReason(input, probe) || kitStateReason(input, probe) || (gateSwitches().roleGate && classifyActions(input, resolved.map, probe.role).length));
-      spawned = needed ? spawnedRole(input, resolved.map) : null;
-      who = spawned;
+      const asks = closeReason(input, probe) || kitStateReason(input, probe);
+      const job = asks || gateSwitches().roleGate ? jobOfAgent(input) : null;
+      if (job) {
+        try {
+          resolved = jobMap(job.file);
+        } catch (error) {
+          if (gateSwitches().roleGate) throw error;
+          logGate({ hook: "role-gate", decision: "skip-map-unreadable", agent_type: input.agent_type, error: error.message });
+          return;
+        }
+        const needed = resolved && (asks || classifyActions(input, resolved.map, probe.role).length);
+        spawned = needed ? spawnedRole(input, resolved.map, listSessions, job) : null;
+        who = spawned;
+      }
     }
     const closing = closeReason(input, who);
     const kitState = closing ? null : kitStateReason(input, spawned);

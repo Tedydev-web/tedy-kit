@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { chmodSync, existsSync, linkSync, mkdirSync, readdirSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, linkSync, mkdirSync, readdirSync, readFileSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { classifyAction, decide, roleCard, roleOf, sessionName } from "../gates/role-gate.mjs";
 import * as gate from "../gates/role-gate.mjs";
@@ -585,6 +585,36 @@ test("the gate entry gives a job's every ask both to the agent its record binds 
       assert.equal(decision.permissionDecision, "ask", `${name} ${who.agent_id}`);
       assert.match(decision.permissionDecisionReason, /^tedy role gate: this is a pm job \(tedy:pm\); /, `${name} ${who.agent_id}`);
     }
+  }
+});
+
+test("the gate entry finds a job agent's project map from its job file, never from the hook's cwd, so with the role gate off its close and kit-state asks hold in its core worktree outside every map path and under a symlinked map path", () => {
+  const root = tempDir("tedy-role-root-");
+  const link = join(tempDir("tedy-role-link-"), "shop");
+  symlinkSync(root, link);
+  const tree = tempDir("tedy-role-worktree-");
+  for (const paths of [[root], [link]]) {
+    const profile = tempDir("tedy-role-profile-");
+    writeFileSync(join(profile, "config.json"), JSON.stringify({ gates: { roleGate: false } }));
+    mkdirSync(join(profile, "projects"));
+    writeFileSync(join(profile, "projects", "shop.md"), `# map\n\n\`\`\`json\n${JSON.stringify({ name: "shop", paths, repos: [{ path: "." }], jobs: true })}\n\`\`\`\n`);
+    const stateDir = tempDir("tedy-state-");
+    const launched = spawnedJob("dev", { state: stateDir, root, record: { cwd: tree, worktree: tree } });
+    const bound = spawnedJob("pm", { state: stateDir, root, agent: "a-bound", record: { cwd: root, agent_id: "a-bound" } });
+    const entry = (who, call) => execFileSync("node", [new URL("../gates/role-gate.mjs", import.meta.url).pathname], { input: JSON.stringify({ hook_event_name: "PreToolUse", cwd: tree, ...who, ...call }), encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: stateDir } });
+    const calls = [
+      { tool_name: "Bash", tool_input: { command: `node /k/plugin/scripts/job.mjs close ${other}` } },
+      { tool_name: "Bash", tool_input: { command: `cd ${root} && node /k/plugin/scripts/job.mjs close ${other}` } },
+      { tool_name: "Write", tool_input: { file_path: join(stateDir, "jobs", "forged.json"), content: "{}" } },
+    ];
+    for (const job of [launched, bound]) {
+      for (const call of calls) {
+        const out = entry(job.input, call);
+        assert.notEqual(out, "", `${paths} ${job.input.agent_type} ${JSON.stringify(call)}`);
+        assert.equal(JSON.parse(out).hookSpecificOutput.permissionDecision, "ask");
+      }
+    }
+    assert.equal(entry({ session_id: launched.input.session_id }, calls[0]), "");
   }
 });
 
