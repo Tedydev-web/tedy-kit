@@ -7,6 +7,7 @@ import { chmodSync, existsSync, linkSync, mkdirSync, readdirSync, readFileSync, 
 import { dirname, join } from "node:path";
 import { classifyAction, decide, roleCard, roleOf, sessionName } from "../gates/role-gate.mjs";
 import * as gate from "../gates/role-gate.mjs";
+import { isReviewer } from "../gates/reviewer-gate.mjs";
 import { recordLaunch } from "../lib/job-files.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
@@ -586,6 +587,18 @@ test("the gate entry asks a bound job agent before job.mjs close with the role g
   assert.equal(entry({}), "");
   assert.equal(entry({ agent_id: "a-unbound", agent_type: "tedy:review" }), "");
   assert.equal(existsSync(join(stateDir, "session-roles", job.input.session_id)), false);
+});
+
+test("a bound job's own subagents are judged as the cockpit, a tedy:reviewer one included, and the reviewer gate still checks the tedy:reviewer one", () => {
+  const job = spawnedJob("review", { record: { agent_id: "a-job" }, agent: "a-job" });
+  assert.deepEqual(gate.spawnedRole(job.input, jobsMap, counted()), { role: "review", label: "tedy:review" });
+  for (const type of ["general-purpose", "Explore", "tedy:reviewer"]) {
+    const child = { agent_type: type, agent_id: `a-${type.replace(/\W/g, "")}`, session_id: job.input.session_id, transcript_path: job.input.transcript_path };
+    assert.equal(gate.agentRole(child), null, type);
+    assert.equal(gate.spawnedRole(child, jobsMap, counted()), null, type);
+    assert.equal(gate.judge({ ...editCode, ...child }, jobsMap, counted()).role, "cockpit", type);
+    assert.equal(isReviewer({ tool_name: "Bash", ...child }), type === "tedy:reviewer", type);
+  }
 });
 
 test("the gate entry asks a bound job agent before any git --output form and before an edit under the profile or state dir, and leaves the cockpit alone", () => {

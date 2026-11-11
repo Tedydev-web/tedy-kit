@@ -131,10 +131,9 @@ test("jobs.md has the Job section every prompt names, and the skills point a job
   }
 });
 
-test("the pm, review and devops job agents cannot spawn subagents, and the dev job agent keeps the Agent tool", () => {
+test("every job agent keeps the Agent tool, so review and pm jobs can spawn the tedy:reviewer lenses their skills call for", () => {
   const front = (role) => readFileSync(join(PLUGIN, "agents", `${role}.md`), "utf8").split("---")[1];
-  for (const role of ["pm", "review", "devops"]) assert.match(front(role), /^disallowedTools: Agent$/m, role);
-  assert.doesNotMatch(front("dev"), /^(tools|disallowedTools):/m);
+  for (const role of ["pm", "dev", "review", "devops"]) assert.doesNotMatch(front(role), /^(tools|disallowedTools):/m, role);
 });
 
 test("jobs.md gives the cockpit its subagent rules, and no plugin file outside the tests names a removed launch adapter", () => {
