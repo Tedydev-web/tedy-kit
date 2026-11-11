@@ -50,7 +50,7 @@ function textRightBefore(input) {
     const end = index === at ? content.findIndex((block) => block?.type === "tool_use" && block.id === input.tool_use_id) : content.length;
     for (const block of content.slice(0, end).reverse()) {
       if (block?.type === "text" && typeof block.text === "string") return [block.text];
-      if (block?.type === "tool_use") return [];
+      if (typeof block?.type === "string" && block.type.endsWith("tool_use")) return [];
     }
   }
   return [];

@@ -127,6 +127,7 @@ test("with no annotations, a preview from another turn, a hidden place or a spli
     ["no entry for this question in the transcript", [said([text(fenced(PREVIEW))])], { ask: false }],
     ["a later reply block in the same turn, as after a Stop hook continuation, showing another draft", [said([text(fenced(PREVIEW))]), { type: "system", content: "Stop hook" }, said([text(fenced("ok b"))])]],
     ["a parallel tool call between the quote and the question", [said([text(fenced(PREVIEW))]), said([{ type: "tool_use", name: "Bash", id: "toolu_b", input: { command: "ls" } }])]],
+    ["a server tool call between the quote and the question", [said([text(fenced(PREVIEW)), { type: "server_tool_use", name: "web_search", id: "srvtoolu_1", input: {} }])]],
     ["an older entry reusing this question's id, the newest showing another draft", [said([text(fenced(PREVIEW)), ASK]), userTurn("ok"), said([text(fenced("ok b"))])]],
     ["a refusal", [said([text(fenced(PREVIEW))])], { answer: VI["post.hold"] }],
     ["an AFK auto-resolve", [said([text(fenced(PREVIEW))])], { extra: { afkTimeoutMs: 600000 } }],
