@@ -2,17 +2,11 @@
 
 ## Sweep (step 1a)
 
-Run from any directory the project map covers; the hand-off lands under the map's `paths[0]/plans/reports/`: `node <plugin>/scripts/merged-sweep.mjs --handoff --from "<this session's name>"`.
+Run from any directory the project map covers: `node <plugin>/scripts/merged-sweep.mjs`, or in a review job `node <plugin>/scripts/merged-sweep.mjs --job <this job file>`.
 
-It finds the user's PRs opened, merged or reverted since the last sweep whose body links a work package (`OP#<id>`) assigned to the user, plans each package from all of its PRs (`<plugin>/shared/status-flow.md`), and writes one hand-off asking the PM session to apply the batch.
+It finds the user's PRs opened, merged or reverted since the last sweep whose body links a work package (`OP#<id>`) assigned to the user, plans each package from all of its PRs (`<plugin>/shared/status-flow.md`), writes one publish card with a `set` command per package and prints `card: <path>`. Mention that path in one line of the reply; it never blocks the review, and `/tedy:pending approve` applies the batch.
 
-When it prints a `message:` line, `SendMessage` the PM session with that line exactly, without the `handoff.header` question: this batch covers only the user's own work packages, and the PM session still asks `approve.header` before any status changes.
-
-Mention the hand-off in one line of the reply; it never blocks the review.
-
-With `--inbox`, or when the map has no pm session, the sweep writes one inbox card instead and prints `card: <path>`; mention that path in one line of the reply, and `/tedy:pending approve` applies the batch.
-
-In a `jobs` map run `node <plugin>/scripts/merged-sweep.mjs --inbox --job <this job file>` instead: the card and each of its `set` commands name the job, so the cockpit applies the batch only after the job is done and does not close the job while the card is open.
+With `--job`, the card and each of its `set` commands name the job, so the cockpit applies the batch only after the job is done and does not close the job while the card is open.
 
 ## Merge step (step 12)
 

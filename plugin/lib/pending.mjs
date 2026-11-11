@@ -3,8 +3,7 @@ import { createHash } from "node:crypto";
 import { appendFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { listPending, parse, reportsDir, slugOf, stamp } from "./handoff.mjs";
-import { age, launchRecordPath, listJobs, readRecord } from "./job-files.mjs";
+import { age, launchRecordPath, listJobs, parse, readRecord, slugOf, stamp } from "./job-files.mjs";
 import { olderKitStatus } from "./job.mjs";
 import { cardRefusal, headerLength, oneLine, readCard } from "./pending-cards.mjs";
 import { resolveMap } from "./project-map.mjs";
@@ -83,8 +82,6 @@ export function archive(file, map) {
   if (!plans) throw new Error(`${file} is not under plans/ of this project`);
   const inside = relative(plans, real);
   if (inside.startsWith(`archive${sep}`)) throw new Error(`${file} is already in plans/archive`);
-  const reports = existsSync(reportsDir(map)) ? realpathSync(reportsDir(map)) : null;
-  if (reports && real.startsWith(reports + sep) && /^handoff-.*\.md$/.test(real.slice(reports.length + 1))) throw new Error(`${file} is a hand-off; close it with handoff.mjs done`);
   const to = join(plans, "archive", inside);
   if (existsSync(to)) throw new Error(`${to} is already archived; rename ${file} first`);
   mkdirSync(dirname(to), { recursive: true });
@@ -254,7 +251,7 @@ function jobState(job, problems) {
   }
 }
 
-export function waitingText(map, { offline = false, handoffs = true, limit = Infinity, budgetMs = Infinity } = {}) {
+export function waitingText(map, { offline = false, limit = Infinity, budgetMs = Infinity } = {}) {
   const dirs = repoDirs(map);
   const deadline = Date.now() + budgetMs;
   const problems = [];
@@ -273,7 +270,6 @@ export function waitingText(map, { offline = false, handoffs = true, limit = Inf
   const label = (dir) => relative(map.paths[0], dir) || ".";
   const prs = offline ? [] : dirs.filter(isRepoRoot).map((dir) => ({ dir, ...draftPrs(dir) }));
   const groups = [
-    ["Hand-offs not taken yet", (handoffs ? listPending(reportsDir(map)) : []).map((item) => `to ${item.to}: ${item.title} ${item.path}`)],
     ["Jobs", listJobs(map).map((job) => `${job.role}: ${job.title} (${jobState(job, problems)}, ${age(job.created)}) ${job.path}`)],
     ["To publish", open.filter((item) => item.kind === "publish").map((item) => `${item.title} (${item.preview}, ${plural(item.blocks.length, "command")}${item.running ? ", job running" : ""}) ${item.path}`)],
     ["Questions", open.filter((item) => item.kind === "question").map((item) => `${item.title}${item.answer ? ` (answered: ${item.answer})` : ""} ${item.path}`)],

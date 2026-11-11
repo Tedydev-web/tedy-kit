@@ -4,8 +4,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
-import { HANDOFF_KEYS, parse, stamp } from "../lib/handoff.mjs";
-import { JOB_KEYS as FILE_KEYS, launchRecordPath, readRecord, recordLaunch, updateRecord } from "../lib/job-files.mjs";
+import { JOB_BASE_KEYS, JOB_KEYS as FILE_KEYS, launchRecordPath, parse, readRecord, recordLaunch, stamp, updateRecord } from "../lib/job-files.mjs";
 import { handle, processInfo } from "../lib/job-session-hooks.mjs";
 import { BODY, bound, DEAD_PID, JOBS_DOC, jobFile, PLUGIN, sleeper, world } from "./job-world-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
@@ -132,12 +131,13 @@ test("decision-points.md tells a job it never asks the user and writes a card in
   assert.match(text, /A job never asks the user: it writes a `question` card and ends its turn \(`shared\/jobs\.md`, Job 2\)\./);
 });
 
-test("jobs.md has the Job section every prompt names, and the skills point a jobs map at it", () => {
+test("jobs.md has the Job section every prompt names, and the skills send work for another role to it, never to a role session", () => {
   const headings = readFileSync(JOBS_DOC, "utf8").split("\n").filter((line) => line.startsWith("## "));
   assert.deepEqual(headings, ["## Which agent this is", "## Cockpit", "## Job", "## Permissions"]);
   for (const skill of ["pm", "dev", "review-pr"]) {
     const text = readFileSync(join(PLUGIN, "skills", skill, "SKILL.md"), "utf8");
-    assert.match(text, /When the map sets `jobs` or `sessions`, follow `\$\{CLAUDE_PLUGIN_ROOT\}\/shared\/jobs\.md` or `handoff\.md` instead of switching skills here\./, skill);
+    assert.match(text, /Work for another role goes through `\$\{CLAUDE_PLUGIN_ROOT\}\/shared\/jobs\.md` instead of switching skills here\./, skill);
+    assert.doesNotMatch(text, /`sessions`|hand-?off|PM session/i, skill);
   }
 });
 
@@ -155,7 +155,7 @@ test("jobs.md gives the cockpit its subagent rules, and no plugin file outside t
 });
 
 test("a job file's header keys are only the ones start writes, and the test isolation scrubs no removed launcher's settings", () => {
-  assert.deepEqual(FILE_KEYS, [...HANDOFF_KEYS, "cwd", "repo", "branch", "base", "worktree", "worktree_owner"]);
+  assert.deepEqual(FILE_KEYS, [...JOB_BASE_KEYS, "cwd", "repo", "branch", "base", "worktree", "worktree_owner"]);
   assert.doesNotMatch(readFileSync(join(PLUGIN, "tests", "test-isolation.mjs"), "utf8"), /T3|HERDR/);
 });
 

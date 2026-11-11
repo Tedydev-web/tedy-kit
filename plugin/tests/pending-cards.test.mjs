@@ -6,7 +6,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFi
 import { basename, dirname, join, relative } from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
-import { parse } from "../lib/handoff.mjs";
+import { parse } from "../lib/job-files.mjs";
 import { CARD_KEYS } from "../lib/pending-cards.mjs";
 import { card, cardCheck, cardNote, cards, cardStart, done, waitingText } from "../lib/pending.mjs";
 import { profileWith, tempDir } from "./temp-dir-for-tests.mjs";
@@ -170,19 +170,19 @@ test("a card written by hand with a bad block lists under Refused cards and neve
   assert.equal(cards(map)[0].refusal.startsWith("block 1 is not plain words"), true);
 });
 
-test("the waiting list puts each card under its kind and keeps plain drafts and hand-offs where they were", () => {
+test("the waiting list puts each card under its kind, keeps plain drafts where they were and lists no hand-off", () => {
   const { root, draft, map } = project();
   writeFileSync(join(root, "plans", "reports", "handoff-1-to-pm.md"), "to: PM - Shop\nfrom: Dev\nstatus: pending\ncreated: c\ntitle: Fix toast\n\nx\n");
   const publish = card(map, "publish", { title: "Post review on PR 712", draft, preview: "ready", body: ready(draft) });
   const question = card(map, "question", { title: "Which toast", body: "Which toast text?\n- Short: one line\n- Long: two lines\n" });
   const notice = card(map, "notify", { title: "PR 713 opened", body: "https://x/713\n" });
   const text = waitingText(map, { offline: true });
-  assert.equal(text.split("\n\n").map((group) => group.split(":\n")[0]).join(" | "), "Hand-offs not taken yet | To publish | Questions | For your information | Drafts waiting on the user");
+  assert.equal(text.split("\n\n").map((group) => group.split(":\n")[0]).join(" | "), "To publish | Questions | For your information | Drafts waiting on the user");
   assert.match(text, new RegExp(`^To publish:\n- Post review on PR 712 \\(ready, 1 command\\) ${publish}$`, "m"));
   assert.match(text, new RegExp(`^Questions:\n- Which toast ${question}$`, "m"));
   assert.match(text, new RegExp(`^For your information:\n- PR 713 opened ${notice}$`, "m"));
   assert.match(text, new RegExp(`^Drafts waiting on the user:\n- ${draft}$`, "m"));
-  assert.match(text, /^Hand-offs not taken yet:\n- to PM - Shop: Fix toast /m);
+  assert.doesNotMatch(text, /Hand-off|Fix toast/);
 });
 
 test("done on a card archives the card and its draft, and leaves a draft outside plans/drafts alone", () => {
@@ -291,7 +291,7 @@ test("a card file name taken by a dangling symlink is skipped, never written thr
   const { symlinkSync } = await import("node:fs");
   const { root, map } = project();
   const target = join(tempDir("tedy-cards-target-"), "planted.md");
-  const { stamp } = await import("../lib/handoff.mjs");
+  const { stamp } = await import("../lib/job-files.mjs");
   const now = Date.now();
   for (const at of [now, now + 60_000]) symlinkSync(target, join(root, "plans", "drafts", `${stamp(new Date(at))}-notify-pr-opened.md`));
   const file = card(map, "notify", { title: "PR opened", body: "x" });

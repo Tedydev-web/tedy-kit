@@ -1,7 +1,7 @@
 import { realpathSync } from "node:fs";
 import { basename, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parse } from "./handoff.mjs";
+import { parse } from "./job-files.mjs";
 import { KIT_PUBLISH_APPLY_VERBS, KIT_PUBLISH_WRITE_VERBS } from "./publish-approval-settings.mjs";
 import { jobFlag } from "./record-lock.mjs";
 import { tokenize } from "./shell-segments.mjs";

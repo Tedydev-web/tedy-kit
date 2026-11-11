@@ -5,7 +5,7 @@ import { lintChatComment } from "./draft-lint.mjs";
 import { logPostedText } from "./edit-log.mjs";
 import { docKey, findQuoteRange, insertAnchored, readDocument, recheckDocTarget, session } from "./gdoc-comments.mjs";
 import { chatLanguage, fill, labels } from "./labels.mjs";
-import { slugOf, stamp } from "./handoff.mjs";
+import { slugOf, stamp } from "./job-files.mjs";
 import { fetchTab, quoteCount } from "./prd-section.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";

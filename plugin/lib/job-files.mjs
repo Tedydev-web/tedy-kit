@@ -1,9 +1,57 @@
 import { createHash } from "node:crypto";
 import { closeSync, existsSync, fchmodSync, linkSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
-import { HANDOFF_KEYS, parse } from "./handoff.mjs";
 import { withLockSync } from "./record-lock.mjs";
 import { STATE_DIR } from "./state-dir.mjs";
+
+export const JOB_BASE_KEYS = Object.freeze(["to", "from", "status", "created", "title", "updated"]);
+const SECTIONS = ["## User decisions", "## First safe step", "## Sources"];
+
+const outsideFences = (body) => {
+  let fence = null;
+  return body.split("\n").filter((line) => {
+    const marker = line.match(/^\s*(```|~~~)/)?.[1];
+    if (!marker) return !fence;
+    if (!fence) fence = marker;
+    else if (marker === fence) fence = null;
+    return false;
+  });
+};
+
+export const missingSections = (body) => SECTIONS.filter((heading) => !outsideFences(body).some((line) => line.trim() === heading));
+
+export const slugOf = (text) => text.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/g, "d").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
+
+export function stamp(date = new Date()) {
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${String(date.getFullYear()).slice(2)}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}`;
+}
+
+export function render({ to, from, title, body, created }) {
+  return `to: ${to}\nfrom: ${from}\nstatus: pending\ncreated: ${created}\ntitle: ${title}\n\n${body.trim()}\n`;
+}
+
+export function parse(text, keys = JOB_BASE_KEYS) {
+  const header = new RegExp(`^(${keys.join("|")}): (.*)$`);
+  const fields = {};
+  for (const line of text.split("\n")) {
+    const match = line.match(header);
+    if (!match) break;
+    fields[match[1]] = match[2].trim();
+  }
+  return fields;
+}
+
+export function setStatus(text, status, when) {
+  const lines = text.split("\n");
+  const index = lines.findIndex((line) => line.startsWith("status: "));
+  if (index === -1) throw new Error("not a job file: no status line");
+  lines[index] = `status: ${status}`;
+  const updated = lines.findIndex((line) => line.startsWith("updated: "));
+  if (updated === -1) lines.splice(index + 1, 0, `updated: ${when}`);
+  else lines[updated] = `updated: ${when}`;
+  return lines.join("\n");
+}
 
 const temporary = (file) => join(dirname(file), `.${basename(file)}.${process.pid}.tmp`);
 
@@ -61,7 +109,7 @@ export function updateRecord(path, change) {
   });
 }
 
-export const JOB_KEYS = Object.freeze([...HANDOFF_KEYS, "cwd", "repo", "branch", "base", "worktree", "worktree_owner"]);
+export const JOB_KEYS = Object.freeze([...JOB_BASE_KEYS, "cwd", "repo", "branch", "base", "worktree", "worktree_owner"]);
 export const JOB_ROLES = Object.freeze(["pm", "dev", "review", "devops"]);
 const HEADER_KEYS = [...JOB_KEYS, "permission_mode", "session_id"];
 const HEADER = new RegExp(`^(${HEADER_KEYS.join("|")}): `);

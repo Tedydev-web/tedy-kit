@@ -63,7 +63,7 @@ test("an invalid config fails loudly, naming the file and the field", () => {
 test("a profile file overrides the engine file of the same relative path, and paths cannot leave either root", () => {
   const dir = profileWith({ "style/pr-comment.md": "mine\n" });
   assert.equal(resolveShared("style/pr-comment.md", dir), join(dir, "style/pr-comment.md"));
-  assert.equal(resolveShared("handoff.md", dir), join(SHARED, "handoff.md"));
+  assert.equal(resolveShared("jobs.md", dir), join(SHARED, "jobs.md"));
   assert.deepEqual(overrides(dir), ["style/pr-comment.md"]);
   assert.throws(() => resolveShared("../rules/working-style.md", dir), /relative path inside/);
   assert.throws(() => resolveShared("/etc/passwd", dir), /relative path inside/);

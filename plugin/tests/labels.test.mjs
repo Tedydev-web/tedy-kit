@@ -27,8 +27,12 @@ test("every pack has the drop option of the approval inbox", () => {
 
 test("an unknown language falls back to English, and placeholders are filled", () => {
   assert.equal(labels("fr")["next.header"], "Next step");
-  assert.equal(fill(labels("en")["handoff.message"], { from: "PM", title: "Fix toast", path: "/p/h.md" }), "Hand-off from PM: Fix toast. File: /p/h.md. The user approved this hand-off.");
-  assert.match(labels("vi")["handoff.message"], /^Hand-off /);
+  assert.equal(fill(labels("en")["doc.postedAt"], { at: "09:30" }), "Commented at 09:30");
+  assert.equal(fill("{at} {missing}", { at: "09:30" }), "09:30 {missing}");
+});
+
+test("no pack keeps a hand-off label, because the kit no longer hands work between sessions", () => {
+  for (const [code, pack] of Object.entries(LABELS)) assert.deepEqual(Object.keys(pack).filter((key) => key.startsWith("handoff.")), [], code);
 });
 
 test("the command prints the table for the profile's chat language, or the one asked for", () => {

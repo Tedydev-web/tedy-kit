@@ -28,6 +28,8 @@ test("a PR in a tracked project must carry OP#<id> in its body", () => {
   assert.equal(create("--body=OP#21453").allow, true);
   assert.equal(create('--body ""').allow, false);
   assert.match(create('--body ""').reason, /OP#<id>/);
+  assert.match(create('--body ""').reason, /No work package yet: stop, write a question card to start a pm job for it \(shared\/jobs\.md, Job 4\), and open or edit the PR once it exists\./);
+  assert.doesNotMatch(create('--body ""').reason, /PM session|hand-?off/i);
   assert.equal(create("--fill").allow, false);
   assert.equal(create('--body "#21372"').allow, false);
   writeFileSync(join(repo, "body.md"), "OP#21376\n");

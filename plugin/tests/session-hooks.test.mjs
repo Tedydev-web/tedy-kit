@@ -240,14 +240,16 @@ test("a job's session start prints only its job card, naming jobs.md", async () 
   assert.equal(text, `Role: this session is a dev job (tedy:dev) of shop. Work it per ${JOBS_DOC}, section "Job": read the job file your prompt names, turn each decision into a question card and each write that needs approval into a publish card, and end with job.mjs done or stop.`);
 });
 
-test("a session start in a map that still holds sessions and a jobs key gives every session the cockpit card without a fleet lookup", async () => {
-  const { existsSync } = await import("node:fs");
+test("a session start in a map that still holds sessions, a jobs key and hand-off files gives every session the cockpit card without a fleet lookup and lists no hand-off", async () => {
+  const { existsSync, mkdirSync } = await import("node:fs");
   const fixture = await jobsFixture({ jobs: false, sessions: [{ name: "PM - Shop", role: "pm" }, { name: "Dev - Shop", role: "dev" }] });
+  mkdirSync(join(fixture.work, "plans", "reports"), { recursive: true });
+  writeFileSync(join(fixture.work, "plans", "reports", "handoff-261012-0900-to-dev-shop-fix-toast.md"), "to: Dev - Shop\nfrom: PM - Shop\nstatus: pending\ncreated: 2026-10-12T02:00:00.000Z\ntitle: Fix toast\n\nbody\n");
   for (const session_id of ["s-1", "s-2"]) {
     const text = fixture.start({ session_id });
     assert.match(text, /^This is the cockpit of shop:/m, session_id);
     assert.match(text, /^Jobs:\n- dev: Add hello /m, session_id);
-    assert.doesNotMatch(text, /PM - Shop|ListAgents|Pending hand-offs/, session_id);
+    assert.doesNotMatch(text, /hand-off|handoff|Fix toast|PM - Shop|ListAgents/i, session_id);
   }
   assert.equal(existsSync(fixture.called), false);
 });

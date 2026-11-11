@@ -180,7 +180,7 @@ async function inboxWorld({ sessions }) {
 }
 
 test("a sweep writes one run card with a block per update and no hand-off, even in a map that lists a pm session, moves the mark, and a sweep with nothing new writes no card", async () => {
-  const { parse } = await import("../lib/handoff.mjs");
+  const { parse } = await import("../lib/job-files.mjs");
   const { CARD_KEYS, readCard } = await import("../lib/pending-cards.mjs");
   const world = await inboxWorld({ sessions: [{ name: "PM - Shop", role: "pm" }] });
   try {
@@ -206,7 +206,7 @@ test("a sweep writes one run card with a block per update and no hand-off, even 
 
 test("--job names the job in the card and on every set command, and the card passes the card check", async () => {
   const { mkdirSync, writeFileSync } = await import("node:fs");
-  const { parse } = await import("../lib/handoff.mjs");
+  const { parse } = await import("../lib/job-files.mjs");
   const { CARD_KEYS, cardRefusal, readCard } = await import("../lib/pending-cards.mjs");
   const { tokenize } = await import("../lib/shell-segments.mjs");
   const world = await inboxWorld({ sessions: [] });

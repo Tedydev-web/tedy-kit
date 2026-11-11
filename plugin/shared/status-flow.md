@@ -15,4 +15,4 @@ The map's `tracker.flow` (`<plugin>/shared/project-map-schema.md`) says where ea
 - `/tedy:dev` step 3, when the work begins: `plan <id> --started`.
 - `/tedy:dev` step 8, after the draft PR opens: `plan <id>`; the preview lines ride in the next-step question.
 - `/tedy:review-pr`, after a merge it was asked to make: `references/status-after-merge.md`.
-- `merged-sweep.mjs` catches what happened outside the skills (a merge on GitHub, a revert) and hands the batch to the PM session.
+- `merged-sweep.mjs` catches what happened outside the skills (a merge on GitHub, a revert) and writes the batch as one publish card.

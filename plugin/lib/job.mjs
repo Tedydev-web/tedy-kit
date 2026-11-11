@@ -1,8 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { missingSections, render, setStatus, slugOf, stamp } from "./handoff.mjs";
-import { age, createAtomic, JOB_ROLES, jobsDir, launchRecordPath, listJobs, readJob, readRecord, recordLaunch, setKey, updateRecord, withSection, writeAtomic } from "./job-files.mjs";
+import { age, createAtomic, JOB_ROLES, jobsDir, launchRecordPath, listJobs, missingSections, readJob, readRecord, recordLaunch, render, setKey, setStatus, slugOf, stamp, updateRecord, withSection, writeAtomic } from "./job-files.mjs";
 import { addWorktree, git as gitRun, linkedWorktreeOf, merged, planWorktree, removeWorktree } from "./job-worktrees.mjs";
 import { agentRunning, agentsOf, alive, busyAgents, claudeProcess, cockpitAlive } from "./job-session-hooks.mjs";
 import { resolveMap } from "./project-map.mjs";
