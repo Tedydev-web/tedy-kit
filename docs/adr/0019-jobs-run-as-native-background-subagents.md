@@ -5,7 +5,7 @@ Status: accepted (2026-11-11, user decision; probed 2026-11-11, built 2026-11-11
 ## Context
 - ADR 0018 opened each job as a session of its own: a T3 thread on a `tedy-<role>` provider instance, a herdr pane, or a `claude --agent tedy:<role> --settings <file>` command the user ran. That needed four T3 instances written into T3's settings file, a settings file per role, a launch spec, per-job claude pids and the kit signalling them, and herdr calls.
 - The user decided on 2026-11-11: "Tôi thích phương án sub-agent hơn vì nó native hơn", and chose "Subagent cho mọi job" over keeping the thread and pane adapters, knowing that the user cannot type into a native subagent inside T3, that a background subagent cannot ask, and that a job ends with the cockpit session.
-- A probe in a T3 cockpit on 2026-11-11 (Probe evidence below) showed a body-less `tedy:pm` background subagent keeps the Claude Code system prompt, sees the kit skills it may invoke, has no AskUserQuestion, has its role-gate ask surfaced in the cockpit thread, and resumes with its history through SendMessage.
+- A probe in a T3 cockpit on 2026-11-11 (Probe evidence below) showed a body-less `tedy:pm` background subagent keeps the Claude Code system prompt, sees the kit skills it may invoke, keeps the Agent tool, has no AskUserQuestion, has its role-gate ask surfaced in the cockpit thread, and resumes with its history through SendMessage.
 
 ## Decision
 - **Every job is a background subagent of the cockpit.** `job.mjs start` writes the job file and its launch record as before, makes a dev job's core worktree, and prints one Agent call spec: `{ subagent_type: "tedy:<role>", run_in_background: true, name: "<role>-<yymmddhhmm>-<slug>", description: "<role> <up to four title words>", prompt }`. The name comes from the job file's name, cut to 32 characters with the stamp kept, so jobs of the same title started in different minutes differ; `start` refuses, and removes the job file it just made, when an open job already has that name (titles sharing their first words in one minute). The cockpit calls the Agent tool with it.
@@ -31,10 +31,10 @@ Status: accepted (2026-11-11, user decision; probed 2026-11-11, built 2026-11-11
 
 - Claude Code subagents docs (Anthropic docs, studied 2026-11-11, via web)
   - https://code.claude.com/docs/en/sub-agents "Background subagents surface every permission prompt in your main session."
-  - https://code.claude.com/docs/en/sub-agents "a background subagent keeps every MCP tool but only these built-in tools: `Read`, `Grep`, `Glob`, `LSP`, `Bash`, `PowerShell`, `Edit`, `Write`, `NotebookEdit`, `WebFetch`, `WebSearch`, `TodoWrite`, `Skill`, `ToolSearch`, `EnterWorktree`, `ExitWorktree`, `Monitor`, `TaskStop`, `SendMessage`, and `Artifact`"
+  - https://code.claude.com/docs/en/sub-agents "Apart from `Agent` and `ExitPlanMode`, which follow the first filter's conditions wherever the subagent runs, a background subagent keeps every MCP tool but only these built-in tools: `Read`, `Grep`, `Glob`, `LSP`, `Bash`, `PowerShell`, `Edit`, `Write`, `NotebookEdit`, `WebFetch`, `WebSearch`, `TodoWrite`, `Skill`, `ToolSearch`, `EnterWorktree`, `ExitWorktree`, `Monitor`, `TaskStop`, `SendMessage`, and `Artifact`"
   - https://code.claude.com/docs/en/sub-agents "When Claude sends a completed subagent a message with the `SendMessage` tool, the subagent resumes in the background without a new `Agent` invocation."
   - https://code.claude.com/docs/en/sub-agents "Each transcript is stored as `agent-{agentId}.jsonl`."
-  - Lesson: a background subagent's prompts land in the cockpit, it cannot ask, and SendMessage is native rework with the agent's history. ADR 0018 read the first fact as a reason against subagents; the user weighed it the other way.
+  - Lesson: a background subagent's prompts land in the cockpit, it cannot ask, and SendMessage is native rework with the agent's history. The built-in list above excludes `Agent`, which the docs filter separately; the observed tool set of a job agent is the probe's (Probe evidence), and it includes `Agent`, so a job can spawn subagents unless its definition removes the tool. ADR 0018 read the first fact as a reason against subagents; the user weighed it the other way.
   - https://code.claude.com/docs/en/sub-agents "In a subagent definition, listing `Agent` in `tools` lets that subagent spawn subagents of its own while the depth limit allows it, but any type list inside the parentheses is ignored."
   - Taken: jobs as background subagents, questions on cards, rework through SendMessage, binding from the agent's own transcript, and `disallowedTools: Agent` instead of an `Agent(tedy:reviewer)` allowlist the platform ignores in a subagent.
 - Claude Code tools reference (Anthropic docs, studied 2026-11-11, via web)
@@ -70,7 +70,7 @@ position: role-coordination conforms
 OBSERVED, from a probe in a T3 cockpit on 2026-11-11, reported by the user:
 - A body-less `tedy:pm` background subagent keeps the Claude Code system prompt, so the agent files need no body.
 - Its Skill tool lists `tedy:pm` and `tedy:review-pr`, but not `tedy:dev` (the dev skill is not model-invocable).
-- Its tools are Agent, Bash, Edit, Read, Skill, ToolSearch, Write, MCP tools, and deferred EnterWorktree, ExitWorktree, Monitor, SendMessage, TaskStop, WebFetch and WebSearch. AskUserQuestion is missing.
+- Its tools are Agent, Bash, Edit, Read, Skill, ToolSearch, Write, MCP tools, and deferred EnterWorktree, ExitWorktree, Monitor, SendMessage, TaskStop, WebFetch and WebSearch. AskUserQuestion is missing. This observed set is the fact the design rests on; the docs' background list quoted under Prior art leaves `Agent` out because it filters `Agent` separately. The probe ran before the pm, review and devops agents set `disallowedTools: Agent`.
 - A role-gate `ask` on its Write was logged with agent `tedy:pm` and surfaced in the cockpit thread as a T3 approval card.
 - SendMessage resumed it with its history.
 - No session-roles file was written for it.
