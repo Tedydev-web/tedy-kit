@@ -20,6 +20,7 @@ Status: accepted (2026-11-04); implemented in v0.2.24; superseded in part by [AD
 - A role is read from the hook input's `agent_type`, never from a session display name.
 - Each job starts with its role's permission allowlist on the launch line (`--settings`), because plugin agents ignore `permissionMode` and a plugin `settings.json` cannot carry permissions. Rules run deny, then ask, then allow, so the allowlist cannot bypass a publish ask rule. Background worktree isolation is off for jobs, so drafts land where the cockpit reads them.
 - A `jobs` field in the project map turns this on per project. The `sessions` field and hand-off files keep working until the user switches a project and confirms the switch; they are removed after that.
+- **Removal (2026-11-11).** The user decided on 2026-11-11 to remove the legacy path at once, without the soak period, in a release of its own. Jobs are the only mode: the `jobs` and `sessions` map fields are dropped (a map that still holds them parses, the keys are ignored, and `project-map.mjs doctor` names them in one `warn` line); the role gate no longer reads `claude agents --json` or matches a session by its display name; the dispatch role, hand-off files' write, route and accept paths, their CLI and `shared/handoff.md` are gone, and `merged-sweep.mjs` writes its status batch as a publish card by default. Every session whose hook input carries no `tedy:<role>` agent type is the cockpit; a job agent, or a `claude --agent tedy:<role>` main thread and its subagents through the session-role file, keeps its role. Hand-off files already in a project stay where they are: `pending.mjs list` no longer lists them, and `pending.mjs done` archives one like any other file under `plans/`. The previous release tag is the rollback.
 
 ## Enforcement
 - Lock and ledger refusals, each proved by a test with two real child processes and by per-writer tests for GitHub, Doc and Figma.
@@ -60,7 +61,7 @@ Status: accepted (2026-11-04); implemented in v0.2.24; superseded in part by [AD
   - Taken: each code job works in its own worktree.
 
 ## Consequences
-- ADR 0003's role-per-session rule is superseded in a map with `jobs`, and removed in full when the legacy `sessions` path is removed.
+- ADR 0003's role-per-session rule is superseded in a map with `jobs`, and removed in full when the legacy `sessions` path is removed (done 2026-11-11, Decision: Removal).
 - ADR 0007 rejected a role persona through `claude --agent` because an agent body replaces the default Claude Code system prompt. The job agents have front matter and no body, which is expected to keep the default prompt and the skills list; the probe must confirm it, and if a body turns out to be required, 0007's rejection stands and jobs stop for the user.
 - ADR 0012 is amended for `jobs` maps: a status move goes through an inbox card that the cockpit applies; the job does not apply it.
 - Each job starts with a fresh context and carries its record in files (job file, drafts, reports), so a job re-reads its own sources.
