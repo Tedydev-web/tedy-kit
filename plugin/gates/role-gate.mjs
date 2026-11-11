@@ -1,9 +1,7 @@
-import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { bashInputs, classify } from "./git-gate.mjs";
-import { route } from "../lib/handoff.mjs";
 import { jobsDir } from "../lib/job-files.mjs";
 import { jobOfAgent } from "../lib/job-session-hooks.mjs";
 import { profileDir } from "../lib/profile.mjs";
@@ -32,7 +30,6 @@ const FORBIDDEN = {
   devops: new Set(["tracker", "doc-figma", "pr-review"]),
   review: new Set(["code", "tracker", "doc-figma"]),
   pm: new Set(["code", "pr-review"]),
-  dispatch: new Set(["code", "tracker", "tracker-status", "doc-figma", "pr-review"]),
   reader: new Set(["code", "tracker", "tracker-status", "doc-figma", "pr-review"]),
   cockpit: new Set(["code"]),
 };
@@ -100,9 +97,8 @@ function jobMap(file) {
   return loadMaps().find(({ map }) => map.paths?.length && existsSync(jobsDir(map)) && realpathSync(jobsDir(map)) === dir) ?? null;
 }
 
-export function spawnedRole(input, map, list = listSessions, job = jobOfAgent(input)) {
-  if (!jobAgentType(input) || map?.jobs !== true || !job) return null;
-  if (map.sessions?.length && roleOf(map, sessionName(input.session_id, list()))) return null;
+export function spawnedRole(input, job = jobOfAgent(input)) {
+  if (!jobAgentType(input) || !job) return null;
   return { role: AGENT_ROLES[input.agent_type], label: input.agent_type };
 }
 
@@ -119,8 +115,7 @@ function repoOf(map, path) {
 
 const isCode = (hit) => hit && !hit.inside.split("/").includes("plans") && !hit.inside.endsWith(".md");
 
-export function classifyActions(input, map, role) {
-  if (!role && !map.sessions?.length && !map.jobs) return [];
+export function classifyActions(input, map) {
   const cwd = input.cwd ?? process.cwd();
   if (EDIT_TOOLS.has(input.tool_name)) {
     const path = resolve(cwd, input.tool_input?.file_path ?? input.tool_input?.notebook_path ?? "");
@@ -144,7 +139,7 @@ export function classifyActions(input, map, role) {
   return actions;
 }
 
-export const classifyAction = (input, map, role) => classifyActions(input, map, role)[0] ?? null;
+export const classifyAction = (input, map) => classifyActions(input, map)[0] ?? null;
 
 const JOB_SCRIPT = /(?:^|\/)job\.mjs$/;
 
@@ -194,60 +189,23 @@ export function closeReason(input, who) {
   return `tedy role gate: this is a ${who.role} job (${who.label}); job.mjs close ${[...new Set(files)].join(", ")} marks that job closed and removes its worktree, which belongs to the cockpit. Allow it only if the user asked for it here.`;
 }
 
-export const roleOf = (map, name) => (map.sessions ?? []).find((session) => session.name === name)?.role ?? null;
-
-export function sessionName(sessionId, list) {
-  return list.find((session) => session.sessionId === sessionId)?.name ?? null;
-}
-
-function ownerSession(map, role, repo) {
-  try {
-    return route(map, role, repo ?? undefined).name;
-  } catch {
-    return null;
-  }
-}
-
-export function decide(map, name, action) {
-  const role = roleOf(map, name);
-  if (!role || !action || !FORBIDDEN[role]?.has(action.kind)) return null;
-  const owner = OWNER[action.kind];
-  const target = ownerSession(map, owner, action.repo);
-  return `tedy role gate: this is "${name}", the ${role} session; ${WHAT[action.kind]} belongs to the ${owner} session${target ? ` "${target}"` : ""}. Hand it over with what you found and where, per ${fileURLToPath(new URL("../shared/handoff.md", import.meta.url))}, unless the user allows this one here.`;
-}
-
 const JOBS_DOC = fileURLToPath(new URL("../shared/jobs.md", import.meta.url));
 
 export function agentReason(who, action, map = {}) {
   if (!FORBIDDEN[who.role]?.has(action.kind)) return null;
   const owner = OWNER[action.kind];
   if (who.role === "cockpit") return `tedy role gate: this is the cockpit of ${map.name}; ${WHAT[action.kind]} belongs to the ${owner} role. Start a ${owner} job per ${JOBS_DOC}, unless the user allows this one here.`;
-  const next = map.jobs ? `Write a card, or a question card to start a ${owner} job, per ${JOBS_DOC}` : "Leave a draft under plans/drafts for it";
-  return `tedy role gate: this is a ${who.role} job (${who.label}); ${WHAT[action.kind]} belongs to the ${owner} role. ${next}, unless the user allows this one here.`;
+  return `tedy role gate: this is a ${who.role} job (${who.label}); ${WHAT[action.kind]} belongs to the ${owner} role. Write a card, or a question card to start a ${owner} job, per ${JOBS_DOC}, unless the user allows this one here.`;
 }
 
 export const cockpitCard = (map) => `This is the cockpit of ${map.name}: start jobs per ${JOBS_DOC}, approve with /tedy:pending.`;
 
 export function jobCard(map, who, gateOn = true) {
-  if (map.jobs) return `Role: this session is a ${who.role} job (${who.label}) of ${map.name}. Work it per ${JOBS_DOC}, section "Job": read the job file your prompt names, turn each decision into a question card and each write that needs approval into a publish card, and end with job.mjs done or stop.${gateOn ? " A write that belongs to another role asks the user first." : ""}`;
-  return `Role: this session is a ${who.role} job (${who.label}) of ${map.name}. When work for another role turns up (a PRD or Figma question, a tracker task, a PR review, code another role owns), stop looking into it, write what you saw and where (file:line, PRD locator, frame) into a draft under plans/drafts, and return to this job's task; the owning role does the research.${gateOn ? " A write that belongs to another role asks the user first." : ""}`;
+  return `Role: this session is a ${who.role} job (${who.label}) of ${map.name}. Work it per ${JOBS_DOC}, section "Job": read the job file your prompt names, turn each decision into a question card and each write that needs approval into a publish card, and end with job.mjs done or stop.${gateOn ? " A write that belongs to another role asks the user first." : ""}`;
 }
 
-export function roleCard(map, name, gateOn = true) {
-  const role = roleOf(map, name);
-  if (!role) return "";
-  const repos = (map.sessions.find((session) => session.name === name).repos ?? []).join(", ");
-  const others = (map.sessions ?? []).filter((session) => session.name !== name).map((session) => `"${session.name}" (${session.role}${session.repos ? `: ${session.repos.join(", ")}` : ""})`).join(", ");
-  if (role === "dispatch") return `Role: this session is "${name}", the dispatch session of ${map.name}. It does no role work itself and publishes nothing. The role sessions are ${others}. Route every request per the dispatch section of ${fileURLToPath(new URL("../shared/handoff.md", import.meta.url))}: hand it to the owning session without the hand-off question, ask only when the owner is unclear or the request spans two roles, and relay each session's reply in one line.`;
-  return `Role: this session is "${name}", the ${role} session of ${map.name}${repos ? ` for ${repos}` : ""}. The other sessions are ${others}. When work for another role turns up (a PRD or Figma question, a tracker task, a PR review, code in another session's repository), stop looking into it, write what you saw and where (file:line, PRD locator, frame) into a hand-off per ${fileURLToPath(new URL("../shared/handoff.md", import.meta.url))}, and return to this session's task; the receiving session does the research.${gateOn ? " A write that belongs to another role asks the user first." : ""}`;
-}
-
-export function listSessions() {
-  return JSON.parse(execFileSync("claude", ["agents", "--json", "--all"], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], timeout: 10_000 }));
-}
-
-export function judge(input, map, list = listSessions, who = agentRole(input) ?? spawnedRole(input, map, list)) {
-  const actions = classifyActions(input, map, who?.role);
+export function judge(input, map, who = agentRole(input) ?? spawnedRole(input)) {
+  const actions = classifyActions(input, map);
   if (!actions.length) return null;
   const first = (reasonOf) => {
     for (const action of actions) {
@@ -258,15 +216,10 @@ export function judge(input, map, list = listSessions, who = agentRole(input) ??
   };
   if (who) {
     const { action, reason } = first((each) => agentReason(who, each, map));
-    return { kind: action.kind, role: who.role, session: null, reason };
+    return { kind: action.kind, role: who.role, reason };
   }
-  const name = map.jobs && !map.sessions?.length ? null : sessionName(input.session_id, list());
-  if (map.jobs && !roleOf(map, name)) {
-    const { action, reason } = first((each) => (each.script ? null : agentReason({ role: "cockpit" }, each, map)));
-    return { kind: action.kind, role: "cockpit", session: null, reason };
-  }
-  const { action, reason } = first((each) => (name && decide(map, name, each)) || null);
-  return { kind: action.kind, role: name && roleOf(map, name), session: name, reason };
+  const { action, reason } = first((each) => (each.script ? null : agentReason({ role: "cockpit" }, each, map)));
+  return { kind: action.kind, role: "cockpit", reason };
 }
 
 export function run() {
@@ -288,8 +241,8 @@ export function run() {
           logGate({ hook: "role-gate", decision: "skip-map-unreadable", agent_type: input.agent_type, error: error.message });
           return;
         }
-        const needed = resolved && (asks || classifyActions(input, resolved.map, probe.role).length);
-        spawned = needed ? spawnedRole(input, resolved.map, listSessions, job) : null;
+        const needed = resolved && (asks || classifyActions(input, resolved.map).length);
+        spawned = needed ? spawnedRole(input, job) : null;
         who = spawned;
       }
     }
@@ -303,9 +256,9 @@ export function run() {
     if (!gateSwitches().roleGate) return;
     if (resolved === null) logGate({ hook: "role-gate", decision: "job-map-missing", agent_type: input.agent_type });
     if (!resolved) resolved = resolveMap(cwd);
-    const verdict = resolved && judge(input, resolved.map, listSessions, who);
+    const verdict = resolved && judge(input, resolved.map, who);
     if (verdict) {
-      logGate({ hook: "role-gate", decision: verdict.reason ? "ask" : "allow", session: verdict.session, agent_type: input.agent_type, role: verdict.role, kind: verdict.kind, tool: input.tool_name });
+      logGate({ hook: "role-gate", decision: verdict.reason ? "ask" : "allow", agent_type: input.agent_type, role: verdict.role, kind: verdict.kind, tool: input.tool_name });
       if (verdict.reason) ask(verdict.reason);
     }
   } catch (error) {

@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { evaluate } from "../gates/git-gate.mjs";
 import { prBodyRefusal } from "../lib/github-write.mjs";
 import { prBodyFrom, sameComment } from "../lib/openproject.mjs";
-import { classifyAction, decide } from "../gates/role-gate.mjs";
+import { agentReason, classifyAction } from "../gates/role-gate.mjs";
 import { check, publishes, reasonFor, unshown } from "../gates/publish-quote-gate.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 import { ALL_GATES_ON } from "../lib/hook-io.mjs";
@@ -186,11 +186,11 @@ test("openproject pr-body records what it generated, so a hand-edited body is to
   assert.equal(generatedPrBodyOp(body.replace("goal", "goal, edited")), null);
 });
 
-test("pr-body is the dev session's write; the review and PM sessions are asked first", () => {
-  const map = { paths: ["/w"], repos: [], sessions: [{ name: "Dev", role: "dev" }, { name: "Review", role: "review" }, { name: "PM", role: "pm" }] };
+test("pr-body is the dev job's write; review and pm jobs are asked first", () => {
+  const map = { name: "w", paths: ["/w"], repos: [] };
   const action = classifyAction({ tool_name: "Bash", cwd: "/w", tool_input: { command: "node /k/github-write.mjs pr-body 744 --body-file b.md" } }, map);
   assert.equal(action.kind, "code");
-  assert.equal(decide(map, "Dev", action), null);
-  assert.match(decide(map, "Review", action), /dev session/);
-  assert.match(decide(map, "PM", action), /dev session/);
+  assert.equal(agentReason({ role: "dev", label: "tedy:dev" }, action, map), null);
+  assert.match(agentReason({ role: "review", label: "tedy:review" }, action, map), /belongs to the dev role/);
+  assert.match(agentReason({ role: "pm", label: "tedy:pm" }, action, map), /belongs to the dev role/);
 });

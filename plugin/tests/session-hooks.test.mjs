@@ -69,14 +69,6 @@ test("activeRole returns the last tedy skill invoked", () => {
   assert.equal(activeRole([use("Skill", { skill: "ak:plan" })]), null);
 });
 
-test("the session-start notice lists pending hand-offs with their target, and stays silent when none wait", async () => {
-  const { pendingNotice } = await import("../lib/session-hooks.mjs");
-  assert.equal(pendingNotice([], "/p/handoff.md"), "");
-  const notice = pendingNotice([{ to: "Dev TMA - Shop", from: "PM - Shop", title: "Fix the fake save toast", path: "/w/plans/reports/handoff-1.md" }], "/p/handoff.md");
-  assert.match(notice, /- to Dev TMA - Shop: Fix the fake save toast \(from PM - Shop\) \/w\/plans\/reports\/handoff-1\.md/);
-  assert.match(notice, /ListAgents prints this session's name/);
-});
-
 const line = (timestamp, extra) => JSON.stringify({ timestamp, ...extra });
 const startup = (timestamp, kind = "startup") => line(timestamp, { type: "attachment", attachment: { type: "hook_success", hookName: `SessionStart:${kind}` } });
 const reload = (timestamp) => line(timestamp, { type: "user", message: { content: "<command-name>/reload-plugins</command-name>\n<command-message>reload-plugins</command-message>" } });
@@ -183,16 +175,6 @@ test("the session-start hook shows the learn line to the user, records the day, 
   assert.doesNotMatch(fixture.hook("startup").stdout, /feedback memories/);
 });
 
-test("the day is recorded only after the notice was written, so a failing hook does not use up the nudge", async () => {
-  const { mkdirSync } = await import("node:fs");
-  const fixture = await learnHookFixture();
-  mkdirSync(join(fixture.work, "plans"), { recursive: true });
-  writeFileSync(join(fixture.work, "plans", "reports"), "not a folder");
-  assert.equal(fixture.hook("startup").stdout, "");
-  assert.equal(fixture.nudged(), undefined);
-  assert.match(fixture.log(), /"decision":"skip-on-error"/);
-});
-
 test("a broken learn state is logged and the other notices still print", async () => {
   const { mkdirSync } = await import("node:fs");
   const fixture = await learnHookFixture();
@@ -214,7 +196,7 @@ test("a job's session start prints its role card from agent_type, records the ro
   writeFileSync(join(bin, "claude"), `#!/bin/sh\ntouch "${called}"\nexit 1\n`);
   chmodSync(join(bin, "claude"), 0o755);
   const output = JSON.parse(fixture.hook("startup", { PATH: `${bin}:${process.env.PATH}` }, { agent_type: "tedy:pm" }).stdout);
-  assert.match(output.hookSpecificOutput.additionalContext, /^Role: this session is a pm job \(tedy:pm\) of shop\. .*stop looking into it, write what you saw and where .* into a draft under plans\/drafts/m);
+  assert.match(output.hookSpecificOutput.additionalContext, /^Role: this session is a pm job \(tedy:pm\) of shop\. Work it per \S+\/shared\/jobs\.md, section "Job": /m);
   assert.equal(existsSync(called), false);
   assert.equal(readFileSync(join(fixture.state, "session-roles", "s-1"), "utf8"), "pm");
   assert.doesNotMatch(fixture.log(), /role-card/);
@@ -222,7 +204,7 @@ test("a job's session start prints its role card from agent_type, records the ro
 
 const JOBS_DOC = new URL("../shared/jobs.md", import.meta.url).pathname;
 
-async function jobsFixture(map = { jobs: true }) {
+async function jobsFixture(map = {}) {
   const { chmodSync, mkdirSync } = await import("node:fs");
   const fixture = await learnHookFixture({ memories: 0, map });
   const bin = tempDir("tedy-no-fleet-");
@@ -252,23 +234,22 @@ test("the cockpit's session start lists cards and jobs with their age and prints
   assert.equal(existsSync(fixture.called), false);
 });
 
-test("a job's session start in a jobs map prints only its job card, naming jobs.md", async () => {
+test("a job's session start prints only its job card, naming jobs.md", async () => {
   const fixture = await jobsFixture();
   const text = fixture.start({ agent_type: "tedy:dev" });
   assert.equal(text, `Role: this session is a dev job (tedy:dev) of shop. Work it per ${JOBS_DOC}, section "Job": read the job file your prompt names, turn each decision into a question card and each write that needs approval into a publish card, and end with job.mjs done or stop.`);
 });
 
-test("in a jobs map that still lists sessions, a listed session gets its legacy role card and an unlisted one the cockpit card", async () => {
-  const { chmodSync } = await import("node:fs");
-  const fixture = await jobsFixture({ jobs: true, sessions: [{ name: "PM - Shop", role: "pm" }, { name: "Dev - Shop", role: "dev" }] });
-  const bin = tempDir("tedy-fleet-");
-  writeFileSync(join(bin, "claude"), `#!/bin/sh\necho '[{"sessionId":"s-1","name":"PM - Shop"}]'\n`);
-  chmodSync(join(bin, "claude"), 0o755);
-  const listed = JSON.parse(fixture.hook("startup", { PATH: `${bin}:${process.env.PATH}` }).stdout).hookSpecificOutput.additionalContext;
-  assert.match(listed, /^Role: this session is "PM - Shop", the pm session of shop\./m);
-  assert.doesNotMatch(listed, /cockpit/);
-  const other = JSON.parse(fixture.hook("startup", { PATH: `${bin}:${process.env.PATH}` }, { session_id: "s-2" }).stdout).hookSpecificOutput.additionalContext;
-  assert.match(other, /^This is the cockpit of shop:/m);
+test("a session start in a map that still holds sessions and a jobs key gives every session the cockpit card without a fleet lookup", async () => {
+  const { existsSync } = await import("node:fs");
+  const fixture = await jobsFixture({ jobs: false, sessions: [{ name: "PM - Shop", role: "pm" }, { name: "Dev - Shop", role: "dev" }] });
+  for (const session_id of ["s-1", "s-2"]) {
+    const text = fixture.start({ session_id });
+    assert.match(text, /^This is the cockpit of shop:/m, session_id);
+    assert.match(text, /^Jobs:\n- dev: Add hello /m, session_id);
+    assert.doesNotMatch(text, /PM - Shop|ListAgents|Pending hand-offs/, session_id);
+  }
+  assert.equal(existsSync(fixture.called), false);
 });
 
 test("the Stop nudge pushes a session that asks in prose toward AskUserQuestion", () => {

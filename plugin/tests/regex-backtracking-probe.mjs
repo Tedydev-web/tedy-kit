@@ -45,7 +45,7 @@ const TARGETS = {
   "git-gate hiddenPublish (PUBLISH)": (text) => hiddenPublish(text),
   "git-gate splitSegments (HEREDOC, SHELL_WRAPPER)": (text) => splitSegments(text),
   "tracker-token-gate evaluate (TOKEN_FILE, WRITE_VERB)": (text) => trackerToken({ command: text }, "op.example.com"),
-  "role-gate classifyAction (SCRIPT_WRITES)": (text) => classifyAction({ tool_name: "Bash", tool_input: { command: text }, cwd: "/w" }, { sessions: [{ name: "a", role: "dev" }] }),
+  "role-gate classifyAction (SCRIPT_WRITES)": (text) => classifyAction({ tool_name: "Bash", tool_input: { command: text }, cwd: "/w" }, { paths: ["/w"] }),
   "no-comments-gate checkEdit (comment-scan DIRECTIVE, TEST_PATH)": (text) => checkEdit("Edit", { file_path: "/w/x.mjs", old_string: "", new_string: text }),
   "publish-quote-gate publishes (SCRIPT)": (text) => publishes(text, "/w", () => ""),
   "review-run-gate reviewRunVerdict (MANAGERS, DIR_FLAGS, REVIEW_FOLDER)": (text) => reviewRunVerdict({ tool_name: "Bash", cwd: "/w", tool_input: { command: text } }),

@@ -1,14 +1,13 @@
 import { closeSync, existsSync, fstatSync, openSync, readSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { listPending, reportsDir } from "./handoff.mjs";
 import { layoutOverride, memoryStats } from "./memory-stats.mjs";
 import { waitingText } from "./pending.mjs";
 import { currentTurn, gateSwitches, logGate, readHookInput, readTranscriptTail, toolUses } from "./hook-io.mjs";
 import { loadConfig, profileDir } from "./profile.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { readState, writeState } from "./project-state.mjs";
-import { AGENT_ROLES, agentRole, cockpitCard, jobCard, listSessions, roleCard, sessionName } from "../gates/role-gate.mjs";
+import { AGENT_ROLES, agentRole, cockpitCard, jobCard } from "../gates/role-gate.mjs";
 
 export const PROSE_QUESTION = /(\?\s*$)|(anh (muốn|chọn|có muốn|thấy sao|quyết)|em (làm|tiếp tục|tiến hành)[^.]{0,40}(không|ko)\b|được không|nhé\?)/i;
 
@@ -67,9 +66,7 @@ function sessionRoleCard(input) {
     if (!resolved) return "";
     const { map } = resolved;
     const who = agentRole(input);
-    if (who) return jobCard(map, who, gateSwitches().roleGate);
-    if (map.jobs && !map.sessions?.length) return cockpitCard(map);
-    return roleCard(map, sessionName(input.session_id, listSessions()), gateSwitches().roleGate) || (map.jobs ? cockpitCard(map) : "");
+    return who ? jobCard(map, who, gateSwitches().roleGate) : cockpitCard(map);
   } catch (error) {
     logGate({ hook: "role-card", decision: "skip-on-error", error: error.message });
     return "";
@@ -154,16 +151,10 @@ export function configWarning(dir = profileDir()) {
   }
 }
 
-export function pendingNotice(pending, procedure) {
-  if (!pending.length) return "";
-  const lines = pending.map((item) => `- to ${item.to}: ${item.title} (from ${item.from}) ${item.path}`);
-  return `Pending hand-offs in this project:\n${lines.join("\n")}\nIf one is addressed to this session (ListAgents prints this session's name), take it as described in ${procedure}; the others belong to their own sessions.`;
-}
-
 export function waitingNotice(map) {
   let text;
   try {
-    text = waitingText(map, { offline: true, handoffs: map.jobs === true, limit: 10, budgetMs: 8000 });
+    text = waitingText(map, { offline: true, limit: 10, budgetMs: 8000 });
   } catch (error) {
     logGate({ hook: "pending-handoffs", decision: "waiting-list-skipped", error: error.message });
     return "";
@@ -204,14 +195,13 @@ function runPendingHandoffs() {
   const input = readHookInput();
   try {
     const resolved = resolveMap(input.cwd ?? process.cwd());
-    const jobs = resolved?.map.jobs === true;
-    if (jobs && !input.agent_id && Object.hasOwn(AGENT_ROLES, input.agent_type)) {
+    if (resolved && !input.agent_id && Object.hasOwn(AGENT_ROLES, input.agent_type)) {
       const card = sessionRoleCard(input);
       if (card) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: card } }));
       return;
     }
     const learn = resolved ? learnLine(input, resolved.map) : "";
-    const notice = [configWarning(), resolved && sessionRoleCard(input), resolved && !jobs && pendingNotice(listPending(reportsDir(resolved.map)), fileURLToPath(new URL("../shared/handoff.md", import.meta.url))), resolved && waitingNotice(resolved.map), learn].filter(Boolean).join("\n\n");
+    const notice = [configWarning(), resolved && sessionRoleCard(input), resolved && waitingNotice(resolved.map), learn].filter(Boolean).join("\n\n");
     if (notice) process.stdout.write(JSON.stringify({ ...(learn && { systemMessage: learn }), hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: notice } }));
     if (learn) writeState(resolved.map.name, "learn_nudged", localDate());
   } catch (error) {
