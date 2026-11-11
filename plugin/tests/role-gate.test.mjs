@@ -618,6 +618,29 @@ test("the gate entry asks a bound job agent before any git --output form and bef
   for (const call of [bash("git diff"), bash("git log --oneline -3"), { tool_name: "Write", tool_input: { file_path: join(root, "plans", "x.md"), content: "x" } }]) assert.equal(entry(call, job.input), "", JSON.stringify(call));
 });
 
+test("in a map with jobs and sessions the gate entry reads the fleet list for a bound job only when a close, kit-state or classified write needs its role", () => {
+  const root = tempDir("tedy-role-root-");
+  const profile = tempDir("tedy-role-profile-");
+  mkdirSync(join(profile, "projects"));
+  writeFileSync(join(profile, "projects", "shop.md"), `# map\n\n\`\`\`json\n${JSON.stringify({ name: "shop", paths: [root], repos: [{ path: "fe" }], jobs: true, sessions: [{ name: "PM - Shop", role: "pm" }] })}\n\`\`\`\n`);
+  const bin = tempDir("tedy-role-bin-");
+  const calls = join(bin, "calls.log");
+  writeFileSync(join(bin, "claude"), `#!/bin/sh\necho "$@" >> "${calls}"\nexit 1\n`);
+  chmodSync(join(bin, "claude"), 0o755);
+  const stateDir = tempDir("tedy-state-");
+  const job = spawnedJob("dev", { state: stateDir, root });
+  const entry = (gateOn, call) => {
+    writeFileSync(join(profile, "config.json"), JSON.stringify({ gates: { roleGate: gateOn } }));
+    return execFileSync("node", [new URL("../gates/role-gate.mjs", import.meta.url).pathname], { input: JSON.stringify({ cwd: root, ...job.input, ...call }), encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: stateDir } });
+  };
+  const bash = (command) => ({ tool_name: "Bash", tool_input: { command } });
+  for (const gateOn of [false, true]) assert.equal(entry(gateOn, bash("git status")), "", `gate ${gateOn}`);
+  assert.equal(entry(false, bash("cd fe && git commit -m x")), "");
+  assert.equal(existsSync(calls), false);
+  assert.match(JSON.parse(entry(false, bash(`node /k/plugin/scripts/job.mjs close ${other}`))).hookSpecificOutput.permissionDecisionReason, /could not check which session role owns this write/);
+  assert.equal(readFileSync(calls, "utf8").trim().split("\n").length, 1);
+});
+
 test("role-gate asks when it cannot read the project maps", () => {
   const profile = tempDir("tedy-role-profile-");
   writeFileSync(join(profile, "config.json"), JSON.stringify({ gates: { roleGate: true } }));

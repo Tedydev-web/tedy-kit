@@ -272,7 +272,9 @@ export function run() {
     let spawned = null;
     if (!who && jobAgentType(input)) {
       resolved = resolveMap(cwd);
-      spawned = resolved ? spawnedRole(input, resolved.map) : null;
+      const probe = { role: AGENT_ROLES[input.agent_type], label: input.agent_type };
+      const needed = resolved && (closeReason(input, probe) || kitStateReason(input, probe) || (gateSwitches().roleGate && classifyActions(input, resolved.map, probe.role).length));
+      spawned = needed ? spawnedRole(input, resolved.map) : null;
       who = spawned;
     }
     const closing = closeReason(input, who);
