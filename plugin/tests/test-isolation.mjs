@@ -8,10 +8,8 @@ Object.assign(process.env, {
   TEDY_PROFILE_DIR: join(scratch, "profile"),
   TEDY_STATE_DIR: join(scratch, "state"),
   TEDY_CLAUDE_SETTINGS: join(scratch, "settings.json"),
-  TEDY_T3_SETTINGS: join(scratch, "t3", "settings.json"),
   TEDY_RELEASE_DIR: join(scratch, "release"),
   TEDY_CLAUDE_MD: join(scratch, "CLAUDE.md"),
   TEDY_KNOWN_MARKETPLACES: join(scratch, "known_marketplaces.json"),
 });
 delete process.env.CLAUDE_PROJECT_DIR;
-for (const key of ["HERDR_ENV", "HERDR_PANE_ID", "HERDR_TAB_ID", "HERDR_WORKSPACE_ID"]) delete process.env[key];

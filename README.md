@@ -186,7 +186,7 @@ Jobs end when the cockpit session ends: quitting the cockpit or closing its T3 t
 | What | Where |
 |---|---|
 | Rules, style samples, project maps, gate switches | Your profile: `TEDY_PROFILE_DIR` or `~/.config/tedy` |
-| Gate log, edit log, draft snapshots, last reply check, approval tickets (`approvals/`), record locks (`locks/`), write ledger (`records/`), each job session's role for its subagents (`session-roles/`, pruned after 7 days), each job's launch record (`jobs/`) | `TEDY_STATE_DIR` or `~/.local/state/tedy` |
+| Gate log, edit log, draft snapshots, last reply check, approval tickets (`approvals/`), record locks (`locks/`), write ledger (`records/`), each `claude --agent tedy:<role>` session's role for its subagents (`session-roles/`, pruned after 7 days; a job the cockpit spawns writes none), each job's launch record (`jobs/`) | `TEDY_STATE_DIR` or `~/.local/state/tedy` |
 | Job files: the request, status, notes and outcome of each job | `plans/jobs/` under the project map's first path |
 | Release worktree the profile guard watches | `TEDY_RELEASE_DIR` or `~/Documents/workspace/tedy-kit-release` |
 | `permissions.ask` rules git-gate checks a publish against | `TEDY_CLAUDE_SETTINGS` or `~/.claude/settings.json` |

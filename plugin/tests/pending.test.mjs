@@ -281,7 +281,7 @@ test("the waiting list has a Jobs group of every job that is not closed, with it
   const { root, map } = project();
   const jobs = join(root, "plans", "jobs");
   mkdirSync(jobs, { recursive: true });
-  const job = (name, status, minutes) => writeFileSync(join(jobs, `${name}.md`), `to: tedy:review\nfrom: cockpit\nstatus: ${status}\ncreated: ${new Date(Date.now() - minutes * 60_000).toISOString()}\ntitle: ${name}\nsession_id: s-${name}\n\nbody\n`);
+  const job = (name, status, minutes) => writeFileSync(join(jobs, `${name}.md`), `to: tedy:review\nfrom: cockpit\nstatus: ${status}\ncreated: ${new Date(Date.now() - minutes * 60_000).toISOString()}\ntitle: ${name}\n\nbody\n`);
   job("review-12", "running", 7);
   job("review-13", "done", 61);
   job("review-11", "closed", 600);

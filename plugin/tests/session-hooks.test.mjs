@@ -232,7 +232,7 @@ async function jobsFixture(map = { jobs: true }) {
   mkdirSync(join(fixture.work, "plans", "jobs"), { recursive: true });
   mkdirSync(join(fixture.work, "plans", "drafts"), { recursive: true });
   const created = new Date(Date.now() - 125 * 60_000).toISOString();
-  writeFileSync(join(fixture.work, "plans", "jobs", "261106-0900-dev-add-hello.md"), `to: tedy:dev\nfrom: cockpit\nstatus: running\ncreated: ${created}\ntitle: Add hello\nsession_id: s-9\n\nbody\n`);
+  writeFileSync(join(fixture.work, "plans", "jobs", "261106-0900-dev-add-hello.md"), `to: tedy:dev\nfrom: cockpit\nstatus: running\ncreated: ${created}\ntitle: Add hello\n\nbody\n`);
   writeFileSync(join(fixture.work, "plans", "drafts", "261106-0910-notify-ci.md"), "kind: notify\ntitle: CI is green\njob: none\n\nAll checks passed.\n");
   const start = (extra = {}) => {
     const out = fixture.hook("startup", { PATH: `${bin}:${process.env.PATH}` }, extra).stdout;
@@ -271,7 +271,7 @@ test("in a jobs map that still lists sessions, a listed session gets its legacy 
   assert.match(other, /^This is the cockpit of shop:/m);
 });
 
-test("the Stop nudge pushes a job toward AskUserQuestion like any session, since a job asks in its own window", () => {
+test("the Stop nudge pushes a session that asks in prose toward AskUserQuestion", () => {
   const entries = [prompt("x"), say("Anh muốn em đăng các góp ý này không?")];
   assert.equal(decideNudge(entries, false, undefined).nudge, true);
 });

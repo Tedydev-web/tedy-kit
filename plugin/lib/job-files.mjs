@@ -63,7 +63,7 @@ export function updateRecord(path, change) {
 
 export const removeRecord = (path) => lockedRecord(path, () => rmSync(path, { force: true }));
 
-export const JOB_KEYS = Object.freeze([...HANDOFF_KEYS, "cwd", "permission_mode", "session_id", "repo", "branch", "base", "worktree", "worktree_owner"]);
+export const JOB_KEYS = Object.freeze([...HANDOFF_KEYS, "cwd", "repo", "branch", "base", "worktree", "worktree_owner"]);
 export const JOB_ROLES = Object.freeze(["pm", "dev", "review", "devops"]);
 const HEADER = new RegExp(`^(${JOB_KEYS.join("|")}): `);
 

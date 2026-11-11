@@ -4,8 +4,8 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
-import { parse, stamp } from "../lib/handoff.mjs";
-import { launchRecordPath, readRecord, recordLaunch } from "../lib/job-files.mjs";
+import { HANDOFF_KEYS, parse, stamp } from "../lib/handoff.mjs";
+import { JOB_KEYS as FILE_KEYS, launchRecordPath, readRecord, recordLaunch } from "../lib/job-files.mjs";
 import { handle, processInfo } from "../lib/job-session-hooks.mjs";
 import { BODY, bound, DEAD_PID, JOBS_DOC, jobFile, PLUGIN, sleeper, world } from "./job-world-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
@@ -143,6 +143,11 @@ test("jobs.md gives the cockpit its subagent rules, and no plugin file outside t
   const files = execFileSync("git", ["-C", PLUGIN, "ls-files"], { encoding: "utf8" }).split("\n").filter((file) => file && !file.startsWith("tests/"));
   assert.ok(files.includes("shared/jobs.md"));
   assert.deepEqual(files.filter((file) => /herdr|t3-instance|launchArgs|--via/.test(readFileSync(join(PLUGIN, file), "utf8"))), []);
+});
+
+test("a job file's header keys are only the ones start writes, and the test isolation scrubs no removed launcher's settings", () => {
+  assert.deepEqual(FILE_KEYS, [...HANDOFF_KEYS, "cwd", "repo", "branch", "base", "worktree", "worktree_owner"]);
+  assert.doesNotMatch(readFileSync(join(PLUGIN, "tests", "test-isolation.mjs"), "utf8"), /T3|HERDR/);
 });
 
 test("a job agent the hooks bind to a started job shows in list with its state", async () => {
