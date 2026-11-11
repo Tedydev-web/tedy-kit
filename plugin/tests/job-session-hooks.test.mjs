@@ -129,6 +129,33 @@ test("the cockpit's TaskStop of a job agent, by its agent id or its name, marks 
   assert.equal(w.record(w.files[0]).state, "stopped");
 });
 
+test("a TaskStop marks stopped only the job agent of the cockpit session that ran it, even when another session's job has the same agent name", () => {
+  const w = world(["261111-1000-dev-add-hello", "261111-1001-dev-add-hello"]);
+  w.fire(w.agent(launch(w.files[0]), { id: "a1" }));
+  w.fire(w.agent(launch(w.files[1]), { id: "b1", session: "s-2" }));
+  assert.deepEqual([w.record(w.files[0]).agent_name, w.record(w.files[1]).agent_name, w.record(w.files[1]).session_id], ["dev-t", "dev-t", "s-2"]);
+  w.fire({ hook_event_name: "PostToolUse", tool_name: "TaskStop", session_id: "s-2", tool_input: { task_id: "dev-t" } });
+  assert.deepEqual([w.record(w.files[0]).state, w.record(w.files[1]).state], ["running", "stopped"]);
+  w.fire({ hook_event_name: "PostToolUse", tool_name: "TaskStop", session_id: "s-2", tool_input: { task_id: "a1" } });
+  assert.equal(w.record(w.files[0]).state, "running");
+});
+
+test("a tool event whose transcript_path is the agent's own transcript binds from it", () => {
+  const w = world();
+  const input = w.agent(launch(w.files[0]), { id: "e5" });
+  w.fire({ ...input, transcript_path: join(w.root, "projects", "s-1", "subagents", "agent-e5.jsonl") });
+  assert.equal(w.record().agent_id, "e5");
+});
+
+test("an event that carries a bound agent_id without agent_type still moves that job's state", () => {
+  const w = world();
+  w.fire(w.agent(launch(w.files[0])));
+  w.fire({ hook_event_name: "Notification", notification_type: "permission_prompt", agent_id: "a1b2c3" });
+  assert.equal(w.record().state, "waiting: permission");
+  w.fire({ hook_event_name: "PostToolUse", tool_name: "Bash", agent_id: "zz-unbound" });
+  assert.equal(w.record().state, "waiting: permission");
+});
+
 test("an event of a bound job agent takes the cockpit's claude pid again only once the recorded one has ended", { skip: process.platform !== "linux" }, async () => {
   const w = world();
   const first = spawn("sleep", ["30"], { argv0: "claude" });

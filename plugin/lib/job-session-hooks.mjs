@@ -118,8 +118,9 @@ function unquoted(text) {
 
 function agentTranscript({ agent_transcript_path: given, transcript_path: main, session_id: session, agent_id: agent }) {
   if (typeof given === "string" && isAbsolute(given)) return given;
-  if (typeof main !== "string" || !isAbsolute(main) || !SAFE_ID.test(session ?? "") || !SAFE_ID.test(agent)) return null;
-  return join(dirname(main), session, "subagents", `agent-${agent}.jsonl`);
+  if (typeof main !== "string" || !isAbsolute(main) || !SAFE_ID.test(agent)) return null;
+  if (basename(main) === `agent-${agent}.jsonl`) return main;
+  return SAFE_ID.test(session ?? "") ? join(dirname(main), session, "subagents", `agent-${agent}.jsonl`) : null;
 }
 
 function launchedJobFile(transcript) {
@@ -158,7 +159,7 @@ function nextState({ hook_event_name: event, notification_type: type }) {
 function stopped(input, dir, now) {
   if (input.hook_event_name !== "PostToolUse" || input.tool_name !== "TaskStop") return;
   const named = Object.values(input.tool_input ?? {}).filter((value) => typeof value === "string" && value);
-  const found = findRecord(dir, (record) => Boolean(record.agent_id) && (named.includes(record.agent_id) || named.includes(record.agent_name)));
+  const found = findRecord(dir, (record) => Boolean(record.agent_id) && record.session_id === input.session_id && (named.includes(record.agent_id) || named.includes(record.agent_name)));
   if (found) updateRecord(found.path, (record) => (record?.agent_id === found.record.agent_id ? { ...record, state: "stopped", last_event_at: now } : undefined));
 }
 
@@ -169,8 +170,7 @@ export function handle(input, { dir = STATE_DIR, now = new Date().toISOString(),
     return warnings;
   }
   const role = input.agent_type?.match(JOB_AGENT)?.[1];
-  if (!role) return warnings;
-  bind(input, role, dir, now, claude, warnings);
+  if (role) bind(input, role, dir, now, claude, warnings);
   const found = recordOfAgent(dir, input.agent_id);
   if (!found) return warnings;
   const state = nextState(input);
