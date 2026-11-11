@@ -255,6 +255,46 @@ test("close refuses while the job's agent still runs or waits in a live cockpit,
   }
 });
 
+test("close refuses a job not started while the cockpit that started it runs, and a job whose record holds no cockpit pid; a job file with no launch record still closes", async () => {
+  const w = world();
+  const live = await sleeper();
+  try {
+    const starting = jobFile(w, { name: "starting", record: { cockpit_pid: live.pid, cockpit_pid_start: live.start } });
+    const noPid = jobFile(w, { status: "done", name: "no-pid", record: { cockpit_pid: undefined, cockpit_pid_start: undefined } });
+    const boundNoPid = jobFile(w, { status: "done", name: "bound-no-pid", record: bound({}, { state: "idle" }) });
+    const refusals = [
+      [starting, `job: ${starting}: its agent dev-starting has made no tool call yet while the cockpit that started it (claude pid ${live.pid}) still runs, so it may be starting; end that agent or the cockpit session, then close it again; nothing was closed\n`],
+      [noPid, `job: ${noPid}: its launch record holds no cockpit claude pid, so the kit cannot tell whether its agent still runs; end that agent or the cockpit session, then close it again; nothing was closed\n`],
+      [boundNoPid, `job: ${boundNoPid}: its launch record holds no cockpit claude pid, so the kit cannot tell whether its agent still runs; end that agent or the cockpit session, then close it again; nothing was closed\n`],
+    ];
+    for (const [file, message] of refusals) {
+      const before = { text: readFileSync(file, "utf8"), record: JSON.stringify(w.record(file)) };
+      const out = w.run(["close", file, "--reason", "x"]);
+      assert.equal(out.status, 1, file);
+      assert.equal(out.stderr, message);
+      assert.deepEqual({ text: readFileSync(file, "utf8"), record: JSON.stringify(w.record(file)) }, before);
+    }
+    for (const file of [jobFile(w, { name: "never-spawned" }), jobFile(w, { status: "done", name: "no-record", record: null })]) {
+      const out = w.run(["close", file, "--reason", "x"]);
+      assert.equal(out.status, 0, `${file}: ${out.stderr}`);
+      assert.equal(parse(readFileSync(file, "utf8")).status, "closed");
+    }
+  } finally {
+    live.child.kill("SIGKILL");
+  }
+});
+
+test("start records the claude process that ran it as the job's cockpit", async () => {
+  const { start } = await import("../lib/job.mjs");
+  const w = world();
+  start(w.map, "pm", { title: "Gaps", body: BODY }, { caller: () => ({ pid: 4242, start: "777" }) });
+  const record = readRecord(launchRecordPath(w.jobs()[0]));
+  assert.deepEqual([record.cockpit_pid, record.cockpit_pid_start, record.agent_id], [4242, "777", undefined]);
+  start(w.map, "devops", { title: "Deploy", body: BODY }, { caller: () => null });
+  const unknown = readRecord(launchRecordPath(w.jobs().find((file) => file.includes("-devops-"))));
+  assert.deepEqual([unknown.cockpit_pid, unknown.cockpit_pid_start], [undefined, undefined]);
+});
+
 test("close refuses a running job without a reason, stops it with one, refuses an unreadable record, a closed job and a file outside the jobs folder", () => {
   const w = world();
   const running = jobFile(w, { name: "running" });
@@ -291,14 +331,14 @@ test("close refuses an unknown flag or a --flag=value form before it writes anyt
   assert.equal(JSON.stringify(w.record(file)), before.record);
 });
 
-test("resume run from the cockpit that runs the job's agent appends the note and prints a SendMessage call to that agent", async () => {
+test("resume run from the cockpit that runs the job's agent appends the note, marks the record running and prints a SendMessage call to that agent", async () => {
   const { resume } = await import("../lib/job.mjs");
   const w = world();
   const live = await sleeper();
   try {
     const file = jobFile(w, { status: "done", record: bound(live, { state: "idle" }) });
     recordLaunch(file, w.record(file));
-    const before = JSON.stringify(readRecord(launchRecordPath(file)));
+    const before = JSON.stringify({ ...readRecord(launchRecordPath(file)), state: "running" });
     const out = resume(w.map, file, "Also add the line world.\n", { caller: () => ({ pid: live.pid, start: live.start }) });
     assert.deepEqual(Object.keys(out), ["tool", "to", "message"]);
     assert.deepEqual([out.tool, out.to], ["SendMessage", "a1b2c3"]);
@@ -317,7 +357,7 @@ test("resume run from the cockpit that runs the job's agent appends the note and
   }
 });
 
-test("resume of a job whose cockpit has gone, or whose agent never bound, appends the note, moves the old agent into earlier and prints a fresh Agent spec carrying the note", () => {
+test("resume of a job whose cockpit has gone, or whose agent never bound, appends the note, moves the old agent into earlier, records the resuming cockpit and prints a fresh Agent spec carrying the note", () => {
   const w = world();
   const file = jobFile(w, { status: "done", record: bound({ pid: DEAD_PID, start: "1" }, { state: "idle" }) });
   const note = join(w.root, "note.md");
@@ -330,7 +370,8 @@ test("resume of a job whose cockpit has gone, or whose agent never bound, append
   assert.ok(spec.prompt.startsWith(`Job file ${JSON.stringify(file)}. `), spec.prompt);
   assert.ok(spec.prompt.endsWith(" The job is resumed: the latest ## Note in the job file, quoted below, is the rework request. Go on with it and end with job.mjs done or stop.\n\nAlso add the line world."), spec.prompt);
   const record = w.record(file);
-  assert.deepEqual([record.agent_id, record.session_id, record.cockpit_pid, record.state, record.earlier, record.role, record.agent_name], [undefined, undefined, undefined, undefined, ["a1b2c3"], "dev", "dev-add-hello"]);
+  assert.deepEqual([record.agent_id, record.session_id, record.state, record.earlier, record.role, record.agent_name], [undefined, undefined, undefined, ["a1b2c3"], "dev", "dev-add-hello"]);
+  assert.ok(Number.isInteger(record.cockpit_pid) && record.cockpit_pid !== DEAD_PID && typeof record.cockpit_pid_start === "string", JSON.stringify(record));
   assert.match(w.run(["list"]).stdout, /· not started ·/);
   const unbound = jobFile(w, { status: "done", name: "unbound" });
   const fresh = w.run(["resume", unbound, "--note-file", note]);
@@ -380,7 +421,7 @@ test("a hook that read a job's record before close deleted it, or before resume 
   let out;
   handle({ hook_event_name: "PostToolUse", tool_name: "Bash", session_id: "s-cockpit", agent_id: "c2", agent_type: "tedy:dev" }, { dir: w.state, claude: () => { out = out ?? w.run(["resume", resumed, "--note-file", note]); return { pid: process.pid, start: processInfo(process.pid).start }; } });
   assert.equal(out.status, 0, out.stderr);
-  assert.deepEqual([w.record(resumed).agent_id, w.record(resumed).cockpit_pid, w.record(resumed).earlier], [undefined, undefined, ["c2"]]);
+  assert.deepEqual([w.record(resumed).agent_id, w.record(resumed).cockpit_pid === DEAD_PID, w.record(resumed).earlier], [undefined, false, ["c2"]]);
 });
 
 test("done refuses an empty outcome and otherwise appends it, and neither done nor stop runs claude", () => {

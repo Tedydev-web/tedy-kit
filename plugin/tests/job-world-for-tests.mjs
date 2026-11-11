@@ -18,6 +18,7 @@ export const DEAD_PID = 2 ** 22 + 17;
 
 export const PLUGIN = fileURLToPath(new URL("../", import.meta.url)).replace(/\/$/, "");
 export const SCRIPT = join(PLUGIN, "scripts", "job.mjs");
+const FAKE_COCKPIT = fileURLToPath(new URL("./fake-cockpit-for-tests.mjs", import.meta.url));
 export const JOBS_DOC = join(PLUGIN, "shared", "jobs.md");
 
 export const BODY = "Add the line hello to notes.txt.\n\n## User decisions\nnone yet\n\n## First safe step\nRead notes.txt.\n\n## Sources\nthe user's request\n";
@@ -37,10 +38,10 @@ export function world(mapExtra = { jobs: true }, root = tempDir("tedy-job-")) {
   writeFileSync(body, BODY);
   const env = (extra = {}) => ({ ...process.env, PATH: `${bin}:${process.env.PATH}`, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: state, ...extra });
   const run = (args, { extra, cwd = root } = {}) => {
-    const { status, stdout, stderr } = spawnSync(process.execPath, [SCRIPT, ...args], { cwd, encoding: "utf8", env: env(extra) });
+    const { status, stdout, stderr } = spawnSync(process.execPath, [FAKE_COCKPIT, SCRIPT, ...args], { cwd, encoding: "utf8", env: env(extra), argv0: "claude" });
     return { status, stdout, stderr };
   };
-  const runAsync = (args) => promisify(execFile)(process.execPath, [SCRIPT, ...args], { cwd: root, encoding: "utf8", env: env() });
+  const runAsync = (args) => promisify(execFile)(process.execPath, [FAKE_COCKPIT, SCRIPT, ...args], { cwd: root, encoding: "utf8", env: env(), argv0: "claude" });
   const calls = () => readFileSync(log, "utf8").split("\n").filter(Boolean);
   const jobs = () => (existsSync(join(root, "plans", "jobs")) ? readdirSync(join(root, "plans", "jobs")).filter((name) => name.endsWith(".md")).map((name) => join(root, "plans", "jobs", name)) : []);
   const record = (file) => JSON.parse(readFileSync(launchRecordPath(file, state), "utf8"));
@@ -52,7 +53,7 @@ export function jobFile(w, { role = "dev", status = "running", created = new Dat
   const file = join(w.root, "plans", "jobs", `261106-0900-${role}-${name}.md`);
   const lines = [`to: tedy:${role}`, "from: cockpit", `status: ${status}`, `created: ${created}`, `title: ${name.replaceAll("-", " ")}`, `cwd: ${w.root}`, ...header];
   writeFileSync(file, `${lines.join("\n")}\n\n${BODY}`);
-  if (record) recordLaunch(file, { role, cwd: w.root, agent_name: `${role}-${name}`, ...record }, w.state);
+  if (record) recordLaunch(file, { role, cwd: w.root, agent_name: `${role}-${name}`, cockpit_pid: DEAD_PID, cockpit_pid_start: "1", ...record }, w.state);
   return file;
 }
 
