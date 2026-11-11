@@ -1,15 +1,13 @@
 import "./test-isolation.mjs";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { parse } from "../lib/handoff.mjs";
-import { JOB_KEYS, launchRecordPath, readRecord, recordLaunch, writeRecord } from "../lib/job-files.mjs";
-import { handle } from "../lib/job-session-hooks.mjs";
+import { JOB_KEYS, launchRecordPath, writeRecord } from "../lib/job-files.mjs";
 import { linkedWorktree } from "../lib/job-worktrees.mjs";
-import { tokenize } from "../lib/shell-segments.mjs";
-import { sleeper, world } from "./job-world-for-tests.mjs";
+import { bound, DEAD_PID, sleeper, world } from "./job-world-for-tests.mjs";
 
 const IDENTITY = { GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t" };
 const HEADER = ["to", "status", "cwd", "repo", "branch", "base", "worktree", "worktree_owner"];
@@ -33,14 +31,13 @@ function gitWorld(mapExtra = {}) {
   return { ...w, origin, seed, fe: join(w.root, "fe"), start, header };
 }
 
-test("a dev job started by print gets a core worktree beside its repository, on a job branch from the map's integration branch, and runs there", () => {
+test("a dev job with a repository gets a core worktree beside it, on a job branch from the map's integration branch, and its job file names that folder", () => {
   const w = gitWorld();
-  const out = w.start(["--json"]);
+  const out = w.start([]);
   assert.equal(out.status, 0, out.stderr);
   const spec = JSON.parse(out.stdout);
   const tree = join(w.root, ".worktrees", "fe-add-hello");
-  assert.equal(spec.cwd, tree);
-  assert.deepEqual(tokenize(spec.command).slice(0, 2), ["cd", tree]);
+  assert.equal(Object.hasOwn(spec, "cwd"), false);
   assert.equal(git(tree, "rev-parse", "--abbrev-ref", "HEAD"), "feat/add-hello");
   assert.equal(git(tree, "rev-parse", "HEAD"), git(w.fe, "rev-parse", "origin/main"));
   assert.ok(linkedWorktree(tree));
@@ -55,10 +52,10 @@ test("the worktree root, the branch and the integration branch follow the map an
   const w = gitWorld({ worktree_root: "trees", repos: [{ path: "fe", role: "FE", branch: "dev" }] });
   git(w.seed, "push", "-q", "origin", "HEAD:dev");
   git(w.fe, "fetch", "-q", "origin");
-  const out = w.start(["--branch", "fix/hello-copy", "--json"]);
+  const out = w.start(["--branch", "fix/hello-copy"]);
   assert.equal(out.status, 0, out.stderr);
   const tree = join(w.root, "trees", "fe-add-hello");
-  assert.equal(JSON.parse(out.stdout).cwd, tree);
+  assert.equal(w.header(w.jobs()[0]).cwd, tree);
   assert.equal(git(tree, "rev-parse", "--abbrev-ref", "HEAD"), "fix/hello-copy");
   assert.equal(w.header(w.jobs()[0]).base, "dev");
   const bad = w.start(["--branch", "bad..name"]);
@@ -77,50 +74,21 @@ test("a core worktree starts from the integration branch as origin has it now, n
   git(w.seed, "push", "-q", "origin", "HEAD:main");
   const tip = git(w.seed, "rev-parse", "HEAD");
   assert.notEqual(git(w.fe, "rev-parse", "origin/main"), tip);
-  const out = w.start(["--json"]);
+  const out = w.start([]);
   assert.equal(out.status, 0, out.stderr);
-  assert.equal(git(JSON.parse(out.stdout).cwd, "rev-parse", "HEAD"), tip);
+  assert.equal(git(w.header(w.jobs()[0]).cwd, "rev-parse", "HEAD"), tip);
 });
 
 test("only a dev job with --repo gets a worktree", () => {
   const w = gitWorld();
-  assert.equal(JSON.parse(w.run(["start", "dev", "--title", "x", "--body-file", w.body, "--json"]).stdout).cwd, w.root);
-  assert.equal(JSON.parse(w.run(["start", "devops", "--title", "y", "--body-file", w.body, "--repo", "fe", "--json"]).stdout).cwd, w.fe);
+  assert.equal(w.run(["start", "dev", "--title", "x", "--body-file", w.body]).status, 0);
+  assert.equal(w.run(["start", "devops", "--title", "y", "--body-file", w.body, "--repo", "fe"]).status, 0);
+  assert.equal(w.header(w.jobs().find((path) => path.includes("-dev-x"))).cwd, w.root);
+  assert.equal(w.header(w.jobs().find((path) => path.includes("-devops-y"))).cwd, w.fe);
   assert.equal(existsSync(join(w.root, ".worktrees")), false);
 });
 
-test("a dev job started in T3 hands the worktree to T3 through workspaceStrategy and makes none itself", () => {
-  const w = gitWorld();
-  const out = w.start(["--t3", "--json"]);
-  assert.equal(out.status, 0, out.stderr);
-  const spec = JSON.parse(out.stdout);
-  assert.equal(spec.cwd, w.fe);
-  assert.deepEqual(spec.t3.workspaceStrategy, { type: "worktree", baseRef: "origin/main", branch: "feat/add-hello", startFromOrigin: true });
-  assert.equal(existsSync(join(w.root, ".worktrees")), false);
-  const header = w.header(w.jobs()[0]);
-  assert.deepEqual([header.worktree_owner, header.branch, header.base, header.worktree], ["t3", "feat/add-hello", "main", undefined]);
-});
-
-test("a dev job inside herdr gets its worktree and pane from herdr worktree create, and falls back to a core worktree when that fails", () => {
-  const w = gitWorld();
-  const herdrTree = join(w.root, "herdr-trees", "fe-add-hello");
-  const out = w.start(["--json"], { HERDR_ENV: "1", FAKE_HERDR_WORKTREE: herdrTree });
-  assert.equal(out.status, 0, out.stderr);
-  const spec = JSON.parse(out.stdout);
-  const [create, start] = w.herdrCalls();
-  assert.deepEqual(create, ["worktree", "create", "--cwd", w.fe, "--branch", "feat/add-hello", "--base", "origin/main", "--label", "dev acme-shop add-hello", "--no-focus"]);
-  assert.deepEqual(start.slice(0, 7), ["agent", "start", spec.herdr.name, "--kind", "claude", "--pane", "w1:p8"]);
-  assert.equal(spec.cwd, herdrTree);
-  const header = w.header(w.jobs()[0]);
-  assert.deepEqual([header.worktree_owner, header.worktree, header.cwd], ["herdr", herdrTree, herdrTree]);
-  const fallback = w.run(["start", "dev", "--title", "Other", "--body-file", w.body, "--repo", "fe", "--json"], { extra: { ...IDENTITY, HERDR_ENV: "1", FAKE_HERDR_FAIL: "worktree create:not_a_repository" } });
-  assert.equal(fallback.status, 0, fallback.stderr);
-  assert.match(fallback.stderr, /^warning: herdr worktree create failed \(not_a_repository: fake failure\); run the command below in any terminal/m);
-  assert.equal(JSON.parse(fallback.stdout).cwd, join(w.root, ".worktrees", "fe-other"));
-  assert.ok(linkedWorktree(join(w.root, ".worktrees", "fe-other")));
-});
-
-test("resume trusts a worktree job by its recorded repository and runs in its worktree", () => {
+test("resume trusts a worktree job by its recorded repository, keeps its worktree as the folder, and refuses once that folder is gone", () => {
   const w = gitWorld();
   w.start([]);
   const [file] = w.jobs();
@@ -128,81 +96,16 @@ test("resume trusts a worktree job by its recorded repository and runs in its wo
   const done = join(w.root, "outcome.md");
   writeFileSync(done, "ok\n");
   assert.equal(w.run(["done", file, "--outcome-file", done]).status, 0);
-  writeRecord(launchRecordPath(file, w.state), { ...w.record(file), session_id: "s-1", bound_at: "t" });
   const note = join(w.root, "note.md");
   writeFileSync(note, "more\n");
-  const out = w.run(["resume", file, "--note-file", note, "--json"]);
+  const out = w.run(["resume", file, "--note-file", note]);
   assert.equal(out.status, 0, out.stderr);
-  assert.equal(JSON.parse(out.stdout).cwd, tree);
+  assert.equal(JSON.parse(out.stdout).tool, "Agent");
+  assert.equal(w.header(file).cwd, tree);
   execFileSync("git", ["-C", w.fe, "worktree", "remove", tree]);
-  writeRecord(launchRecordPath(file, w.state), { ...w.record(file), session_id: "s-2", bound_at: "t" });
   const gone = w.run(["resume", file, "--note-file", note]);
   assert.equal(gone.status, 1);
   assert.match(gone.stderr, /its folder .* no longer exists; close it and start a new job/);
-});
-
-test("a T3-owned dev job resumes in the folder its session ran in, by print, herdr or T3, and its recorded cwd stays the repository", () => {
-  const w = gitWorld();
-  const out = w.start(["--t3", "--json"]);
-  assert.equal(out.status, 0, out.stderr);
-  const spec = JSON.parse(out.stdout);
-  const [file] = w.jobs();
-  const t3Tree = join(w.root, "t3-worktrees", "fe-add-hello");
-  git(w.fe, "worktree", "add", "-q", "-b", "feat/add-hello", t3Tree, "origin/main");
-  const bindIn = (session, prompt) => {
-    const transcript = join(w.root, `${session}.jsonl`);
-    writeFileSync(transcript, `${JSON.stringify({ type: "user", message: { content: prompt } })}\n`);
-    handle({ hook_event_name: "PostToolUse", tool_name: "Bash", session_id: session, transcript_path: transcript, agent_type: "tedy:dev", cwd: t3Tree }, { dir: w.state, claude: () => null });
-  };
-  bindIn("s-1", spec.prompt);
-  const done = join(w.root, "outcome.md");
-  writeFileSync(done, "ok\n");
-  assert.equal(w.run(["done", file, "--outcome-file", done]).status, 0);
-  const note = join(w.root, "note.md");
-  writeFileSync(note, "more\n");
-  const seen = [];
-  for (const [via, extra] of [["print", {}], ["t3", {}], ["herdr", { HERDR_ENV: "1" }]]) {
-    const resumed = w.run(["resume", file, "--note-file", note, ...(via === "t3" ? ["--t3"] : ["--via", via]), "--json"], { extra });
-    assert.equal(resumed.status, 0, resumed.stderr);
-    const launch = JSON.parse(resumed.stdout);
-    seen.push([via, launch.cwd, tokenize(launch.command).slice(0, 2), w.record(file).cwd]);
-    bindIn(`s-${via}`, launch.prompt);
-  }
-  assert.deepEqual(seen, ["print", "t3", "herdr"].map((via) => [via, t3Tree, ["cd", t3Tree], w.fe]));
-  const [tab] = w.herdrCalls();
-  assert.deepEqual([tab.slice(0, 2), tab[tab.indexOf("--cwd") + 1]], [["tab", "create"], t3Tree]);
-  assert.equal(w.header(file).cwd, w.fe);
-});
-
-test("a T3 resume of a dev job whose worktree still exists binds that worktree through workspaceStrategy, and a job whose session ran in the repository gets none", () => {
-  const w = gitWorld();
-  const note = join(w.root, "note.md");
-  writeFileSync(note, "more\n");
-  const outcome = join(w.root, "outcome.md");
-  writeFileSync(outcome, "ok\n");
-  const bindIn = (session, prompt, cwd) => {
-    const transcript = join(w.root, `${session}.jsonl`);
-    writeFileSync(transcript, `${JSON.stringify({ type: "user", message: { content: prompt } })}\n`);
-    handle({ hook_event_name: "PostToolUse", tool_name: "Bash", session_id: session, transcript_path: transcript, agent_type: "tedy:dev", cwd }, { dir: w.state, claude: () => null });
-  };
-  const resumeT3 = (title, cwd, args = ["--t3"]) => {
-    const started = w.start(["--title", title, ...args, "--json"]);
-    assert.equal(started.status, 0, started.stderr);
-    const file = w.jobs().find((path) => path.endsWith(`-dev-${title}.md`));
-    bindIn(`s-${title}`, JSON.parse(started.stdout).prompt, cwd ?? w.record(file).cwd);
-    assert.equal(w.run(["done", file, "--outcome-file", outcome]).status, 0);
-    const resumed = w.run(["resume", file, "--note-file", note, "--t3", "--json"]);
-    assert.equal(resumed.status, 0, resumed.stderr);
-    return JSON.parse(resumed.stdout).t3;
-  };
-  const t3Tree = join(w.root, "t3-worktrees", "fe-in-t3");
-  git(w.fe, "worktree", "add", "-q", "-b", "feat/in-t3", t3Tree, "origin/main");
-  assert.deepEqual(resumeT3("in-t3", t3Tree).workspaceStrategy, { type: "existing_worktree", worktreePath: t3Tree });
-  mkdirSync(join(t3Tree, "pkg"));
-  assert.deepEqual(resumeT3("in-t3-sub", join(t3Tree, "pkg")).workspaceStrategy, { type: "existing_worktree", worktreePath: realpathSync(t3Tree) });
-  assert.equal(Object.hasOwn(resumeT3("in-repo", w.fe), "workspaceStrategy"), false);
-  const core = resumeT3("core", undefined, []);
-  assert.deepEqual(core.workspaceStrategy, { type: "existing_worktree", worktreePath: join(w.root, ".worktrees", "fe-core") });
 });
 
 function pruneWorld() {
@@ -329,18 +232,11 @@ test("close keeps a core worktree whose ignored file sits in a tracked build fol
   assert.ok(existsSync(join(tree, "build", "webpack.local.test.js")));
 });
 
-test("prune --days moves the idle limit, refuses a bad value, and leaves T3 and herdr worktrees to their owner", () => {
+test("prune --days moves the idle limit and refuses a bad value", () => {
   const { w, make } = pruneWorld();
   const idle = make("idle", { record: { session_id: "s-1", bound_at: "t", last_event_at: new Date(Date.now() - 11 * DAY).toISOString() } });
   assert.equal(w.run(["prune", "--days", "30"], { extra: IDENTITY }).stdout.trim(), `kept ${idle}: the job is running and was active within 30 days`);
   assert.match(w.run(["prune", "--days", "0"]).stderr, /--days needs a whole number of days above 0/);
-  const herdrTree = join(w.root, "herdr-tree");
-  git(w.fe, "worktree", "add", "-q", "-b", "feat/by-herdr", herdrTree, "origin/main");
-  assert.equal(w.start(["--title", "by herdr"], { HERDR_ENV: "1", FAKE_HERDR_WORKTREE: herdrTree }).status, 0);
-  const file = w.jobs().find((path) => path.endsWith("-dev-by-herdr.md"));
-  writeFileSync(file, readFileSync(file, "utf8").replace("status: running", "status: closed"));
-  assert.doesNotMatch(w.run(["prune"], { extra: IDENTITY }).stdout, /herdr-tree/);
-  assert.ok(existsSync(herdrTree));
 });
 
 test("close removes its own job's clean core worktree and keeps a dirty one with the reason", () => {
@@ -365,80 +261,40 @@ test("close removes its own job's clean core worktree and keeps a dirty one with
   assert.equal(existsSync(launchRecordPath(job("dirty"), w.state)), false);
 });
 
-test("prune keeps the worktree of a job whose recorded session is alive, even when its file says closed", async () => {
+test("prune keeps the worktree of a job whose agent still runs in a live cockpit, even when its file says closed, and close refuses that job and keeps its tree", async () => {
   const { w, make } = pruneWorld();
   const live = await sleeper();
   try {
-    const tree = make("live", { status: "closed", record: { session_id: "s-1", bound_at: "t", pid: live.pid, pid_start: live.start } });
-    assert.equal(w.run(["prune"], { extra: IDENTITY }).stdout.trim(), `kept ${tree}: its session is open`);
+    const tree = make("live", { status: "closed", record: bound(live) });
+    assert.equal(w.run(["prune"], { extra: IDENTITY }).stdout.trim(), `kept ${tree}: its agent still runs in the cockpit`);
     assert.ok(existsSync(tree));
+    const busy = make("busy", { status: "done", record: bound(live, { state: "waiting: permission" }) });
+    const file = w.jobs().find((path) => path.endsWith("-dev-busy.md"));
+    const out = w.run(["close", file], { extra: IDENTITY });
+    assert.equal(out.status, 1);
+    assert.match(out.stderr, /its agent dev-busy \(a1b2c3\) is waiting: permission in cockpit session s-cockpit/);
+    assert.ok(existsSync(busy));
+    writeRecord(launchRecordPath(file, w.state), { ...w.record(file), state: "idle" });
+    const closed = w.run(["close", file], { extra: IDENTITY });
+    assert.equal(closed.status, 0, closed.stderr);
+    assert.equal(closed.stdout, `closed: ${file}\nremoved ${busy} (the job is closed)\n`);
   } finally {
     live.child.kill("SIGKILL");
   }
 });
 
-test("close of a job whose own session is still running keeps its worktree and the session's pid, so a later prune keeps it too", async () => {
-  const { close } = await import("../lib/job.mjs");
+test("a git failure while close checks the worktree keeps the tree with the reason and its record without the agent, and still closes the job", () => {
   const { w, make } = pruneWorld();
-  const own = await sleeper();
-  try {
-    const tree = make("self", { status: "done", record: { session_id: "s-1", bound_at: "t", pid: own.pid, pid_start: own.start } });
-    const file = w.jobs().find((path) => path.endsWith("-dev-self.md"));
-    recordLaunch(file, w.record(file));
-    const out = close(w.map, file, undefined, { own: () => ({ pid: own.pid }) });
-    assert.match(out, new RegExp(`^kept ${tree}: its session is still open$`, "m"));
-    assert.ok(existsSync(tree));
-    const kept = readRecord(launchRecordPath(file));
-    assert.deepEqual([kept.pid, kept.pid_start], [own.pid, own.start]);
-    writeRecord(launchRecordPath(file, w.state), kept);
-    assert.equal(w.run(["prune"], { extra: IDENTITY }).stdout.trim(), `kept ${tree}: its session is open`);
-    assert.ok(existsSync(tree));
-  } finally {
-    own.child.kill("SIGKILL");
-  }
-});
-
-test("close --if-ended refuses a bound job with no claude pid recorded, since it cannot tell the session has ended, and keeps its worktree and record", () => {
-  const { w, make } = pruneWorld();
-  const tree = make("nopid", { status: "done", record: { session_id: "s-live", bound_at: "t" } });
-  const file = w.jobs().find((path) => path.endsWith("-dev-nopid.md"));
-  const before = { text: readFileSync(file, "utf8"), record: JSON.stringify(w.record(file)) };
-  const out = w.run(["close", file, "--if-ended"], { extra: IDENTITY });
-  assert.equal(out.status, 1);
-  assert.equal(out.stderr, `job: ${file}: no claude pid was recorded for session s-live, so the kit cannot tell that it has ended and nothing was closed; the user closes it with a plain job.mjs close once that session has ended\n`);
-  assert.equal(readFileSync(file, "utf8"), before.text);
-  assert.equal(JSON.stringify(w.record(file)), before.record);
+  const tree = make("broken", { status: "done", record: bound({ pid: DEAD_PID, start: "1" }, { state: "idle" }) });
+  const file = w.jobs().find((path) => path.endsWith("-dev-broken.md"));
+  writeFileSync(join(git(tree, "rev-parse", "--absolute-git-dir"), "index"), "not an index");
+  const out = w.run(["close", file], { extra: IDENTITY });
+  assert.equal(out.status, 0, out.stderr);
+  assert.match(out.stdout, new RegExp(`^closed: ${file}\\nkept ${tree}: git ls-files -v -z failed in ${tree}: .+$`, "m"));
   assert.ok(existsSync(tree));
-});
-
-test("close --if-ended never removes a worktree: it keeps the tree and the whole record, so a second claude on the session takes the record over and prune removes the tree only once that session is gone", async () => {
-  const { w, make } = pruneWorld();
-  const first = await sleeper();
-  const second = await sleeper();
-  try {
-    const tree = make("viewed", { status: "done", record: { session_id: "s-1", bound_at: "t", pid: first.pid, pid_start: first.start } });
-    const file = w.jobs().find((path) => path.endsWith("-dev-viewed.md"));
-    first.child.kill("SIGKILL");
-    await first.exited;
-    const out = w.run(["close", file, "--if-ended"], { extra: IDENTITY });
-    assert.equal(out.status, 0, out.stderr);
-    assert.equal(out.stdout, `closed: ${file}\nkept ${tree}: close --if-ended never removes a worktree; job.mjs prune removes it once its session is gone\n`);
-    assert.equal(parse(readFileSync(file, "utf8"), JOB_KEYS).status, "closed");
-    assert.ok(existsSync(tree));
-    assert.deepEqual([w.record(file).session_id, w.record(file).pid], ["s-1", first.pid]);
-    handle({ hook_event_name: "PostToolUse", tool_name: "Bash", session_id: "s-1" }, { dir: w.state, claude: () => ({ pid: second.pid, start: second.start }) });
-    assert.equal(w.record(file).pid, second.pid);
-    assert.equal(w.run(["prune"], { extra: IDENTITY }).stdout.trim(), `kept ${tree}: its session is open`);
-    assert.ok(existsSync(tree));
-    second.child.kill("SIGKILL");
-    await second.exited;
-    assert.equal(w.run(["prune"], { extra: IDENTITY }).stdout.trim(), `removed ${tree} (the job is closed)`);
-    assert.ok(!existsSync(tree));
-    assert.equal(existsSync(launchRecordPath(file, w.state)), false);
-  } finally {
-    first.child.kill("SIGKILL");
-    second.child.kill("SIGKILL");
-  }
+  assert.equal(parse(readFileSync(file, "utf8"), JOB_KEYS).status, "closed");
+  const kept = w.record(file);
+  assert.deepEqual([kept.worktree, kept.agent_id, kept.session_id, kept.cockpit_pid, kept.state], [tree, undefined, undefined, undefined, undefined]);
 });
 
 test("close run from inside the job's own worktree keeps that worktree and its record, and says so", () => {
@@ -514,22 +370,3 @@ test("close removes a clean core worktree whose git ls-files output passes 1 MiB
   assert.ok(!existsSync(tree));
 });
 
-test("a git failure while close checks the worktree, after the session has ended, keeps the tree with the reason, prints every line and still closes the job", async () => {
-  const { w, make } = pruneWorld();
-  const live = await sleeper();
-  try {
-    const tree = make("broken", { status: "done", record: { session_id: "s-1", bound_at: "t", pid: live.pid, pid_start: live.start } });
-    const file = w.jobs().find((path) => path.endsWith("-dev-broken.md"));
-    writeFileSync(join(git(tree, "rev-parse", "--absolute-git-dir"), "index"), "not an index");
-    const out = w.run(["close", file], { extra: IDENTITY });
-    assert.equal(out.status, 0, out.stderr);
-    assert.match(out.stdout, new RegExp(`^closed: ${file}\\nended session s-1 \\(pid ${live.pid}\\)\\nkept ${tree}: git ls-files -v -z failed in ${tree}: .+$`, "m"));
-    assert.deepEqual(await live.exited, [null, "SIGTERM"]);
-    assert.ok(existsSync(tree));
-    assert.equal(parse(readFileSync(file, "utf8"), JOB_KEYS).status, "closed");
-    const kept = w.record(file);
-    assert.deepEqual([kept.worktree, kept.session_id, kept.pid], [tree, undefined, undefined]);
-  } finally {
-    live.child.kill("SIGKILL");
-  }
-});

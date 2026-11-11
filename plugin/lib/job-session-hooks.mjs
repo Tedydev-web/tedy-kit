@@ -1,17 +1,16 @@
 import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, openSync, readdirSync, readFileSync, readSync } from "node:fs";
-import { basename, isAbsolute, join } from "node:path";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { herdr, HerdrError } from "./job-adapters.mjs";
 import { launchRecordPath, readJob, readRecord, updateRecord } from "./job-files.mjs";
 import { isUserPrompt, logGate, readHookInput } from "./hook-io.mjs";
 import { STATE_DIR } from "./state-dir.mjs";
 
-const LAUNCH_FORM = /^(?:<command-message>[^<]*<\/command-message>\s*<command-name>\/tedy:[a-z-]+<\/command-name>\s*<command-args>job |\/tedy:[a-z-]+ job |Job file )(?:("(?:[^"\\\n]|\\.)*")|(\/[^\s"'\\]*?\/plans\/jobs\/\d{6}-\d{4}-(?:pm|dev|review|devops)-[a-z0-9-]+\.md))/;
+const LAUNCH_FORM = /^Job file ("(?:[^"\\\n]|\\.)*")/;
 const JOB_PATH = /^\/(?:.*\/)?plans\/jobs\/\d{6}-\d{4}-(pm|dev|review|devops)-[a-z0-9-]+\.md$/;
 const JOB_AGENT = /^tedy:(pm|dev|review|devops)$/;
+const SAFE_ID = /^[\w-]+$/;
 const TRANSCRIPT_HEAD = 1 << 20;
-const WAITING = { permission_prompt: "waiting: permission", idle_prompt: "waiting: input" };
 const GONE = new Set(["ENOENT", "ESRCH"]);
 
 function linuxProcess(pid) {
@@ -52,17 +51,6 @@ export function claudeProcess(from = process.ppid) {
   return null;
 }
 
-export function ancestors(from = process.ppid) {
-  const chain = [];
-  for (let pid = from; pid > 1 && !chain.some((entry) => entry.pid === pid); ) {
-    const info = processInfo(pid);
-    if (!info) break;
-    chain.push({ pid, start: info.start });
-    pid = info.ppid;
-  }
-  return chain;
-}
-
 export function alive(record) {
   if (!Number.isInteger(record?.pid) || record.pid <= 1) return false;
   try {
@@ -74,6 +62,10 @@ export function alive(record) {
   const info = processInfo(record.pid);
   return Boolean(info?.claude) && info.start === record.pid_start;
 }
+
+export const cockpitAlive = (record) => alive({ pid: record?.cockpit_pid, pid_start: record?.cockpit_pid_start });
+
+export const agentRunning = (record) => Boolean(record?.agent_id) && record.state !== "idle" && record.state !== "stopped" && cockpitAlive(record);
 
 function findRecord(dir, matches) {
   const jobs = join(dir, "jobs");
@@ -91,9 +83,7 @@ function findRecord(dir, matches) {
   return null;
 }
 
-export const recordOfSession = (dir, session) => (session ? findRecord(dir, (record) => record.session_id === session) : null);
-
-export const recordOfProcesses = (dir, processes) => (processes.length ? findRecord(dir, (record) => processes.some(({ pid, start }) => record.pid === pid && record.pid_start === start)) : null);
+const recordOfAgent = (dir, agent) => findRecord(dir, (record) => record.agent_id === agent);
 
 function firstPrompt(transcript) {
   let descriptor;
@@ -126,64 +116,69 @@ function unquoted(text) {
   }
 }
 
+function agentTranscript({ agent_transcript_path: given, transcript_path: main, session_id: session, agent_id: agent }) {
+  if (typeof given === "string" && isAbsolute(given)) return given;
+  if (typeof main !== "string" || !isAbsolute(main) || !SAFE_ID.test(session ?? "") || !SAFE_ID.test(agent)) return null;
+  return join(dirname(main), session, "subagents", `agent-${agent}.jsonl`);
+}
+
 function launchedJobFile(transcript) {
   if (!transcript || !existsSync(transcript)) return null;
-  const [, quotedFile, bare] = firstPrompt(transcript)?.match(LAUNCH_FORM) ?? [];
-  const file = quotedFile ? unquoted(quotedFile) : bare;
+  const [, quoted] = firstPrompt(transcript)?.match(LAUNCH_FORM) ?? [];
+  const file = quoted ? unquoted(quoted) : null;
   const role = typeof file === "string" ? file.match(JOB_PATH)?.[1] : undefined;
   return role ? { file, role } : null;
 }
 
-function bind(input, dir, now, claude, warnings) {
-  const role = input.agent_type?.match(JOB_AGENT)?.[1];
-  if (!role || input.agent_id || recordOfSession(dir, input.session_id)) return;
-  const launched = launchedJobFile(input.transcript_path);
+function bind(input, role, dir, now, claude, warnings) {
+  if (recordOfAgent(dir, input.agent_id)) return;
+  const transcript = agentTranscript(input);
+  const launched = launchedJobFile(transcript);
   if (launched?.role !== role || !existsSync(launched.file)) return;
   const { file } = launched;
   const path = launchRecordPath(file, dir);
   if (!readRecord(path)) return;
-  const found = claude();
-  let bound = null;
+  const cockpit = claude();
+  let taken = null;
   updateRecord(path, (record) => {
-    bound = record?.session_id ?? null;
-    if (!record || bound || readJob(file).status === "closed") return undefined;
-    return { ...record, session_id: input.session_id, transcript_path: input.transcript_path, ...(found && !alive(record) && { pid: found.pid, pid_start: found.start }), ...(typeof input.cwd === "string" && isAbsolute(input.cwd) && { session_cwd: input.cwd }), bound_at: now };
+    taken = record?.agent_id ?? null;
+    if (!record || taken || readJob(file).status === "closed") return undefined;
+    return { ...record, agent_id: input.agent_id, session_id: input.session_id, transcript_path: transcript, ...(cockpit && { cockpit_pid: cockpit.pid, cockpit_pid_start: cockpit.start }), bound_at: now };
   });
-  if (bound && bound !== input.session_id) warnings.push(`${file} is already bound to session ${bound}; this session is not tracked as that job`);
+  if (taken && taken !== input.agent_id) warnings.push(`${file} is already bound to agent ${taken}; agent ${input.agent_id} is not tracked as that job`);
 }
 
-function nextState({ hook_event_name: event, notification_type: type, tool_name: tool }) {
-  if (event === "Notification") return WAITING[type];
-  if (event === "PreToolUse") return tool === "AskUserQuestion" ? "waiting: question" : undefined;
-  if (event === "PostToolUse" || event === "SessionStart") return "running";
-  if (event === "Stop") return "idle";
+function nextState({ hook_event_name: event, notification_type: type }) {
+  if (event === "Notification") return type === "permission_prompt" ? "waiting: permission" : undefined;
+  if (event === "SubagentStop") return "idle";
+  if (event === "PostToolUse") return "running";
   return undefined;
 }
 
-function notifyHerdr(record, state, env, warnings) {
-  if (env.HERDR_ENV !== "1" || !state?.startsWith("waiting") || state === record.state) return;
-  try {
-    herdr(["notification", "show", `tedy ${record.role} job: ${state}`, "--body", basename(record.file ?? ""), "--sound", "request"], env);
-  } catch (error) {
-    if (!(error instanceof HerdrError)) throw error;
-    warnings.push(`${error.message}; the job is ${state}`);
-  }
+function stopped(input, dir, now) {
+  if (input.hook_event_name !== "PostToolUse" || input.tool_name !== "TaskStop") return;
+  const named = Object.values(input.tool_input ?? {}).filter((value) => typeof value === "string" && value);
+  const found = findRecord(dir, (record) => Boolean(record.agent_id) && (named.includes(record.agent_id) || named.includes(record.agent_name)));
+  if (found) updateRecord(found.path, (record) => (record?.agent_id === found.record.agent_id ? { ...record, state: "stopped", last_event_at: now } : undefined));
 }
 
-export function handle(input, { dir = STATE_DIR, now = new Date().toISOString(), claude = claudeProcess, env = process.env } = {}) {
+export function handle(input, { dir = STATE_DIR, now = new Date().toISOString(), claude = claudeProcess } = {}) {
   const warnings = [];
-  bind(input, dir, now, claude, warnings);
-  const found = recordOfSession(dir, input.session_id);
+  if (!input.agent_id) {
+    stopped(input, dir, now);
+    return warnings;
+  }
+  const role = input.agent_type?.match(JOB_AGENT)?.[1];
+  if (!role) return warnings;
+  bind(input, role, dir, now, claude, warnings);
+  const found = recordOfAgent(dir, input.agent_id);
   if (!found) return warnings;
-  const state = input.agent_id ? undefined : nextState(input);
-  const started = input.hook_event_name === "SessionStart" || !alive(found.record) ? claude() : null;
-  let before = null;
+  const state = nextState(input);
+  const cockpit = cockpitAlive(found.record) ? null : claude();
   updateRecord(found.path, (record) => {
-    if (record?.session_id !== input.session_id) return undefined;
-    before = record;
-    return { ...record, ...(started && !alive(record) && { pid: started.pid, pid_start: started.start }), ...(state && { state }), last_event_at: now };
+    if (record?.agent_id !== input.agent_id) return undefined;
+    return { ...record, ...(cockpit && !cockpitAlive(record) && { cockpit_pid: cockpit.pid, cockpit_pid_start: cockpit.start }), ...(state && { state }), last_event_at: now };
   });
-  if (before) notifyHerdr(before, state, env, warnings);
   return warnings;
 }
 

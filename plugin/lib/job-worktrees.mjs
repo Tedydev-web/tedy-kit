@@ -84,4 +84,3 @@ export function removeWorktree({ repo, worktree, branch }, reason, dryRun = fals
   return `removed ${worktree} (${reason})`;
 }
 
-export const t3Strategy =({ branch, base }) => ({ type: "worktree", baseRef: `origin/${base}`, branch, startFromOrigin: true });

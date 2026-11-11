@@ -2,258 +2,174 @@ import "./test-isolation.mjs";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { launchRecordPath, recordLaunch } from "../lib/job-files.mjs";
 import { alive, claudeProcess, handle, processInfo } from "../lib/job-session-hooks.mjs";
-import { fakeHerdr, sleeper } from "./job-world-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const PLUGIN = fileURLToPath(new URL("../", import.meta.url)).replace(/\/$/, "");
 const HOOK = join(PLUGIN, "scripts", "job-session-hooks.mjs");
 
-function world(names = ["261109-1000-dev-add-hello"]) {
+function world(names = ["261111-1000-dev-add-hello"]) {
   const root = tempDir("tedy-job-hooks-");
   const state = join(root, "state");
   mkdirSync(join(root, "plans", "jobs"), { recursive: true });
   const files = names.map((name) => {
     const file = join(root, "plans", "jobs", `${name}.md`);
-    writeFileSync(file, `to: tedy:${name.split("-")[2]}\nfrom: cockpit\nstatus: running\ncreated: 2026-11-09T03:00:00.000Z\ntitle: t\n\nbody\n`);
-    recordLaunch(file, { role: name.split("-")[2], cwd: root }, state);
+    writeFileSync(file, `to: tedy:${name.split("-")[2]}\nfrom: cockpit\nstatus: running\ncreated: 2026-11-11T03:00:00.000Z\ntitle: t\n\nbody\n`);
+    recordLaunch(file, { role: name.split("-")[2], cwd: root, agent_name: `${name.split("-")[2]}-t` }, state);
     return file;
   });
+  const main = join(root, "projects", "s-1.jsonl");
+  mkdirSync(dirname(main), { recursive: true });
+  writeFileSync(main, "");
   const record = (file = files[0]) => JSON.parse(readFileSync(launchRecordPath(file, state), "utf8"));
   const claude = () => ({ pid: 4242, start: "777" });
-  const fire = (input, now = "2026-11-09T04:00:00.000Z") => handle({ session_id: "s-1", ...input }, { dir: state, now, claude });
-  const prompt = (content, { session = "s-1", event = "PreToolUse", extra = [] } = {}) => {
-    const transcript = join(root, `${session}.jsonl`);
-    const lines = [{ type: "user", message: { role: "user", content } }, ...extra].map((entry) => JSON.stringify(entry));
-    writeFileSync(transcript, `${lines.join("\n")}\n`);
-    return { hook_event_name: event, tool_name: "Bash", session_id: session, transcript_path: transcript, agent_type: "tedy:dev" };
+  const fire = (input, now = "2026-11-11T04:00:00.000Z") => handle({ session_id: "s-1", transcript_path: main, ...input }, { dir: state, now, claude });
+  const agent = (content, { id = "a1b2c3", role = "dev", event = "PostToolUse", session = "s-1" } = {}) => {
+    const transcript = join(root, "projects", session, "subagents", `agent-${id}.jsonl`);
+    mkdirSync(dirname(transcript), { recursive: true });
+    writeFileSync(transcript, `${JSON.stringify({ type: "user", isSidechain: true, agentId: id, message: { role: "user", content } })}\n`);
+    return { hook_event_name: event, tool_name: "Bash", session_id: session, transcript_path: join(root, "projects", `${session}.jsonl`), agent_id: id, agent_type: `tedy:${role}` };
   };
-  return { root, state, files, record, fire, prompt };
+  return { root, state, files, record, fire, agent, main };
 }
 
-const slash = (file) => `<command-message>tedy:dev</command-message>\n<command-name>/tedy:dev</command-name>\n<command-args>job ${file}. First read the jobs doc, section "Job".</command-args>`;
+const launch = (file) => `Job file ${JSON.stringify(file)}. Plugin root: /k/plugin. First read /k/plugin/shared/jobs.md, section "Job".`;
 
-test("a job session's first event after a prompt naming its job file binds the session, its transcript and its claude pid into the launch record", () => {
-  for (const [content, event] of [[(file) => slash(file), "PreToolUse"], [(file) => [{ type: "text", text: `Job file ${file}. Read the jobs doc.` }], "Notification"], [(file) => `/tedy:dev job ${file}. First read the jobs doc.`, "SessionStart"]]) {
-    const w = world();
-    const input = w.prompt(content(w.files[0]), { event });
-    assert.deepEqual(w.fire(input), []);
-    const record = w.record();
-    assert.equal(record.session_id, "s-1", event);
-    assert.equal(record.transcript_path, input.transcript_path);
-    assert.equal(record.pid, 4242);
-    assert.equal(record.pid_start, "777");
-    assert.equal(record.last_event_at, "2026-11-09T04:00:00.000Z");
-    assert.equal(record.role, "dev");
-  }
+test("a job agent's first tool event binds its agent id, the cockpit's session and the cockpit's claude pid from the launch form in the agent's own transcript", () => {
+  const w = world();
+  const input = w.agent(launch(w.files[0]));
+  assert.deepEqual(w.fire(input), []);
+  const record = w.record();
+  assert.equal(record.agent_id, "a1b2c3");
+  assert.equal(record.session_id, "s-1");
+  assert.equal(record.transcript_path, join(w.root, "projects", "s-1", "subagents", "agent-a1b2c3.jsonl"));
+  assert.deepEqual([record.cockpit_pid, record.cockpit_pid_start], [4242, "777"]);
+  assert.equal(record.state, "running");
+  assert.equal(record.bound_at, "2026-11-11T04:00:00.000Z");
+  assert.equal(record.last_event_at, "2026-11-11T04:00:00.000Z");
+  assert.equal(record.agent_name, "dev-t");
 });
 
-test("the cockpit, a subagent, another role's session, a tool result or a reply naming the file, and a missing or unrecorded job file bind nothing", () => {
+test("SubagentStop binds from its agent_transcript_path and marks the job idle", () => {
   const w = world();
-  const unrecorded = join(w.root, "plans", "jobs", "261109-1001-dev-by-hand.md");
-  writeFileSync(unrecorded, "to: tedy:dev\nfrom: cockpit\nstatus: running\n\nbody\n");
+  const input = w.agent(launch(w.files[0]), { id: "f00d", event: "SubagentStop" });
+  const moved = join(w.root, "elsewhere", "agent-f00d.jsonl");
+  mkdirSync(dirname(moved), { recursive: true });
+  writeFileSync(moved, readFileSync(join(w.root, "projects", "s-1", "subagents", "agent-f00d.jsonl")));
+  writeFileSync(join(w.root, "projects", "s-1", "subagents", "agent-f00d.jsonl"), "");
+  w.fire({ ...input, tool_name: undefined, agent_transcript_path: moved, last_assistant_message: "done" });
+  assert.deepEqual([w.record().agent_id, w.record().transcript_path, w.record().state], ["f00d", moved, "idle"]);
+});
+
+test("the cockpit, another plugin's agent, another role's agent, a launch form later in the prompt, and a missing, unrecorded or closed job file bind nothing", () => {
+  const w = world();
   const named = w.files[0];
-  const inputs = [
-    { ...w.prompt(slash(named)), agent_type: undefined },
-    { ...w.prompt(slash(named)), agent_id: "a-1" },
-    { ...w.prompt(slash(named)), agent_type: "tedy:pm" },
-    { ...w.prompt(slash(named)), transcript_path: join(w.root, "none.jsonl") },
-    w.prompt(slash(join(w.root, "plans", "jobs", "261109-1002-dev-missing.md"))),
-    w.prompt(slash(unrecorded)),
-    w.prompt("see plans/jobs/261109-1000-dev-add-hello.md"),
-    w.prompt(`/tedy:dev job "${named}\\q". First read the jobs doc.`),
-    w.prompt(`/tedy:dev job "${named}.txt". First read the jobs doc.`),
-    w.prompt(`/tedy:dev job "${w.root}/notes.md" ${named}. First read the jobs doc.`),
-    w.prompt("hello", { extra: [{ type: "assistant", message: { content: [{ type: "text", text: named }] } }, { type: "user", message: { content: [{ type: "tool_result", content: named }] } }] }),
+  const unrecorded = join(w.root, "plans", "jobs", "261111-1001-dev-by-hand.md");
+  writeFileSync(unrecorded, "to: tedy:dev\nfrom: cockpit\nstatus: running\n\nbody\n");
+  const closed = join(w.root, "plans", "jobs", "261111-1002-dev-closed.md");
+  writeFileSync(closed, "to: tedy:dev\nfrom: cockpit\nstatus: closed\n\nbody\n");
+  recordLaunch(closed, { role: "dev", cwd: w.root }, w.state);
+  const cases = [
+    { ...w.agent(launch(named)), agent_id: undefined },
+    { ...w.agent(launch(named)), agent_type: "general-purpose" },
+    { ...w.agent(launch(named)), agent_type: "other:dev" },
+    w.agent(launch(named), { role: "pm" }),
+    w.agent(`Please look. ${launch(named)}`),
+    w.agent(launch(join(w.root, "plans", "jobs", "261111-1003-dev-missing.md"))),
+    w.agent(launch(unrecorded)),
+    w.agent(launch(closed)),
+    w.agent([{ type: "tool_result", content: launch(named) }]),
   ];
-  for (const input of inputs) {
-    assert.deepEqual(w.fire(input), []);
-    assert.equal(w.record().session_id, undefined, JSON.stringify(input));
-  }
+  for (const input of cases) assert.deepEqual(w.fire(input), [], JSON.stringify(input));
+  assert.equal(w.record().agent_id, undefined);
+  assert.equal(JSON.parse(readFileSync(launchRecordPath(closed, w.state), "utf8")).agent_id, undefined);
 });
 
-test("binding reads only the kit's launch form at the start of the first user prompt, never another job path the prompt or a later prompt names", () => {
-  const w = world(["261109-1000-dev-add-hello", "261109-1005-dev-other"]);
-  const [mine, other] = w.files;
-  const inputs = [
-    w.prompt(`Go on with ${mine}`),
-    w.prompt(`Same fix as in ${other}, please.\n\n/tedy:dev job ${mine}. First read the jobs doc.`),
-    w.prompt([{ type: "text", text: `See ${other}` }, { type: "text", text: `Job file ${mine}.` }]),
-    w.prompt("hello", { extra: [{ type: "user", message: { content: slash(mine) } }] }),
-  ];
-  for (const input of inputs) {
-    assert.deepEqual(w.fire(input), []);
-    assert.deepEqual([w.record(mine).session_id, w.record(other).session_id], [undefined, undefined], JSON.stringify(input));
-  }
-  w.fire(w.prompt(`${slash(mine)} Same fix as in ${other}, please.`));
-  assert.deepEqual([w.record(mine).session_id, w.record(other).session_id], ["s-1", undefined]);
-});
-
-test("a second session naming a bound job file does not rebind it and only returns a warning for stderr", () => {
+test("a second agent naming a bound job file does not rebind it and only returns a warning for stderr", () => {
   const w = world();
-  w.fire(w.prompt(slash(w.files[0])));
-  const warnings = w.fire(w.prompt(slash(w.files[0]), { session: "s-2" }));
-  assert.equal(warnings.length, 1);
-  assert.match(warnings[0], /is already bound to session s-1; this session is not tracked as that job/);
-  assert.equal(w.record().session_id, "s-1");
-  assert.equal(w.record().pid, 4242);
+  w.fire(w.agent(launch(w.files[0])));
+  const warnings = w.fire(w.agent(launch(w.files[0]), { id: "b2" }));
+  assert.deepEqual(warnings, [`${w.files[0]} is already bound to agent a1b2c3; agent b2 is not tracked as that job`]);
+  assert.equal(w.record().agent_id, "a1b2c3");
 });
 
-test("a job file whose status is closed binds no session, even when its record has none, and the session does not bind a later job file it names", () => {
-  const w = world(["261109-1000-dev-add-hello", "261109-1005-dev-other"]);
-  writeFileSync(w.files[0], readFileSync(w.files[0], "utf8").replace("status: running", "status: closed"));
-  assert.deepEqual(w.fire(w.prompt(`${slash(w.files[0])} then ${w.files[1]}`)), []);
-  assert.equal(w.record(w.files[0]).session_id, undefined);
-  assert.equal(w.record(w.files[0]).pid, undefined);
-  assert.equal(w.record(w.files[1]).session_id, undefined);
-});
-
-test("a session bound to one job does not bind a second job file it names", () => {
-  const w = world(["261109-1000-dev-add-hello", "261109-1005-dev-other"]);
-  w.fire(w.prompt(slash(w.files[0])));
-  w.fire(w.prompt(slash(w.files[1])));
-  assert.equal(w.record(w.files[0]).session_id, "s-1");
-  assert.equal(w.record(w.files[1]).session_id, undefined);
-});
-
-test("the record's state follows the hooks: permission and idle notifications, AskUserQuestion, tool results and the end of a turn", () => {
+test("the record's state follows the job agent: running after a tool, waiting on its permission notification, idle when it stops, and the cockpit's own events change nothing", () => {
   const w = world();
-  w.fire(w.prompt(slash(w.files[0])));
+  const input = w.agent(launch(w.files[0]));
+  w.fire(input);
   const steps = [
-    [{ hook_event_name: "Notification", notification_type: "permission_prompt" }, "waiting: permission"],
+    [{ ...input, hook_event_name: "Notification", notification_type: "permission_prompt" }, "waiting: permission"],
+    [{ ...input, hook_event_name: "PostToolUse" }, "running"],
+    [{ hook_event_name: "Notification", notification_type: "permission_prompt" }, "running"],
+    [{ hook_event_name: "Stop" }, "running"],
     [{ hook_event_name: "PostToolUse", tool_name: "Bash" }, "running"],
-    [{ hook_event_name: "PreToolUse", tool_name: "AskUserQuestion" }, "waiting: question"],
-    [{ hook_event_name: "PostToolUse", tool_name: "AskUserQuestion" }, "running"],
-    [{ hook_event_name: "Stop" }, "idle"],
-    [{ hook_event_name: "Notification", notification_type: "idle_prompt" }, "waiting: input"],
-    [{ hook_event_name: "Notification", notification_type: "auth_success" }, "waiting: input"],
-    [{ hook_event_name: "PostToolUse", tool_name: "Read" }, "running"],
+    [{ ...input, hook_event_name: "Notification", notification_type: "idle_prompt" }, "running"],
+    [{ ...input, hook_event_name: "SubagentStop" }, "idle"],
   ];
-  steps.forEach(([input, state], index) => {
-    const now = `2026-11-09T05:0${index}:00.000Z`;
-    w.fire(input, now);
-    assert.equal(w.record().state, state, JSON.stringify(input));
-    assert.equal(w.record().last_event_at, now);
-  });
-  const before = w.record();
-  w.fire({ hook_event_name: "Stop", session_id: "s-other" });
-  assert.deepEqual(w.record(), before);
-});
-
-test("a subagent's hook events never change the job's state, so the main thread's waiting: question and waiting: permission stay, and only its last event time moves", () => {
-  const w = world();
-  w.fire(w.prompt(slash(w.files[0])));
-  const subagent = { agent_id: "a-1", agent_type: "tedy:reviewer" };
-  const seen = [];
-  for (const [index, waiting] of [{ hook_event_name: "PreToolUse", tool_name: "AskUserQuestion" }, { hook_event_name: "Notification", notification_type: "permission_prompt" }].entries()) {
-    w.fire(waiting, `2026-11-09T07:0${index}:00.000Z`);
-    for (const [step, event] of [{ hook_event_name: "PostToolUse", tool_name: "Bash" }, { hook_event_name: "PreToolUse", tool_name: "AskUserQuestion" }, { hook_event_name: "Stop" }, { hook_event_name: "Notification", notification_type: "idle_prompt" }].entries()) {
-      const now = `2026-11-09T07:0${index}:1${step}.000Z`;
-      w.fire({ ...event, ...subagent }, now);
-      seen.push([w.record().state, w.record().last_event_at === now]);
-    }
+  for (const [step, state] of steps) {
+    w.fire(step, "2026-11-11T05:00:00.000Z");
+    assert.equal(w.record().state, state, JSON.stringify(step));
   }
-  assert.deepEqual(seen, [...Array(4).fill(["waiting: question", true]), ...Array(4).fill(["waiting: permission", true])]);
-  w.fire({ hook_event_name: "PostToolUse", tool_name: "AskUserQuestion" });
-  assert.equal(w.record().state, "running");
 });
 
-test("inside herdr a job that starts waiting raises one herdr notification, and outside herdr or on a failed call nothing breaks", () => {
-  const w = world();
-  const bin = tempDir("tedy-herdr-bin-");
-  const herdrCalls = fakeHerdr(bin);
-  const env = (extra = {}) => ({ ...process.env, PATH: `${bin}:${process.env.PATH}`, HERDR_ENV: "1", ...extra });
-  const fire = (input, extra) => handle({ session_id: "s-1", ...input }, { dir: w.state, now: "2026-11-09T05:00:00.000Z", claude: () => null, env: env(extra) });
-  fire(w.prompt(slash(w.files[0])));
-  assert.deepEqual(fire({ hook_event_name: "Notification", notification_type: "permission_prompt" }), []);
-  fire({ hook_event_name: "Notification", notification_type: "permission_prompt" });
-  assert.deepEqual(herdrCalls(), [["notification", "show", "tedy dev job: waiting: permission", "--body", "261109-1000-dev-add-hello.md", "--sound", "request"]]);
-  fire({ hook_event_name: "PostToolUse", tool_name: "Bash" });
-  fire({ hook_event_name: "PreToolUse", tool_name: "AskUserQuestion" }, { HERDR_ENV: "" });
-  assert.equal(herdrCalls().length, 1);
-  fire({ hook_event_name: "Stop" });
-  const warnings = fire({ hook_event_name: "Notification", notification_type: "idle_prompt" }, { FAKE_HERDR_FAIL: "notification show:server_unavailable" });
-  assert.deepEqual(warnings, ["herdr notification show failed (server_unavailable: fake failure); the job is waiting: input"]);
-  assert.equal(w.record().state, "waiting: input");
+test("the cockpit's TaskStop of a job agent, by its agent id or its name, marks the job stopped; a TaskStop of anything else changes nothing", () => {
+  const w = world(["261111-1000-dev-add-hello", "261111-1000-pm-gaps"]);
+  w.fire(w.agent(launch(w.files[0])));
+  w.fire(w.agent(launch(w.files[1]), { id: "c3", role: "pm" }));
+  w.fire({ hook_event_name: "PostToolUse", tool_name: "TaskStop", tool_input: { task_id: "b-other" } });
+  assert.deepEqual([w.record(w.files[0]).state, w.record(w.files[1]).state], ["running", "running"]);
+  w.fire({ hook_event_name: "PostToolUse", tool_name: "TaskStop", tool_input: { task_id: "a1b2c3" } });
+  w.fire({ hook_event_name: "PostToolUse", tool_name: "TaskStop", tool_input: { task_id: "pm-t" } });
+  assert.deepEqual([w.record(w.files[0]).state, w.record(w.files[1]).state], ["stopped", "stopped"]);
+  w.fire({ ...w.agent(launch(w.files[0])), hook_event_name: "PostToolUse", agent_id: "zz", agent_type: "tedy:dev" });
+  assert.equal(w.record(w.files[0]).state, "stopped");
 });
 
-test("SessionStart of a bound session records its claude pid again", () => {
+test("an event of a bound job agent takes the cockpit's claude pid again only once the recorded one has ended", { skip: process.platform !== "linux" }, async () => {
   const w = world();
-  w.fire(w.prompt(slash(w.files[0])));
-  w.fire({ hook_event_name: "Stop" });
-  handle({ hook_event_name: "SessionStart", source: "resume", session_id: "s-1" }, { dir: w.state, now: "2026-11-09T06:00:00.000Z", claude: () => ({ pid: 5151, start: "888" }) });
-  assert.equal(w.record().pid, 5151);
-  assert.equal(w.record().pid_start, "888");
-  assert.equal(w.record().state, "running");
-});
-
-test("SessionStart of a second claude on a bound session keeps the recorded pid while the recorded claude is alive, and takes over only once it has ended", { skip: process.platform !== "linux" }, async () => {
-  const w = world();
-  const first = await sleeper();
-  const second = await sleeper();
+  const first = spawn("sleep", ["30"], { argv0: "claude" });
   try {
-    const as = (proc) => ({ dir: w.state, now: "2026-11-09T06:00:00.000Z", claude: () => ({ pid: proc.pid, start: proc.start }) });
-    handle({ ...w.prompt(slash(w.files[0])), hook_event_name: "SessionStart", source: "startup" }, as(first));
-    assert.deepEqual([w.record().pid, w.record().pid_start], [first.pid, first.start]);
-    handle({ hook_event_name: "SessionStart", source: "resume", session_id: "s-1" }, as(second));
-    assert.deepEqual([w.record().pid, w.record().pid_start, w.record().state], [first.pid, first.start, "running"]);
-    first.child.kill("SIGKILL");
-    await first.exited;
-    handle({ hook_event_name: "SessionStart", source: "resume", session_id: "s-1" }, as(second));
-    assert.deepEqual([w.record().pid, w.record().pid_start], [second.pid, second.start]);
+    const live = { pid: first.pid, start: processInfo(first.pid).start };
+    handle({ ...w.agent(launch(w.files[0])), transcript_path: w.main }, { dir: w.state, claude: () => live });
+    handle({ ...w.agent(launch(w.files[0])), transcript_path: w.main }, { dir: w.state, claude: () => ({ pid: 5151, start: "9" }) });
+    assert.equal(w.record().cockpit_pid, first.pid);
   } finally {
-    first.child.kill("SIGKILL");
-    second.child.kill("SIGKILL");
+    first.kill("SIGKILL");
   }
-});
-
-test("a second claude that outlives the recorded one takes over the record on its next hook event, not only on SessionStart", { skip: process.platform !== "linux" }, async () => {
-  const w = world();
-  const first = await sleeper();
-  const second = await sleeper();
-  try {
-    const as = (proc) => ({ dir: w.state, now: "2026-11-09T06:00:00.000Z", claude: () => ({ pid: proc.pid, start: proc.start }) });
-    handle({ ...w.prompt(slash(w.files[0])), hook_event_name: "SessionStart", source: "startup" }, as(first));
-    handle({ hook_event_name: "SessionStart", source: "resume", session_id: "s-1" }, as(second));
-    first.child.kill("SIGKILL");
-    await first.exited;
-    handle({ hook_event_name: "PostToolUse", tool_name: "Bash", session_id: "s-1" }, as(second));
-    assert.deepEqual([w.record().pid, w.record().pid_start], [second.pid, second.start]);
-  } finally {
-    first.child.kill("SIGKILL");
-    second.child.kill("SIGKILL");
-  }
+  await new Promise((resolve) => first.once("exit", resolve));
+  handle({ ...w.agent(launch(w.files[0])), transcript_path: w.main }, { dir: w.state, claude: () => ({ pid: 5151, start: "9" }) });
+  assert.deepEqual([w.record().cockpit_pid, w.record().cockpit_pid_start], [5151, "9"]);
 });
 
 test("a corrupt record of another job does not stop the hook from updating this job", () => {
   const w = world();
-  w.fire(w.prompt(slash(w.files[0])));
+  const input = w.agent(launch(w.files[0]));
+  w.fire(input);
   writeFileSync(join(w.state, "jobs", "0".repeat(32) + ".json"), "{ trunc");
-  w.fire({ hook_event_name: "Stop" });
+  w.fire({ ...input, hook_event_name: "SubagentStop" });
   assert.equal(w.record().state, "idle");
 });
 
-test("the hook script walks its parents to the nearest claude process, records that pid with its start time, and prints nothing", { skip: process.platform !== "linux" }, () => {
+test("the hook script walks its parents to the nearest claude process, records that pid with its start time as the cockpit's, and prints nothing", { skip: process.platform !== "linux" }, () => {
   const w = world();
   const bin = tempDir("tedy-claude-bin-");
   const input = join(bin, "input.json");
-  writeFileSync(input, JSON.stringify(w.prompt(slash(w.files[0]), { session: "s-9", event: "Notification" })));
+  writeFileSync(input, JSON.stringify(w.agent(launch(w.files[0]), { id: "d4" })));
   writeFileSync(join(bin, "claude"), `#!/bin/sh\nnode "${HOOK}" < "${input}"\nstatus=$?\nexit $status\n`);
   chmodSync(join(bin, "claude"), 0o755);
   const run = spawnSync(join(bin, "claude"), [], { encoding: "utf8", env: { ...process.env, TEDY_STATE_DIR: w.state } });
   assert.equal(run.status, 0, run.stderr);
   assert.equal(run.stdout, "");
-  assert.equal(w.record().session_id, "s-9");
-  assert.equal(w.record().pid, run.pid);
-  assert.match(w.record().pid_start, /^\d+$/);
-  assert.equal(alive(w.record()), false);
+  assert.equal(w.record().agent_id, "d4");
+  assert.equal(w.record().cockpit_pid, run.pid);
+  assert.match(w.record().cockpit_pid_start, /^\d+$/);
 });
 
-test("alive needs the recorded pid to be a claude process with the recorded start time, so a reused or forged pid is not taken for the job", { skip: process.platform !== "linux" }, async () => {
+test("alive needs the recorded pid to be a claude process with the recorded start time, so a reused or forged pid is not taken for the cockpit", { skip: process.platform !== "linux" }, async () => {
   const child = spawn("sleep", ["30"], { argv0: "claude" });
   const plain = spawn("sleep", ["30"]);
   try {
