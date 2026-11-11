@@ -11,6 +11,7 @@ How every `/tedy:*` skill hands a decision to the user. The user's rules say whe
 - Options come from what you found (draft numbers, PR numbers, file paths, map values), not from generic placeholders. The automatic "Other" field is where the user pastes a URL, a path or a sentence; mention that in the question when a free value is expected.
 - Use `multiSelect: true` only when choices are independent, such as which draft comments to drop.
 - A subagent cannot ask. The skill asks, then passes the answer on.
+- A publish approval whose option carries a `preview` (`post.asIs`, `approve.all`, `merge.yes`): in the same turn, right before the `AskUserQuestion` and with no tool call between, quote that whole preview verbatim, command line included and in the preview's order, in one fenced block of the reply. Some clients (T3 Code, the desktop Code tab) draw no preview, so in answer mode the kit issues the approval only for a preview that block showed (ADR 0020).
 - Plan mode has its own approval flow; no menus there.
 
 ## Labels

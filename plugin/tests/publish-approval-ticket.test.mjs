@@ -80,50 +80,56 @@ test("the hook writes no ticket for a refusal, a typed answer, a note, a timeout
 const PREVIEW = `ok a\nthêm dòng 2\n${REPLY}`;
 const said = (blocks, at = Date.now()) => ({ type: "assistant", timestamp: new Date(at).toISOString(), message: { content: blocks } });
 const text = (value) => ({ type: "text", text: value });
-function unannotated(transcriptEntries, { preview = PREVIEW, questionText = "Đăng?", answer = VI["post.asIs"], extra = {} } = {}) {
+const ASK = { type: "tool_use", name: "AskUserQuestion", id: "toolu_1", input: {} };
+const userTurn = (content) => ({ type: "user", timestamp: new Date().toISOString(), message: { content } });
+function unannotated(transcriptEntries, { preview = PREVIEW, questionText = "Đăng?", answer = VI["post.asIs"], extra = {}, ask = true, description = "d" } = {}) {
   const transcript = join(tempDir("tedy-transcript-"), "session.jsonl");
-  writeFileSync(transcript, transcriptEntries.map((entry) => JSON.stringify(entry)).join("\n") + "\n");
-  const input = hookInput([question(preview, questionText)], { [questionText]: answer }, {}, extra);
+  const entries = ask ? [...transcriptEntries, said([ASK])] : transcriptEntries;
+  writeFileSync(transcript, entries.map((entry) => JSON.stringify(entry)).join("\n") + "\n");
+  const asked = question(preview, questionText);
+  asked.options[0].description = description;
+  const input = hookInput([asked], { [questionText]: answer }, {}, extra);
   delete input.tool_response.annotations;
   return { ...input, transcript_path: transcript };
 }
-const minted = (input, now = Date.now()) => recordApprovals(input, { dir: tempDir("tedy-tickets-"), accepted: ACCEPTED, now }).length;
+const minted = (input) => recordApprovals(input, { dir: tempDir("tedy-tickets-"), accepted: ACCEPTED }).length;
 const fenced = (body) => `Em sẽ đăng:\n\n\`\`\`\n${body}\n\`\`\``;
 const asked = (preview) => ({ type: "tool_use", name: "AskUserQuestion", input: { questions: [question(preview)] } });
 
-test("with no annotations in the response, as T3 Code returns, a ticket needs the whole chosen preview shown in the chat on whole lines within the approval window", () => {
-  assert.equal(minted(unannotated([said([text(fenced(PREVIEW)), asked(PREVIEW)])])), 1);
-  assert.equal(minted(unannotated([said([text("Trả lời thread 2:"), text(fenced(PREVIEW))])])), 1);
+test("with no annotations in the response, as T3 Code returns, a ticket needs the whole chosen preview in one block the question's own turn showed", () => {
+  assert.equal(minted(unannotated([said([text(fenced(PREVIEW))])])), 1);
+  assert.equal(minted(unannotated([said([text("Trả lời thread 2:")]), said([text(fenced(PREVIEW))])])), 1);
+  assert.equal(minted(unannotated([said([text(fenced(PREVIEW)), ASK])], { ask: false })), 1);
   assert.equal(minted(unannotated([said([text(`> ok a\n>   thêm   dòng 2\n\n${REPLY}`)])])), 1);
-  assert.equal(minted(unannotated([], { questionText: `Đăng?\n${PREVIEW}` })), 1);
   assert.equal(minted(unannotated([said([text(`Em sẽ đăng:\r\n\r\n\`\`\`\r\n${PREVIEW.replaceAll("\n", "\r\n")}\r\n\`\`\``)])])), 1);
+  assert.equal(minted(unannotated([], { questionText: `Đăng?\n${PREVIEW}` })), 1);
+  assert.equal(minted(unannotated([], { description: PREVIEW })), 1);
+  assert.equal(minted(unannotated([said([text(fenced(PREVIEW))], Date.now() - 3 * 60 * 60_000)])), 1, "an answer given hours later");
 });
 
-test("with no annotations, the approval window runs back from when the question was asked, so a late answer still gets its ticket", () => {
-  const now = Date.now();
-  const askedAt = now - 50 * 60_000;
-  const question = { ...said([{ type: "tool_use", name: "AskUserQuestion", id: "toolu_1", input: {} }], askedAt) };
-  assert.equal(minted(unannotated([said([text(fenced(PREVIEW))], askedAt - 60_000), question]), now), 1);
-  assert.equal(minted(unannotated([said([text(fenced(PREVIEW))], askedAt - APPROVAL_TTL_MS - 60_000), question]), now), 0);
-});
-
-test("with no annotations, a preview that only the AskUserQuestion previews, thinking, tool input or an old reply showed gives no ticket", () => {
+test("with no annotations, a preview from another turn, a hidden place or a split quote gives no ticket", () => {
   for (const [name, entries, options] of [
     ["only in the asked previews", [said([asked(PREVIEW)])]],
     ["only in another option's preview", [said([{ type: "tool_use", name: "AskUserQuestion", input: { questions: [{ ...question("A"), options: [{ label: VI["post.hold"], description: "n", preview: PREVIEW }] }] } }])]],
     ["only in thinking", [said([{ type: "thinking", thinking: PREVIEW }])]],
     ["only in a Write input", [said([{ type: "tool_use", name: "Write", input: { file_path: "b.md", content: PREVIEW } }])]],
-    ["only in a user message", [{ type: "user", timestamp: new Date().toISOString(), message: { content: [text(PREVIEW)] } }]],
-    ["older than the approval window", [said([text(fenced(PREVIEW))], Date.now() - APPROVAL_TTL_MS - 60_000)]],
+    ["only in a user message", [userTurn([text(PREVIEW)])]],
+    ["a draft quoted in an earlier turn the user answered, then another draft asked", [said([text(fenced(PREVIEW))]), userTurn("sửa lại"), said([text(fenced("ok b"))])]],
+    ["a tool result between the quote and the question", [said([text(fenced(PREVIEW))]), userTurn([{ type: "tool_result", tool_use_id: "toolu_x", content: "ok" }])]],
+    ["text written after the question", [], { ask: false, after: true }],
     ["the command line missing from the chat", [said([text("ok a\nthêm dòng 2")])]],
     ["the command inline, not on a line of its own", [said([text(`ok a\nthêm dòng 2\nchạy \`${REPLY}\``)])]],
     ["the body lines out of order", [said([text(`thêm dòng 2\nok a\n${REPLY}`)])]],
     ["only in an earlier AskUserQuestion's question text, which may have failed and never been drawn", [said([{ type: "tool_use", name: "AskUserQuestion", id: "toolu_0", input: { questions: [{ question: PREVIEW, header: "x", options: [{ label: "a", description: "b" }] }] } }])]],
     ["only in a subagent's reply", [{ ...said([text(fenced(PREVIEW))]), isSidechain: true }]],
     ["stitched from two reply blocks", [said([text("ok a\nthêm dòng 2")]), said([text(REPLY)])]],
+    ["no entry for this question in the transcript", [said([text(fenced(PREVIEW))])], { ask: false }],
     ["a refusal", [said([text(fenced(PREVIEW))])], { answer: VI["post.hold"] }],
     ["an AFK auto-resolve", [said([text(fenced(PREVIEW))])], { extra: { afkTimeoutMs: 600000 } }],
-  ]) assert.equal(minted(unannotated(entries, options)), 0, name);
+  ]) {
+    const input = options?.after ? unannotated([said([ASK]), said([text(fenced(PREVIEW))])], { ask: false }) : unannotated(entries, options);
+    assert.equal(minted(input), 0, name);
+  }
   const gone = unannotated([said([text(fenced(PREVIEW))])]);
   assert.equal(minted({ ...gone, transcript_path: join(tempDir("tedy-none-"), "missing.jsonl") }), 0, "no transcript");
   const annotatedNull = unannotated([said([text(fenced(PREVIEW))])]);
@@ -146,7 +152,7 @@ test("the hook entry in answer mode writes a ticket for a T3 Code answer whose p
 });
 
 test("the refusal tells the agent to quote the whole preview in the reply first, for a client that does not report previews", () => {
-  assert.throws(() => consume(tempDir("tedy-tickets-"), ["reply", "1", "2", "--body-file", "b.md"], ["ok a"]), /quote that whole preview verbatim in a fenced block of the reply/);
+  assert.throws(() => consume(tempDir("tedy-tickets-"), ["reply", "1", "2", "--body-file", "b.md"], ["ok a"]), /in the same turn with no tool call between, quote that whole preview verbatim in one fenced block of the reply/);
 });
 
 test("the hook entry writes tickets only in answer mode", () => {

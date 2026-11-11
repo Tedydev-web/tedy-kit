@@ -40,23 +40,25 @@ const askedTexts = (input) =>
 
 const contentOf = (entry) => (Array.isArray(entry?.message?.content) ? entry.message.content : []);
 
-function chatBlocks(input, now) {
-  const entries = readTranscriptTail(input?.transcript_path, TRANSCRIPT_BYTES).filter((entry) => entry?.type === "assistant" && !entry.isSidechain);
-  const asked = entries.find((entry) => contentOf(entry).some((block) => block?.type === "tool_use" && block.id === input?.tool_use_id));
-  const askedAt = Date.parse(asked?.timestamp ?? "");
-  const since = (Number.isNaN(askedAt) ? now : askedAt) - APPROVAL_TTL_MS;
-  const said = entries
-    .filter((entry) => Date.parse(entry.timestamp ?? "") >= since)
-    .flatMap(contentOf)
-    .flatMap((block) => (block?.type === "text" && typeof block.text === "string" ? [block.text] : []));
-  return [...said, ...askedTexts(input?.tool_input)].map(contentLines);
+function turnTexts(input) {
+  const entries = readTranscriptTail(input?.transcript_path, TRANSCRIPT_BYTES).filter((entry) => !entry?.isSidechain);
+  const at = entries.findIndex((entry) => entry?.type === "assistant" && contentOf(entry).some((block) => block?.type === "tool_use" && block.id === input?.tool_use_id));
+  if (at === -1) return [];
+  const texts = [];
+  for (let index = at; index >= 0 && entries[index]?.type !== "user"; index -= 1) {
+    if (entries[index]?.type !== "assistant") continue;
+    const content = contentOf(entries[index]);
+    const end = index === at ? content.findIndex((block) => block?.type === "tool_use" && block.id === input.tool_use_id) : content.length;
+    texts.unshift(...content.slice(0, end).flatMap((block) => (block?.type === "text" && typeof block.text === "string" ? [block.text] : [])));
+  }
+  return texts;
 }
 
-function approvedPreviews(input, accepted, now) {
+function approvedPreviews(input, accepted) {
   const found = answered(input).filter(({ answer, chosen }) => accepted.includes(answer) && typeof chosen.preview === "string" && chosen.preview.trim());
   if (!found.length) return [];
   if (input.tool_response.annotations !== undefined) return found.filter(({ chosen, shown }) => shown === chosen.preview).map(({ chosen }) => chosen.preview);
-  const blocks = chatBlocks(input, now);
+  const blocks = [...turnTexts(input), ...askedTexts(input?.tool_input)].map(contentLines);
   return found.filter(({ chosen }) => blocks.some((lines) => holdsBlock(lines, contentLines(chosen.preview)))).map(({ chosen }) => chosen.preview);
 }
 
@@ -92,7 +94,7 @@ export function recordRunApprovals(input, { dir = runApprovalsDir(), lang, now =
 export const hasRunApproval = (sha, dir = runApprovalsDir()) => existsSync(join(dir, `${sha}.json`));
 
 export function recordApprovals(input, { dir = approvalsDir(), accepted = approvalLabels(), now = Date.now() } = {}) {
-  const previews = approvedPreviews(input, accepted, now);
+  const previews = approvedPreviews(input, accepted);
   if (!previews.length) return [];
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   chmodSync(dir, 0o700);
@@ -145,7 +147,7 @@ function sweep(dir, now) {
 }
 
 export const refusal = (command) =>
-  `publish approval is in answer mode and no unused approval matches this write. Nothing was written. Ask the user again with one AskUserQuestion whose approving option's preview holds the command line \`${command.join(" ")}\` (optionally after \`node\` and with the script's full path) on a line of its own, and every text it writes, verbatim, on whole lines. Right before that question, quote that whole preview verbatim in a fenced block of the reply: a client that does not report which preview the user saw, such as T3 Code, gets a ticket only for a preview the chat showed. One approval covers one command, for ${APPROVAL_TTL_MS / 60_000} minutes.`;
+  `publish approval is in answer mode and no unused approval matches this write. Nothing was written. Ask the user again with one AskUserQuestion whose approving option's preview holds the command line \`${command.join(" ")}\` (optionally after \`node\` and with the script's full path) on a line of its own, and every text it writes, verbatim, on whole lines. Right before that question, in the same turn with no tool call between, quote that whole preview verbatim in one fenced block of the reply: a client that does not report which preview the user saw, such as T3 Code, gets a ticket only for a preview the chat showed. One approval covers one command, for ${APPROVAL_TTL_MS / 60_000} minutes.`;
 
 export function requireExplicitTarget(flag, given, { expected, mode = gateSwitches().publishApproval } = {}) {
   if (mode !== "answer") return;
