@@ -42,6 +42,18 @@ test("the cockpit asks each job's open cards by the pending skill's steps, a job
   assert.match(pending, /`approve\.hold` → `pending\.mjs card-note <card>/);
 });
 
+test("every kit write a skill runs after a question is approved by an approve.all or post.asIs option, never by the merge or next-step answer", () => {
+  const flow = read("shared/status-flow.md");
+  assert.doesNotMatch(flow, /ride in the|yes there approves/);
+  assert.match(flow, /`approve\.all`, whose `preview` holds the preview line and, on a line of its own, the same command with `--apply --lock <n>`/);
+  const merge = read("skills/review-pr/references/status-after-merge.md");
+  assert.doesNotMatch(merge, /approved those lines/);
+  assert.match(merge, /`merge\.yes` approves the merge alone/);
+  for (const path of ["skills/dev/references/rebut.md", "skills/review-pr/references/follow-up.md"]) assert.match(read(path), /`approve\.all`/, path);
+  assert.match(read("skills/pm/SKILL.md"), /`approve\.trim` \([^)]*ask again\)/);
+  assert.match(read("skills/pm/references/tracker-openproject.md"), /undone with `rollback`: preview, then `approve\.header` naming close or delete, whose `approve\.all` `preview`/);
+});
+
 test("every role that moves a work package's status follows one status procedure, and review merges only on the user's yes", () => {
   const procedure = read("shared/status-flow.md");
   for (const phrase of ["op-status.mjs plan", "--started", "--merging", "without `--apply`", "--apply --lock"]) assert.ok(procedure.includes(phrase), phrase);
