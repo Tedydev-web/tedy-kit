@@ -1,10 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
-import { isAbsolute, join, relative, resolve } from "node:path";
+import { basename, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { bashInputs, classify } from "./git-gate.mjs";
 import { route } from "../lib/handoff.mjs";
 import { boundJob } from "../lib/job-session-hooks.mjs";
+import { profileDir } from "../lib/profile.mjs";
 import { ask, gateSwitches, logGate, readHookInput, STATE_DIR } from "../lib/hook-io.mjs";
 import { resolveMap } from "../lib/project-map.mjs";
 import { expandHome, shellWords, tokenize, walkCommands } from "../lib/shell-segments.mjs";
@@ -141,19 +142,43 @@ export const classifyAction = (input, map, role) => classifyActions(input, map, 
 
 const JOB_SCRIPT = /(?:^|\/)job\.mjs$/;
 
-function jobScriptCalls(input) {
+function bashSegments(input) {
   const cwd = input.cwd ?? process.cwd();
+  return (bashInputs(input).inputs ?? []).filter((item) => item.tool_name === "Bash").flatMap((item) => walkCommands(item.tool_input?.command ?? "", item.cwd ?? cwd).parts);
+}
+
+function jobScriptCalls(input) {
   const calls = [];
-  for (const item of bashInputs(input).inputs ?? []) {
-    if (item.tool_name !== "Bash") continue;
-    for (const { text, dir } of walkCommands(item.tool_input?.command ?? "", item.cwd ?? cwd).parts) {
-      const tokens = tokenize(text);
-      tokens.forEach((token, index) => {
-        if (JOB_SCRIPT.test(token)) calls.push({ args: tokens.slice(index + 1), dir });
-      });
-    }
+  for (const { text, dir } of bashSegments(input)) {
+    const tokens = tokenize(text);
+    tokens.forEach((token, index) => {
+      if (JOB_SCRIPT.test(token)) calls.push({ args: tokens.slice(index + 1), dir });
+    });
   }
   return calls;
+}
+
+function gitOutput(text) {
+  const tokens = tokenize(text);
+  const at = tokens.findIndex((token) => basename(token) === "git");
+  return at !== -1 && tokens.slice(at + 1).some((token) => token.startsWith("--output"));
+}
+
+const within = (dir, path) => {
+  const inside = relative(resolve(dir), path);
+  return !inside.startsWith("..") && !isAbsolute(inside);
+};
+
+export function kitStateReason(input, who) {
+  if (!who) return null;
+  const job = `tedy role gate: this is a ${who.role} job (${who.label});`;
+  if (EDIT_TOOLS.has(input.tool_name)) {
+    const path = resolve(input.cwd ?? process.cwd(), input.tool_input?.file_path ?? input.tool_input?.notebook_path ?? "");
+    const kit = [["profile", profileDir()], ["state", STATE_DIR]].find(([, dir]) => within(dir, path));
+    return kit ? `${job} ${input.tool_name} of ${path} changes the kit's ${kit[0]} dir ${resolve(kit[1])}, which belongs to the cockpit. Allow it only if the user asked for it here.` : null;
+  }
+  if (!bashSegments(input).some(({ text }) => gitOutput(text))) return null;
+  return `${job} git --output writes a file wherever it points, the kit's profile and state dirs included, which belong to the cockpit. Allow it only if the user asked for it here.`;
 }
 
 export function closeReason(input, who) {
@@ -244,14 +269,17 @@ export function run() {
     const cwd = input.cwd ?? process.cwd();
     let who = agentRole(input);
     let resolved;
+    let spawned = null;
     if (!who && jobAgentType(input)) {
       resolved = resolveMap(cwd);
-      who = resolved ? spawnedRole(input, resolved.map) : null;
+      spawned = resolved ? spawnedRole(input, resolved.map) : null;
+      who = spawned;
     }
     const closing = closeReason(input, who);
-    if (closing) {
-      logGate({ hook: "role-gate", decision: "ask", agent_type: input.agent_type, role: who.role, kind: "job-close", tool: input.tool_name });
-      ask(closing);
+    const kitState = closing ? null : kitStateReason(input, spawned);
+    if (closing || kitState) {
+      logGate({ hook: "role-gate", decision: "ask", agent_type: input.agent_type, role: who.role, kind: closing ? "job-close" : "kit-state", tool: input.tool_name });
+      ask(closing ?? kitState);
       return;
     }
     if (!gateSwitches().roleGate) return;

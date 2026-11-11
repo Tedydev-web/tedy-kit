@@ -588,6 +588,36 @@ test("the gate entry asks a bound job agent before job.mjs close with the role g
   assert.equal(existsSync(join(stateDir, "session-roles", job.input.session_id)), false);
 });
 
+test("the gate entry asks a bound job agent before any git --output form and before an edit under the profile or state dir, and leaves the cockpit alone", () => {
+  const root = tempDir("tedy-role-root-");
+  const profile = tempDir("tedy-role-profile-");
+  writeFileSync(join(profile, "config.json"), JSON.stringify({ gates: { roleGate: false } }));
+  mkdirSync(join(profile, "projects"));
+  writeFileSync(join(profile, "projects", "shop.md"), `# map\n\n\`\`\`json\n${JSON.stringify({ name: "shop", paths: [root], repos: [], jobs: true })}\n\`\`\`\n`);
+  const stateDir = tempDir("tedy-state-");
+  const job = spawnedJob("dev", { state: stateDir, root });
+  const entry = (call, extra) => execFileSync("node", [new URL("../gates/role-gate.mjs", import.meta.url).pathname], { input: JSON.stringify({ cwd: root, session_id: job.input.session_id, ...call, ...extra }), encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: stateDir } });
+  const bash = (command) => ({ tool_name: "Bash", tool_input: { command } });
+  const asked = [
+    bash(`git diff --output ${join(profile, "config.json")}`),
+    bash("git diff --output=/tmp/out.patch"),
+    bash(`cd ${root} && git -C ${root} format-patch -1 --output-directory ${join(stateDir, "x")}`),
+    { tool_name: "Edit", tool_input: { file_path: join(profile, "projects", "shop.md"), old_string: "a", new_string: "b" } },
+    { tool_name: "Write", tool_input: { file_path: join(stateDir, "jobs", "x.json"), content: "{}" } },
+    { tool_name: "NotebookEdit", tool_input: { notebook_path: join(stateDir, "n.ipynb"), new_source: "x" } },
+  ];
+  for (const call of asked) {
+    const decision = JSON.parse(entry(call, job.input)).hookSpecificOutput;
+    assert.equal(decision.permissionDecision, "ask", JSON.stringify(call));
+    assert.match(decision.permissionDecisionReason, /^tedy role gate: this is a dev job \(tedy:dev\); /);
+    assert.equal(entry(call, {}), "", `cockpit: ${JSON.stringify(call)}`);
+  }
+  assert.match(JSON.parse(entry(asked[0], job.input)).hookSpecificOutput.permissionDecisionReason, /git --output/);
+  assert.match(JSON.parse(entry(asked[4], job.input)).hookSpecificOutput.permissionDecisionReason, new RegExp(`the kit's state dir ${stateDir}`));
+  assert.match(JSON.parse(entry(asked[3], job.input)).hookSpecificOutput.permissionDecisionReason, new RegExp(`the kit's profile dir ${profile}`));
+  for (const call of [bash("git diff"), bash("git log --oneline -3"), { tool_name: "Write", tool_input: { file_path: join(root, "plans", "x.md"), content: "x" } }]) assert.equal(entry(call, job.input), "", JSON.stringify(call));
+});
+
 test("role-gate asks when it cannot read the project maps", () => {
   const profile = tempDir("tedy-role-profile-");
   writeFileSync(join(profile, "config.json"), JSON.stringify({ gates: { roleGate: true } }));
