@@ -62,3 +62,8 @@ test("the job status hook runs after every tool, on the permission notification 
   for (const agent of ["tedy:pm", "tedy:dev", "tedy:review", "tedy:devops"]) assert.ok(stop.test(agent), agent);
   for (const agent of ["tedy:reviewer", "", "Explore", "other:tedy:pm", "tedy:pmx"]) assert.ok(!stop.test(agent), agent);
 });
+
+test("the ask-cards hook runs on every prompt in a plain command group, never blocking, with a short timeout", () => {
+  const { hooks } = JSON.parse(readFileSync(new URL("../hooks/hooks.json", import.meta.url), "utf8"));
+  assert.deepEqual(hooks.UserPromptSubmit, [{ hooks: [{ type: "command", command: 'node "${CLAUDE_PLUGIN_ROOT}/scripts/session-hooks.mjs" ask-cards', timeout: 10 }] }]);
+});

@@ -1,6 +1,6 @@
 # 0014: Kit artifacts meet six quota techniques, each failed by a check
 
-Status: accepted (2026-10-30)
+Status: accepted (2026-10-30); T2 amended by [ADR 0021](0021-the-cockpit-asks-each-jobs-open-cards-on-arrival.md) (standard version 4: one UserPromptSubmit hook, `session-hooks.mjs ask-cards`, is allowed)
 
 ## Context
 - S32 asks that every kit artifact meets the quota techniques the quota study establishes, and that a machine check fails one that does not. ADR 0013 left it partial until the quota study chose its techniques.

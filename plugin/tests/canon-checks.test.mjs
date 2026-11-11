@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { alwaysOnChars, docReferenceErrors, footprintErrors, hookEventErrors, installedClaudeVersion, inventoryDigest, kitFootprint, kitHookEvents, skillModelErrors, inventoryVersionErrors, kitArtifacts, kitDocFiles, kitSurfaceFit, topicLineErrors, kitRetiredNames, kitSkills, kitSourceFiles, kitTagVersions, retiredReferenceErrors, skillDescriptionErrors, skillSectionErrors, sourceCommentErrors, surfaceFitErrors, tagVersionErrors } from "../lib/canon-checks.mjs";
+import { alwaysOnChars, docReferenceErrors, footprintErrors, hookEventErrors, installedClaudeVersion, inventoryDigest, kitFootprint, kitHookEvents, kitHooks, skillModelErrors, inventoryVersionErrors, kitArtifacts, kitDocFiles, kitSurfaceFit, topicLineErrors, kitRetiredNames, kitSkills, kitSourceFiles, kitTagVersions, retiredReferenceErrors, skillDescriptionErrors, skillSectionErrors, sourceCommentErrors, surfaceFitErrors, tagVersionErrors } from "../lib/canon-checks.mjs";
 import { applies, kitConformance } from "../lib/canon-standard.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
@@ -196,8 +196,16 @@ test("always-on text over its budget, or a budget raised since the latest releas
   ]);
 });
 
-test("a kit hook on an event that adds text to every prompt or every subagent spawn fails", () => {
+test("a kit hook on an event that adds text to every prompt or every subagent spawn fails, except the cockpit's one ask-cards prompt hook", () => {
   assert.deepEqual(hookEventErrors(["PreToolUse", "SessionStart", "Stop"]), []);
+  const askCards = { type: "command", command: 'node "${CLAUDE_PLUGIN_ROOT}/scripts/session-hooks.mjs" ask-cards', timeout: 10 };
+  const other = { type: "command", command: 'node "${CLAUDE_PLUGIN_ROOT}/scripts/session-hooks.mjs" pending-handoffs', timeout: 10 };
+  assert.deepEqual(hookEventErrors(["UserPromptSubmit"], { UserPromptSubmit: [{ hooks: [askCards] }] }), []);
+  const refused = ["hooks.json registers UserPromptSubmit, whose output enters the context on every prompt or every subagent spawn"];
+  assert.deepEqual(hookEventErrors(["UserPromptSubmit"], { UserPromptSubmit: [{ hooks: [other] }] }), refused);
+  assert.deepEqual(hookEventErrors(["UserPromptSubmit"], { UserPromptSubmit: [{ hooks: [askCards, other] }] }), refused);
+  assert.deepEqual(hookEventErrors(["UserPromptSubmit"], { UserPromptSubmit: [{ hooks: [askCards] }, { hooks: [askCards] }] }), refused);
+  assert.deepEqual(hookEventErrors(["UserPromptExpansion"], { UserPromptExpansion: [{ hooks: [askCards] }] }), ["hooks.json registers UserPromptExpansion, whose output enters the context on every prompt or every subagent spawn"]);
   assert.deepEqual(hookEventErrors(["UserPromptSubmit", "SubagentStart", "Stop"]), [
     "hooks.json registers UserPromptSubmit, whose output enters the context on every prompt or every subagent spawn",
     "hooks.json registers SubagentStart, whose output enters the context on every prompt or every subagent spawn",
@@ -215,7 +223,7 @@ test("the kit's always-on text, hook events and skill models stay within the quo
   const footprint = kitFootprint(REPO);
   assert.ok(footprint.chars > 1000, String(footprint.chars));
   assert.deepEqual(footprintErrors(footprint), []);
-  assert.deepEqual(hookEventErrors(kitHookEvents(REPO)), []);
+  assert.deepEqual(hookEventErrors(kitHookEvents(REPO), kitHooks(REPO)), []);
   assert.deepEqual(skillModelErrors(kitSkills(REPO)), []);
 });
 

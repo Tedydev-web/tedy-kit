@@ -59,3 +59,33 @@ test("a session start with no card to ask prints no ask block, and a role sessio
   assert.doesNotMatch(context(c.hook("pending-handoffs", { agent_type: "tedy:dev" })), /Open cards wait/);
   assert.doesNotMatch(c.log(), /"hook":"ask-cards"/);
 });
+
+const SCRIPTS = join(PLUGIN, "scripts");
+const prompt = (extra = {}) => ({ hook_event_name: "UserPromptSubmit", prompt: "go on", ...extra });
+
+test("each prompt in the cockpit, a job's report-back turn included, gets the askable cards as UserPromptSubmit context, and nothing when none is askable", () => {
+  const c = cockpit();
+  assert.equal(c.hook("ask-cards", prompt()), null);
+  const card = c.question(c.job("done"));
+  const output = c.hook("ask-cards", prompt({ prompt: "<task-notification>job done</task-notification>" }));
+  assert.equal(output.hookSpecificOutput.hookEventName, "UserPromptSubmit");
+  assert.ok(context(output).startsWith("Open cards wait on the user's answer: ask them in this turn."), context(output));
+  assert.ok(context(output).endsWith(`\nQuestions:\n- Which toast ${card}`), context(output));
+  assert.doesNotMatch(context(output), /^Jobs:/m);
+  assert.equal(c.hook("ask-cards", prompt({ agent_type: "tedy:dev" })), null);
+  assert.equal(c.hook("ask-cards", prompt({ agent_id: "a1b2", agent_type: "Explore" })), null);
+  assert.equal(c.hook("ask-cards", prompt({ cwd: tempDir("tedy-unmapped-") })), null);
+});
+
+test("the per-prompt list leaves out a held publish card that the session start still asks, and lists at most ten cards per group", () => {
+  const c = cockpit();
+  const job = c.job("done");
+  const held = join(c.work, "plans", "drafts", "261106-0920-publish-status-of-12.md");
+  writeFileSync(held, `kind: publish\ntitle: Status of 12\njob: ${job}\npreview: run\nanswer: Not yet\n\n### 1\nnode ${SCRIPTS}/openproject.mjs set 12 --status "In Review" --job ${job}\n- #12 Task 12\n`);
+  assert.equal(c.hook("ask-cards", prompt()), null);
+  assert.match(context(c.hook("pending-handoffs")), new RegExp(`^Open cards wait[\\s\\S]*^- Status of 12 \\(run, 1 command, held: Not yet\\) ${escape(held)}$`, "m"));
+  for (let n = 1; n <= 12; n += 1) c.question(job, `Question ${String(n).padStart(2, "0")}`);
+  const text = context(c.hook("ask-cards", prompt()));
+  assert.equal(text.split("\n").filter((line) => line.startsWith("- Question ")).length, 10, text);
+  assert.ok(text.endsWith("\n- … 2 more"), text);
+});

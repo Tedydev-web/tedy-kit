@@ -85,6 +85,13 @@
         ]
       }
     ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-hooks.mjs\" ask-cards", "timeout": 10 }
+        ]
+      }
+    ],
     "Stop": [
       {
         "hooks": [

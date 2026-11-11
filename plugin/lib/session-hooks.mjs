@@ -228,7 +228,20 @@ function runPendingHandoffs() {
   }
 }
 
+function runAskCards() {
+  const input = readHookInput();
+  try {
+    if (!isCockpit(input)) return;
+    const resolved = resolveMap(input.cwd ?? process.cwd());
+    const notice = resolved ? askCardsNotice(resolved.map, { held: false }) : "";
+    if (notice) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: input.hook_event_name ?? "UserPromptSubmit", additionalContext: notice } }));
+  } catch (error) {
+    logGate({ hook: "ask-cards", decision: "skip-on-error", error: error.message });
+  }
+}
+
 export function run() {
+  if (process.argv[2] === "ask-cards") runAskCards();
   if (process.argv[2] === "decision-nudge") runDecisionNudge();
   if (process.argv[2] === "role-reminder") runRoleReminder();
   if (process.argv[2] === "pending-handoffs") runPendingHandoffs();
