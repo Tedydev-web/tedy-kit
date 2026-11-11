@@ -16,7 +16,7 @@ const HEADER = ["to", "status", "cwd", "repo", "branch", "base", "worktree", "wo
 const git = (dir, ...args) => execFileSync("git", ["-C", dir, ...args], { encoding: "utf8", env: { ...process.env, ...IDENTITY }, stdio: ["ignore", "pipe", "pipe"] }).trim();
 
 function gitWorld(mapExtra = {}) {
-  const w = world({ jobs: true, ...mapExtra });
+  const w = world(mapExtra);
   const origin = join(w.root, "origin.git");
   git(w.root, "init", "-q", "--bare", "-b", "main", origin);
   const seed = join(w.root, "seed");

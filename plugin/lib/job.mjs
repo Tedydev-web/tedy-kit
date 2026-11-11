@@ -83,7 +83,6 @@ function createJob(dir, base, text) {
 const cockpitOf = (found) => (found ? { cockpit_pid: found.pid, cockpit_pid_start: found.start } : {});
 
 export function start(map, role, { title, body, repo, branch }, { caller = claudeProcess } = {}) {
-  if (map.jobs !== true) throw new Error(`the project map ${map.name} does not set "jobs": true; hand the work over per ${join(PLUGIN, "shared", "handoff.md")} instead`);
   if (!JOB_ROLES.includes(role)) throw new Error(`unknown role ${role}; use pm, dev, review or devops`);
   const line = String(title ?? "").replace(/\s+/g, " ").trim();
   const slug = slugOf(line);

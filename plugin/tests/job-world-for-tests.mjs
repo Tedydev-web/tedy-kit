@@ -23,7 +23,7 @@ export const JOBS_DOC = join(PLUGIN, "shared", "jobs.md");
 
 export const BODY = "Add the line hello to notes.txt.\n\n## User decisions\nnone yet\n\n## First safe step\nRead notes.txt.\n\n## Sources\nthe user's request\n";
 
-export function world(mapExtra = { jobs: true }, root = tempDir("tedy-job-")) {
+export function world(mapExtra = {}, root = tempDir("tedy-job-")) {
   const profile = join(root, "profile");
   const state = join(root, "state");
   const bin = join(root, "bin");

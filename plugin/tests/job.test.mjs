@@ -88,11 +88,15 @@ test("each role's prompt names the job file, the plugin root and jobs.md section
   assert.ok(existsSync(join(PLUGIN, "skills", "dev", "SKILL.md")));
 });
 
-test("start refuses a map without jobs, an unknown role, a body without its sections, a repo it may not write and a flag it does not take", () => {
-  const legacy = world({ sessions: [{ name: "PM - Shop", role: "pm" }] });
-  const refused = legacy.run(["start", "dev", "--title", "x", "--body-file", legacy.body]);
-  assert.equal(refused.status, 1);
-  assert.match(refused.stderr, /^job: the project map acme-shop does not set "jobs": true/m);
+test("start writes a job in a map that still holds sessions and jobs: false, whose keys it ignores", () => {
+  const legacy = world({ jobs: false, sessions: [{ name: "PM - Shop", role: "pm" }] });
+  const started = legacy.run(["start", "pm", "--title", "x", "--body-file", legacy.body]);
+  assert.equal(started.status, 0, started.stderr);
+  assert.equal(JSON.parse(started.stdout).subagent_type, "tedy:pm");
+  assert.equal(legacy.jobs().length, 1);
+});
+
+test("start refuses an unknown role, a body without its sections, a repo it may not write and a flag it does not take", () => {
   const w = world();
   assert.match(w.run(["start", "qa", "--title", "x", "--body-file", w.body]).stderr, /unknown role qa; use pm, dev, review or devops/);
   writeFileSync(w.body, BODY.replace("## First safe step", "## First step"));
