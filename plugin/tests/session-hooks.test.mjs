@@ -175,6 +175,18 @@ test("the session-start hook shows the learn line to the user, records the day, 
   assert.doesNotMatch(fixture.hook("startup").stdout, /feedback memories/);
 });
 
+test("the day is recorded only after the notice was written, so a hook whose write fails does not use up the nudge", async () => {
+  const fixture = await learnHookFixture();
+  const failingWrite = join(tempDir("tedy-learn-write-"), "failing-stdout.mjs");
+  writeFileSync(failingWrite, 'process.stdout.write = () => { throw new Error("stdout closed"); };\n');
+  const failed = fixture.hook("startup", { NODE_OPTIONS: `--import ${failingWrite}` });
+  assert.equal(failed.stdout, "");
+  assert.equal(fixture.nudged(), undefined);
+  assert.match(fixture.log(), /"hook":"pending-handoffs","decision":"skip-on-error","error":"stdout closed"/);
+  assert.match(JSON.parse(fixture.hook("startup").stdout).systemMessage, /5 feedback memories/);
+  assert.match(fixture.nudged(), /^\d{4}-\d{2}-\d{2}$/);
+});
+
 test("a broken learn state is logged and the other notices still print", async () => {
   const { mkdirSync } = await import("node:fs");
   const fixture = await learnHookFixture();
