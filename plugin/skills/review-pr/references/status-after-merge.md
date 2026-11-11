@@ -4,7 +4,7 @@
 
 Run from any directory the project map covers: `node <plugin>/scripts/merged-sweep.mjs`, or in a review job `node <plugin>/scripts/merged-sweep.mjs --job <this job file>`.
 
-It finds the user's PRs opened, merged or reverted since the last sweep whose body links a work package (`OP#<id>`) assigned to the user, plans each package from all of its PRs (`<plugin>/shared/status-flow.md`), writes one publish card with a `set` command per package and prints `card: <path>`. Mention that path in one line of the reply; it never blocks the review, and `/tedy:pending approve` applies the batch.
+It finds the user's PRs opened, merged or reverted since the last sweep whose body links a work package (`OP#<id>`) assigned to the user, plans each package from all of its PRs (`<plugin>/shared/status-flow.md`), writes one publish card with a `set` command per package and prints `card: <path>`. Mention that path in one line of the reply; it never blocks the review, and the cockpit asks the card like every open card (`<plugin>/shared/jobs.md`, Cockpit 5).
 
 With `--job`, the card and each of its `set` commands name the job, so the cockpit applies the batch only after the job is done and does not close the job while the card is open.
 

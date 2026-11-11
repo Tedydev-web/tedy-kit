@@ -18,12 +18,28 @@ test("every numbered list in a skill's sections starts at 1 and runs on without 
   }
 });
 
-test("a review job asks to run PR code on a question card that /tedy:pending asks with the run header, and the answer goes back through SendMessage", () => {
+test("a review job asks to run PR code on a question card that the cockpit asks with the run header, and the answer goes back through SendMessage", () => {
   const checkout = read("skills/review-pr/references/checkout.md");
   assert.doesNotMatch(checkout, /own window/);
-  for (const phrase of ["`question` card", "full head sha", "`run.none`, `run.lint` and `run.all`", "header `run.header`", "/tedy:pending", "SendMessage", "verify not run: awaiting the run question"]) assert.ok(checkout.includes(phrase), phrase);
+  for (const phrase of ["`question` card", "full head sha", "`run.none`, `run.lint` and `run.all`", "header `run.header`", "Cockpit 5", "SendMessage", "verify not run: awaiting the run question"]) assert.ok(checkout.includes(phrase), phrase);
   const questions = read("skills/pending/SKILL.md").match(/^3\. \*\*Questions\.\*\*.*$/m)?.[0] ?? "";
   for (const phrase of ["`run.none`, `run.lint` and `run.all`", "header `run.header`", "head sha"]) assert.ok(questions.includes(phrase), phrase);
+});
+
+test("the cockpit asks each job's open cards by the pending skill's steps, a job stops only for what the user must decide, and /tedy:pending is the manual view", () => {
+  const jobs = read("shared/jobs.md");
+  const cockpit = jobs.match(/^5\. Questions go through question cards.*$/m)?.[0] ?? "";
+  for (const phrase of ["<plugin>/skills/pending/SKILL.md", "step 2", "step 3", "pending.mjs list --job <job file>", "names the card file", "asked again at the next trigger", "decided itself", "manual and recovery view"]) assert.ok(cockpit.includes(phrase), phrase);
+  assert.doesNotMatch(jobs, /Approve with `\/tedy:pending`/);
+  assert.match(jobs, /^6\. Answers and rework go through SendMessage\.[\s\S]*?`pending\.mjs done <card>` archives the card/m);
+  const job = jobs.match(/^2\. A job cannot ask the user.*$/m)?.[0] ?? "";
+  for (const phrase of ["local, reversible choice yourself", "the next-step menu included", "publishing under the user's name", "a push or PR beyond this job's own task branch and draft PR", "a merge", "a scope cut", "picking a side in a conflict between sources", "a destructive or irreversible step", "job.mjs done"]) assert.ok(job.includes(phrase), phrase);
+  const points = read("shared/decision-points.md");
+  assert.doesNotMatch(points, /Every question, including the next-step menu, becomes a `question` card/);
+  assert.match(points, /A job asks no menu/);
+  const pending = read("skills/pending/SKILL.md");
+  assert.match(pending, /^description: Manual and recovery view of what waits on the user/m);
+  assert.match(pending, /`approve\.hold` → `pending\.mjs card-note <card>/);
 });
 
 test("every role that moves a work package's status follows one status procedure, and review merges only on the user's yes", () => {

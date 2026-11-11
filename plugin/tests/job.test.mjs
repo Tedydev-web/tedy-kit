@@ -128,7 +128,8 @@ test("two concurrent identical starts write two job files with a record each and
 test("decision-points.md tells a job it never asks the user and writes a card instead, as jobs.md Job 2 says", () => {
   const text = readFileSync(join(PLUGIN, "shared", "decision-points.md"), "utf8");
   assert.doesNotMatch(text, /A job asks in its own window/);
-  assert.match(text, /A job never asks the user: it writes a `question` card and ends its turn \(`shared\/jobs\.md`, Job 2\)\./);
+  assert.match(text, /A job never asks the user \(`shared\/jobs\.md`, Job 2\)\./);
+  assert.match(text, /only a decision the user must make \(`shared\/jobs\.md`, Job 2\) becomes a `question` card, which the cockpit asks\./);
 });
 
 test("jobs.md has the Job section every prompt names, and the skills send work for another role to it, never to a role session", () => {
@@ -150,7 +151,7 @@ test("every job agent keeps the Agent tool, so review and pm jobs can spawn the 
 
 test("jobs.md gives the cockpit its subagent rules, and no plugin file outside the tests names a removed launch adapter", () => {
   const doc = readFileSync(JOBS_DOC, "utf8");
-  for (const rule of ["Spawn with Agent.", "Questions go through question cards.", "Answers and rework go through SendMessage.", "Never answer a job's permission card for the user.", "Jobs end when the cockpit session ends"]) assert.ok(doc.includes(rule), rule);
+  for (const rule of ["Spawn with Agent.", "Questions go through question cards, and the cockpit asks them as they arrive.", "Answers and rework go through SendMessage.", "Never answer a job's permission card for the user.", "Jobs end when the cockpit session ends"]) assert.ok(doc.includes(rule), rule);
   const files = execFileSync("git", ["-C", PLUGIN, "ls-files"], { encoding: "utf8" }).split("\n").filter((file) => file && !file.startsWith("tests/"));
   assert.ok(files.includes("shared/jobs.md"));
   assert.deepEqual(files.filter((file) => /herdr|t3-instance|launchArgs|--via/.test(readFileSync(join(PLUGIN, file), "utf8"))), []);
