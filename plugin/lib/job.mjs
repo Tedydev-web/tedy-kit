@@ -135,12 +135,11 @@ export function stop(file, reason) {
 
 const withoutAgent = (record) => Object.fromEntries(Object.entries(record).filter(([key]) => !AGENT_KEYS.includes(key)));
 
-const ENDING = "end that agent or the cockpit session, then close it again";
-
-function agentHold(record) {
-  if (agentRunning(record)) return { why: `its agent ${record.agent_name ?? record.agent_id} (${record.agent_id}) is ${record.state ?? "running"} in cockpit session ${record.session_id} (claude pid ${record.cockpit_pid})`, then: "stop it with TaskStop in that session, then close it again" };
-  if (record?.agent_id && !record.cockpit_pid) return { why: "its launch record holds no cockpit claude pid, so the kit cannot tell whether its agent still runs", then: ENDING };
-  if (record && !record.agent_id && cockpitAlive(record)) return { why: `its agent ${record.agent_name} has made no tool call yet while the cockpit that started it (claude pid ${record.cockpit_pid}) still runs, so it may be starting`, then: ENDING };
+function agentHold(record, verb = "close") {
+  const ending = `end that agent or the cockpit session, then ${verb} it again`;
+  if (agentRunning(record)) return { why: `its agent ${record.agent_name ?? record.agent_id} (${record.agent_id}) is ${record.state ?? "running"} in cockpit session ${record.session_id} (claude pid ${record.cockpit_pid})`, then: `${verb === "resume" ? "wait until it is idle, or " : ""}stop it with TaskStop in that session, then ${verb} it again` };
+  if (record?.agent_id && !record.cockpit_pid) return { why: "its launch record holds no cockpit claude pid, so the kit cannot tell whether its agent still runs", then: ending };
+  if (record && !record.agent_id && cockpitAlive(record)) return { why: `its agent ${record.agent_name} has made no tool call yet while the cockpit that started it (claude pid ${record.cockpit_pid}) still runs, so it may be starting`, then: ending };
   return null;
 }
 
@@ -258,6 +257,8 @@ export function resume(map, file, note, { caller = claudeProcess } = {}) {
   if (!existsSync(record.cwd)) throw new Error(`${file}: its folder ${record.cwd} no longer exists; close it and start a new job`);
   const older = fromOlderKit(record) && olderSession(record);
   if (older) throw new Error(`${file}: ${older}; end that session first, then resume it again; nothing was resumed`);
+  const held = agentHold(record, "resume");
+  if (held) throw new Error(`${file}: ${held.why}; ${held.then}; nothing was resumed`);
   const live = Boolean(record.agent_id) && cockpitAlive(record);
   const cockpit = caller();
   if (live && !sameProcess(cockpit, record)) throw new Error(`${file}: its agent ${record.agent_name ?? record.agent_id} (${record.agent_id}) belongs to another live cockpit session, ${record.session_id} (claude pid ${record.cockpit_pid}); resume it there with SendMessage; nothing was resumed`);

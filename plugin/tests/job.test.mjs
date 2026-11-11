@@ -370,6 +370,33 @@ test("resume run from the cockpit that runs the job's agent appends the note, ma
   }
 });
 
+test("resume refuses and writes nothing in every state close refuses: an agent running or waiting in a live cockpit, a job not started while the cockpit that started it runs, and a bound agent whose record holds no cockpit pid", async () => {
+  const { resume } = await import("../lib/job.mjs");
+  const w = world();
+  const live = await sleeper();
+  const caller = () => ({ pid: live.pid, start: live.start });
+  try {
+    const busy = (name, state) => `its agent dev-${name} (a1b2c3) is ${state} in cockpit session s-cockpit (claude pid ${live.pid}); wait until it is idle, or stop it with TaskStop in that session, then resume it again`;
+    const cases = [
+      ["busy-running", bound(live, { state: "running" }), busy("busy-running", "running")],
+      ["busy-waiting", bound(live, { state: "waiting: permission" }), busy("busy-waiting", "waiting: permission")],
+      ["starting", { cockpit_pid: live.pid, cockpit_pid_start: live.start }, `its agent dev-starting has made no tool call yet while the cockpit that started it (claude pid ${live.pid}) still runs, so it may be starting; end that agent or the cockpit session, then resume it again`],
+      ["bound-no-pid", bound({}, { state: "idle" }), "its launch record holds no cockpit claude pid, so the kit cannot tell whether its agent still runs; end that agent or the cockpit session, then resume it again"],
+    ];
+    for (const [name, record, why] of cases) {
+      const file = jobFile(w, { status: "done", name, record });
+      recordLaunch(file, w.record(file));
+      const snapshot = () => ({ text: readFileSync(file, "utf8"), record: JSON.stringify(readRecord(launchRecordPath(file))) });
+      const before = snapshot();
+      assert.equal(w.run(["close", file]).status, 1, name);
+      assert.throws(() => resume(w.map, file, "Also add the line world.\n", { caller }), (error) => error.message === `${file}: ${why}; nothing was resumed`, name);
+      assert.deepEqual(snapshot(), before, name);
+    }
+  } finally {
+    live.child.kill("SIGKILL");
+  }
+});
+
 test("resume of a job whose cockpit has gone, or whose agent never bound, appends the note, moves the old agent into earlier, records the resuming cockpit and prints a fresh Agent spec carrying the note", () => {
   const w = world();
   const file = jobFile(w, { status: "done", record: bound({ pid: DEAD_PID, start: "1" }, { state: "idle" }) });
