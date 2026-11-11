@@ -77,6 +77,66 @@ test("the hook writes no ticket for a refusal, a typed answer, a note, a timeout
   }
 });
 
+const PREVIEW = `ok a\nthêm dòng 2\n${REPLY}`;
+const said = (blocks, at = Date.now()) => ({ type: "assistant", timestamp: new Date(at).toISOString(), message: { content: blocks } });
+const text = (value) => ({ type: "text", text: value });
+function unannotated(transcriptEntries, { preview = PREVIEW, questionText = "Đăng?", answer = VI["post.asIs"], extra = {} } = {}) {
+  const transcript = join(tempDir("tedy-transcript-"), "session.jsonl");
+  writeFileSync(transcript, transcriptEntries.map((entry) => JSON.stringify(entry)).join("\n") + "\n");
+  const input = hookInput([question(preview, questionText)], { [questionText]: answer }, {}, extra);
+  delete input.tool_response.annotations;
+  return { ...input, transcript_path: transcript };
+}
+const minted = (input, now = Date.now()) => recordApprovals(input, { dir: tempDir("tedy-tickets-"), accepted: ACCEPTED, now }).length;
+const fenced = (body) => `Em sẽ đăng:\n\n\`\`\`\n${body}\n\`\`\``;
+const asked = (preview) => ({ type: "tool_use", name: "AskUserQuestion", input: { questions: [question(preview)] } });
+
+test("with no annotations in the response, as T3 Code returns, a ticket needs the whole chosen preview shown in the chat on whole lines within the approval window", () => {
+  assert.equal(minted(unannotated([said([text(fenced(PREVIEW)), asked(PREVIEW)])])), 1);
+  assert.equal(minted(unannotated([said([text("Trả lời thread 2:"), text(fenced(PREVIEW))])])), 1);
+  assert.equal(minted(unannotated([said([text(`> ok a\n>   thêm   dòng 2\n\n${REPLY}`)])])), 1);
+  assert.equal(minted(unannotated([], { questionText: `Đăng?\n${PREVIEW}` })), 1);
+});
+
+test("with no annotations, a preview that only the AskUserQuestion previews, thinking, tool input or an old reply showed gives no ticket", () => {
+  for (const [name, entries, options] of [
+    ["only in the asked previews", [said([asked(PREVIEW)])]],
+    ["only in another option's preview", [said([{ type: "tool_use", name: "AskUserQuestion", input: { questions: [{ ...question("A"), options: [{ label: VI["post.hold"], description: "n", preview: PREVIEW }] }] } }])]],
+    ["only in thinking", [said([{ type: "thinking", thinking: PREVIEW }])]],
+    ["only in a Write input", [said([{ type: "tool_use", name: "Write", input: { file_path: "b.md", content: PREVIEW } }])]],
+    ["only in a user message", [{ type: "user", timestamp: new Date().toISOString(), message: { content: [text(PREVIEW)] } }]],
+    ["older than the approval window", [said([text(fenced(PREVIEW))], Date.now() - APPROVAL_TTL_MS - 60_000)]],
+    ["the command line missing from the chat", [said([text("ok a\nthêm dòng 2")])]],
+    ["the command inline, not on a line of its own", [said([text(`ok a\nthêm dòng 2\nchạy \`${REPLY}\``)])]],
+    ["the body lines out of order", [said([text(`thêm dòng 2\nok a\n${REPLY}`)])]],
+    ["a refusal", [said([text(fenced(PREVIEW))])], { answer: VI["post.hold"] }],
+    ["an AFK auto-resolve", [said([text(fenced(PREVIEW))])], { extra: { afkTimeoutMs: 600000 } }],
+  ]) assert.equal(minted(unannotated(entries, options)), 0, name);
+  const gone = unannotated([said([text(fenced(PREVIEW))])]);
+  assert.equal(minted({ ...gone, transcript_path: join(tempDir("tedy-none-"), "missing.jsonl") }), 0, "no transcript");
+  const annotatedNull = unannotated([said([text(fenced(PREVIEW))])]);
+  annotatedNull.tool_response.annotations = null;
+  assert.equal(minted(annotatedNull), 0, "annotations null");
+  const annotatedEmpty = unannotated([said([text(fenced(PREVIEW))])]);
+  annotatedEmpty.tool_response.annotations = {};
+  assert.equal(minted(annotatedEmpty), 0, "annotations without a preview, as the terminal returns for an unseen preview");
+});
+
+test("the hook entry in answer mode writes a ticket for a T3 Code answer whose preview the chat showed", () => {
+  for (const [entries, expected] of [[[said([text(fenced(PREVIEW))])], 1], [[said([asked(PREVIEW)])], 0]]) {
+    const state = tempDir("tedy-ticket-state-");
+    const profile = profileWith({ gates: { publishApproval: "answer" }, language: { chat: "vi" } });
+    const run = spawnSync("node", [HOOK], { input: JSON.stringify(unannotated(entries)), encoding: "utf8", env: { ...process.env, TEDY_STATE_DIR: state, TEDY_PROFILE_DIR: profile } });
+    assert.equal(run.status, 0, run.stderr);
+    const dir = join(state, "approvals");
+    assert.equal(existsSync(dir) ? tickets(dir).length : 0, expected);
+  }
+});
+
+test("the refusal tells the agent to quote the whole preview in the reply first, for a client that does not report previews", () => {
+  assert.throws(() => consume(tempDir("tedy-tickets-"), ["reply", "1", "2", "--body-file", "b.md"], ["ok a"]), /quote that whole preview verbatim in a fenced block of the reply/);
+});
+
 test("the hook entry writes tickets only in answer mode", () => {
   for (const [mode, expected] of [["answer", 1], ["ask", 0], [null, 0]]) {
     const state = tempDir("tedy-ticket-state-");

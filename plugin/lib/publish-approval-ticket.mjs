@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { STATE_DIR, gateSwitches, logGate, readHookInput } from "./hook-io.mjs";
+import { STATE_DIR, gateSwitches, logGate, readHookInput, readTranscriptTail } from "./hook-io.mjs";
 import { CLAUDE_SETTINGS, readSettings, stateDenyRules } from "./publish-approval-settings.mjs";
 import { chatLanguage, labels } from "./labels.mjs";
 import { tokenize } from "./shell-segments.mjs";
@@ -31,11 +31,28 @@ function answered(input) {
   });
 }
 
-function approvedPreviews(input, accepted) {
-  return answered(input).flatMap(({ answer, chosen, shown }) => {
-    if (!accepted.includes(answer) || typeof chosen.preview !== "string" || !chosen.preview.trim()) return [];
-    return shown === chosen.preview ? [chosen.preview] : [];
-  });
+const TRANSCRIPT_BYTES = 16_000_000;
+
+const askedTexts = (input) =>
+  (Array.isArray(input?.questions) ? input.questions : [])
+    .flatMap((question) => [question?.question, ...(Array.isArray(question?.options) ? question.options : []).flatMap((option) => [option?.label, option?.description])])
+    .filter((value) => typeof value === "string");
+
+function chatLines(input, now) {
+  const since = now - APPROVAL_TTL_MS;
+  const said = readTranscriptTail(input?.transcript_path, TRANSCRIPT_BYTES)
+    .filter((entry) => entry?.type === "assistant" && Date.parse(entry.timestamp ?? "") >= since)
+    .flatMap((entry) => (Array.isArray(entry.message?.content) ? entry.message.content : []))
+    .flatMap((block) => (block?.type === "text" && typeof block.text === "string" ? [block.text] : block?.type === "tool_use" && block.name === "AskUserQuestion" ? askedTexts(block.input) : []));
+  return [...said, ...askedTexts(input?.tool_input)].flatMap(contentLines);
+}
+
+function approvedPreviews(input, accepted, now) {
+  const found = answered(input).filter(({ answer, chosen }) => accepted.includes(answer) && typeof chosen.preview === "string" && chosen.preview.trim());
+  if (!found.length) return [];
+  if (input.tool_response.annotations !== undefined) return found.filter(({ chosen, shown }) => shown === chosen.preview).map(({ chosen }) => chosen.preview);
+  const chat = chatLines(input, now);
+  return found.filter(({ chosen }) => holdsBlock(chat, contentLines(chosen.preview))).map(({ chosen }) => chosen.preview);
 }
 
 export const runApprovalsDir = (state = STATE_DIR) => join(state, "review-runs");
@@ -70,7 +87,7 @@ export function recordRunApprovals(input, { dir = runApprovalsDir(), lang, now =
 export const hasRunApproval = (sha, dir = runApprovalsDir()) => existsSync(join(dir, `${sha}.json`));
 
 export function recordApprovals(input, { dir = approvalsDir(), accepted = approvalLabels(), now = Date.now() } = {}) {
-  const previews = approvedPreviews(input, accepted);
+  const previews = approvedPreviews(input, accepted, now);
   if (!previews.length) return [];
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   chmodSync(dir, 0o700);
@@ -123,7 +140,7 @@ function sweep(dir, now) {
 }
 
 export const refusal = (command) =>
-  `publish approval is in answer mode and no unused approval matches this write. Nothing was written. Ask the user again with one AskUserQuestion whose approving option's preview holds the command line \`${command.join(" ")}\` (optionally after \`node\` and with the script's full path) on a line of its own, and every text it writes, verbatim, on whole lines. One approval covers one command, for ${APPROVAL_TTL_MS / 60_000} minutes.`;
+  `publish approval is in answer mode and no unused approval matches this write. Nothing was written. Ask the user again with one AskUserQuestion whose approving option's preview holds the command line \`${command.join(" ")}\` (optionally after \`node\` and with the script's full path) on a line of its own, and every text it writes, verbatim, on whole lines. Right before that question, quote that whole preview verbatim in a fenced block of the reply: a client that does not report which preview the user saw, such as T3 Code, gets a ticket only for a preview the chat showed. One approval covers one command, for ${APPROVAL_TTL_MS / 60_000} minutes.`;
 
 export function requireExplicitTarget(flag, given, { expected, mode = gateSwitches().publishApproval } = {}) {
   if (mode !== "answer") return;
