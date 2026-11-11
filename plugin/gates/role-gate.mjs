@@ -271,7 +271,13 @@ export function run() {
     let resolved;
     let spawned = null;
     if (!who && jobAgentType(input)) {
-      resolved = resolveMap(cwd);
+      try {
+        resolved = resolveMap(cwd);
+      } catch (error) {
+        if (gateSwitches().roleGate) throw error;
+        logGate({ hook: "role-gate", decision: "skip-map-unreadable", agent_type: input.agent_type, error: error.message });
+        return;
+      }
       const probe = { role: AGENT_ROLES[input.agent_type], label: input.agent_type };
       const needed = resolved && (closeReason(input, probe) || kitStateReason(input, probe) || (gateSwitches().roleGate && classifyActions(input, resolved.map, probe.role).length));
       spawned = needed ? spawnedRole(input, resolved.map) : null;

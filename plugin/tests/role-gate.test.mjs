@@ -707,6 +707,28 @@ test("in a map with jobs and sessions the gate entry reads the fleet list for a 
   assert.equal(readFileSync(calls, "utf8").trim().split("\n").length, 1);
 });
 
+test("with the role gate off a map that does not parse leaves a tedy job agent's calls alone, and with it on they ask", () => {
+  const root = tempDir("tedy-role-root-");
+  const profile = tempDir("tedy-role-profile-");
+  mkdirSync(join(profile, "projects"));
+  writeFileSync(join(profile, "projects", "broken.md"), `# map\n\n\`\`\`json\n{ "name": "shop", "paths": ["${root}"], \n\`\`\`\n`);
+  const stateDir = tempDir("tedy-state-");
+  const entry = (gateOn, call) => {
+    writeFileSync(join(profile, "config.json"), JSON.stringify({ gates: { roleGate: gateOn } }));
+    return execFileSync("node", [new URL("../gates/role-gate.mjs", import.meta.url).pathname], { input: JSON.stringify({ hook_event_name: "PreToolUse", cwd: root, session_id: randomUUID(), agent_id: "a-dev", agent_type: "tedy:dev", ...call }), encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: stateDir } });
+  };
+  const calls = [
+    { tool_name: "Edit", tool_input: { file_path: join(root, "fe", "a.ts"), old_string: "a", new_string: "b" } },
+    { tool_name: "Bash", tool_input: { command: `cd ${root} && git commit -m x` } },
+    { tool_name: "Bash", tool_input: { command: `node /k/plugin/scripts/job.mjs close ${other}` } },
+    { tool_name: "Bash", tool_input: { command: "git diff --output=/tmp/x" } },
+  ];
+  for (const call of calls) {
+    assert.equal(entry(false, call), "", JSON.stringify(call));
+    assert.match(JSON.parse(entry(true, call)).hookSpecificOutput.permissionDecisionReason, /could not check which session role owns this write/, JSON.stringify(call));
+  }
+});
+
 test("role-gate asks when it cannot read the project maps", () => {
   const profile = tempDir("tedy-role-profile-");
   writeFileSync(join(profile, "config.json"), JSON.stringify({ gates: { roleGate: true } }));
