@@ -116,25 +116,25 @@ test("the record's state follows the job agent: running after a tool, waiting on
   }
 });
 
-test("the cockpit's TaskStop of a job agent, by its agent id or its name, marks the job stopped; a TaskStop of anything else changes nothing", () => {
+test("the cockpit's TaskStop of a job agent by its exact agent id marks the job stopped; a TaskStop naming its agent name, part of its id or anything else changes nothing", () => {
   const w = world(["261111-1000-dev-add-hello", "261111-1000-pm-gaps"]);
   w.fire(w.agent(launch(w.files[0])));
   w.fire(w.agent(launch(w.files[1]), { id: "c3", role: "pm" }));
-  w.fire({ hook_event_name: "PostToolUse", tool_name: "TaskStop", tool_input: { task_id: "b-other" } });
+  for (const task_id of ["b-other", "pm-t", "dev-t", "a1b2c"]) w.fire({ hook_event_name: "PostToolUse", tool_name: "TaskStop", tool_input: { task_id } });
   assert.deepEqual([w.record(w.files[0]).state, w.record(w.files[1]).state], ["running", "running"]);
   w.fire({ hook_event_name: "PostToolUse", tool_name: "TaskStop", tool_input: { task_id: "a1b2c3" } });
-  w.fire({ hook_event_name: "PostToolUse", tool_name: "TaskStop", tool_input: { task_id: "pm-t" } });
+  w.fire({ hook_event_name: "PostToolUse", tool_name: "TaskStop", tool_input: { task_id: "c3" } });
   assert.deepEqual([w.record(w.files[0]).state, w.record(w.files[1]).state], ["stopped", "stopped"]);
   w.fire({ ...w.agent(launch(w.files[0])), hook_event_name: "PostToolUse", agent_id: "zz", agent_type: "tedy:dev" });
   assert.equal(w.record(w.files[0]).state, "stopped");
 });
 
-test("a TaskStop marks stopped only the job agent of the cockpit session that ran it, even when another session's job has the same agent name", () => {
+test("a TaskStop marks stopped only the job agent of the cockpit session that ran it", () => {
   const w = world(["261111-1000-dev-add-hello", "261111-1001-dev-add-hello"]);
   w.fire(w.agent(launch(w.files[0]), { id: "a1" }));
   w.fire(w.agent(launch(w.files[1]), { id: "b1", session: "s-2" }));
-  assert.deepEqual([w.record(w.files[0]).agent_name, w.record(w.files[1]).agent_name, w.record(w.files[1]).session_id], ["dev-t", "dev-t", "s-2"]);
-  w.fire({ hook_event_name: "PostToolUse", tool_name: "TaskStop", session_id: "s-2", tool_input: { task_id: "dev-t" } });
+  assert.equal(w.record(w.files[1]).session_id, "s-2");
+  w.fire({ hook_event_name: "PostToolUse", tool_name: "TaskStop", session_id: "s-2", tool_input: { task_id: "b1" } });
   assert.deepEqual([w.record(w.files[0]).state, w.record(w.files[1]).state], ["running", "stopped"]);
   w.fire({ hook_event_name: "PostToolUse", tool_name: "TaskStop", session_id: "s-2", tool_input: { task_id: "a1" } });
   assert.equal(w.record(w.files[0]).state, "running");

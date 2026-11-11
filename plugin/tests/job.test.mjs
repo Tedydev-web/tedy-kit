@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
-import { parse } from "../lib/handoff.mjs";
+import { parse, stamp } from "../lib/handoff.mjs";
 import { launchRecordPath, readRecord, recordLaunch } from "../lib/job-files.mjs";
 import { handle, processInfo } from "../lib/job-session-hooks.mjs";
 import { BODY, bound, DEAD_PID, JOBS_DOC, jobFile, PLUGIN, sleeper, world } from "./job-world-for-tests.mjs";
@@ -27,25 +27,47 @@ test("start writes the running job file and its launch record, then prints only 
   const [file] = w.jobs();
   assert.match(file, /plans\/jobs\/\d{6}-\d{4}-pm-gaps-in-epic-3-of-the-shop\.md$/);
   const spec = JSON.parse(out.stdout);
+  const [, day, time] = file.match(/(\d{6})-(\d{4})-pm-[^/]+$/);
   assert.deepEqual(Object.keys(spec), ["subagent_type", "run_in_background", "name", "description", "prompt"]);
-  assert.deepEqual([spec.subagent_type, spec.run_in_background, spec.name, spec.description], ["tedy:pm", true, "pm-gaps-in-epic-3-of-the-shop", "pm Gaps in epic 3"]);
+  assert.deepEqual([spec.subagent_type, spec.run_in_background, spec.name, spec.description], ["tedy:pm", true, `pm-${day}${time}-gaps-in-epic-3-of`, "pm Gaps in epic 3"]);
   assert.ok(spec.prompt.startsWith(`Job file ${JSON.stringify(file)}. `), spec.prompt);
   const job = parse(readFileSync(file, "utf8"), JOB_KEYS);
   assert.deepEqual([job.to, job.from, job.status, job.title, job.cwd], ["tedy:pm", "cockpit", "running", "Gaps in epic 3 of the shop", w.root]);
   assert.match(readFileSync(file, "utf8"), /\n\nAdd the line hello to notes\.txt\.\n\n## User decisions\n/);
   const record = w.record(file);
-  assert.deepEqual([record.file, record.role, record.cwd, record.agent_name, record.agent_id], [file, "pm", w.root, "pm-gaps-in-epic-3-of-the-shop", undefined]);
+  assert.deepEqual([record.file, record.role, record.cwd, record.agent_name, record.agent_id], [file, "pm", w.root, spec.name, undefined]);
   assert.ok(!existsSync(join(w.state, "jobs", "settings")));
   assert.deepEqual(w.calls(), []);
 });
 
-test("a job agent's name is its role and title slug cut to 32 characters, and its description is the role and at most four title words", () => {
+test("a job agent's name is its role, its job file's stamp and its title slug cut to 32 characters, and its description is the role and at most four title words", () => {
   const w = world();
-  const spec = JSON.parse(w.run(["start", "review", "--title", "Review the payment retry pull request again", "--body-file", w.body]).stdout);
-  assert.equal(spec.name, "review-review-the-payment-retry");
-  assert.ok(spec.name.length <= 32);
-  assert.equal(spec.description, "review Review the payment retry");
-  assert.equal(JSON.parse(w.run(["start", "devops", "--title", "Deploy", "--body-file", w.body]).stdout).description, "devops Deploy");
+  const spec = JSON.parse(w.run(["start", "devops", "--title", "Review the payment retry pull request again", "--body-file", w.body]).stdout);
+  const [, day, time] = w.jobs()[0].match(/(\d{6})-(\d{4})-devops-/);
+  assert.equal(spec.name, `devops-${day}${time}-review-the-pay`);
+  assert.equal(spec.name.length, 32);
+  assert.equal(spec.description, "devops Review the payment retry");
+  assert.equal(JSON.parse(w.run(["start", "pm", "--title", "Deploy", "--body-file", w.body]).stdout).description, "pm Deploy");
+});
+
+test("start refuses, and leaves no job file or launch record, when an open job already uses its agent name; a closed job does not count", () => {
+  const w = world();
+  mkdirSync(join(w.root, "plans", "jobs"), { recursive: true });
+  const taken = (status) => [Date.now(), Date.now() + 60_000].map((at) => {
+    const file = join(w.root, "plans", "jobs", `${stamp(new Date(at))}-pm-fix-the-checkout-flow-on-mobile-chrome.md`);
+    writeFileSync(file, `to: tedy:pm\nfrom: cockpit\nstatus: ${status}\ncreated: 2026-11-11T03:00:00.000Z\ntitle: x\ncwd: ${w.root}\n\n${BODY}`);
+    return file;
+  });
+  const open = taken("running");
+  const out = w.run(["start", "pm", "--title", "Fix the checkout flow on mobile safari", "--body-file", w.body]);
+  assert.equal(out.status, 1);
+  assert.match(out.stderr, /^job: the agent name pm-\d{10}-fix-the-checkout-f is already used by the open job .*-pm-fix-the-checkout-flow-on-mobile-chrome\.md; close that job or start this one with a title whose first words differ; nothing was started\n$/);
+  assert.deepEqual(w.jobs().sort(), open.sort());
+  assert.ok(!existsSync(join(w.state, "jobs")) || readdirSync(join(w.state, "jobs")).length === 0);
+  for (const file of open) writeFileSync(file, readFileSync(file, "utf8").replace("status: running", "status: closed"));
+  const again = w.run(["start", "pm", "--title", "Fix the checkout flow on mobile safari", "--body-file", w.body]);
+  assert.equal(again.status, 0, again.stderr);
+  assert.match(JSON.parse(again.stdout).name, /^pm-\d{10}-fix-the-checkout-f$/);
 });
 
 test("each role's prompt names the job file, the plugin root and jobs.md section Job; pm and review invoke their skill with the Skill tool, dev and devops get a file to read", () => {
@@ -96,7 +118,8 @@ test("two concurrent identical starts write two job files with a record each and
   const files = w.jobs();
   assert.equal(files.length, 2, outs.map((o) => o.stdout).join(""));
   for (const file of files) assert.equal(w.record(file).role, "pm");
-  assert.deepEqual(outs.map((o) => JSON.parse(o.stdout).name).sort(), ["pm-gaps-in-epic-3", "pm-gaps-in-epic-3-2"]);
+  const [, day, time] = files[0].match(/(\d{6})-(\d{4})-pm-/);
+  assert.deepEqual(outs.map((o) => JSON.parse(o.stdout).name).sort(), [`pm-${day}${time}-gaps-in-epic-3`, `pm-${day}${time}-gaps-in-epic-3-2`]);
 });
 
 test("jobs.md has the Job section every prompt names, and the skills point a jobs map at it", () => {

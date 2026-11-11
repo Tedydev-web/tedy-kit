@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { missingSections, render, setStatus, slugOf, stamp } from "./handoff.mjs";
@@ -31,7 +31,10 @@ function startPrompt(role, file) {
   return `${head} Then do the job in the job file; devops has no skill.`;
 }
 
-const agentName = (role, file) => `${role}-${basename(file, ".md").replace(/^\d{6}-\d{4}-[a-z]+-/, "")}`.slice(0, NAME_LIMIT).replace(/-+$/, "");
+function agentName(role, file) {
+  const [, day, time, slug] = basename(file, ".md").match(/^(\d{6})-(\d{4})-[a-z]+-(.+)$/) ?? [];
+  return slug ? `${role}-${day}${time}-${slug}`.slice(0, NAME_LIMIT).replace(/-+$/, "") : null;
+}
 
 const agentSpec = (role, title, name, prompt) => ({ subagent_type: `tedy:${role}`, run_in_background: true, name, description: [role, ...title.split(" ").slice(0, 4)].join(" "), prompt });
 
@@ -88,13 +91,20 @@ export function start(map, role, { title, body, repo, branch }) {
   const repoPath = repo ? writableRepo(map, repo) : null;
   const tree = role === "dev" && repoPath ? planWorktree(map, repoPath, { branch, slug }) : null;
   if (branch !== undefined && !tree) throw new Error("--branch applies only to a dev job with --repo");
-  if (tree) addWorktree(tree);
   const cwd = tree?.path ?? repoPath ?? map.paths[0];
   const created = new Date().toISOString();
   const keys = [["cwd", cwd], ["repo", repoPath], ["branch", tree?.branch], ["base", tree?.base], ["worktree", tree?.path], ["worktree_owner", tree && "core"]];
   const header = keys.filter(([, value]) => value).reduce((text, [key, value]) => setKey(text, key, value), setStatus(render({ to: `tedy:${role}`, from: "cockpit", title: line, body, created }), "running", created));
   const file = createJob(jobsDir(map), `${stamp()}-${role}-${slug}`, () => header);
   const name = agentName(role, file);
+  try {
+    const taken = listJobs(map).find((job) => job.path !== file && agentName(job.role, job.path) === name);
+    if (taken) throw new Error(`the agent name ${name} is already used by the open job ${taken.path}; close that job or start this one with a title whose first words differ; nothing was started`);
+    if (tree) addWorktree(tree);
+  } catch (error) {
+    rmSync(file, { force: true });
+    throw error;
+  }
   recordLaunch(file, { role, cwd, created, agent_name: name, ...(repoPath && { repo: repoPath }), ...(tree && { branch: tree.branch, base: tree.base, worktree_owner: "core", worktree: tree.path }) });
   return agentSpec(role, line, name, startPrompt(role, file));
 }

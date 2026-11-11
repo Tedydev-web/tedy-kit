@@ -272,7 +272,7 @@ test("prune keeps the worktree of a job whose agent still runs in a live cockpit
     const file = w.jobs().find((path) => path.endsWith("-dev-busy.md"));
     const out = w.run(["close", file], { extra: IDENTITY });
     assert.equal(out.status, 1);
-    assert.match(out.stderr, /its agent dev-busy \(a1b2c3\) is waiting: permission in cockpit session s-cockpit/);
+    assert.match(out.stderr, /its agent dev-\d{10}-busy \(a1b2c3\) is waiting: permission in cockpit session s-cockpit/);
     assert.ok(existsSync(busy));
     writeRecord(launchRecordPath(file, w.state), { ...w.record(file), state: "idle" });
     const closed = w.run(["close", file], { extra: IDENTITY });

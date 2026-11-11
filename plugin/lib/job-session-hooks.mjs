@@ -170,7 +170,7 @@ function nextState({ hook_event_name: event, notification_type: type }) {
 function stopped(input, dir, now) {
   if (input.hook_event_name !== "PostToolUse" || input.tool_name !== "TaskStop") return;
   const named = Object.values(input.tool_input ?? {}).filter((value) => typeof value === "string" && value);
-  const found = findRecord(dir, (record) => Boolean(record.agent_id) && record.session_id === input.session_id && (named.includes(record.agent_id) || named.includes(record.agent_name)));
+  const found = findRecord(dir, (record) => Boolean(record.agent_id) && record.session_id === input.session_id && named.includes(record.agent_id));
   if (found) updateRecord(found.path, (record) => (record?.agent_id === found.record.agent_id ? { ...record, state: "stopped", last_event_at: now } : undefined));
 }
 
