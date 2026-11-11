@@ -463,8 +463,8 @@ const own = "/w/acme/plans/jobs/261110-1100-pm-this.md";
 
 test("a job asks before job.mjs close of another job or of itself and names the job file, and the cockpit is not asked", () => {
   const closing = (command, who = job("tedy:pm")) => gate.closeReason({ ...shell(command), ...who }, gate.agentRole({ ...shell(command), ...who }));
-  assert.equal(closing(`node /k/plugin/scripts/job.mjs close ${other} --reason x`), `tedy role gate: this is a pm job (tedy:pm); job.mjs close ${other} ends that job's session and marks it closed, which belongs to the cockpit. Allow it only if the user asked for it here.`);
-  assert.match(closing(`node /k/plugin/scripts/job.mjs close ${own}`) ?? "", new RegExp(`job\\.mjs close ${own} ends`));
+  assert.equal(closing(`node /k/plugin/scripts/job.mjs close ${other} --reason x`), `tedy role gate: this is a pm job (tedy:pm); job.mjs close ${other} marks that job closed and removes its worktree, which belongs to the cockpit. Allow it only if the user asked for it here.`);
+  assert.match(closing(`node /k/plugin/scripts/job.mjs close ${own}`) ?? "", new RegExp(`job\\.mjs close ${own} marks`));
   assert.equal(gate.closeReason({ ...shell(`node /k/plugin/scripts/job.mjs close ${other}`), session_id: randomUUID() }, gate.agentRole({ session_id: randomUUID() })), null);
   assert.equal(closing(`node /k/plugin/scripts/job.mjs list && node /k/plugin/scripts/job.mjs stop ${own} --reason x`), null);
 });
@@ -482,8 +482,8 @@ test("every command form the gate normalizes asks for a job's close, and the rea
     const input = { ...shell(command), ...job("tedy:dev") };
     return gate.closeReason(input, gate.agentRole(input)) ?? "";
   };
-  for (const command of forms) assert.match(reason(command), new RegExp(`^tedy role gate: this is a dev job \\(tedy:dev\\); job\\.mjs close ${other} ends`), command);
-  assert.match(reason(`echo $(node /k/plugin/scripts/job.mjs close ${other})`), new RegExp(`^tedy role gate: this is a dev job \\(tedy:dev\\); job\\.mjs close \\S+, ${other} ends`));
+  for (const command of forms) assert.match(reason(command), new RegExp(`^tedy role gate: this is a dev job \\(tedy:dev\\); job\\.mjs close ${other} marks`), command);
+  assert.match(reason(`echo $(node /k/plugin/scripts/job.mjs close ${other})`), new RegExp(`^tedy role gate: this is a dev job \\(tedy:dev\\); job\\.mjs close \\S+, ${other} marks`));
   const ctx = { tool_name: "mcp__plugin_context-mode_context-mode__ctx_execute", cwd: "/w/acme", tool_input: { language: "shell", code: `node /k/plugin/scripts/job.mjs close ${other}`, cwd: "/w/acme" }, ...job("tedy:review") };
   assert.match(gate.closeReason(ctx, gate.agentRole(ctx)) ?? "", /this is a review job \(tedy:review\); job\.mjs close/);
 });
@@ -496,7 +496,7 @@ test("the gate entry asks a job before job.mjs close with the role gate off and 
   const entry = (extra) => execFileSync("node", [new URL("../gates/role-gate.mjs", import.meta.url).pathname], { input: JSON.stringify({ tool_name: "Bash", tool_input: { command }, cwd: "/tmp", session_id: randomUUID(), ...extra }), encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: tempDir("tedy-state-") } });
   const decision = JSON.parse(entry({ agent_type: "tedy:pm" })).hookSpecificOutput;
   assert.equal(decision.permissionDecision, "ask");
-  assert.match(decision.permissionDecisionReason, new RegExp(`job\\.mjs close ${other} ends that job's session`));
+  assert.match(decision.permissionDecisionReason, new RegExp(`job\\.mjs close ${other} marks that job closed`));
   assert.equal(entry({}), "");
 });
 
@@ -513,21 +513,31 @@ test("with the role gate off a job's subagent is asked before job.mjs close once
   assert.match(decision.permissionDecisionReason, /^tedy role gate: this is a pm job \(general-purpose\); job\.mjs close /);
 });
 
-test("a job asks before job.mjs t3-instance --write, not before it prints the instances, and the cockpit is not asked", () => {
-  const writing = (command, who = job("tedy:dev")) => gate.t3WriteReason({ ...shell(command), ...who }, gate.agentRole({ ...shell(command), ...who }));
-  const reason = "tedy role gate: this is a dev job (tedy:dev); job.mjs t3-instance --write changes T3's settings file and the instances later job threads start from, which belongs to the cockpit after the user's yes. Allow it only if the user asked for it here.";
-  for (const command of ["node /k/plugin/scripts/job.mjs t3-instance --all --write", "cd /w && node /k/plugin/scripts/job.mjs t3-instance dev --write", `node "/k/plugin/scripts/job".mjs 't3-instance' pm --write`]) assert.equal(writing(command), reason, command);
-  assert.equal(writing("node /k/plugin/scripts/job.mjs t3-instance --all"), null);
-  assert.equal(writing("node /k/plugin/scripts/job.mjs list --write"), null);
-  assert.equal(gate.t3WriteReason({ ...shell("node /k/plugin/scripts/job.mjs t3-instance --all --write"), session_id: randomUUID() }, gate.agentRole({ session_id: randomUUID() })), null);
+test("a tedy job agent the cockpit spawned takes its role from agent_type, and the cockpit's session gets no role file", () => {
+  const cockpit = randomUUID();
+  const sub = (agent_type) => ({ agent_type, agent_id: "a-10", session_id: cockpit });
+  assert.deepEqual(gate.agentRole(sub("tedy:pm")), { role: "pm", label: "tedy:pm" });
+  assert.equal(gate.judge({ ...postReview, ...sub("tedy:pm") }, jobsMap, counted()).reason, `tedy role gate: this is a pm job (tedy:pm); posting or resolving PR review comments belongs to the review role. Write a card, or a question card to start a review job, per ${JOBS_DOC}, unless the user allows this one here.`);
+  assert.match(gate.judge({ ...comment, ...sub("tedy:dev") }, jobsMap, counted()).reason, /^tedy role gate: this is a dev job \(tedy:dev\); writing to the tracker belongs to the pm role/);
+  assert.equal(gate.judge({ ...editCode, ...sub("tedy:dev") }, jobsMap, counted()).reason, null);
+  assert.equal(existsSync(roleFile(cockpit)), false);
+  assert.equal(gate.agentRole({ session_id: cockpit }), null);
+  assert.equal(gate.agentRole(sub("Explore")), null);
+  assert.equal(gate.agentRole(sub("tedy:reviewer")), null);
+});
+
+test("the gate entry asks a job agent the cockpit spawned before job.mjs close with the role gate off, and lets the cockpit close", () => {
   const profile = tempDir("tedy-role-profile-");
   writeFileSync(join(profile, "config.json"), JSON.stringify({ gates: { roleGate: false } }));
   mkdirSync(join(profile, "projects"));
-  const entry = (extra) => execFileSync("node", [new URL("../gates/role-gate.mjs", import.meta.url).pathname], { input: JSON.stringify({ tool_name: "Bash", tool_input: { command: "node /k/plugin/scripts/job.mjs t3-instance --all --write" }, cwd: "/tmp", session_id: randomUUID(), ...extra }), encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: tempDir("tedy-state-") } });
-  const decision = JSON.parse(entry({ agent_type: "tedy:pm" })).hookSpecificOutput;
+  const stateDir = tempDir("tedy-state-");
+  const cockpit = randomUUID();
+  const entry = (extra) => execFileSync("node", [new URL("../gates/role-gate.mjs", import.meta.url).pathname], { input: JSON.stringify({ tool_name: "Bash", tool_input: { command: `node /k/plugin/scripts/job.mjs close ${other}` }, cwd: "/tmp", session_id: cockpit, ...extra }), encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: stateDir } });
+  const decision = JSON.parse(entry({ agent_id: "a-11", agent_type: "tedy:review" })).hookSpecificOutput;
   assert.equal(decision.permissionDecision, "ask");
-  assert.match(decision.permissionDecisionReason, /^tedy role gate: this is a pm job \(tedy:pm\); job\.mjs t3-instance --write changes/);
+  assert.match(decision.permissionDecisionReason, new RegExp(`^tedy role gate: this is a review job \\(tedy:review\\); job\\.mjs close ${other} marks that job closed`));
   assert.equal(entry({}), "");
+  assert.equal(existsSync(join(stateDir, "session-roles", cockpit)), false);
 });
 
 test("role-gate asks when it cannot read the project maps", () => {

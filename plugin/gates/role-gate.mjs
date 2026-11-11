@@ -86,7 +86,7 @@ export function agentRole(input) {
     logGate({ hook: "role-gate", decision: "session-role-unreadable", agent_type: input.agent_type, error: error.message });
     return { role: "reader", label: input.agent_type ?? "subagent" };
   }
-  if (!JOB_ROLES.has(parent)) return null;
+  if (!JOB_ROLES.has(parent)) return Object.hasOwn(AGENT_ROLES, input.agent_type) ? { role: AGENT_ROLES[input.agent_type], label: input.agent_type } : null;
   return input.agent_type === "tedy:reviewer" ? { role: "reader", label: input.agent_type } : { role: parent, label: input.agent_type ?? "subagent" };
 }
 
@@ -151,12 +151,7 @@ export function closeReason(input, who) {
   if (!who) return null;
   const files = jobScriptCalls(input).filter(({ args }) => args[0] === "close").map(({ args, dir }) => (args[1] ? resolve(dir, expandHome(args[1])) : "with no job file"));
   if (!files.length) return null;
-  return `tedy role gate: this is a ${who.role} job (${who.label}); job.mjs close ${[...new Set(files)].join(", ")} ends that job's session and marks it closed, which belongs to the cockpit. Allow it only if the user asked for it here.`;
-}
-
-export function t3WriteReason(input, who) {
-  if (!who || !jobScriptCalls(input).some(({ args }) => args[0] === "t3-instance" && args.includes("--write"))) return null;
-  return `tedy role gate: this is a ${who.role} job (${who.label}); job.mjs t3-instance --write changes T3's settings file and the instances later job threads start from, which belongs to the cockpit after the user's yes. Allow it only if the user asked for it here.`;
+  return `tedy role gate: this is a ${who.role} job (${who.label}); job.mjs close ${[...new Set(files)].join(", ")} marks that job closed and removes its worktree, which belongs to the cockpit. Allow it only if the user asked for it here.`;
 }
 
 export const roleOf = (map, name) => (map.sessions ?? []).find((session) => session.name === name)?.role ?? null;
@@ -239,10 +234,9 @@ export function run() {
   try {
     const who = agentRole(input);
     const closing = closeReason(input, who);
-    const writing = closing ? null : t3WriteReason(input, who);
-    if (closing || writing) {
-      logGate({ hook: "role-gate", decision: "ask", agent_type: input.agent_type, role: who.role, kind: closing ? "job-close" : "t3-write", tool: input.tool_name });
-      ask(closing ?? writing);
+    if (closing) {
+      logGate({ hook: "role-gate", decision: "ask", agent_type: input.agent_type, role: who.role, kind: "job-close", tool: input.tool_name });
+      ask(closing);
       return;
     }
     const resolved = gateSwitches().roleGate && resolveMap(input.cwd ?? process.cwd());
