@@ -29,7 +29,7 @@ Any other `fail` line in the `profile.mjs doctor` output (`release-worktree`, `r
 ## Bare run: `/tedy:setup`
 
 1. `node <plugin>/scripts/project-map.mjs doctor` in the current directory.
-2. `READY`: show the result, then offer the update menu below.
+2. `READY`: show the result, then offer the update menu below. A `warn obsolete fields` line names map keys an older kit used (`sessions`, `jobs`) that change nothing now; before that menu, one `AskUserQuestion` offers removing them, and on yes delete them from the json block and commit as in step 6.
 3. No map, or `NOT_READY`: run `node <plugin>/scripts/project-map.mjs discover` from the workspace root before asking anything. It prints JSON with:
    - `repos[]`: remote, `origin/HEAD`, the integration branch with its evidence (base of the last 30 merged PRs, else `dev`/`develop`/`staging`), stack markers, and the package scripts that check code.
    - `instructions[]`: `AGENTS.md` and `CLAUDE.md` at the root and in each repository.

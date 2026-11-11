@@ -80,14 +80,14 @@
       }
     },
     {
-      "need": "continuity across sessions and compaction (pending hand-offs, inbox cards and jobs, active role)",
-      "uses": { "hooks": "SessionStart startup and resume lists pending hand-offs, or in a jobs map gives the cockpit its card with the cards and open jobs and gives a claude --agent tedy:<role> session only its job card (a job the cockpit spawns as a subagent gets no SessionStart; its prompt names jobs.md); SessionStart compact restates the role" },
+      "need": "continuity across sessions and compaction (inbox cards and jobs, active role)",
+      "uses": { "hooks": "SessionStart startup and resume gives the cockpit its card with the cards and open jobs and gives a claude --agent tedy:<role> session only its job card (a job the cockpit spawns as a subagent gets no SessionStart; its prompt names jobs.md); SessionStart compact restates the role" },
       "rejected": {
         "skill": "loads only on match; the reminder must arrive unasked",
         "subagent": "its output would not reach the main context at start",
         "plugin eval": "measures, does not remind",
         "permission rule": "carries no text",
-        "memory": "static text; the hand-off, card and job lists are derived when the session starts"
+        "memory": "static text; the card and job lists are derived when the session starts"
       }
     },
     {

@@ -71,3 +71,29 @@ test("a map path written with a trailing slash still covers the project root its
   writeFileSync(join(profile, "projects", "x.md"), `# x\n\n\`\`\`json\n${JSON.stringify({ name: "x", paths: [`${root}/`] })}\n\`\`\`\n`);
   assert.equal(resolveMap(root, join(profile, "projects"))?.map.name, "x");
 });
+
+test("doctor names the sessions and jobs keys an older kit used as ignored in one warn line, and stays READY", () => {
+  const root = tempDir("tedy-maps-doctor-");
+  const remote = join(root, "remote.git");
+  execFileSync("git", ["init", "-q", "--bare", "-b", "main", remote]);
+  execFileSync("git", ["clone", "-q", remote, join(root, "fe")], { stdio: "ignore" });
+  execFileSync("git", ["-C", join(root, "fe"), "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "init"]);
+  execFileSync("git", ["-C", join(root, "fe"), "push", "-q", "origin", "main"], { stdio: "ignore" });
+  const bin = join(root, "bin");
+  mkdirSync(bin);
+  writeFileSync(join(bin, "gh"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  const doctor = (extra) => {
+    const profile = tempDir("tedy-maps-doctor-profile-");
+    mkdirSync(join(profile, "projects"));
+    writeFileSync(join(profile, "projects", "shop.md"), mapFile({ name: "shop", paths: [root], repos: [{ path: "fe", role: "FE", branch: "main" }], language: { pr_review: "en" }, prd: { doc: "d" }, figma: { file: "f" }, ...extra }));
+    return spawnSync("node", [new URL("../lib/project-map.mjs", import.meta.url).pathname, "doctor", root], { encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, TEDY_PROFILE_DIR: profile } });
+  };
+  const legacy = doctor({ sessions: [{ name: "PM - Shop", role: "pm" }], jobs: true });
+  assert.equal(legacy.status, 0, legacy.stdout);
+  assert.match(legacy.stdout, /^READY$/m);
+  assert.deepEqual(legacy.stdout.split("\n").filter((line) => /sessions|jobs/.test(line)), ["warn obsolete fields: sessions, jobs are ignored: every session is the cockpit and role work runs as jobs (plugin/shared/jobs.md); remove them with /tedy:setup update"]);
+  assert.match(doctor({ jobs: false }).stdout, /^warn obsolete fields: jobs is ignored: /m);
+  const current = doctor({});
+  assert.equal(current.status, 0, current.stdout);
+  assert.doesNotMatch(current.stdout, /obsolete/);
+});

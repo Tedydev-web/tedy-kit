@@ -61,6 +61,12 @@ export function trackerCheck(map) {
   return { check: "tracker type", status: "fail", detail: `${type} has no adapter; supported: ${SUPPORTED_TRACKERS.join(", ")} (see plugin/shared/tracker-contract.md)` };
 }
 
+export function obsoleteCheck(map) {
+  const keys = ["sessions", "jobs"].filter((key) => Object.hasOwn(map, key));
+  if (!keys.length) return null;
+  return { check: "obsolete fields", status: "warn", detail: `${keys.join(", ")} ${keys.length === 1 ? "is" : "are"} ignored: every session is the cockpit and role work runs as jobs (plugin/shared/jobs.md); remove them with /tedy:setup update` };
+}
+
 function git(dir, ...args) {
   return execFileSync("git", ["-C", dir, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] }).trim();
 }
@@ -104,6 +110,8 @@ async function doctor(cwd) {
   const gaps = missingFields(map);
   results.push({ check: "required fields", status: gaps.required.length ? "fail" : "ok", detail: gaps.required.join(", ") || "complete" });
   if (gaps.optional.length) results.push({ check: "optional fields", status: "warn", detail: `unset: ${gaps.optional.join(", ")}` });
+  const obsolete = obsoleteCheck(map);
+  if (obsolete) results.push(obsolete);
   try {
     execFileSync("gh", ["auth", "status"], { stdio: "ignore" });
     results.push({ check: "gh auth", status: "ok", detail: "logged in" });
