@@ -15,7 +15,7 @@ const SAFE_SINK = new Set(["/dev/null", "&1", "&2"]);
 const NETWORK = new Set(["curl"]);
 const INSTEAD = "Use git log/show/diff/blame/grep, rg, grep, cat, head, sed -n 'N,Mp', find without -exec, gh pr view/diff or gh api GET, or the kit's read scripts, and report what you could not check instead.";
 
-export const isReviewer = (input) => input.tool_name === "Bash" && input.agent_type === REVIEWER;
+export const isReviewer = (input) => (input.tool_name === "Bash" || input.tool_name === "Monitor") && input.agent_type === REVIEWER;
 
 const refuse = (segment, why) => ({ decision: "deny", reason: `tedy reviewer gate: the reviewer is read-only, so "${segment}" is refused (${why}). ${INSTEAD}` });
 

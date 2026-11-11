@@ -51,6 +51,15 @@ test("shell sent through the context-mode tools is guarded like the same Bash co
   assert.equal(check("ctx_execute", { language: "python", code: `open(${JSON.stringify(join(profile, "rules.md"))}, "w")` }), null);
 });
 
+test("a Monitor command is guarded like the same Bash command", () => {
+  const { profile, release } = places();
+  const check = (command) => evaluate({ tool_name: "Monitor", tool_input: { command, description: "watch" }, cwd: "/" }, { profile, release });
+  assert.equal(check(`sed -i s/a/b/ ${join(profile, "rules.md")}`), REASON);
+  assert.equal(check(`git -C ${release} checkout v0.0.9`), REASON);
+  assert.equal(check(`git -C ${release} status`), null);
+  assert.equal(evaluate({ tool_name: "Monitor", tool_input: { ws: { url: "wss://example.com/feed" }, description: "watch" }, cwd: "/" }, { profile, release }), null);
+});
+
 test("reads, other profile files and read-only git in the release worktree pass", () => {
   const { profile, release } = places();
   const check = (tool_name, tool_input) => evaluate({ tool_name, tool_input, cwd: "/" }, { profile, release });

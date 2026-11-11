@@ -26,6 +26,17 @@ for (const [gate, tools] of [["git-gate", ["Bash"]], ["review-run-gate", ["Bash"
   });
 }
 
+test("every PreToolUse gate that reads a Bash command also runs on Monitor, which runs a command as Bash does", () => {
+  const { PreToolUse } = JSON.parse(readFileSync(new URL("../hooks/hooks.json", import.meta.url), "utf8")).hooks;
+  for (const gate of ["role-gate", "git-gate", "profile-guard-gate", "tracker-token-gate", "reviewer-gate", "review-run-gate"]) {
+    const entry = PreToolUse.find((item) => item.hooks.some((hook) => hook.command.includes(`/${gate}.mjs`)));
+    const matcher = new RegExp(entry.matcher);
+    assert.ok(matcher.test("Bash"), `${gate} Bash`);
+    assert.ok(matcher.test("Monitor"), `${gate} Monitor`);
+    if (gate !== "tracker-token-gate") for (const tool of ["MonitorX", "XMonitor", "BashOutput"]) assert.ok(!matcher.test(tool), `${gate} ${tool}`);
+  }
+});
+
 test("role-gate also runs before a subagent spawn, so a forked job records its role before the subagent's first call", () => {
   const { PreToolUse } = JSON.parse(readFileSync(new URL("../hooks/hooks.json", import.meta.url), "utf8")).hooks;
   const entry = PreToolUse.find((item) => item.hooks.some((hook) => hook.command.includes("/role-gate.mjs")));

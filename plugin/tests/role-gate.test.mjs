@@ -658,6 +658,32 @@ test("the gate entry asks a bound job agent before any git --output form and bef
   for (const call of [bash("git diff"), bash("git log --oneline -3"), { tool_name: "Write", tool_input: { file_path: join(root, "plans", "x.md"), content: "x" } }]) assert.equal(entry(call, job.input), "", JSON.stringify(call));
 });
 
+test("a Monitor command is judged like the same Bash command: a job's git --output and close ask, and so does the cockpit's commit in a repository", () => {
+  const monitor = (command, cwd = "/w/acme") => ({ tool_name: "Monitor", cwd, tool_input: { command, description: "watch" } });
+  assert.deepEqual(classifyAction(monitor("cd acme-shop-fe && git commit -m x"), map), { kind: "code", repo: "acme-shop-fe" });
+  assert.equal(classifyAction(monitor("node /k/scripts/openproject.mjs apply d.json"), map).kind, "tracker");
+  const root = tempDir("tedy-role-root-");
+  mkdirSync(join(root, "fe"));
+  const profile = tempDir("tedy-role-profile-");
+  writeFileSync(join(profile, "config.json"), JSON.stringify({ gates: { roleGate: true } }));
+  mkdirSync(join(profile, "projects"));
+  writeFileSync(join(profile, "projects", "shop.md"), `# map\n\n\`\`\`json\n${JSON.stringify({ name: "shop", paths: [root], repos: [{ path: "fe" }], jobs: true })}\n\`\`\`\n`);
+  const stateDir = tempDir("tedy-state-");
+  const job = spawnedJob("dev", { state: stateDir, root });
+  const entry = (call, extra) => {
+    const out = execFileSync("node", [new URL("../gates/role-gate.mjs", import.meta.url).pathname], { input: JSON.stringify({ hook_event_name: "PreToolUse", session_id: job.input.session_id, ...call, ...extra }), encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: stateDir } });
+    return out ? JSON.parse(out).hookSpecificOutput : null;
+  };
+  for (const command of ["git diff --output=/tmp/x", `node /k/plugin/scripts/job.mjs close ${other}`]) {
+    const decision = entry(monitor(command, root), job.input);
+    assert.equal(decision?.permissionDecision, "ask", command);
+    assert.match(decision.permissionDecisionReason, /^tedy role gate: this is a dev job \(tedy:dev\); /, command);
+  }
+  const cockpit = entry(monitor(`cd ${join(root, "fe")} && git commit -m x`, root), {});
+  assert.equal(cockpit?.permissionDecision, "ask");
+  assert.match(cockpit.permissionDecisionReason, /^tedy role gate: this is the cockpit of shop; changing or committing product code belongs to the dev role/);
+});
+
 test("in a map with jobs and sessions the gate entry reads the fleet list for a bound job only when a close, kit-state or classified write needs its role", () => {
   const root = tempDir("tedy-role-root-");
   const profile = tempDir("tedy-role-profile-");

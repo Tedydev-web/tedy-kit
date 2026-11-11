@@ -272,6 +272,17 @@ test("context-mode shell code is checked where context-mode runs it", () => {
   }
 });
 
+test("a Monitor command that runs a checkout's code is refused like the same Bash command, through the hook too", () => {
+  const setup = reviewSetup();
+  const monitor = (command, cwd) => ({ tool_name: "Monitor", cwd, tool_input: { command, description: "watch" } });
+  assert.ok(verdict(setup, monitor("npm test", setup.worktree)));
+  assert.ok(verdict(setup, monitor(`cd ${setup.worktree} && npm test`, setup.repo)));
+  assert.equal(verdict(setup, monitor("git log --oneline -3", setup.worktree)), null);
+  const state = tempDir("tedy-review-run-state-");
+  const hook = spawnSync("node", [GATE], { input: JSON.stringify(monitor("npm test", setup.worktree)), encoding: "utf8", env: { ...process.env, TEDY_STATE_DIR: state } });
+  assert.equal(JSON.parse(hook.stdout).hookSpecificOutput.permissionDecision, "deny");
+});
+
 test("the hook denies through its shim with the state folder's approvals, and passes once the head is approved", () => {
   const setup = reviewSetup();
   const state = tempDir("tedy-review-run-state-");

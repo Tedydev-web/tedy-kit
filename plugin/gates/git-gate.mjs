@@ -524,6 +524,7 @@ function batchCommands(commands) {
 }
 
 export function bashInputs(input) {
+  if (input.tool_name === "Monitor") return { inputs: [{ ...input, tool_name: "Bash" }] };
   const tool = String(input.tool_name ?? "").match(CTX_TOOL)?.[1];
   if (!tool) return { inputs: [input] };
   const toolInput = input.tool_input;

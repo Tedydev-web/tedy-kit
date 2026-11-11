@@ -7,8 +7,10 @@ import { isReviewer, reviewerVerdict } from "../gates/reviewer-gate.mjs";
 const SCRIPTS = fileURLToPath(new URL("../scripts/", import.meta.url));
 const decision = (command) => reviewerVerdict(command, "/repo").decision;
 
-test("only the kit's reviewer subagent is checked", () => {
+test("only the kit's reviewer subagent is checked, on Bash and on Monitor", () => {
   assert.equal(isReviewer({ tool_name: "Bash", agent_type: "tedy:reviewer" }), true);
+  assert.equal(isReviewer({ tool_name: "Monitor", agent_type: "tedy:reviewer" }), true);
+  assert.equal(isReviewer({ tool_name: "Monitor", agent_type: "Explore" }), false);
   for (const input of [{ tool_name: "Bash", agent_type: "Explore" }, { tool_name: "Bash", agent_type: "other:reviewer" }, { tool_name: "Bash" }, { tool_name: "Read", agent_type: "tedy:reviewer" }]) assert.equal(isReviewer(input), false, JSON.stringify(input));
 });
 

@@ -267,6 +267,26 @@ test("missing or unreadable ask rules make a node publish ask, without quoting t
   assert.equal(runEntry("git status", { settings: settingsWith("{") }), null);
 });
 
+test("a Monitor command is judged like the same Bash command, the quote check included", () => {
+  const dir = tempDir("tedy-quote-");
+  writeFileSync(join(dir, "d.md"), "# PR #7: comment line by line (head abcdef1)\n\n## 1. `a.ts:3`\n\nc check lại chỗ này giúp e nha\n");
+  const transcript = join(dir, "t.jsonl");
+  writeFileSync(transcript, "");
+  const settings = settingsWith(JSON.stringify({ permissions: { ask: F2_PUBLISH_RULES } }));
+  const run = (tool_name, command) => {
+    const input = JSON.stringify({ tool_name, tool_input: { command, description: "watch" }, cwd: dir, transcript_path: transcript });
+    const out = execFileSync("node", [GATE_ENTRY], { input, encoding: "utf8", env: { ...process.env, TEDY_STATE_DIR: tempDir("tedy-state-"), TEDY_CLAUDE_SETTINGS: settings, TEDY_PROFILE_DIR: profileWith({ gates: { publishQuote: true } }) } });
+    return out ? JSON.parse(out).hookSpecificOutput : null;
+  };
+  for (const command of ["gh pr merge 1", "git push --force origin main", "node /k/github-write.mjs post d.md"]) {
+    const monitor = run("Monitor", command);
+    assert.ok(monitor, command);
+    assert.deepEqual(monitor, run("Bash", command), command);
+  }
+  assert.equal(run("Monitor", "node /k/github-write.mjs post d.md").permissionDecision, "deny");
+  assert.equal(run("Monitor", "git status"), null);
+});
+
 test("the quote check runs only when gates.publishQuote is on", () => {
   const dir = tempDir("tedy-quote-");
   writeFileSync(join(dir, "d.md"), "# PR #7: comment line by line (head abcdef1)\n\n## 1. `a.ts:3`\n\nc check lại chỗ này giúp e nha\n");
