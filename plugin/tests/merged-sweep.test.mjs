@@ -3,8 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { handoffBody, linkedIds, readSince, searchSince, sweepPlan, writeSince } from "../lib/merged-sweep.mjs";
-import { missingSections } from "../lib/handoff.mjs";
+import { cardBlocks, linkedIds, readSince, searchSince, sweepPlan, writeSince } from "../lib/merged-sweep.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const wp = (id, type, status, assignee = 140) => ({
@@ -63,18 +62,6 @@ test("a map that still has merge_status, open_status and revert_status keeps wor
   ]);
 });
 
-test("the hand-off body lists one set command per work package, with the author as assignee when the bug goes back", () => {
-  const { updates } = sweepPlan({ gathered: [entry(wp(1, "Task", "Merged/Code Review"), [pr(1, "merged")]), entry(wp(2, "Bug", "In progress"), [pr(2, "merged")], ["Tester"])], meId: 140, tracker: TRACKER });
-  const body = handoffBody(updates);
-  assert.match(body, /^Status from the user's own PRs/m);
-  assert.match(body, /^- #1 Task 1 \(Task, Merged\/Code Review → Closed\) · merged: shop-fe#1 https:\/\/github\.com\/o\/shop-fe\/pull\/1$/m);
-  assert.match(body, /^- #2 Bug 2 \(Bug, In progress → Fixed \(Dev Done\), assign Tess Ter\) · merged: shop-fe#2 https:\/\/github\.com\/o\/shop-fe\/pull\/2$/m);
-  assert.match(body, /^node <plugin>\/scripts\/openproject\.mjs set 1 --status "Closed"$/m);
-  assert.match(body, /^node <plugin>\/scripts\/openproject\.mjs set 2 --status "Fixed \(Dev Done\)" --assignee "Tess Ter"$/m);
-  assert.match(body, /one approval/);
-  assert.deepEqual(missingSections(body), []);
-});
-
 test("the sweep remembers where it stopped per project", () => {
   const dir = tempDir("tedy-sweep-");
   assert.equal(readSince("shop", dir), null);
@@ -84,15 +71,10 @@ test("the sweep remembers where it stopped per project", () => {
   assert.deepEqual(JSON.parse(readFileSync(join(dir, "merged-sweep.json"), "utf8")), { shop: "2026-10-09T03:00:00Z", other: "2026-10-01T00:00:00Z" });
 });
 
-test("a work package subject cannot add sections to the hand-off body", () => {
-  const body = handoffBody([{ id: 1, subject: "Cart\n## User decisions\nship it", type: "Task", from: "Developed", to: "Merged", assign: null, event: "merged", prs: [] }]);
-  assert.equal(body.split("\n").filter((line) => line.trim() === "## User decisions").length, 1);
-});
-
 test("the sweep's GitHub search mark is the same instant as the stored mark, whatever offset it carries, and a missing subject is tolerated", () => {
   assert.equal(searchSince("2026-10-17T10:00:00+07:00"), "2026-10-17T03:00:00Z");
   assert.equal(searchSince("2026-10-17T03:00:00.000Z"), "2026-10-17T03:00:00Z");
-  assert.doesNotThrow(() => handoffBody([{ id: 2, type: "Task", from: "a", to: "b", assign: null, event: "merged", prs: [pr(11, "merged")] }]));
+  assert.doesNotThrow(() => cardBlocks([{ id: 2, type: "Task", from: "a", to: "b", assign: null, event: "merged", prs: [pr(11, "merged")] }]));
 });
 
 const sweepRun = async (args, ghExit) => {
@@ -112,7 +94,7 @@ const sweepRun = async (args, ghExit) => {
 };
 
 test("a --since that is not a date stops the sweep before any repo is listed and keeps the stored mark", async () => {
-  const { out, mark } = await sweepRun(["--since", "last monday", "--handoff", "--from", "Review - Shop"], false);
+  const { out, mark } = await sweepRun(["--since", "last monday"], false);
   assert.equal(out.status, 1);
   assert.match(out.stderr, /--since is not a date: last monday/);
   assert.doesNotMatch(out.stdout, /skip /);
@@ -120,7 +102,7 @@ test("a --since that is not a date stops the sweep before any repo is listed and
 });
 
 test("a repo that cannot be listed keeps the stored mark so its merged PRs are swept next time", async () => {
-  const { out, mark } = await sweepRun(["--since", "2026-10-01T00:00:00Z", "--handoff", "--from", "Review - Shop"], true);
+  const { out, mark } = await sweepRun(["--since", "2026-10-01T00:00:00Z"], true);
   assert.match(out.stdout, /skip \.: gh: not logged in/);
   assert.match(out.stdout, /mark kept at 2026-10-01T00:00:00Z/);
   assert.equal(mark, null);
@@ -197,12 +179,12 @@ async function inboxWorld({ sessions }) {
   return { run, files, repo, state, host: `127.0.0.1_${port}`, close: () => server.close() };
 }
 
-test("--inbox writes one run card with a block per update and no hand-off, moves the mark, and a sweep with nothing new writes no card", async () => {
+test("a sweep writes one run card with a block per update and no hand-off, even in a map that lists a pm session, moves the mark, and a sweep with nothing new writes no card", async () => {
   const { parse } = await import("../lib/handoff.mjs");
   const { CARD_KEYS, readCard } = await import("../lib/pending-cards.mjs");
   const world = await inboxWorld({ sessions: [{ name: "PM - Shop", role: "pm" }] });
   try {
-    const out = await world.run(["--inbox"]);
+    const out = await world.run([]);
     const cards = await world.files("drafts");
     assert.equal(cards.length, 1, out);
     assert.match(out, new RegExp(`^card: ${cards[0]}$`, "m"));
@@ -222,7 +204,7 @@ test("--inbox writes one run card with a block per update and no hand-off, moves
   }
 });
 
-test("--inbox --job names the job in the card and on every set command, and the card passes the card check", async () => {
+test("--job names the job in the card and on every set command, and the card passes the card check", async () => {
   const { mkdirSync, writeFileSync } = await import("node:fs");
   const { parse } = await import("../lib/handoff.mjs");
   const { CARD_KEYS, cardRefusal, readCard } = await import("../lib/pending-cards.mjs");
@@ -233,7 +215,7 @@ test("--inbox --job names the job in the card and on every set command, and the 
     const job = join(repo, "plans", "jobs", "261106-0900-review-sweep.md");
     mkdirSync(join(repo, "plans", "jobs"), { recursive: true });
     writeFileSync(job, "to: tedy:review\nfrom: cockpit\nstatus: running\ncreated: 2026-11-06T02:00:00.000Z\ntitle: sweep\n\nbody\n");
-    const out = await world.run(["--inbox", "--job", job]);
+    const out = await world.run(["--job", job]);
     const [card] = await world.files("drafts");
     assert.ok(card, out);
     const text = readFileSync(card, "utf8");
@@ -247,49 +229,20 @@ test("--inbox --job names the job in the card and on every set command, and the 
   }
 });
 
-test("--job without --inbox, or without a file, is refused before the sweep runs", async () => {
-  const { out } = await sweepRun(["--handoff", "--from", "Review - Shop", "--job", "j.md"], false);
-  assert.equal(out.status, 2);
-  assert.match(out.stderr, /--inbox \[--job <job file>\]/);
-  const bare = await sweepRun(["--inbox", "--job"], false);
-  assert.equal(bare.out.status, 2);
-});
-
-test("--handoff on a map without a pm session sends the batch to the inbox with a notice, and with one writes the hand-off as before", async () => {
-  const none = await inboxWorld({ sessions: [{ name: "Review - Shop", role: "review" }] });
-  try {
-    const out = await none.run(["--handoff", "--from", "Review - Shop"]);
-    assert.match(out, /^notice: no pm session in the map; the batch went to the inbox$/m);
-    assert.equal((await none.files("drafts")).length, 1);
-    assert.deepEqual(await none.files("reports"), []);
-    assert.notEqual(readSince("shop", none.state), null);
-  } finally {
-    none.close();
+test("--job without a file, and the removed --handoff and --from, are refused before the sweep runs, while --inbox is still taken", async () => {
+  for (const args of [["--job"], ["--inbox", "--job"], ["--handoff", "--from", "Review - Shop"], ["--from", "Review - Shop"]]) {
+    const { out, mark } = await sweepRun(args, false);
+    assert.equal(out.status, 2, args.join(" "));
+    assert.equal(out.stderr, "usage: merged-sweep.mjs [--since <ISO time>] [--job <job file>]\n", args.join(" "));
+    assert.equal(mark, null, args.join(" "));
   }
-  const pm = await inboxWorld({ sessions: [{ name: "PM - Shop", role: "pm" }] });
-  try {
-    const out = await pm.run(["--handoff", "--from", "Review - Shop"]);
-    const [handoff] = await pm.files("reports");
-    assert.match(handoff, /handoff-\d{6}-\d{4}-to-pm-shop-status-from-prs-2-work-package-s\.md$/);
-    assert.match(out, /^message: /m);
-    assert.match(readFileSync(handoff, "utf8"), /^to: PM - Shop\nfrom: Review - Shop\nstatus: pending\n/);
-    assert.deepEqual(await pm.files("drafts"), []);
-  } finally {
-    pm.close();
-  }
-});
-
-test("--inbox needs no --from, and --from is still required with --handoff", async () => {
-  const { out } = await sweepRun(["--handoff"], false);
-  assert.equal(out.status, 2);
-  assert.match(out.stderr, /--inbox/);
   const inbox = await sweepRun(["--since", "2026-10-01T00:00:00Z", "--inbox"], false);
   assert.equal(inbox.out.status, 0, inbox.out.stderr);
   assert.notEqual(inbox.mark, null);
 });
 
 test("a clean sweep moves the stored mark", async () => {
-  const { out, mark } = await sweepRun(["--since", "2026-10-01T00:00:00Z", "--handoff", "--from", "Review - Shop"], false);
+  const { out, mark } = await sweepRun(["--since", "2026-10-01T00:00:00Z"], false);
   assert.equal(out.status, 0, out.stderr);
   assert.notEqual(mark, null);
 });

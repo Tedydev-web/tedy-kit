@@ -2,11 +2,9 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { render, reportsDir, route, slugOf, stamp } from "./handoff.mjs";
 import { card } from "./pending.mjs";
 import { STATE_DIR } from "./hook-io.mjs";
 import { loadConfig } from "./openproject-client.mjs";
-import { chatLanguage, fill, labels } from "./labels.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { notBefore, sinceTime } from "./since.mjs";
 import { gatherFacts, listPullRequests } from "./op-status.mjs";
@@ -45,8 +43,6 @@ export function sweepPlan({ gathered, meId, tracker }) {
 
 const updateRow = (update) => `- #${update.id} ${String(update.subject ?? "").replace(/\s+/g, " ")} (${update.type}, ${update.from} → ${update.to}${update.assign ? `, assign ${update.assign}` : ""}) · ${update.event}: ${update.prs.map((pr) => `${pr.repo}#${pr.number} ${pr.url ?? ""}`.trim()).join(", ")}`;
 
-const setCommand = (update, script) => `node ${script} set ${update.id} --status "${update.to}"${update.assign ? ` --assignee "${update.assign}"` : ""}`;
-
 const OPENPROJECT_SCRIPT = fileURLToPath(new URL("../scripts/openproject.mjs", import.meta.url));
 
 const quoted = (value, id) => {
@@ -58,12 +54,6 @@ const quoted = (value, id) => {
 const cardCommand = (update, job) => `node ${quoted(OPENPROJECT_SCRIPT, update.id)} set ${update.id} --status ${quoted(update.to, update.id)}${update.assign ? ` --assignee ${quoted(update.assign, update.id)}` : ""}${job ? ` --job ${quoted(job, update.id)}` : ""}`;
 
 export const cardBlocks = (updates, job) => updates.map((update, index) => `### ${index + 1}\n${cardCommand(update, job)}\n${updateRow(update)}\n`).join("\n");
-
-export function handoffBody(updates) {
-  const rows = updates.map(updateRow);
-  const commands = updates.map((update) => setCommand(update, "<plugin>/scripts/openproject.mjs"));
-  return `Status from the user's own PRs (opened, merged or reverted), found by merged-sweep.mjs. Run each command without --apply, quote the preview lines, ask one approval for the whole batch, then run them again with --apply --lock <n>.\n\n${rows.join("\n")}\n\n\`\`\`\n${commands.join("\n")}\n\`\`\`\n\n## User decisions\nNone yet: the batch waits for one approval in the PM session.\n\n## First safe step\nRun the first command above without --apply and quote its preview.\n\n## Sources\nmerged-sweep.mjs over the user's PRs; each row links its PR.\n`;
-}
 
 const sincePath = (dir) => join(dir, "merged-sweep.json");
 
@@ -98,12 +88,9 @@ function listedPrs(map, since, withOpen) {
 
 async function main(argv) {
   const flag = (name) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : undefined);
-  const handoff = argv.includes("--handoff");
-  const from = flag("--from");
-  const jobGiven = argv.includes("--job");
   const job = flag("--job");
-  if ((handoff && !from) || (jobGiven && (!argv.includes("--inbox") || !job || job.startsWith("--")))) {
-    console.error('usage: merged-sweep.mjs [--since <ISO time>] [--inbox [--job <job file>] | --handoff --from "<this session>"]');
+  if (argv.includes("--handoff") || argv.includes("--from") || (argv.includes("--job") && (!job || job.startsWith("--")))) {
+    console.error("usage: merged-sweep.mjs [--since <ISO time>] [--job <job file>]");
     return 2;
   }
   if (job && !existsSync(job)) throw new Error(`the job file ${job} does not exist`);
@@ -140,23 +127,10 @@ async function main(argv) {
     for (const update of updates) console.log(`update #${update.id} ${update.type} ${update.from} → ${update.to}${update.assign ? `, assign ${update.assign}` : ""} · ${update.event} ${update.prs.map((pr) => `${pr.repo}#${pr.number}`).join(", ")}`);
     for (const skip of picked.skipped) console.log(`skip #${skip.id}: ${skip.why}`);
   }
-  const noPm = handoff && !(map.sessions ?? []).some((session) => session.role === "pm");
-  const inbox = argv.includes("--inbox") || noPm;
-  if (!handoff && !inbox) return 0;
-  const title = `Status from PRs: ${updates.length} work package(s)`;
-  if (inbox && updates.length) {
+  if (updates.length) {
+    const title = `Status from PRs: ${updates.length} work package(s)`;
     const path = card(map, "publish", { title, job: job && resolve(job), records: updates.map((update) => `op:${client.host}:wp:${update.id}`).join(","), preview: "run", body: cardBlocks(updates, job && resolve(job)) });
     console.log(`card: ${path}`);
-    if (noPm) console.log("notice: no pm session in the map; the batch went to the inbox");
-  } else if (updates.length) {
-    const autoMessage = labels(chatLanguage())["handoff.autoMessage"];
-    const to = route(map, "pm").name;
-    const dir = reportsDir(map);
-    mkdirSync(dir, { recursive: true });
-    const path = join(dir, `handoff-${stamp()}-to-${slugOf(to)}-${slugOf(title)}.md`);
-    writeFileSync(path, render({ to, from, title, body: handoffBody(updates), created: startedAt }));
-    console.log(path);
-    console.log(`message: ${fill(autoMessage, { from, title, path })}`);
   }
   if (skipped.length) console.log(`mark kept at ${since}: ${skipped.length} repo(s) could not be listed`);
   else writeSince(map.name, startedAt);
