@@ -1,6 +1,7 @@
 {
-  "version": 4,
+  "version": 5,
   "history": [
+    { "version": 5, "date": "2026-11-12", "trigger": "ADR 0022: the user decided on 2026-11-12 that a publish is approved once, at the native permission prompt of the kit's ask rules, after the reply quotes the text verbatim, and that answer mode, its tickets and the AskUserQuestion publish menus go.", "change": "verbatim-preview now asks for the verbatim quote in one fenced block of the reply before the publish command runs, in place of an AskUserQuestion preview. answer-mode-target is retired with answer mode, because no ticket needs to read a write target from the command line. ADR 0022 is registered at version 5, because it is new since the release.", "redid": [] },
     { "version": 4, "date": "2026-11-12", "trigger": "ADR 0021: the user decided on 2026-11-12 that a hook on UserPromptSubmit in the cockpit lists the open cards of jobs that are not running and prints nothing when no card is open, which per-turn-hooks forbade.", "change": "per-turn-hooks allows exactly one per-turn registration: UserPromptSubmit running only session-hooks.mjs ask-cards, which prints nothing unless a card is askable or a finished job waits to be closed, and lists at most ten per group. Every other per-turn hook still fails. ADR 0021 is registered at version 4, because it is new since the release.", "redid": [] },
     { "version": 3, "date": "2026-11-03", "trigger": "ADR 0013 and ADR 0014: S27 and S32 move from partial to covered, because the kit now checks surface fit against a committed inventory and meets the quota techniques the user chose.", "change": "Seven rules: surface-fit, inventory-version, footprint-budget, per-turn-hooks, skill-model, reviewer-spawn and cost-gate, each held by a test. The seven skills are re-registered at version 3, because skill-model judges them. ADRs 0013 and 0014 and the fifteen cards they cite are registered at version 3, because they are new since the release.", "redid": ["plugin/skills/dev/SKILL.md", "plugin/skills/learn/SKILL.md", "plugin/skills/pending/SKILL.md", "plugin/skills/pm/SKILL.md", "plugin/skills/reconcile/SKILL.md", "plugin/skills/review-pr/SKILL.md", "plugin/skills/setup/SKILL.md"] },
     { "version": 2, "date": "2026-10-28", "trigger": "The canon plan left open whether sweep records name a role or a topic; the user chose topic, since a sweep studies a topic and roles reuse topics.", "change": "Sweep records say '- Topic: <topic>' instead of '- Role: <role>'; the renderers write it for every record not registered at version 1.", "redid": [] },
@@ -153,26 +154,14 @@
     },
     {
       "id": "verbatim-preview",
-      "text": "Every approval before a github-write post, reply or edit carries the verbatim body in an AskUserQuestion preview.",
+      "text": "Every publish quotes the verbatim text in one fenced block of the reply before its command runs, and the command's permission prompt is its one approval.",
       "since": 1,
       "scope": "repo",
       "reason": "The user answers for every word published under their name.",
       "class": "user-policy",
       "problems": ["S12"],
-      "enforced": { "kind": "test", "file": "plugin/tests/skill-contracts.test.mjs", "title": "every approval before a github-write post, reply or edit carries the verbatim body in an AskUserQuestion preview" },
-      "notCovered": "Publishing paths that do not go through github-write.mjs.",
-      "approved": "2026-10-28"
-    },
-    {
-      "id": "answer-mode-target",
-      "text": "Every write command line in the skills names the target that answer mode needs.",
-      "since": 1,
-      "scope": "repo",
-      "reason": "A one-use approval ticket matches only a command whose target it can read.",
-      "class": "platform",
-      "problems": ["S12"],
-      "enforced": { "kind": "test", "file": "plugin/tests/skill-contracts.test.mjs", "title": "every write command line in the skills names the target answer mode needs" },
-      "notCovered": "Write commands an agent composes outside the skill text.",
+      "enforced": { "kind": "test", "file": "plugin/tests/skill-contracts.test.mjs", "title": "every publish quotes the verbatim text in one fenced block of the reply before its command runs" },
+      "notCovered": "Whether the user reads the quote before answering the prompt; the publish-quote gate checks only github-write.mjs post, reply and edit.",
       "approved": "2026-10-28"
     },
     {

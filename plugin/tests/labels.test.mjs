@@ -14,15 +14,14 @@ test("every language pack has exactly the keys of the English pack", () => {
 
 test("the Vietnamese pack keeps the labels the menus use today", () => {
   const vi = labels("vi");
-  assert.equal(vi["approve.header"], "Duyệt");
-  assert.equal(vi["post.asIs"], "Đăng nguyên bản (Recommended)");
+  assert.equal(vi["merge.yes"], "Merge và cập nhật task (Recommended)");
   assert.equal(vi["next.header"], "Bước tiếp");
   assert.equal(vi["next.stop"], "Dừng ở đây");
   assert.equal(vi["readiness.missing"], "thiếu nặng");
 });
 
-test("every pack has the drop option of the approval inbox", () => {
-  for (const [code, pack] of Object.entries(LABELS)) assert.ok(pack["approve.drop"]?.trim(), code);
+test("no pack keeps a publish menu label, because a publish is approved at its command prompt (ADR 0022)", () => {
+  for (const [code, pack] of Object.entries(LABELS)) assert.deepEqual(Object.keys(pack).filter((key) => /^(?:approve|post)\./.test(key)), [], code);
 });
 
 test("an unknown language falls back to English, and placeholders are filled", () => {
@@ -39,7 +38,7 @@ test("the command prints the table for the profile's chat language, or the one a
   const vi = spawnSync("node", [SCRIPT], { encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: profileWith({ language: { chat: "vi" } }) } });
   assert.equal(vi.status, 0);
   assert.match(vi.stdout, /^language: vi$/m);
-  assert.match(vi.stdout, /^\| `approve\.header` \| Duyệt \|$/m);
+  assert.match(vi.stdout, /^\| `merge\.header` \| Merge \|$/m);
   const en = spawnSync("node", [SCRIPT, "en"], { encoding: "utf8" });
-  assert.match(en.stdout, /^\| `approve\.header` \| Approve \|$/m);
+  assert.match(en.stdout, /^\| `next\.header` \| Next step \|$/m);
 });

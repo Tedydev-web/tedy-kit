@@ -11,13 +11,13 @@ How every `/tedy:*` skill hands a decision to the user. The user's rules say whe
 - Options come from what you found (draft numbers, PR numbers, file paths, map values), not from generic placeholders. The automatic "Other" field is where the user pastes a URL, a path or a sentence; mention that in the question when a free value is expected.
 - Use `multiSelect: true` only when choices are independent, such as which draft comments to drop.
 - A subagent cannot ask. The skill asks, then passes the answer on.
-- A publish approval whose option carries a `preview` (`post.asIs`, `approve.all`): in the same turn, right before the `AskUserQuestion` and with no tool call between, quote that whole preview verbatim, command line included and in the preview's order, in one fenced block of the reply's last text before the question. Some clients (T3 Code, the desktop Code tab) draw no preview, so in answer mode the kit issues the approval only for a preview that block showed (ADR 0020).
-- When a kit write is refused because no approval matches it, ask again with its preview quoted as above. Never offer switching publish approval (`profile.mjs publish-approval`) as the remedy, and never switch it yourself: the mode is the user's setting.
+- Publishing is never asked with `AskUserQuestion`. Lint the text, then quote everything the command publishes verbatim in one fenced block of the reply, with the lint's `pinned:`, `warning:` and `notice:` lines and the exact command on a line of its own, and run that command in the same turn. Its permission prompt (the kit's `permissions.ask` rules, or a git-gate ask) is the one approval (ADR 0022); the prompt shows only the command, so the quote is what the user reads. A "No" at the prompt with a typed note, or a request in chat, is how the user rewords, trims or holds: edit, lint, quote again and run again.
+- When a kit write is refused, fix what its refusal names (its last line names the check that refused: `refused by github-write`, `refused by pins`, `card refused by card-check`), quote the text again and run the command again. Never change the kit's approval settings (`profile.mjs publish-approval`) to get past a refusal.
 - Plan mode has its own approval flow; no menus there.
 
 ## Labels
 
-Headers and option labels in the skills are keys such as `next.header` or `approve.all`. `node <plugin>/scripts/labels.mjs` prints each key with its label in the user's chat language (`language.chat` in the profile config); put the label in the question verbatim, never the key.
+Headers and option labels in the skills are keys such as `next.header` or `merge.yes`. `node <plugin>/scripts/labels.mjs` prints each key with its label in the user's chat language (`language.chat` in the profile config); put the label in the question verbatim, never the key.
 
 ## The next-step menu
 

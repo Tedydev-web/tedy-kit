@@ -34,11 +34,11 @@ Entry points: a new PR starts at step 1. A request about an existing draft for t
 7. **Pass 1: findings.** Write `plans/reports/review-<yymmdd-hhmm>-pr<n>-findings.md` in the reviewed repo: each finding with `path:line`, evidence (code quote, PRD locator and quote, Figma node, `path:line@branch`), CONFIRMED or PLAUSIBLE, and whether this PR introduced it (`git blame` / `git log -L`). Leave out what `references/stack-checks.md` (Not findings) lists. Verify results go here too.
 8. **Pass 2: draft.** Turn CONFIRMED findings into hints in the format of `references/draft-format.md`.
 9. **Lint.** `node ${CLAUDE_PLUGIN_ROOT}/scripts/draft-lint.mjs pr-comment <draft> --repo <owner/repo>` from the reviewed repo until it prints `clean`.
-10. **Approval.** Give the findings report path. `post.asIs` carries the whole draft, the lint's `pinned:`, `warning:` and `notice:` lines and, on a line of its own, the step 11 command verbatim in its `preview`; quote that whole preview in one fenced block, then, with no tool call between, one `AskUserQuestion`, header `post.header`, options and re-ask rules in `references/draft-format.md`.
-11. **Post.** `node ${CLAUDE_PLUGIN_ROOT}/scripts/github-write.mjs post <draft> --repo <owner/repo>` from the reviewed repo. `ask` mode prompts again; headless refuses it. On `refused` or a gate denial, fix what it names (a moved head or pin: re-read first), lint, and ask again as in step 10. Report the `K/K` listing it prints; when every comment in the draft was posted, `pending.mjs done <draft>`.
+10. **Approval.** Give the findings report path. Quote the whole draft verbatim, the lint's `pinned:`, `warning:` and `notice:` lines and, on a line of its own, the step 11 command in one fenced block of the reply; no `AskUserQuestion` (ADR 0022). Run step 11 in the same turn: its permission prompt is the one approval. Rewording and trimming: `references/draft-format.md`.
+11. **Post.** `node ${CLAUDE_PLUGIN_ROOT}/scripts/github-write.mjs post <draft> --repo <owner/repo>` from the reviewed repo; headless refuses it. On `refused` or a gate denial, fix what its last line names (a moved head: `draft-lint.mjs carry <draft> --repo <owner/repo>`, else re-read first), lint, and quote and run again as in step 10. Report the `K/K` listing it prints; when every comment in the draft was posted, `pending.mjs done <draft>`.
 12. **Next step.** Nothing left after a re-review: the merge step of 1a first. One `AskUserQuestion`, header `next.header`: the next PR waiting on the user (`gh pr list --search "review-requested:@me" --state open`) as recommended when one exists; checking replies on threads already posted (`references/follow-up.md`); `next.stop` with an 80-character summary.
 
-Several PRs in one request: steps 1–9 for each, one approval menu per PR.
+Several PRs in one request: steps 1–9 for each, one quote and one post per PR.
 
 ## Anti-rationalization
 

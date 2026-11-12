@@ -56,13 +56,13 @@
       }
     },
     {
-      "need": "publish approval bound to the user's answer",
+      "need": "one publish approval at the command prompt",
       "uses": {
-        "hooks": "PostToolUse on AskUserQuestion writes a one-use ticket each kit write script checks",
-        "permission rule": "ask or deny rules written to the user's settings by profile.mjs publish-approval after the user approves"
+        "hooks": "git-gate asks before a kit publish whose form no ask rule matches",
+        "permission rule": "the kit's 22 ask rules, restored in the user's settings by profile.mjs publish-approval ask after the user approves"
       },
       "rejected": {
-        "skill": "the skill asks, but a ticket must come from the answer itself",
+        "skill": "the skill quotes the text, but only a prompt the harness shows stops the write",
         "subagent": "the answer is given in the main session",
         "plugin eval": "measures, does not approve",
         "memory": "cannot record an answer"

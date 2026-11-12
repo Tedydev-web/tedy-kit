@@ -39,7 +39,9 @@ test("the cockpit asks each job's open cards by the pending skill's steps, a job
   assert.match(points, /A job asks no menu/);
   const pending = read("skills/pending/SKILL.md");
   assert.match(pending, /^description: Manual and recovery view of what waits on the user/m);
-  assert.match(pending, /`approve\.hold` → `pending\.mjs card-note <card>/);
+  const approve = pending.match(/^2\. \*\*Approve\.\*\*[\s\S]*?(?=^3\. )/m)?.[0] ?? "";
+  for (const phrase of ["no `AskUserQuestion`", "verbatim", "fenced block", "pending.mjs card-start <card>", "permission prompt is the approval"]) assert.ok(approve.includes(phrase), phrase);
+  assert.doesNotMatch(approve, /--approved/);
 });
 
 test("the cockpit closes a finished job on its notification turn with close --if-finished, and a dev job with an open PR stays open for rework", () => {
@@ -70,7 +72,7 @@ test("all answers of one round for a job go back in one note and one resume, and
   const pending = read("skills/pending/SKILL.md");
   const questions = pending.match(/^3\. \*\*Questions\.\*\*[\s\S]*?(?=^\d\. )/m)?.[0] ?? "";
   for (const phrase of ["one note file per job", "one `job.mjs resume` per job", "`card-note --refuse` each reworded card"]) assert.ok(questions.includes(phrase), phrase);
-  const reword = pending.match(/^   - On `approve\.reword`.*$/m)?.[0] ?? "";
+  const reword = pending.match(/^   - On a "No" at a block's prompt.*$/m)?.[0] ?? "";
   assert.ok(reword.includes("comes only after that note went out"), reword);
   const jobs = read("shared/jobs.md");
   assert.match(jobs, /^6\. Answers and rework go through SendMessage\.[\s\S]*?Then put every answer and rework of that round for the job into one note file/m);
@@ -113,16 +115,15 @@ test("the cockpit branches on resume's busy: or refused: prefix, settles a start
   assert.doesNotMatch(`${jobs}\n${pending}`, /--starts|`starts:`/);
 });
 
-test("every kit write a skill runs after a question is approved by an approve.all or post.asIs option, never by the merge or next-step answer", () => {
+test("every kit write a skill runs is approved at its own permission prompt after the reply quoted it, never by a menu answer", () => {
   const flow = read("shared/status-flow.md");
   assert.doesNotMatch(flow, /ride in the|yes there approves/);
-  assert.match(flow, /`approve\.all`, whose `preview` holds the preview line and, on a line of its own, the same command with `--apply --lock <n>`/);
+  assert.match(flow, /quote both in one fenced block of the reply, then run that command; its permission prompt is the approval/);
   const merge = read("skills/review-pr/references/status-after-merge.md");
   assert.doesNotMatch(merge, /approved those lines/);
   assert.match(merge, /`merge\.yes` approves the merge alone/);
-  for (const path of ["skills/dev/references/rebut.md", "skills/review-pr/references/follow-up.md"]) assert.match(read(path), /`approve\.all`/, path);
-  assert.match(read("skills/pm/SKILL.md"), /`approve\.trim` \([^)]*ask again\)/);
-  assert.match(read("skills/pm/references/tracker-openproject.md"), /undone with `rollback`: preview, then `approve\.header` naming close or delete, whose `approve\.all` `preview`/);
+  const menu = /`(?:approve|post)\.[a-zA-Z]+`/;
+  for (const path of ["shared/decision-points.md", "shared/status-flow.md", "shared/jobs.md", "skills/dev/references/rebut.md", "skills/dev/references/pr-body-refresh.md", "skills/review-pr/SKILL.md", "skills/review-pr/references/follow-up.md", "skills/review-pr/references/draft-format.md", "skills/review-pr/references/status-after-merge.md", "skills/pm/SKILL.md", "skills/pm/references/tracker-openproject.md", "skills/pm/references/comment-channels.md", "skills/pending/SKILL.md"]) assert.doesNotMatch(read(path), menu, path);
 });
 
 test("every role that moves a work package's status follows one status procedure, and review merges only on the user's yes", () => {
@@ -193,11 +194,12 @@ test("the standards lens reads the repository's rule files from the PR base, nev
   assert.ok(read("skills/review-pr/references/checkout.md").includes("--branch <repo path>:<baseRefName>"));
 });
 
-test("every approval before a github-write post, reply or edit carries the verbatim body in an AskUserQuestion preview", () => {
+test("every publish quotes the verbatim text in one fenced block of the reply before its command runs", () => {
   const review = read("skills/review-pr/SKILL.md");
   const approval = review.slice(review.indexOf("10. **Approval.**"), review.indexOf("12. **Next step.**"));
-  assert.ok(approval.includes("verbatim in its `preview`"), "review-pr steps 10 and 11");
-  for (const path of ["skills/review-pr/references/draft-format.md", "skills/review-pr/references/follow-up.md", "skills/dev/references/rebut.md"]) assert.ok(read(path).includes("`preview`"), path);
+  for (const phrase of ["verbatim", "fenced block", "permission prompt"]) assert.ok(approval.includes(phrase), `review-pr steps 10 and 11: ${phrase}`);
+  for (const path of ["skills/review-pr/references/draft-format.md", "skills/review-pr/references/follow-up.md", "skills/dev/references/rebut.md", "skills/pm/SKILL.md"]) assert.ok(read(path).includes("fenced block"), path);
+  assert.match(read("shared/decision-points.md"), /^- Publishing is never asked with `AskUserQuestion`\./m);
 });
 
 test("eval graders check facts only: no llm or baseline grader in any case", async () => {
@@ -208,28 +210,15 @@ test("eval graders check facts only: no llm or baseline grader in any case", asy
   for (const path of graders) assert.doesNotMatch(readFileSync(new URL(path, evals), "utf8"), /^type:\s*(llm|baseline)\s*$/m, path);
 });
 
-test("every write command line in the skills names the target answer mode needs", async () => {
-  const { readdirSync } = await import("node:fs");
-  const skills = new URL("../skills/", import.meta.url);
-  const files = readdirSync(skills, { recursive: true }).filter((path) => path.endsWith(".md"));
-  const needs = [[/github-write\.mjs (?:post|edit|reply|pr-body)\b/, "--repo"], [/openproject\.mjs (?:apply\b|rollback\b(?=.*--apply))/, "--project"], [/figma-comments\.mjs (?:post|reply|delete)\b/, "--file"], [/gdoc-comments\.mjs (?:reply|anchor|edit|delete)\b/, "--doc"], [/doc-comment-file\.mjs post\b(?=.*--apply)/, "--doc"]];
-  let checked = 0;
-  for (const path of files) {
-    for (const line of readFileSync(new URL(path, skills), "utf8").split("\n")) {
-      for (const span of line.match(/(?:github-write|openproject|figma-comments|gdoc-comments|doc-comment-file)\.mjs [^`\n]*/g) ?? []) {
-        if (!span.includes("<")) continue;
-        for (const [pattern, flag] of needs) {
-          if (!pattern.test(span)) continue;
-          checked += 1;
-          assert.ok(span.includes(flag), `${path}: ${span}`);
-        }
-      }
-    }
-  }
-  assert.ok(checked >= 4, String(checked));
+test("a refused write is fixed by what its refusal names, and the kit's approval settings are never the remedy", () => {
+  const rules = read("shared/decision-points.md");
+  assert.match(rules, /^- When a kit write is refused, fix what its refusal names \(its last line names the check that refused: `refused by github-write`, `refused by pins`, `card refused by card-check`\), quote the text again and run the command again\. Never change the kit's approval settings \(`profile\.mjs publish-approval`\) to get past a refusal\.$/m);
 });
 
-test("a refused write is re-asked with its preview quoted, and switching publish approval is never offered as the remedy", () => {
-  const rules = read("shared/decision-points.md");
-  assert.match(rules, /^- When a kit write is refused because no approval matches it, ask again with its preview quoted as above\. Never offer switching publish approval \(`profile\.mjs publish-approval`\) as the remedy, and never switch it yourself: the mode is the user's setting\.$/m);
+test("no file in the plugin uses the retired publish menus or answer-mode tickets", () => {
+  const retired = new RegExp(["post\\.as" + "Is", "approve\\.a" + "ll", "consume" + "Approval", "publish-approval-" + "ticket"].join("|"));
+  const root = new URL("../", import.meta.url);
+  const files = readdirSync(root, { recursive: true }).filter((path) => /\.(?:mjs|md|json|py)$/.test(path) && !path.includes("node_modules"));
+  assert.ok(files.length > 100, String(files.length));
+  assert.deepEqual(files.filter((path) => retired.test(readFileSync(new URL(path, root), "utf8"))), []);
 });
