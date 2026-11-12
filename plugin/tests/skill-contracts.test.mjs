@@ -228,3 +228,10 @@ test("every write command line in the skills names the target answer mode needs"
   }
   assert.ok(checked >= 4, String(checked));
 });
+
+test("a refused write is re-asked with its preview quoted, and switching publish approval is never offered as the remedy", async () => {
+  const rules = read("shared/decision-points.md");
+  assert.match(rules, /^- When a kit write is refused because no approval matches it, ask again with its preview quoted as above\. Never offer switching publish approval \(`profile\.mjs publish-approval`\) as the remedy, and never switch it yourself: the mode is the user's setting\.$/m);
+  const { refusal } = await import("../lib/publish-approval-ticket.mjs");
+  assert.match(refusal(["github-write.mjs", "reply", "1"]), /Never switch publish approval to another mode to get past this refusal; the mode is the user's setting\.$/);
+});

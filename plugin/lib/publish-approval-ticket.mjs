@@ -40,14 +40,18 @@ const askedTexts = (input) =>
 
 const contentOf = (entry) => (Array.isArray(entry?.message?.content) ? entry.message.content : []);
 
-function textRightBefore(input) {
-  const entries = readTranscriptTail(input?.transcript_path, TRANSCRIPT_BYTES).filter((entry) => !entry?.isSidechain);
-  const at = entries.findLastIndex((entry) => entry?.type === "assistant" && contentOf(entry).some((block) => block?.type === "tool_use" && block.id === input?.tool_use_id));
-  if (at === -1) return [];
-  for (let index = at; index >= 0 && entries[index]?.type !== "user"; index -= 1) {
+const mainThread = (input) => readTranscriptTail(input?.transcript_path, TRANSCRIPT_BYTES).filter((entry) => !entry?.isSidechain);
+
+function textBefore(entries, id, { pending = false } = {}) {
+  let at = entries.findLastIndex((entry) => entry?.type === "assistant" && contentOf(entry).some((block) => block?.type === "tool_use" && block.id === id));
+  if (at === -1) {
+    if (!pending) return [];
+    at = entries.length;
+  }
+  for (let index = Math.min(at, entries.length - 1); index >= 0 && entries[index]?.type !== "user"; index -= 1) {
     if (entries[index]?.type !== "assistant") continue;
     const content = contentOf(entries[index]);
-    const end = index === at ? content.findIndex((block) => block?.type === "tool_use" && block.id === input.tool_use_id) : content.length;
+    const end = index === at ? content.findIndex((block) => block?.type === "tool_use" && block.id === id) : content.length;
     for (const block of content.slice(0, end).reverse()) {
       if (block?.type === "text" && typeof block.text === "string") return [block.text];
       if (typeof block?.type === "string" && block.type.endsWith("tool_use")) return [];
@@ -56,13 +60,28 @@ function textRightBefore(input) {
   return [];
 }
 
+const textRightBefore = (input) => textBefore(mainThread(input), input?.tool_use_id);
+
+const shownWith = (question, preview, before) => [...before, ...askedTexts({ questions: [question] })].some((text) => holdsBlock(contentLines(text), contentLines(preview)));
+
+export function unquotedPreviews(input, accepted = approvalLabels()) {
+  const questions = Array.isArray(input?.tool_input?.questions) ? input.tool_input.questions : [];
+  const asked = questions.flatMap((question) => (Array.isArray(question?.options) ? question.options : []).filter((option) => accepted.includes(option?.label) && typeof option.preview === "string" && option.preview.trim()).map((option) => ({ question, preview: option.preview })));
+  const unshown = asked.filter(({ question, preview }) => !shownWith(question, preview, []));
+  if (!unshown.length) return [];
+  const entries = mainThread(input);
+  if (!entries.length) return null;
+  const before = textBefore(entries, input?.tool_use_id, { pending: true });
+  return unshown.filter(({ question, preview }) => !shownWith(question, preview, before)).map(({ preview }) => preview);
+}
+
 function approvedPreviews(input, accepted) {
   const found = answered(input).filter(({ answer, chosen }) => accepted.includes(answer) && typeof chosen.preview === "string" && chosen.preview.trim());
   if (!found.length) return [];
   if (input.tool_response.annotations !== undefined) return found.filter(({ chosen, shown }) => shown === chosen.preview).map(({ chosen }) => chosen.preview);
   const before = textRightBefore(input);
   return found
-    .filter(({ question, chosen }) => [...before, ...askedTexts({ questions: [question] })].some((text) => holdsBlock(contentLines(text), contentLines(chosen.preview))))
+    .filter(({ question, chosen }) => shownWith(question, chosen.preview, before))
     .map(({ chosen }) => chosen.preview);
 }
 
@@ -151,7 +170,7 @@ function sweep(dir, now) {
 }
 
 export const refusal = (command) =>
-  `publish approval is in answer mode and no unused approval matches this write. Nothing was written. Ask the user again with one AskUserQuestion whose approving option's preview holds the command line \`${command.join(" ")}\` (optionally after \`node\` and with the script's full path) on a line of its own, and every text it writes, verbatim, on whole lines. Right before that question, in the same turn with no tool call between, quote that whole preview verbatim in one fenced block of the reply: a client that does not report which preview the user saw, such as T3 Code, gets a ticket only for a preview the chat showed. One approval covers one command, for ${APPROVAL_TTL_MS / 60_000} minutes.`;
+  `publish approval is in answer mode and no unused approval matches this write. Nothing was written. Ask the user again with one AskUserQuestion whose approving option's preview holds the command line \`${command.join(" ")}\` (optionally after \`node\` and with the script's full path) on a line of its own, and every text it writes, verbatim, on whole lines. Right before that question, in the same turn with no tool call between, quote that whole preview verbatim in one fenced block of the reply: a client that does not report which preview the user saw, such as T3 Code, gets a ticket only for a preview the chat showed. One approval covers one command, for ${APPROVAL_TTL_MS / 60_000} minutes. Never switch publish approval to another mode to get past this refusal; the mode is the user's setting.`;
 
 export function requireExplicitTarget(flag, given, { expected, mode = gateSwitches().publishApproval } = {}) {
   if (mode !== "answer") return;

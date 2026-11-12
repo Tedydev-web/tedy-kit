@@ -12,6 +12,7 @@ How every `/tedy:*` skill hands a decision to the user. The user's rules say whe
 - Use `multiSelect: true` only when choices are independent, such as which draft comments to drop.
 - A subagent cannot ask. The skill asks, then passes the answer on.
 - A publish approval whose option carries a `preview` (`post.asIs`, `approve.all`): in the same turn, right before the `AskUserQuestion` and with no tool call between, quote that whole preview verbatim, command line included and in the preview's order, in one fenced block of the reply's last text before the question. Some clients (T3 Code, the desktop Code tab) draw no preview, so in answer mode the kit issues the approval only for a preview that block showed (ADR 0020).
+- When a kit write is refused because no approval matches it, ask again with its preview quoted as above. Never offer switching publish approval (`profile.mjs publish-approval`) as the remedy, and never switch it yourself: the mode is the user's setting.
 - Plan mode has its own approval flow; no menus there.
 
 ## Labels

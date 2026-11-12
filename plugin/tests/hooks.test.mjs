@@ -67,3 +67,13 @@ test("the ask-cards hook runs on every prompt in a plain command group, never bl
   const { hooks } = JSON.parse(readFileSync(new URL("../hooks/hooks.json", import.meta.url), "utf8"));
   assert.deepEqual(hooks.UserPromptSubmit, [{ hooks: [{ type: "command", command: 'node "${CLAUDE_PLUGIN_ROOT}/scripts/session-hooks.mjs" ask-cards', timeout: 10 }] }]);
 });
+
+test("the ask-time approval gate runs before AskUserQuestion only, and a failure lets the question through", () => {
+  const { PreToolUse } = JSON.parse(readFileSync(new URL("../hooks/hooks.json", import.meta.url), "utf8")).hooks;
+  const entries = PreToolUse.filter((item) => item.hooks.some((hook) => hook.command.includes("/publish-approval-ask-gate.mjs")));
+  assert.equal(entries.length, 1);
+  const matcher = new RegExp(entries[0].matcher);
+  assert.ok(matcher.test("AskUserQuestion"));
+  for (const tool of ["Bash", "AskUserQuestionX", "mcp__x__AskUserQuestion"]) assert.ok(!matcher.test(tool), tool);
+  for (const hook of entries[0].hooks) assert.equal(hook.onFailure, undefined, hook.command);
+});
