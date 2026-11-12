@@ -146,10 +146,14 @@ export function pinnedSources(file, relint) {
 }
 
 export function carrySources(file, text, pin, head) {
+  const moved = (sources) => sources.map((candidate) => (candidate.kind === "git" && candidate.pr === pin.pr && candidate.github === pin.github ? { ...candidate, sha: head } : candidate));
   const path = sourcesPath(file);
   const record = JSON.parse(readFileSync(path, "utf8"));
-  const sources = record.sources.map((candidate) => (candidate.kind === "git" && candidate.pr === pin.pr && candidate.github === pin.github ? { ...candidate, sha: head } : candidate));
-  writeFileSync(path, `${JSON.stringify({ ...record, sha256: digest(text), sources }, null, 1)}\n`);
+  writeFileSync(path, `${JSON.stringify({ ...record, sha256: digest(text), sources: moved(record.sources) }, null, 1)}\n`);
+  const reads = readPinsPath(record.pinnedAt ?? file);
+  if (!existsSync(reads)) return;
+  const read = JSON.parse(readFileSync(reads, "utf8"));
+  writeFileSync(reads, `${JSON.stringify({ ...read, sources: moved(read.sources) }, null, 1)}\n`);
 }
 
 export function pinnedSince(file) {

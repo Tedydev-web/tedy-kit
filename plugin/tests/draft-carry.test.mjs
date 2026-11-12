@@ -57,6 +57,23 @@ test("after a carry the body the chat showed before still counts as shown, and a
   assert.match(check(input)?.reason ?? "", /\(publishQuote\)/);
 });
 
+test("with read pins from pin-sources, a carried draft posts, and a body edited after the carry lints again without a new pin-sources", async () => {
+  const w = world({ pr: 701, gh: { diff: DIFF, reviewComments: [{ id: 1, path: "src/a.ts", line: 10, side: "RIGHT", commit_id: "0".repeat(40) }] } });
+  const head = w.checkout.pr(701);
+  const pinned = await w.run("draft-lint", ["pin-sources", "d.md", "--pr", "701", "--repo", "o/r"]);
+  assert.equal(pinned.code, 0, pinned.out);
+  const file = w.file("d.md", `# PR #701: comment line by line (head ${head.slice(0, 7)})\n\n## 1. \`src/a.ts:10\`\n${BODY}\n`);
+  assert.equal((await w.run("draft-lint", ["pr-comment", "d.md", "--repo", "o/r"])).code, 0);
+  w.checkout.pushPr("src/b.ts", "b2\n", "style: spacing");
+  assert.equal((await w.run("draft-lint", ["carry", "d.md", "--repo", "o/r"])).code, 0);
+  writeFileSync(file, readFileSync(file, "utf8").replace(BODY, "The label is wrong here."));
+  const relint = await w.run("draft-lint", ["pr-comment", "d.md", "--repo", "o/r"]);
+  assert.equal(relint.code, 0, relint.out);
+  const posted = await w.run("github-write", ["post", "d.md", "--repo", "o/r"]);
+  assert.equal(posted.code, 0, posted.out);
+  assert.equal(w.writes().length, 1);
+});
+
 test("carry refuses, and changes nothing, when the new commits change a commented file", async () => {
   const { w, file } = await reviewWorld();
   const text = readFileSync(file, "utf8");
