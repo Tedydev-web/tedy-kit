@@ -47,7 +47,7 @@ test("the cockpit closes a finished job on its notification turn with close --if
   const cockpit = jobs.match(/^5\. Questions go through question cards.*$/m)?.[0] ?? "";
   assert.ok(cockpit.includes("job.mjs close <job file> --if-finished"), "Cockpit 5");
   const close = jobs.match(/^7\. Close: .*$/m)?.[0] ?? "";
-  for (const phrase of ["close --if-finished", "no card names", "keeps a dev job open while its branch has an open PR", "merged or closed", "when the user asks", "every refusal of `close`"]) assert.ok(close.includes(phrase), phrase);
+  for (const phrase of ["close --if-finished", "no question or publish card names", "keeps a dev job open while its branch has an open PR", "merged or closed", "when the user asks", "every refusal of `close`"]) assert.ok(close.includes(phrase), phrase);
   const pending = read("skills/pending/SKILL.md");
   const closing = pending.match(/^   - Once no question or publish card names a job .*$/m)?.[0] ?? "";
   assert.ok(closing.includes("job.mjs close <job file> --if-finished"), closing);
@@ -57,7 +57,7 @@ test("the cockpit closes a finished job on its notification turn with close --if
 test("an answer is written onto its card only after resume sent it, a refused card is archived by the job that redoes it, and a job never runs untrusted code alone", () => {
   const pending = read("skills/pending/SKILL.md");
   const questions = pending.match(/^3\. \*\*Questions\.\*\*[\s\S]*?(?=^\d\. )/m)?.[0] ?? "";
-  for (const phrase of ["one `job.mjs resume` per job", "Only after that call went out", "When `resume` refuses", "leave every card of that job as it is"]) assert.ok(questions.includes(phrase), phrase);
+  for (const phrase of ["one `job.mjs resume` per job", "Only after that call went out", "When `resume` prints `busy:`", "leave every card of that job as it is"]) assert.ok(questions.includes(phrase), phrase);
   const jobs = read("shared/jobs.md");
   assert.match(jobs, /^6\. Answers and rework go through SendMessage\.[\s\S]*?only after its call went out/m);
   const job = jobs.match(/^2\. A job cannot ask the user.*$/m)?.[0] ?? "";
@@ -92,19 +92,25 @@ test("each job's round runs its approved cards before the one resume, and a refu
   assert.doesNotMatch(pending, /Both refuse and writes/);
 });
 
-test("every resume refusal but a busy one refuses the job's cards with its reason, a starts card is never refused for it, and a plain close settles the job's questions", () => {
-  const round = read("skills/pending/SKILL.md").match(/^   - \*\*Round per job\.\*\*.*$/m)?.[0] ?? "";
-  for (const phrase of ["every refusal is permanent except a busy one (`shared/jobs.md`, Cockpit 6)", "leave every card of that job as it is", "`card-note --refuse` each unanswered card of that job with that reason, except a `starts:` card", "\"Answered and delivered\" with `pending.mjs done`"]) assert.ok(round.includes(phrase), phrase);
-  assert.doesNotMatch(round, /no launch record|lost its folder|is closed/);
+test("the cockpit branches on resume's busy: or refused: prefix, settles a start-job card itself, and a plain close settles the job's questions", () => {
+  const pending = read("skills/pending/SKILL.md");
+  const round = pending.match(/^   - \*\*Round per job\.\*\*.*$/m)?.[0] ?? "";
+  for (const phrase of ["When `resume` prints `busy:`, leave every card of that job as it is", "when it prints `refused:`, quote it and `card-note --refuse` each unanswered card of that job with the reason", "any other output leaves them (`shared/jobs.md`, Cockpit 6)", "\"Answered and delivered\" with `pending.mjs done`"]) assert.ok(round.includes(phrase), phrase);
+  assert.doesNotMatch(round, /no launch record|lost its folder|is closed|permanent/);
+  assert.match(pending, /a card asking to start another role's job is settled here: start it on yes, then on any answer `card-note` the label and `done` it; every other answer goes back/);
   const jobs = read("shared/jobs.md");
   const six = jobs.match(/^6\. Answers and rework go through SendMessage\.[\s\S]*?(?=^7\. )/m)?.[0] ?? "";
-  assert.match(six, /A `resume` refusal is busy when the job's agent runs, waits or may be starting, the session an older kit recorded is still open, or another live cockpit or a caller the kit cannot identify runs it: leave its cards unanswered/);
-  assert.match(six, /Every other refusal is permanent: `card-note --refuse` each unanswered, not started question card of that job with the refusal's reason, except a `starts:` card \(Job 4\)/);
-  assert.match(six, /An answered card whose call went out is archived with `pending.mjs done`, never refused\./);
-  assert.doesNotMatch(six, /A permanent refusal \(/);
-  assert.match(jobs, /^4\. Work for another role becomes a `question` card [^\n]*`pending\.mjs card question --job <this job file> --starts <role> …`[^\n]*never refused when this job cannot be resumed/m);
+  assert.match(six, /prints one line on stderr that starts with `busy:` or `refused:`; branch on that prefix, never on the wording\./);
+  assert.match(six, /Any other output that is not the JSON object leaves the cards as they are\./);
+  assert.match(six, /An answered card is archived with `pending\.mjs done` and never refused, whatever the job's state later\./);
+  assert.doesNotMatch(six, /in every case `close` refuses|A permanent refusal \(|starts:/);
+  assert.match(jobs, /^5\. [^\n]*A `question` card that asks to start another role's job is the cockpit's own: on yes start that job with step 3, then on any answer `card-note` the label and `pending\.mjs done` it; that answer never goes into the writer's note\./m);
+  assert.match(jobs, /^5\. [^\n]*once no question or publish card names the job/m);
+  assert.match(jobs, /^4\. Work for another role becomes a `question` card \("start a <role> job for …\?"\) written with `pending\.mjs card question --job <this job file> …`; the cockpit starts it on yes\./m);
   assert.match(jobs, /^7\. Close: a `done` job that no question or publish card names \(a started or refused card counts, a notify card does not\)/m);
-  assert.match(jobs, /^7\. Close: [\s\S]*?A plain `close` archives each answered question card of the job as delivered and refuses and archives each other open question card with its reason, except a started or `starts:` card;/m);
+  assert.match(jobs, /^7\. Close: [^\n]*A `stopped` job that no question or publish card names/m);
+  assert.match(jobs, /^7\. Close: [\s\S]*?A plain `close` archives each answered question card of the job as delivered and refuses and archives each other open question card with its reason, except a started card;/m);
+  assert.doesNotMatch(`${jobs}\n${pending}`, /--starts|`starts:`/);
 });
 
 test("every kit write a skill runs after a question is approved by an approve.all or post.asIs option, never by the merge or next-step answer", () => {
