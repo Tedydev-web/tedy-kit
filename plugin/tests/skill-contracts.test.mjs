@@ -92,6 +92,14 @@ test("each job's round runs its approved cards before the one resume, and a refu
   assert.doesNotMatch(pending, /Both refuse and writes/);
 });
 
+test("a permanent resume refusal refuses the job's cards with its reason, a transient one leaves them open, and a plain close settles the job's questions", () => {
+  const round = read("skills/pending/SKILL.md").match(/^   - \*\*Round per job\.\*\*.*$/m)?.[0] ?? "";
+  for (const phrase of ["When `resume` refuses because the job is closed, has no launch record or has lost its folder", "`card-note --refuse` each card of that job with that reason", "still running, waiting or starting, or another live cockpit runs it, leave every card of that job as it is"]) assert.ok(round.includes(phrase), phrase);
+  const jobs = read("shared/jobs.md");
+  assert.match(jobs, /^6\. Answers and rework go through SendMessage\.[\s\S]*?A permanent refusal \(the job is closed, has no launch record or has lost its folder\) refuses its cards with the reason/m);
+  assert.match(jobs, /^7\. Close: [\s\S]*?A plain `close` archives the job's open question cards with a refuse note/m);
+});
+
 test("every kit write a skill runs after a question is approved by an approve.all or post.asIs option, never by the merge or next-step answer", () => {
   const flow = read("shared/status-flow.md");
   assert.doesNotMatch(flow, /ride in the|yes there approves/);
