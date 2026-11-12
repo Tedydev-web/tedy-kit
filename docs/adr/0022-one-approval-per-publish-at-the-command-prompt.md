@@ -1,0 +1,44 @@
+# 0022: One approval per publish, at the command prompt
+
+Status: accepted 2026-11-12 (user decisions); supersedes [ADR 0016](0016-publish-approval-answer-mode.md) and [ADR 0020](0020-answer-tickets-without-annotations-need-the-preview-shown-in-chat.md), and the approval parts of [ADR 0021](0021-the-cockpit-asks-each-jobs-open-cards-on-arrival.md) (the ask-time gate and the `approve.*` menu for publish cards); live check pending (Consequences)
+
+## Context
+- Until v0.3.3 a publish was approved in an AskUserQuestion menu (`post.asIs`, `approve.all` and their trim, reword, hold and drop options). In `gates.publishApproval: "ask"` the kit's `permissions.ask` rule then prompted a second time; in `"answer"` (ADR 0016) a PostToolUse hook minted a one-use ticket from the approving answer, each kit writer spent it, and ADR 0020 and ADR 0021 added the rules that the chat must show the preview and a PreToolUse gate that checks it when the question is asked.
+- The audits of 2026-11-12 (`audit-261112-1620-kit-architecture-and-patchwork.md`, `audit-261112-1620-kit-direction-and-necessity.md` and their synthesis `audit-261112-1645-kit-direction-synthesis.md`, in the user's workspace `plans/reports/`, not in this repository) and the review session's kit-issues report of the same day found:
+  - answer mode carried one publish: the gate log held 32 `no-ticket` rows and 1 `ticket` row since 2026-11-11;
+  - the kit fell back to ask mode twice, because a hand-built approval question had another label or lacked a line; the ticket and the ask-time gate keyed on the label, so a custom label escaped both checks;
+  - a refusal named neither its layer nor the missing piece (label, `pinned:` line, fenced copy), and the gate log recorded only `no-ticket`, which cost 5 approval rounds on one post;
+  - a draft was frozen to the PR head it was written on, so a head move that touched no commented file cost a new draft file, and the publish-quote gate counted the head-line edit as unseen text, 3 to 4 approval rounds per move;
+  - publish cards had no path for a merge or for `github-write.mjs resolve`, so the cockpit ran 3 merges and 6 resolves by hand.
+- The user decided on 2026-11-12 (R3 of the synthesis): a publish is approved once, at the command's native permission prompt, after the reply has quoted the text verbatim; no AskUserQuestion approval menu before a publish. Design C (cockpit and background jobs, ADR 0021) stays, frozen, with only the gaps hit in real work fixed. The profile's rules budget rises to 6,300 bytes (ADR 0006).
+
+## Decision
+- **One approval.** A skill lints the draft, quotes the whole text it publishes verbatim in one fenced block of its reply, with the lint's `pinned:`, `warning:` and `notice:` lines and the exact command, then runs the command. The prompt of the kit's 22 `permissions.ask` rules (`KIT_PUBLISH_ASK_RULES`), or git-gate's ask where no rule covers the form, is the approval. A "No" at the prompt with a typed note, or a request in chat, is how the user rewords or trims; the skill edits, lints, quotes again and runs again.
+- **No publish menus.** The labels `post.header`, `post.asIs`, `post.trim`, `post.reword`, `post.hold`, `approve.header`, `approve.all`, `approve.trim`, `approve.reword`, `approve.hold` and `approve.drop` are gone. Question menus stay: `next.*`, `merge.*`, `run.*`, `learn.*` and the others.
+- **Answer mode is deleted.** The ticket hook, `consumeApproval` and `requireExplicitTarget` in the writers, the PreToolUse AskUserQuestion gate, the `answer` path of `profile.mjs publish-approval` and the settings deny rules on the kit's state records go. The PostToolUse AskUserQuestion hook stays only to record a review job's run-code approval, now in `plugin/lib/review-run-approval.mjs`. A profile that still says `"publishApproval": "answer"` loads and is treated as ask; `profile.mjs doctor` prints one obsolete line naming `profile.mjs publish-approval ask`, which restores the ask rules and removes the retired deny rules. git-gate always runs its ask-rule checks (a kit publish in a form the rules do not match, or with no rule in the settings, asks).
+- **The publish-quote gate stays** and counts only text blocks of the main thread's replies since the draft's last change; AskUserQuestion strings no longer count.
+- **Cards.** The cockpit handles a `publish` card without AskUserQuestion: it quotes the card's blocks verbatim, runs `pending.mjs card-start <card>` (the `--approved` list, which carried menu answers, is gone), then runs each block's command, whose native prompt is the approval. A "No" with a note refuses the card with that note (`card-note --refuse`), and the note reaches the job through the round's one `job.mjs resume`, as a reword did. Question cards keep AskUserQuestion.
+  - A `preview: ready` card needs `draft:` only when a block's verb reads a file; `github-write.mjs resolve`, `unresolve` and `minimize` read none.
+  - A block may be exactly `gh pr merge <n> --repo <owner/repo> --merge|--squash|--rebase`, which takes no `--job`; git-gate's merge ask is its approval.
+- **A draft follows a head that moved past it.** `draft-lint.mjs carry <draft> --repo <owner/repo>` moves a review draft to the PR's current head when `git diff <pinned head> <new head>` touches no file the draft comments on. It refuses unless the draft's sources record still matches the draft (so it never launders an unlinted edit), and otherwise names the changed commented files. It rewrites only the head token of the draft and its frozen original, updates the record's digest and PR pin, and keeps the draft's modification time, because no text the user saw changed. A card's `draft-sha:` still refuses after a carry, so a job carries, then writes a new card.
+- **Refusals say why.** A refused `github-write.mjs` run ends with one line naming the layer (`github-write`, `pins`) and that nothing was written; the publish-quote gate's reason names itself and the bodies not shown; `pending.mjs` card refusals name `card`, `card-check` or `card-start`. Each is logged to the gate log with `decision: "refused"` and its reason. When `github-write.mjs` fails, it says whether a write was sent.
+- **Small fixes.** `github-write.mjs post` prints each posted comment's line (the drafted line when the API reply has none); `job.mjs start` outside every mapped folder names the mapped roots.
+- **Standard v5.** `verbatim-preview` now asks for the verbatim quote in the reply before the publish command, and `answer-mode-target` is retired with answer mode.
+
+## Prior art
+
+- Claude Code permission modes docs (Anthropic docs, studied 2026-11-12, via web)
+  - https://code.claude.com/docs/en/permission-modes "Claude Code doesn’t auto-approve the following in any mode, including `bypassPermissions`"
+  - Lesson: an explicit ask rule is the stop no permission mode auto-approves, so one prompt there is a stronger approval than a menu answer plus a ticket.
+  - Taken: the native prompt of the kit's ask rules is the only publish approval.
+
+no social prior art: 2026-11-12 x: "claude code double approval prompt AskUserQuestion then permission prompt"; youtube: "claude code permission prompt approve before posting review comment ask rule"
+
+position: approval-to-absent-user conforms
+
+## Consequences
+- Each publish costs one prompt in every mode, and the approval is the stop ADR 0016 called the strongest. Label and preview mismatches disappear with the menu.
+- The user must read the quoted block in the reply before answering the prompt; the prompt shows only the command. For `github-write.mjs post`, `reply` and `edit` the publish-quote gate refuses a body the chat did not show. For `pr-body`, `openproject.mjs`, `figma-comments.mjs`, `gdoc-comments.mjs` and `doc-comment-file.mjs` nothing checks that the text was shown; only the skill text and the prompt hold that.
+- A write that does not go through a kit script meets git-gate's asks or refusals only, as before.
+- A merge from a card is approved by a hook ask, not an ask rule; the position page ranks that stop as trial.
+- Live check pending, in the terminal and in T3: a quote and its command in one turn pass the quote gate; exactly one prompt per publish, under `bypassPermissions` too; a "No" with a note reaches the cockpit and, for a card, the job; the review run question still records its approval after the hook split.

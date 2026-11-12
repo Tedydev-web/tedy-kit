@@ -1,6 +1,6 @@
 # 0016: Publish approval by a one-use answer ticket stays opt-in, because it is weaker than an ask rule
 
-Status: accepted (built 2026-10-22 in ceec792, recorded 2026-11-04)
+Status: superseded by [ADR 0022](0022-one-approval-per-publish-at-the-command-prompt.md) on 2026-11-12 (was accepted, built 2026-10-22 in ceec792, recorded 2026-11-04)
 
 ## Context
 - In the default mode, `gates.publishApproval: "ask"`, a publish is approved twice: the user picks an option in the skill's AskUserQuestion menu, then a `permissions.ask` rule on the kit's publish script prompts again before the write.

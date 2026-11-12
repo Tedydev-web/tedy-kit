@@ -1,6 +1,6 @@
 # 0020: An answer ticket from a client that reports no annotations needs the whole preview shown in the chat
 
-Status: accepted 2026-11-11; live check pending (Consequences); [ADR 0021](0021-the-cockpit-asks-each-jobs-open-cards-on-arrival.md) adds a check of this rule when the question is asked
+Status: superseded by [ADR 0022](0022-one-approval-per-publish-at-the-command-prompt.md) on 2026-11-12 (was accepted 2026-11-11); [ADR 0021](0021-the-cockpit-asks-each-jobs-open-cards-on-arrival.md) adds a check of this rule when the question is asked
 
 ## Context
 - ADR 0016 issues a one-use ticket only when AskUserQuestion's `tool_response.annotations[question].preview` equals the chosen option's preview: the terminal client reports which preview the user had in front of them.
