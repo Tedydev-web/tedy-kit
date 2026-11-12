@@ -2,8 +2,8 @@ import { closeSync, existsSync, fstatSync, openSync, readSync, statSync } from "
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { layoutOverride, memoryStats } from "./memory-stats.mjs";
-import { cards, clip, finishedJobs, MORE, waitingText } from "./pending.mjs";
-import { closeHold } from "./job.mjs";
+import { cards, clean, clip, finishedJobs, MORE, waitingText } from "./pending.mjs";
+import { closeHold, heldElsewhere, jobRole } from "./job.mjs";
 import { claudeProcess } from "./job-session-hooks.mjs";
 import { currentTurn, gateSwitches, logGate, readHookInput, readTranscriptTail, toolUses } from "./hook-io.mjs";
 import { loadConfig, profileDir } from "./profile.mjs";
@@ -193,10 +193,21 @@ export function askCardsNotice(map, { held, caller, found }) {
   return capped(`${ASK_HEAD}\n${text}`);
 }
 
-export function closeJobsNotice(map, { perPrompt, found, problems }) {
+const closable = (job, perPrompt, caller) => {
+  try {
+    if (heldElsewhere(job.path, caller)) return false;
+    if (!perPrompt) return true;
+    const { role } = jobRole(job.path);
+    return Boolean(role) && role !== "dev" && !closeHold(job.path);
+  } catch {
+    return !perPrompt;
+  }
+};
+
+export function closeJobsNotice(map, { perPrompt, found, problems, caller }) {
   let jobs;
   try {
-    jobs = finishedJobs(map, found, problems).filter((job) => !perPrompt || (job.role !== "dev" && !closeHold(job.path)));
+    jobs = finishedJobs(map, found, problems).filter((job) => closable(job, perPrompt, caller));
   } catch (error) {
     logGate({ hook: "ask-cards", decision: "close-skipped", error: error.message });
     return "";
@@ -204,11 +215,11 @@ export function closeJobsNotice(map, { perPrompt, found, problems }) {
   if (!jobs.length) return "";
   logGate({ hook: "ask-cards", decision: "close-listed", jobs: jobs.length });
   const more = jobs.length > 10 ? `\n- … ${jobs.length - 10} more; ${MORE}` : "";
-  return capped(`${CLOSE_HEAD}\n${jobs.slice(0, 10).map((job) => `- ${job.role}: ${clip(job.title)} ${job.path}`).join("\n")}${more}`);
+  return capped(`${CLOSE_HEAD}\n${jobs.slice(0, 10).map((job) => `- ${clean(`${job.role}: ${clip(job.title)} ${job.path}`)}`).join("\n")}${more}`);
 }
 
 function cockpitNotices(map, caller, perPrompt, read = cockpitCards(map, caller)) {
-  return [askCardsNotice(map, { held: !perPrompt, caller, found: read.found }), closeJobsNotice(map, { perPrompt, found: read.found, problems: read.problems })];
+  return [askCardsNotice(map, { held: !perPrompt, caller, found: read.found }), closeJobsNotice(map, { perPrompt, found: read.found, problems: read.problems, caller })];
 }
 
 function cockpitCards(map, caller) {

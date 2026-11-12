@@ -4,7 +4,7 @@ import { appendFileSync, closeSync, existsSync, lstatSync, openSync, readSync, m
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { age, launchRecordPath, listJobs, parse, readRecord, slugOf, stamp } from "./job-files.mjs";
-import { close as closeJob, jobBusy, jobRecord, olderKitStatus } from "./job.mjs";
+import { close as closeJob, closeHold, heldElsewhere, jobBusy, jobRecord, jobRole, olderKitStatus } from "./job.mjs";
 import { CARD_KEYS, cardRefusal, headerLength, oneLine, readCard } from "./pending-cards.mjs";
 import { claudeProcess } from "./job-session-hooks.mjs";
 import { resolveMap } from "./project-map.mjs";
@@ -114,8 +114,10 @@ function cardText(path) {
     const buffer = Buffer.alloc(PREFIX_BYTES);
     const length = readSync(descriptor, buffer, 0, PREFIX_BYTES, 0);
     const prefix = buffer.toString("utf8", 0, length);
-    if (!parse(prefix, CARD_KEYS).kind) return null;
-    return length < PREFIX_BYTES ? prefix : readFileSync(path, "utf8");
+    if (length < PREFIX_BYTES) return parse(prefix, CARD_KEYS).kind ? prefix : null;
+    const complete = prefix.split("\n").slice(0, -1);
+    if (headerLength(complete) === complete.length) return readFileSync(path, "utf8");
+    return parse(prefix, CARD_KEYS).kind ? readFileSync(path, "utf8") : null;
   } finally {
     closeSync(descriptor);
   }
@@ -294,7 +296,7 @@ function ofJob(job) {
 }
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
-const clean = (text) => String(text).replace(/[\p{Cc}\p{Cf}`]/gu, " ").replace(/\s+/g, " ").trim();
+export const clean = (text) => String(text).replace(/[\p{Cc}\p{Cf}`]/gu, " ").replace(/\s+/g, " ").trim();
 export const clip = (text, size = 120) => {
   const value = clean(text);
   return value.length > size ? `${value.slice(0, size - 1)}…` : value;
@@ -375,13 +377,25 @@ function devHold(job, list) {
   return urls.length ? `its branch ${record.branch} has an open PR (${urls.join(", ")}); it closes once that PR is merged or closed, or when the user asks` : null;
 }
 
-export function closeFinished(map, file, { list = openPrs } = {}) {
+function trustedRole(job) {
+  try {
+    return jobRole(job.path);
+  } catch (error) {
+    return { role: null, why: `${error.message}, so it stays open` };
+  }
+}
+
+export function closeFinished(map, file, { list = openPrs, caller = {} } = {}) {
   const only = ofJob(file);
   const found = finishedJobs(map).filter((job) => !only || only(job.path));
   if (only && !found.length) return [`kept ${file}: it is not done, or a card still names it`];
   return found.map((job) => {
-    const open = job.role === "dev" ? devHold(job, list) : null;
+    const { role, why } = trustedRole(job);
+    if (!role) return `kept ${job.path}: ${why}`;
+    const open = role === "dev" ? devHold(job, list) : null;
     if (open) return `kept ${job.path}: ${open}`;
+    const other = closeHold(job.path) ? null : heldElsewhere(job.path, caller);
+    if (other) return `kept ${job.path}: its agent belongs to another live cockpit session (${other}), which may still resume it; close it there`;
     try {
       return closeJob(map, job.path);
     } catch (error) {

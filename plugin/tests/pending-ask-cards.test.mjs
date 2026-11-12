@@ -4,7 +4,9 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { card, cardCheck, cardNote, waitingText } from "../lib/pending.mjs";
+import { card, cardCheck, cardNote, finishedJobs, waitingText } from "../lib/pending.mjs";
+import { readCard } from "../lib/pending-cards.mjs";
+import { jobBusy } from "../lib/job.mjs";
 import { STATE_DIR } from "../lib/state-dir.mjs";
 import { bound, jobFile, sleeper, world } from "./job-world-for-tests.mjs";
 
@@ -132,4 +134,29 @@ test("a card longer than the header prefix is still read whole, and a large draf
   writeFileSync(big, `# notes\n\n${"x".repeat(2_000_000)}\n`);
   assert.equal(waitingText(w.map, { ask: true }), `Questions:\n- Long one ${long}`);
   assert.match(waitingText(w.map, { offline: true }), new RegExp(`^Drafts waiting on the user:\\n- ${big}$`, "m"));
+});
+
+test("a card whose header holds more than the prefix before its kind line is still a card, so its job is not closed", () => {
+  const w = here();
+  const job = jobFile(w, { role: "pm", name: "gaps", status: "done" });
+  const long = join(w.root, "plans", "drafts", "261106-0915-question-long-title.md");
+  mkdirSync(join(w.root, "plans", "drafts"), { recursive: true });
+  writeFileSync(long, `title: ${"t".repeat(5000)}\nkind: question\njob: ${job}\n\nWhich?\n- A: a\n- B: b\n`);
+  assert.equal(readCard(readFileSync(long, "utf8"))?.kind, "question");
+  assert.match(waitingText(w.map, { ask: true }), new RegExp(`^- t{119}… ${long}$`, "m"));
+  assert.deepEqual(finishedJobs(w.map).map((item) => item.path), []);
+});
+
+test("a caller that cannot be identified finds a job bound to a live cockpit busy", async () => {
+  const cockpit = await sleeper();
+  try {
+    const w = here();
+    const job = jobFile(w, { name: "add-hello", status: "done", record: bound(cockpit, { state: "idle" }) });
+    assert.equal(jobBusy(job, { cockpit: null }), true);
+    assert.equal(jobBusy(job, { session: "s-cockpit", cockpit: null }), false);
+    assert.equal(jobBusy(job), false);
+  } finally {
+    cockpit.child.kill();
+    await cockpit.exited;
+  }
 });

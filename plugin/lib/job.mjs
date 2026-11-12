@@ -178,13 +178,32 @@ export function closeHold(file) {
   }
 }
 
-export function jobBusy(file, { session, cockpit } = {}) {
+const elsewhere = (record, { session, cockpit } = {}) => Boolean((session && record.session_id && record.session_id !== session) || (cockpit && record.cockpit_pid && !sameProcess(cockpit, record))) && cockpitAlive(record);
+
+const unidentified = (caller) => !caller.session && caller.cockpit === null;
+
+export function heldElsewhere(file, caller = {}) {
+  const record = launchRecord(file);
+  if (!record || isTombstone(record) || !elsewhere(record, caller)) return null;
+  return record.session_id ?? `claude pid ${record.cockpit_pid}`;
+}
+
+export function jobRole(file) {
+  const job = readJob(file);
+  const named = basename(job.path).match(NAMED_ROLE)?.[1] ?? null;
+  const record = launchRecord(job.path);
+  if (!record || isTombstone(record)) return { role: null, why: "it has no launch record, so its role cannot be checked and it stays open" };
+  if (record.role === named && named === job.role) return { role: record.role, why: null };
+  return { role: null, why: `its role is ${record.role ?? "(none)"} in its launch record, ${named ?? "(none)"} in its file name and ${job.role} in its to: line; they must agree, so it stays open` };
+}
+
+export function jobBusy(file, caller = {}) {
   const job = readJob(file);
   if (job.status === "closed") return false;
   const record = launchRecord(job.path);
   if (!record || isTombstone(record)) return false;
-  const elsewhere = (session && record.session_id && record.session_id !== session) || (cockpit && record.cockpit_pid && !sameProcess(cockpit, record));
-  if (elsewhere && cockpitAlive(record)) return true;
+  if (elsewhere(record, caller)) return true;
+  if (unidentified(caller) && record.agent_id && cockpitAlive(record)) return true;
   return Boolean(agentHold(record) || (fromOlderKit(record) && olderSession(record)));
 }
 
@@ -399,7 +418,7 @@ function main([command, target, ...rest]) {
     const wrong = named.find((arg) => arg.startsWith("--")) ?? named[1];
     if (wrong) throw new Error(`close --if-finished takes at most one job file and no other flag, not ${wrong}; nothing was closed`);
     return import("./pending.mjs").then(({ closeFinished }) => {
-      console.log(closeFinished(project(), named[0]).join("\n") || "No finished job waits to be closed.");
+      console.log(closeFinished(project(), named[0], { caller: { cockpit: claudeProcess() } }).join("\n") || "No finished job waits to be closed.");
       return 0;
     });
   }

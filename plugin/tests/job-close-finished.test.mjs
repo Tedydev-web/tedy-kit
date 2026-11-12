@@ -104,3 +104,31 @@ test("a done job that a started or refused card still names is not closed", () =
   assert.equal(out.status, 0, out.stderr);
   assert.deepEqual([status(started), status(refused)], ["done", "done"], out.stdout);
 });
+
+test("close --if-finished keeps a job whose role in its launch record, file name and to: line disagree, or that has no launch record", () => {
+  const w = world();
+  fakeGh(w, "true");
+  const lied = jobFile(w, { role: "dev", name: "lied", status: "done", record: { repo: join(w.root, "fe"), branch: "feat/lied" } });
+  writeFileSync(lied, readFileSync(lied, "utf8").replace("to: tedy:dev", "to: tedy:pm"));
+  const bare = jobFile(w, { role: "pm", name: "bare", status: "done", record: null });
+  const out = w.run(["close", "--if-finished"]);
+  assert.equal(out.status, 0, out.stderr);
+  assert.ok(out.stdout.includes(`kept ${lied}: its role is dev in its launch record, dev in its file name and pm in its to: line; they must agree, so it stays open`), out.stdout);
+  assert.ok(out.stdout.includes(`kept ${bare}: it has no launch record, so its role cannot be checked and it stays open`), out.stdout);
+  assert.deepEqual([status(lied), status(bare)], ["done", "done"]);
+});
+
+test("close --if-finished keeps a done job whose idle agent another live cockpit session holds", async () => {
+  const cockpit = await sleeper();
+  try {
+    const w = world();
+    const held = jobFile(w, { role: "pm", name: "held", status: "done", record: bound(cockpit, { state: "idle" }) });
+    const out = w.run(["close", "--if-finished"]);
+    assert.equal(out.status, 0, out.stderr);
+    assert.ok(out.stdout.includes(`kept ${held}: its agent belongs to another live cockpit session (s-cockpit), which may still resume it; close it there`), out.stdout);
+    assert.equal(status(held), "done");
+  } finally {
+    cockpit.child.kill();
+    await cockpit.exited;
+  }
+});
