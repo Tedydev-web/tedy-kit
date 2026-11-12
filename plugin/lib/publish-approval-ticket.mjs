@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { STATE_DIR, gateSwitches, logGate, readHookInput, readTranscriptTail } from "./hook-io.mjs";
 import { CLAUDE_SETTINGS, readSettings, stateDenyRules } from "./publish-approval-settings.mjs";
 import { chatLanguage, labels } from "./labels.mjs";
+import { recordRunApprovalsFrom } from "./review-run-approval.mjs";
 import { tokenize } from "./shell-segments.mjs";
 
 export const APPROVAL_TTL_MS = 30 * 60 * 1000;
@@ -84,37 +85,6 @@ function approvedPreviews(input, accepted) {
     .filter(({ question, chosen }) => shownWith(question, chosen.preview, before))
     .map(({ chosen }) => chosen.preview);
 }
-
-export const runApprovalsDir = (state = STATE_DIR) => join(state, "review-runs");
-const HEAD_SHA = /(?<![0-9a-f])[0-9a-f]{40}(?![0-9a-f])/g;
-const RUN_SCOPES = { "run.lint": "lint", "run.all": "all" };
-
-function runApprovals(input, lang) {
-  const found = answered(input);
-  if (!found.length) return [];
-  const names = labels(lang ?? chatLanguage());
-  return found.flatMap(({ question, text, answer }) => {
-    if (question.header !== names["run.header"] || typeof answer !== "string") return [];
-    const key = Object.keys(RUN_SCOPES).find((name) => names[name] === answer.replace(/ \(Recommended\)$/, ""));
-    const shas = [...new Set(text.match(HEAD_SHA) ?? [])];
-    return key && shas.length === 1 ? [{ sha: shas[0], scope: RUN_SCOPES[key] }] : [];
-  });
-}
-
-export function recordRunApprovals(input, { dir = runApprovalsDir(), lang, now = Date.now() } = {}) {
-  const approvals = runApprovals(input, lang);
-  if (!approvals.length) return [];
-  mkdirSync(dir, { recursive: true, mode: 0o700 });
-  chmodSync(dir, 0o700);
-  return approvals.map(({ sha, scope }) => {
-    const file = join(dir, `${sha}.json`);
-    writeFileSync(`${file}.tmp`, `${JSON.stringify({ created: now, session_id: input.session_id ?? null, tool_use_id: input.tool_use_id ?? null, scope })}\n`, { mode: 0o600 });
-    renameSync(`${file}.tmp`, file);
-    return sha;
-  });
-}
-
-export const hasRunApproval = (sha, dir = runApprovalsDir()) => existsSync(join(dir, `${sha}.json`));
 
 export function recordApprovals(input, { dir = approvalsDir(), accepted = approvalLabels(), now = Date.now() } = {}) {
   const previews = approvedPreviews(input, accepted);
@@ -234,12 +204,7 @@ export function consumeApproval(argv, texts = [], { dir = approvalsDir(), now = 
 
 export function run() {
   const input = readHookInput();
-  try {
-    const heads = recordRunApprovals(input);
-    if (heads.length) logGate({ hook: "review-run-approval", decision: "approved", heads, tool_use_id: input.tool_use_id });
-  } catch (error) {
-    logGate({ hook: "review-run-approval", decision: "record-failed", error: error.message });
-  }
+  recordRunApprovalsFrom(input);
   try {
     if (gateSwitches().publishApproval !== "answer") return;
     const ids = recordApprovals(input);

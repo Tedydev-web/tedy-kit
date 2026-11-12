@@ -4,7 +4,7 @@ import { basename, dirname, resolve, sep } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { bashInputs, commandTokens } from "./git-gate.mjs";
 import { deny, logGate, readHookInput } from "../lib/hook-io.mjs";
-import { hasRunApproval, runApprovalsDir } from "../lib/publish-approval-ticket.mjs";
+import { hasRunApproval, runApprovalsDir } from "../lib/review-run-approval.mjs";
 import { scriptOperand } from "../lib/shell-program-arguments.mjs";
 import { expandHome, tokenize, walkCommands } from "../lib/shell-segments.mjs";
 

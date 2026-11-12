@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { hasRunApproval, recordRunApprovals, runApprovalsDir } from "../lib/publish-approval-ticket.mjs";
+import { hasRunApproval, recordRunApprovals, runApprovalsDir } from "../lib/review-run-approval.mjs";
 import { LABELS } from "../lib/labels.mjs";
 import { profileWith, tempDir } from "./temp-dir-for-tests.mjs";
 
