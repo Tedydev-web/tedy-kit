@@ -170,7 +170,7 @@ test("a plain close archives an answered question as delivered, refuses one that
   const drafts = join(w.root, "plans", "drafts");
   mkdirSync(drafts, { recursive: true });
   const answered = join(drafts, "261106-0915-question-answered.md");
-  writeFileSync(answered, `kind: question\ntitle: Answered\njob: ${job}\nanswer: Yes\n\nWhich?\n- Yes: y\n- No: n\n`);
+  writeFileSync(answered, `kind: question\ntitle: Answered\njob: ${job}\nstatus: refused\nrefused: noted by hand\nanswer: Yes\n\nWhich?\n- Yes: y\n- No: n\n`);
   const starts = join(drafts, "261106-0916-question-start-dev.md");
   writeFileSync(starts, `kind: question\ntitle: Start dev\njob: ${job}\n\nStart a dev job?\n- Yes: y\n- No: n\n`);
   const started = join(drafts, "261106-0917-question-started.md");

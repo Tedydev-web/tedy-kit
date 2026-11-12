@@ -162,10 +162,12 @@ function judged(path, text, map, { ownClaim = false, caller, state = jobStates(m
   if (!read) return null;
   const claimed = ownClaim || read.status === "refused" || read.status === "started" ? null : claimedAt(path);
   const found = claimed === null ? read : { ...read, status: "started", started: claimed || undefined };
+  const delivered = found.kind === "question" && Boolean(found.answer);
   const refusal =
-    found.status === "refused" ? `refused: ${found.refused ?? "no reason given"}`
+    delivered ? cardRefusal({ ...found, job: "none" }, root)
+    : found.status === "refused" ? `refused: ${found.refused ?? "no reason given"}`
     : found.status === "started" ? `started at ${found.started ?? "an unknown time"}: its commands may already have written; check their read-backs, then pending.mjs done the card, or card-note --refuse it`
-    : cardRefusal(found.kind === "question" && found.answer ? { ...found, job: "none" } : found, root);
+    : cardRefusal(found, root);
   const job = state(found.job);
   const { stuck, busy } = jobView(found, job);
   return { path, ...found, refusal: refusal ?? (found.status === "started" ? null : stuck), running: job.running, busy };
@@ -405,8 +407,8 @@ export function settleClosedJob(map, file) {
   const problems = [];
   const named = cards(map, problems).filter((item) => item.job !== "none" && realOrNull(resolve(root, item.job)) === real);
   const lines = named.map((item) => {
+    if (item.kind === "question" && item.answer) return `archived ${done(item.path, map)[0]}: its answer was delivered`;
     if (item.kind !== "question" || item.status === "refused" || item.status === "started") return `still names the job: ${item.path} (${item.kind}${item.refusal ? `, ${clip(item.refusal)}` : ""})`;
-    if (item.answer) return `archived ${done(item.path, map)[0]}: its answer was delivered`;
     const reason = item.refusal ?? `${file} is closed; start a new job instead`;
     cardNote(item.path, reason, { refuse: true });
     return `archived ${done(item.path, map)[0]}: refused, ${reason}`;

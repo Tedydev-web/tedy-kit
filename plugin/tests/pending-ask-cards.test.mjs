@@ -232,3 +232,13 @@ test("an answered question is listed for archiving, since its answer was deliver
   cardNote(answered, "Yes");
   assert.equal(waitingText(w.map, { ask: true }), `Answered and delivered, archive each with pending.mjs done:\n- Which toast (answered: Yes) ${answered}`);
 });
+
+test("an answered card stays answered when it was also refused, so it is archived as delivered", () => {
+  const w = here();
+  const job = jobFile(w, { role: "pm", name: "gaps", status: "done" });
+  const both = question(w, job, "Both notes");
+  cardNote(both, "Yes");
+  cardNote(both, "the job went away", { refuse: true });
+  assert.equal(waitingText(w.map, { ask: true }), `Answered and delivered, archive each with pending.mjs done:\n- Both notes (answered: Yes) ${both}`);
+  assert.doesNotMatch(waitingText(w.map, { offline: true }), /Refused cards/);
+});
