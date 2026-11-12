@@ -1,13 +1,14 @@
 import "./test-isolation.mjs";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { card, cardCheck, cardNote, finishedJobs, waitingText } from "../lib/pending.mjs";
 import { readCard } from "../lib/pending-cards.mjs";
 import { heldElsewhere, resumeRefusal } from "../lib/job.mjs";
 import { recordLaunch } from "../lib/job-files.mjs";
+import { waitingNotice } from "../lib/session-hooks.mjs";
 import { STATE_DIR } from "../lib/state-dir.mjs";
 import { bound, jobFile, sleeper, world } from "./job-world-for-tests.mjs";
 
@@ -171,7 +172,7 @@ test("an unidentified caller finds a job held by a live cockpit held elsewhere, 
   }
 });
 
-test("a card is refused with the very reason resume would give, for every permanent refusal, and a card that starts another role's job is still asked", () => {
+test("a card is refused with the very reason resume would give, for every permanent refusal, and a starts: line on a card changes nothing", () => {
   const w = here();
   const closed = jobFile(w, { role: "pm", name: "closed", status: "closed" });
   const readonly = jobFile(w, { role: "dev", name: "readonly", status: "done", header: [`repo: ${join(w.root, "be")}`], record: { repo: join(w.root, "be") } });
@@ -179,15 +180,49 @@ test("a card is refused with the very reason resume would give, for every perman
   writeFileSync(lied, readFileSync(lied, "utf8").replace("to: tedy:dev", "to: tedy:pm"));
   const asked = [closed, readonly, lied].map((job, n) => question(w, job, `Question ${n}`));
   const publish = status(w, closed, "Status of 12", 12);
-  const starts = card(w.map, "question", { title: "Start a dev job", job: closed, starts: "dev", body: "Start a dev job for the toast?\n- Yes: start it\n- No: drop it\n" });
-  assert.equal(waitingText(w.map, { ask: true }), `Questions:\n- Start a dev job ${starts}`);
+  const starts = question(w, closed, "Start a dev job");
+  writeFileSync(starts, readFileSync(starts, "utf8").replace(/^job: .*$/m, (line) => `${line}\nstarts: dev`));
+  assert.equal(waitingText(w.map, { ask: true }), "");
+  assert.ok(waitingText(w.map, { offline: true }).includes(`- Start a dev job: ${resumeRefusal(w.map, closed).reason} ${starts}`));
   const list = waitingText(w.map, { offline: true });
   for (const [n, job] of [closed, readonly, lied].entries()) {
     const reason = resumeRefusal(w.map, job).reason;
     assert.ok(list.includes(`- Question ${n}: ${reason} ${asked[n]}`), `${reason}\n${list}`);
   }
   assert.ok(list.includes(`- Status of 12: ${resumeRefusal(w.map, closed).reason} ${publish}`), list);
-  assert.throws(() => card(w.map, "question", { title: "Bad", job: closed, starts: "boss", body: "Which?\n- A: a\n- B: b\n" }), /--starts takes one of pm, dev, review, devops on a question card/);
+  assert.equal(readCard(readFileSync(card(w.map, "question", { title: "Plain", job: closed, starts: "dev", body: "Which?\n- A: a\n- B: b\n" }), "utf8")).starts, undefined);
+});
+
+test("an answered question stays listed for archiving when its job can no longer resume or its job file is gone", () => {
+  const w = here();
+  const closed = jobFile(w, { role: "pm", name: "closed", status: "closed" });
+  const gone = jobFile(w, { role: "pm", name: "gone", status: "done" });
+  const late = question(w, closed, "Closed since");
+  const lost = question(w, gone, "File gone");
+  cardNote(late, "Yes");
+  cardNote(lost, "No");
+  rmSync(gone);
+  assert.equal(waitingText(w.map, { ask: true }), `Answered and delivered, archive each with pending.mjs done:\n- Closed since (answered: Yes) ${late}\n- File gone (answered: No) ${lost}`);
+  assert.doesNotMatch(waitingText(w.map, { offline: true }), /Refused cards/);
+});
+
+test("the session start's waiting list stays under its cap and clips what it could not check", { skip: process.getuid?.() === 0 }, () => {
+  const w = here();
+  const drafts = join(w.root, "plans", "drafts");
+  mkdirSync(drafts, { recursive: true });
+  for (let n = 0; n < 12; n += 1) writeFileSync(join(drafts, `261106-09${String(n).padStart(2, "0")}-question-refused-${n}.md`), `kind: question\ntitle: Refused ${n} ${"t".repeat(150)}\njob: none\nstatus: refused\nrefused: ${"r".repeat(300)}\n\nWhich?\n- A: a\n- B: b\n`);
+  const locked = join(drafts, `261106-0999-question-${"l".repeat(180)}.md`);
+  writeFileSync(locked, "kind: question\n");
+  chmodSync(locked, 0o000);
+  try {
+    const text = waitingNotice(w.map, { caller: {} });
+    assert.ok(text.length <= 3000, `${text.length}`);
+    assert.match(text, /\/tedy:pending lists them all$/);
+    const problems = waitingText(w.map, { offline: true, clipReasons: true }).split("\n\n").find((group) => group.startsWith("Could not check:")) ?? "";
+    assert.ok(problems.includes("…") && !problems.includes(locked), problems);
+  } finally {
+    chmodSync(locked, 0o644);
+  }
 });
 
 test("an answered question is listed for archiving, since its answer was delivered", () => {

@@ -164,7 +164,7 @@ test("a kept dev job's launch record notes when the close command kept it", () =
   assert.ok(Date.now() - Date.parse(w.record(dev).close_kept_at) < 60_000, JSON.stringify(w.record(dev)));
 });
 
-test("a plain close archives an answered question as delivered, leaves started and starts cards listed, and prints cards it could not read", { skip: process.getuid?.() === 0 }, () => {
+test("a plain close archives an answered question as delivered, refuses one that would start another role's job like any other, leaves started cards listed, and prints cards it could not read", { skip: process.getuid?.() === 0 }, () => {
   const w = world();
   const job = jobFile(w, { role: "pm", name: "gaps", status: "done" });
   const drafts = join(w.root, "plans", "drafts");
@@ -172,7 +172,7 @@ test("a plain close archives an answered question as delivered, leaves started a
   const answered = join(drafts, "261106-0915-question-answered.md");
   writeFileSync(answered, `kind: question\ntitle: Answered\njob: ${job}\nanswer: Yes\n\nWhich?\n- Yes: y\n- No: n\n`);
   const starts = join(drafts, "261106-0916-question-start-dev.md");
-  writeFileSync(starts, `kind: question\ntitle: Start dev\njob: ${job}\nstarts: dev\n\nStart a dev job?\n- Yes: y\n- No: n\n`);
+  writeFileSync(starts, `kind: question\ntitle: Start dev\njob: ${job}\n\nStart a dev job?\n- Yes: y\n- No: n\n`);
   const started = join(drafts, "261106-0917-question-started.md");
   writeFileSync(started, `kind: question\ntitle: Started\njob: ${job}\nstatus: started\nstarted: 2026-11-12T01:00:00.000Z\n\nWhich?\n- A: a\n- B: b\n`);
   const locked = join(drafts, "261106-0918-question-locked.md");
@@ -182,7 +182,7 @@ test("a plain close archives an answered question as delivered, leaves started a
     const out = w.run(["close", job]);
     assert.equal(out.status, 0, out.stderr);
     assert.ok(out.stdout.includes(`archived ${join(w.root, "plans", "archive", "drafts", "261106-0915-question-answered.md")}: its answer was delivered`), out.stdout);
-    assert.match(out.stdout, new RegExp(`^still names the job: ${starts} \\(question\\)$`, "m"));
+    assert.ok(out.stdout.includes(`archived ${join(w.root, "plans", "archive", "drafts", "261106-0916-question-start-dev.md")}: refused, ${job} is closed; start a new job instead`), out.stdout);
     assert.match(out.stdout, new RegExp(`^still names the job: ${started} \\(question, started at `, "m"));
     assert.match(out.stdout, new RegExp(`^could not check: ${locked}: EACCES$`, "m"));
   } finally {
