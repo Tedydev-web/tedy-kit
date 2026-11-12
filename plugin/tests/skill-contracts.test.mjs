@@ -49,7 +49,7 @@ test("the cockpit closes a finished job on its notification turn with close --if
   const close = jobs.match(/^7\. Close: .*$/m)?.[0] ?? "";
   for (const phrase of ["close --if-finished", "no card names", "keeps a dev job open while its branch has an open PR", "merged or closed", "when the user asks", "every refusal of `close`"]) assert.ok(close.includes(phrase), phrase);
   const pending = read("skills/pending/SKILL.md");
-  const closing = pending.match(/^   - Once no card names a job .*$/m)?.[0] ?? "";
+  const closing = pending.match(/^   - Once no question or publish card names a job .*$/m)?.[0] ?? "";
   assert.ok(closing.includes("job.mjs close <job file> --if-finished"), closing);
   assert.doesNotMatch(pending, /as `done` or `stopped`, run `node \$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/job\.mjs close <job file>`/);
 });
@@ -92,12 +92,19 @@ test("each job's round runs its approved cards before the one resume, and a refu
   assert.doesNotMatch(pending, /Both refuse and writes/);
 });
 
-test("a permanent resume refusal refuses the job's cards with its reason, a transient one leaves them open, and a plain close settles the job's questions", () => {
+test("every resume refusal but a busy one refuses the job's cards with its reason, a starts card is never refused for it, and a plain close settles the job's questions", () => {
   const round = read("skills/pending/SKILL.md").match(/^   - \*\*Round per job\.\*\*.*$/m)?.[0] ?? "";
-  for (const phrase of ["When `resume` refuses because the job is closed, has no launch record or has lost its folder", "`card-note --refuse` each card of that job with that reason", "still running, waiting or starting, or another live cockpit runs it, leave every card of that job as it is"]) assert.ok(round.includes(phrase), phrase);
+  for (const phrase of ["every refusal is permanent except a busy one (`shared/jobs.md`, Cockpit 6)", "leave every card of that job as it is", "`card-note --refuse` each unanswered card of that job with that reason, except a `starts:` card", "\"Answered and delivered\" with `pending.mjs done`"]) assert.ok(round.includes(phrase), phrase);
+  assert.doesNotMatch(round, /no launch record|lost its folder|is closed/);
   const jobs = read("shared/jobs.md");
-  assert.match(jobs, /^6\. Answers and rework go through SendMessage\.[\s\S]*?A permanent refusal \(the job is closed, has no launch record or has lost its folder\) refuses its cards with the reason/m);
-  assert.match(jobs, /^7\. Close: [\s\S]*?A plain `close` archives the job's open question cards with a refuse note/m);
+  const six = jobs.match(/^6\. Answers and rework go through SendMessage\.[\s\S]*?(?=^7\. )/m)?.[0] ?? "";
+  assert.match(six, /A `resume` refusal is busy when the job's agent runs, waits or may be starting, the session an older kit recorded is still open, or another live cockpit or a caller the kit cannot identify runs it: leave its cards unanswered/);
+  assert.match(six, /Every other refusal is permanent: `card-note --refuse` each unanswered, not started question card of that job with the refusal's reason, except a `starts:` card \(Job 4\)/);
+  assert.match(six, /An answered card whose call went out is archived with `pending.mjs done`, never refused\./);
+  assert.doesNotMatch(six, /A permanent refusal \(/);
+  assert.match(jobs, /^4\. Work for another role becomes a `question` card [^\n]*`pending\.mjs card question --job <this job file> --starts <role> …`[^\n]*never refused when this job cannot be resumed/m);
+  assert.match(jobs, /^7\. Close: a `done` job that no question or publish card names \(a started or refused card counts, a notify card does not\)/m);
+  assert.match(jobs, /^7\. Close: [\s\S]*?A plain `close` archives each answered question card of the job as delivered and refuses and archives each other open question card with its reason, except a started or `starts:` card;/m);
 });
 
 test("every kit write a skill runs after a question is approved by an approve.all or post.asIs option, never by the merge or next-step answer", () => {

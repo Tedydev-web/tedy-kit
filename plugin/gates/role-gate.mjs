@@ -188,7 +188,7 @@ export function closeReason(input, who) {
   const calls = jobScriptCalls(input).filter(({ args }) => args[0] === "close").map(({ args, dir }) => ({ file: named(args) ? resolve(dir, expandHome(named(args))) : null, finished: args.includes("--if-finished") }));
   if (!calls.length) return null;
   const names = calls.map(({ file, finished }) => (file ? `${file}${finished ? " --if-finished" : ""}` : finished ? "--if-finished" : "with no job file"));
-  const effect = calls.some(({ file, finished }) => finished && !file) ? "closes every done job that no card names and removes its worktree" : calls.some(({ finished }) => finished) ? "closes that job once it is done and no card names it, and removes its worktree" : "marks that job closed and removes its worktree";
+  const effect = calls.some(({ file, finished }) => finished && !file) ? "closes every done job that no question or publish card names and removes its worktree" : calls.some(({ finished }) => finished) ? "closes that job once it is done and no question or publish card names it, and removes its worktree" : "marks that job closed, removes its worktree, and refuses and archives its open question cards";
   return `tedy role gate: this is a ${who.role} job (${who.label}); job.mjs close ${[...new Set(names)].join(", ")} ${effect}, which belongs to the cockpit. Allow it only if the user asked for it here.`;
 }
 
