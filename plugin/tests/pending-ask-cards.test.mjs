@@ -105,7 +105,7 @@ test("card --job resolves against the project root and refuses a job file that d
   const relative = job.slice(w.root.length + 1);
   const file = card(w.map, "question", { title: "Which toast", job: relative, body: "Which?\n- A: a\n- B: b\n" });
   assert.match(readFileSync(file, "utf8"), new RegExp(`^job: ${job}$`, "m"));
-  assert.throws(() => card(w.map, "question", { title: "Lost", job: "plans/jobs/261106-0900-dev-missing.md", body: "Which?\n- A: a\n- B: b\n" }), /card refused: its job file .*261106-0900-dev-missing\.md does not exist/);
+  assert.throws(() => card(w.map, "question", { title: "Lost", job: "plans/jobs/261106-0900-dev-missing.md", body: "Which?\n- A: a\n- B: b\n" }), /card refused by card: its job file .*261106-0900-dev-missing\.md does not exist/);
   const hand = join(w.root, "plans", "drafts", "261106-0930-question-hand.md");
   writeFileSync(hand, `kind: question\ntitle: Hand\njob: ${join(w.root, "plans", "jobs", "261106-0900-dev-gone.md")}\n\nWhich?\n- A: a\n- B: b\n`);
   assert.match(waitingText(w.map, { offline: true }), /^Refused cards:\n- Hand: its job file .*261106-0900-dev-gone\.md does not exist /m);
@@ -120,7 +120,7 @@ test("card-check and the ask list treat a job whose agent another live cockpit r
     const pending = (args) => spawnSync(process.execPath, [FAKE_COCKPIT, PENDING, ...args], { cwd: w.root, encoding: "utf8", env: w.env(), argv0: "claude" });
     const checked = pending(["card-check", run]);
     assert.equal(checked.status, 1, checked.stdout);
-    assert.match(checked.stderr, /card refused: its job .* is still running and may rewrite the draft, or another live cockpit runs it/);
+    assert.match(checked.stderr, /card refused by card-check: its job .* is still running and may rewrite the draft, or another live cockpit runs it/);
     assert.match(pending(["list", "--offline"]).stdout, /^- Status of 12 \(run, 1 command, job running\) /m);
   } finally {
     cockpit.child.kill();
@@ -155,8 +155,8 @@ test("card --job and a hand-written card need a job file inside the jobs folder"
   mkdirSync(join(w.root, "plans", "jobs"), { recursive: true });
   writeFileSync(join(w.root, "plans", "jobs", "notes.md"), "not a job\n");
   const body = "Which?\n- A: a\n- B: b\n";
-  assert.throws(() => card(w.map, "question", { title: "Outside", job: "README.md", body }), /card refused: its job file .*README\.md is not in .*plans\/jobs/);
-  assert.throws(() => card(w.map, "question", { title: "Not a job", job: "plans/jobs/notes.md", body }), /card refused: its job file .*notes\.md is not a job file/);
+  assert.throws(() => card(w.map, "question", { title: "Outside", job: "README.md", body }), /card refused by card: its job file .*README\.md is not in .*plans\/jobs/);
+  assert.throws(() => card(w.map, "question", { title: "Not a job", job: "plans/jobs/notes.md", body }), /card refused by card: its job file .*notes\.md is not a job file/);
 });
 
 test("an unidentified caller finds a job held by a live cockpit held elsewhere, as the busy check does", async () => {

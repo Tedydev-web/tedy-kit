@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
-import { STATE_DIR } from "./hook-io.mjs";
+import { STATE_DIR, logRefusal } from "./hook-io.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { mapRepos, pinPullHead, pinRepos, RECHECK, recheckRepos, tipKey } from "./source-pin-git.mjs";
 import { linkedDocs } from "./source-pin-links.mjs";
@@ -160,6 +160,12 @@ export function pinnedSince(file) {
 }
 
 export async function recheckPinned(file, relint, { texts, covers, what } = {}) {
+  const result = await recheckSourcesOf(file, relint, { texts, covers, what });
+  if (result.refusals.length) logRefusal("pins", result.refusals.join("\n"), { file: resolve(file) });
+  return result;
+}
+
+async function recheckSourcesOf(file, relint, { texts, covers, what }) {
   const { sources, warnings, pinnedAt, refusal } = pinnedSources(file, relint);
   if (refusal) return { refusals: [refusal], notices: [], warnings: [] };
   if (covers && !sources.some(covers)) return { refusals: [`refused: ${file} has no pinned ${what}; run ${relintWith(relint, pinnedAt)}, then ask the user again`], notices: [], warnings };

@@ -7,6 +7,7 @@ import { age, launchRecordPath, listJobs, parse, readRecord, slugOf, stamp, upda
 import { close as closeJob, closeHold, heldElsewhere, jobRecord, jobRole, olderKitStatus, resumeRefusal } from "./job.mjs";
 import { CARD_KEYS, cardRefusal, headerLength, oneLine, readCard } from "./pending-cards.mjs";
 import { claudeProcess } from "./job-session-hooks.mjs";
+import { logRefusal } from "./hook-io.mjs";
 import { resolveMap } from "./project-map.mjs";
 
 const capture = (command, args, cwd) => {
@@ -103,6 +104,11 @@ export function stub(map, action) {
   writeFileSync(file, `${action.trim()}\n`);
   return file;
 }
+
+const cardRefused = (layer, reason) => {
+  logRefusal(layer, reason);
+  return new Error(`card refused by ${layer}: ${reason}`);
+};
 
 const sha256 = (file) => createHash("sha256").update(readFileSync(file)).digest("hex");
 
@@ -207,7 +213,7 @@ export function card(map, kind, { title, job = "none", draft, records, preview, 
   ].filter(([, value]) => value !== undefined && value !== "");
   const text = `${header.map(([key, value]) => `${key}: ${oneLine(value)}`).join("\n")}\n\n${String(body ?? "").trim()}\n`;
   const refusal = cardRefusal(readCard(text) ?? { kind }, map.paths[0]);
-  if (refusal) throw new Error(`card refused: ${refusal}`);
+  if (refusal) throw cardRefused("card", refusal);
   const dir = join(map.paths[0], "plans", "drafts");
   mkdirSync(dir, { recursive: true });
   for (let n = 1; ; n += 1) {
@@ -243,7 +249,7 @@ export function cardStart(file, map, caller) {
     writeFileSync(startMarker(resolve(file)), `${at}\n`, { flag: "wx" });
   } catch (error) {
     if (error.code !== "EEXIST") throw error;
-    throw new Error(`card refused: started at ${claimedAt(resolve(file)) || "an unknown time"} by another session; run nothing from it`);
+    throw cardRefused("card-start", `started at ${claimedAt(resolve(file)) || "an unknown time"} by another session; run nothing from it`);
   }
   setHeader(file, ["status"], ["status: started", `started: ${at}`]);
   return count;
@@ -253,13 +259,14 @@ export const cardCheck = (file, map, caller) => checkCard(file, map, false, call
 
 function checkCard(file, map, ownClaim, caller) {
   const root = map.paths[0];
+  const layer = ownClaim ? "card-start" : "card-check";
   const found = judged(resolve(file), readFileSync(file, "utf8"), map, { ownClaim, caller });
   if (!found) throw new Error(`${file} is not a card file: it has no kind: line`);
-  if (found.refusal) throw new Error(`card refused: ${found.refusal}`);
-  if (found.busy) throw new Error(`card refused: its job ${found.job} is still running and may rewrite the draft, or another live cockpit runs it`);
+  if (found.refusal) throw cardRefused(layer, found.refusal);
+  if (found.busy) throw cardRefused(layer, `its job ${found.job} is still running and may rewrite the draft, or another live cockpit runs it`);
   if (found["draft-sha"]) {
     const draft = resolve(root, found.draft);
-    if (!existsSync(draft) || sha256(draft) !== found["draft-sha"]) throw new Error(`card refused: the draft changed since the card was written (${draft}); mark the card refused and have its job or session draft it again`);
+    if (!existsSync(draft) || sha256(draft) !== found["draft-sha"]) throw cardRefused(layer, `the draft changed since the card was written (${draft}); mark the card refused and have its job or session draft it again, or, after a draft-lint.mjs carry, write a new card`);
   }
   return found.blocks.length;
 }
