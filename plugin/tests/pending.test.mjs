@@ -124,7 +124,7 @@ test("the session-start notice shows at most ten drafts and counts the rest", as
   const { root, map } = project();
   for (let n = 0; n < 12; n += 1) writeFileSync(join(root, "plans", "drafts", `extra-${String(n).padStart(2, "0")}.md`), "x\n");
   const notice = waitingNotice(map);
-  assert.match(notice, /^- … 4 more$/m);
+  assert.match(notice, /^- … 4 more; \/tedy:pending lists them all$/m);
   assert.equal(waitingText(map, { offline: true }).split("\n").filter((line) => line.includes("extra-")).length, 12);
 });
 

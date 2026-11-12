@@ -271,32 +271,39 @@ function ofJob(job) {
 }
 
 const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
-const publishLine = (item) => `${item.title} (${item.preview}, ${plural(item.blocks.length, "command")}${item.busy ? ", job running" : ""}${item.answer ? `, held: ${item.answer}` : ""}) ${item.path}`;
-const questionLine = (item) => `${item.title}${item.answer ? ` (answered: ${item.answer})` : item.busy ? " (job running)" : ""} ${item.path}`;
+const clean = (text) => String(text).replace(/[\p{Cc}\p{Cf}`]/gu, " ").replace(/\s+/g, " ").trim();
+export const clip = (text, size = 120) => {
+  const value = clean(text);
+  return value.length > size ? `${value.slice(0, size - 1)}…` : value;
+};
+const publishLine = (item) => `${clip(item.title)} (${item.preview}, ${plural(item.blocks.length, "command")}${item.busy ? ", job running" : ""}${item.answer ? `, held: ${clip(item.answer, 40)}` : ""}) ${item.path}`;
+const questionLine = (item) => `${clip(item.title)}${item.answer ? ` (answered: ${clip(item.answer, 40)})` : item.busy ? " (job running)" : ""} ${item.path}`;
 const askable = (item, held) => !item.refusal && (item.kind === "publish" ? !item.busy && (held || !item.answer) : item.kind === "question" && !item.answer && !item.busy);
-const render = (groups, limit) => groups.filter(([, items]) => items.length).map(([title, items]) => `${title}:\n${items.slice(0, limit).map((item) => `- ${item}`).join("\n")}${items.length > limit ? `\n- … ${items.length - limit} more` : ""}`).join("\n\n");
+export const MORE = "/tedy:pending lists them all";
+const render = (groups, limit) => groups.filter(([, items]) => items.length).map(([title, items]) => `${title}:\n${items.slice(0, limit).map((item) => `- ${clean(item)}`).join("\n")}${items.length > limit ? `\n- … ${items.length - limit} more; ${MORE}` : ""}`).join("\n\n");
 
-export function waitingText(map, { offline = false, limit = Infinity, budgetMs = Infinity, job, ask = false, held = true, session } = {}) {
+export function waitingText(map, { offline = false, limit = Infinity, budgetMs = Infinity, job, ask = false, held = true, session, found: given, skipAsked = false } = {}) {
+  const root = map.paths[0];
+  const named = ofJob(job);
+  const ofNamed = (item) => !named || (item.job !== "none" && named(resolve(root, item.job)));
+  if (ask) {
+    const asked = (given ?? cards(map, [], session)).filter((item) => ofNamed(item) && askable(item, held));
+    return render([["To publish", asked.filter((item) => item.kind === "publish").map(publishLine)], ["Questions", asked.filter((item) => item.kind === "question").map(questionLine)]], limit);
+  }
   const dirs = repoDirs(map);
   const deadline = Date.now() + budgetMs;
   const problems = [];
   const drafts = draftFiles(dirs, problems);
-  const root = map.paths[0];
-  const named = ofJob(job);
-  const found = cardsIn(drafts, root, problems, session).filter((item) => !named || (item.job !== "none" && named(resolve(root, item.job))));
-  if (ask) {
-    const asked = found.filter((item) => askable(item, held));
-    return render([["To publish", asked.filter((item) => item.kind === "publish").map(publishLine)], ["Questions", asked.filter((item) => item.kind === "question").map(questionLine)]], limit);
-  }
+  const found = cardsIn(drafts, root, problems, session).filter(ofNamed);
   const typed = new Set(found.map((item) => item.path));
-  const open = found.filter((item) => !item.refusal);
+  const open = found.filter((item) => !item.refusal && !(skipAsked && askable(item, true)));
   const cardGroups = [
-    ["Jobs", listJobs(map).filter((item) => !named || named(item.path)).map((item) => `${item.role}: ${item.title} (${jobState(item, problems)}, ${age(item.created)}) ${item.path}`)],
+    ["Jobs", listJobs(map).filter((item) => !named || named(item.path)).map((item) => `${item.role}: ${clip(item.title)} (${jobState(item, problems)}, ${age(item.created)}) ${item.path}`)],
     ["To publish", open.filter((item) => item.kind === "publish").map(publishLine)],
     ["Questions", open.filter((item) => item.kind === "question").map(questionLine)],
-    ["For your information", open.filter((item) => item.kind === "notify").map((item) => `${item.title} ${item.path}`)],
-    ["Started, not closed", found.filter((item) => item.status === "started").map((item) => `${item.title} (started ${item.started ?? "an unknown time"}) ${item.path}`)],
-    ["Refused cards", found.filter((item) => item.refusal && item.status !== "started").map((item) => `${item.title ?? "untitled"}: ${item.refusal} ${item.path}`)],
+    ["For your information", open.filter((item) => item.kind === "notify").map((item) => `${clip(item.title)} ${item.path}`)],
+    ["Started, not closed", found.filter((item) => item.status === "started").map((item) => `${clip(item.title)} (started ${item.started ?? "an unknown time"}) ${item.path}`)],
+    ["Refused cards", found.filter((item) => item.refusal && item.status !== "started").map((item) => `${clip(item.title ?? "untitled")}: ${item.refusal} ${item.path}`)],
   ];
   if (named) return render([...cardGroups, ["Could not check", problems]], limit);
   const unpushed = dirs.flatMap((dir) => {
