@@ -5,7 +5,7 @@
     "slash command": "the older format: a skill runs by name the same way",
     "output style": "one per session and it replaces the user's own style",
     "statusline": "a plugin can ship only subagentStatusLine, and no need is a standing bar",
-    "MCP server": "the kit's own reads and writes go through scripts the shell gates and the approval ticket can check",
+    "MCP server": "the kit's own reads and writes go through scripts the shell gates and the kit's ask rules can check",
     "LSP server": "reviewers read code with Read, Grep and git; no need is language diagnostics",
     "monitor": "no need watches a long-running process; every kit check runs on an event",
     "theme": "interface colors only",
@@ -116,7 +116,7 @@
     },
     {
       "need": "tracker and host reads and writes (OpenProject, GitHub, Google Doc, Figma comments)",
-      "uses": { "skill": "skills run node scripts under plugin/scripts through Bash, where the gates read the script name and each write checks the approval ticket" },
+      "uses": { "skill": "skills run node scripts under plugin/scripts through Bash, where the gates read the script name and each write meets the kit's ask rule prompt" },
       "rejected": {
         "subagent": "writes need the user's answer in the main session",
         "hooks": "a hook reacts to calls; it does not make them",

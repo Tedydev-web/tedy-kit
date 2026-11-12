@@ -234,4 +234,5 @@ test("no file in the plugin uses the retired publish menus or answer-mode ticket
   const files = readdirSync(root, { recursive: true }).filter((path) => /\.(?:mjs|md|json|py)$/.test(path) && !path.includes("node_modules"));
   assert.ok(files.length > 100, String(files.length));
   assert.deepEqual(files.filter((path) => retired.test(readFileSync(new URL(path, root), "utf8"))), []);
+  assert.doesNotMatch(readFileSync(new URL("../../docs/canon/surface-fit.json", import.meta.url), "utf8"), /approval ticket/);
 });

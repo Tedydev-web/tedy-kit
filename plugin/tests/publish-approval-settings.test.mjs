@@ -50,13 +50,14 @@ test("ask restores the kit's 22 publish ask rules after a 600 backup, keeps ever
   assert.match(run.stdout, /removed the obsolete gates\.publishApproval "answer"/);
 });
 
-test("ask removes the retired deny rules on the kit's records, is idempotent and writes only on a change", () => {
+test("ask removes only the retired deny rule on the approval tickets, keeps the deny rules that guard the kit's records, is idempotent and writes only on a change", () => {
   const state = process.env.TEDY_STATE_DIR;
-  assert.deepEqual(RETIRED, [`Edit(/${join(state, "approvals")}/**)`, `Edit(/${join(state, "pr-bodies")}/**)`, `Edit(/${join(state, "drafts")}/**)`, `Edit(/${join(state, "review-runs")}/**)`, `Edit(/${join(state, "drafts")}/*.sources.json)`]);
-  const place = places({ deny: [SSH_DENY, ...RETIRED] });
+  assert.deepEqual(RETIRED, [`Edit(/${join(state, "approvals")}/**)`]);
+  const kept = [`Edit(/${join(state, "pr-bodies")}/**)`, `Edit(/${join(state, "drafts")}/**)`, `Edit(/${join(state, "review-runs")}/**)`, `Edit(/${join(state, "drafts")}/*.sources.json)`];
+  const place = places({ deny: [SSH_DENY, ...RETIRED, ...kept] });
   assert.match(toggle(place).stdout, new RegExp(`retired deny rules in .*: ${RETIRED.length}`));
   assert.equal(toggle(place, "ask").status, 0);
-  assert.deepEqual(read(place.settings).permissions.deny, [SSH_DENY]);
+  assert.deepEqual(read(place.settings).permissions.deny, [SSH_DENY, ...kept]);
   assert.equal(backups(place).length, 1);
   const again = toggle(place, "ask");
   assert.match(again.stdout, /every kit publish ask rule is present and no retired deny rule is left, not written/);

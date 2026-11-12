@@ -110,7 +110,7 @@ function readsFile(command) {
   return FILE_OPERANDS[name]?.[verb] ? `${name} ${verb}` : null;
 }
 
-const OTHER_FILE_FLAGS =Object.freeze({ "doc-comment-file.mjs": ["--html"] });
+const OTHER_FILE_FLAGS = Object.freeze({ "doc-comment-file.mjs": ["--html"] });
 
 const GLUED_FLAGS = new Set(["github-write.mjs"]);
 
