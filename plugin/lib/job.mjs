@@ -189,20 +189,6 @@ export function heldElsewhere(file, caller = {}) {
   return held ? record.session_id ?? `claude pid ${record.cockpit_pid}` : null;
 }
 
-export function resumeBlock(file) {
-  let job;
-  try {
-    job = readJob(file);
-  } catch (error) {
-    return error.message;
-  }
-  if (job.status === "closed") return "its job is closed; start a new job";
-  const record = launchRecord(job.path);
-  if (!record || isTombstone(record)) return "its job has no launch record, so an answer cannot reach it; start a new job";
-  if (!record.cwd || !existsSync(record.cwd)) return `its job's folder ${record.cwd ?? "(none)"} no longer exists; start a new job`;
-  return null;
-}
-
 export function jobRole(file) {
   const job = readJob(file);
   const named = basename(job.path).match(NAMED_ROLE)?.[1] ?? null;
@@ -210,16 +196,6 @@ export function jobRole(file) {
   if (!record || isTombstone(record)) return { role: null, why: "it has no launch record, so its role cannot be checked and it stays open" };
   if (record.role === named && named === job.role) return { role: record.role, why: null };
   return { role: null, why: `its role is ${record.role ?? "(none)"} in its launch record, ${named ?? "(none)"} in its file name and ${job.role} in its to: line; they must agree, so it stays open` };
-}
-
-export function jobBusy(file, caller = {}) {
-  const job = readJob(file);
-  if (job.status === "closed") return false;
-  const record = launchRecord(job.path);
-  if (!record || isTombstone(record)) return false;
-  if (elsewhere(record, caller)) return true;
-  if (unidentified(caller) && record.agent_id && cockpitAlive(record)) return true;
-  return Boolean(agentHold(record) || (fromOlderKit(record) && olderSession(record)));
 }
 
 function unsignalled(record) {
@@ -328,20 +304,40 @@ function olderWorktree(file, record) {
 
 const sameProcess = (found, record) => Boolean(found) && found.pid === record.cockpit_pid && found.start === record.cockpit_pid_start;
 
-export function resume(map, file, note, { caller = claudeProcess } = {}) {
-  const job = trusted(map, file);
-  if (job.status === "closed") throw new Error(`${file} is closed; start a new job instead`);
-  if (!String(note ?? "").trim()) throw new Error("the note is empty");
-  if (!job.record) throw new Error(`${file} has no launch record, so it was not started by job.mjs start here; close it and start a new job`);
+export function resumeRefusal(map, file, caller = {}) {
+  let job;
+  try {
+    job = trusted(map, file);
+  } catch (error) {
+    return { kind: "permanent", reason: error.message, agent: false };
+  }
+  const permanent = (reason, agent = false) => ({ kind: "permanent", reason, agent });
+  const busy = (reason) => ({ kind: "busy", reason, agent: true });
+  if (job.status === "closed") return permanent(`${file} is closed; start a new job instead`);
+  if (!job.record) return permanent(`${file} has no launch record, so it was not started by job.mjs start here; close it and start a new job`);
   const { record } = job;
-  if (!existsSync(record.cwd)) throw new Error(`${file}: its folder ${record.cwd} no longer exists; close it and start a new job`);
+  if (!existsSync(record.cwd)) return permanent(`${file}: its folder ${record.cwd} no longer exists; close it and start a new job`);
   const older = fromOlderKit(record) && olderSession(record);
-  if (older) throw new Error(`${file}: ${older}; end that session first, then resume it again; nothing was resumed`);
+  if (older) return busy(`${file}: ${older}; end that session first, then resume it again; nothing was resumed`);
   const held = agentHold(record, "resume");
-  if (held) throw new Error(`${file}: ${held.why}; ${held.then}; nothing was resumed`);
+  if (held) {
+    const reason = `${file}: ${held.why}; ${held.then}; nothing was resumed`;
+    return record.agent_id && !record.cockpit_pid && !agentRunning(record) ? permanent(reason, true) : busy(reason);
+  }
   const live = Boolean(record.agent_id) && cockpitAlive(record);
+  const same = caller.cockpit ? sameProcess(caller.cockpit, record) : Boolean(caller.session) && record.session_id === caller.session;
+  if (live && !same) return busy(`${file}: its agent ${record.agent_name ?? record.agent_id} (${record.agent_id}) belongs to another live cockpit session, ${record.session_id} (claude pid ${record.cockpit_pid}); resume it there with SendMessage; nothing was resumed`);
+  return null;
+}
+
+export function resume(map, file, note, { caller = claudeProcess } = {}) {
+  if (!String(note ?? "").trim()) throw new Error("the note is empty");
   const cockpit = caller();
-  if (live && !sameProcess(cockpit, record)) throw new Error(`${file}: its agent ${record.agent_name ?? record.agent_id} (${record.agent_id}) belongs to another live cockpit session, ${record.session_id} (claude pid ${record.cockpit_pid}); resume it there with SendMessage; nothing was resumed`);
+  const refusal = resumeRefusal(map, file, { cockpit });
+  if (refusal) throw new Error(refusal.reason);
+  const job = trusted(map, file);
+  const { record } = job;
+  const live = Boolean(record.agent_id) && cockpitAlive(record);
   const folder = live ? "" : olderWorktree(file, record);
   const agent = record.agent_id;
   const name = record.agent_name ?? agentName(record.role, job.path);
@@ -442,8 +438,14 @@ function main([command, target, ...rest]) {
     const map = project();
     const closed = close(map, target, text(given.reason));
     return import("./pending.mjs").then(({ settleClosedJob }) => {
-      console.log([closed, ...settleClosedJob(map, target)].join("\n"));
-      return 0;
+      try {
+        console.log([closed, ...settleClosedJob(map, target)].join("\n"));
+        return 0;
+      } catch (error) {
+        console.log(closed);
+        console.error(`job: the job is closed, but its cards were not settled: ${error.message}`);
+        return 1;
+      }
     });
   }
   if (command === "list") {

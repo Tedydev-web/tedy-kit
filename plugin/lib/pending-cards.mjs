@@ -10,7 +10,7 @@ const PLAIN_WORD = String.raw`(?!(?:''|"")*=)(?:[\p{L}\p{N}\p{M}_@%+=:,./-]|'[^'
 const PLAIN_LINE = new RegExp(`^${PLAIN_WORD}(?: ${PLAIN_WORD})*$`, "u");
 
 export const KINDS = Object.freeze(["publish", "question", "notify"]);
-export const CARD_KEYS = Object.freeze(["kind", "title", "job", "draft", "draft-sha", "records", "preview", "created", "status", "started", "answer", "refused"]);
+export const CARD_KEYS = Object.freeze(["kind", "title", "job", "draft", "draft-sha", "records", "preview", "starts", "created", "status", "started", "answer", "refused"]);
 const KEY_LINE = new RegExp(`^(${CARD_KEYS.join("|")}): `);
 const OPTION = /^- (.+?): (.+)$/;
 

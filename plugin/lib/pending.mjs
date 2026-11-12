@@ -3,8 +3,8 @@ import { createHash } from "node:crypto";
 import { appendFileSync, closeSync, existsSync, lstatSync, openSync, readSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { age, launchRecordPath, listJobs, parse, readRecord, slugOf, stamp, updateRecord } from "./job-files.mjs";
-import { close as closeJob, closeHold, heldElsewhere, jobBusy, jobRecord, jobRole, olderKitStatus, resumeBlock } from "./job.mjs";
+import { age, JOB_ROLES, launchRecordPath, listJobs, parse, readRecord, slugOf, stamp, updateRecord } from "./job-files.mjs";
+import { close as closeJob, closeHold, heldElsewhere, jobRecord, jobRole, olderKitStatus, resumeRefusal } from "./job.mjs";
 import { CARD_KEYS, cardRefusal, headerLength, oneLine, readCard } from "./pending-cards.mjs";
 import { claudeProcess } from "./job-session-hooks.mjs";
 import { resolveMap } from "./project-map.mjs";
@@ -123,18 +123,26 @@ function cardText(path) {
   }
 }
 
-function jobStates(root, caller) {
+function jobStates(map, caller) {
   const known = new Map();
   return (job) => {
-    if (!job || job === "none") return { running: false, busy: false, blocked: null, closed: false };
-    const path = resolve(root, job);
+    if (!job || job === "none") return { running: false, closed: false, refusal: null };
+    const path = resolve(map.paths[0], job);
     if (!known.has(path)) {
       const present = existsSync(path);
       const status = present ? parse(readFileSync(path, "utf8")).status : undefined;
-      known.set(path, { running: status === "running", busy: present && jobBusy(path, caller), blocked: present ? resumeBlock(path) : null, closed: status === "closed" });
+      known.set(path, { running: status === "running", closed: status === "closed", refusal: present ? resumeRefusal(map, path, caller ?? {}) : null });
     }
     return known.get(path);
   };
+}
+
+function jobView(found, { running, closed, refusal }) {
+  if (found.kind === "question") {
+    if (found.starts) return { stuck: null, busy: false };
+    return { stuck: refusal?.kind === "permanent" ? refusal.reason : null, busy: refusal?.kind === "busy" };
+  }
+  return { stuck: found.kind === "publish" && closed ? refusal?.reason ?? null : null, busy: Boolean(refusal?.agent) || (running && found.kind !== "notify") };
 }
 
 const startMarker = (path) => join(dirname(path), `.${basename(path)}.started`);
@@ -148,7 +156,8 @@ function claimedAt(path) {
   }
 }
 
-function judged(path, text, root, { ownClaim = false, caller, state = jobStates(root, caller) } = {}) {
+function judged(path, text, map, { ownClaim = false, caller, state = jobStates(map, caller) } = {}) {
+  const root = map.paths[0];
   const read = text === null ? null : readCard(text);
   if (!read) return null;
   const claimed = ownClaim || read.status === "refused" || read.status === "started" ? null : claimedAt(path);
@@ -157,16 +166,16 @@ function judged(path, text, root, { ownClaim = false, caller, state = jobStates(
     found.status === "refused" ? `refused: ${found.refused ?? "no reason given"}`
     : found.status === "started" ? `started at ${found.started ?? "an unknown time"}: its commands may already have written; check their read-backs, then pending.mjs done the card, or card-note --refuse it`
     : cardRefusal(found, root);
-  const { running, busy, blocked, closed } = state(found.job);
-  const stuck = refusal ? null : found.kind === "question" ? blocked : found.kind === "publish" && closed ? blocked : null;
-  return { path, ...found, refusal: refusal ?? stuck, running, busy: busy || (running && found.kind !== "question") };
+  const job = state(found.job);
+  const { stuck, busy } = jobView(found, job);
+  return { path, ...found, refusal: refusal ?? (found.status === "started" ? null : stuck), running: job.running, busy };
 }
 
-function cardsIn(files, root, problems = [], caller) {
-  const state = jobStates(root, caller);
+function cardsIn(files, map, problems = [], caller) {
+  const state = jobStates(map, caller);
   return files.flatMap((path) => {
     try {
-      const found = judged(path, cardText(path), root, { caller, state });
+      const found = judged(path, cardText(path), map, { caller, state });
       return found ? [found] : [];
     } catch (error) {
       problems.push(`${path}: ${error.code ?? error.message}`);
@@ -175,12 +184,13 @@ function cardsIn(files, root, problems = [], caller) {
   });
 }
 
-export const cards = (map, problems = [], caller) => cardsIn(draftFiles(repoDirs(map), problems), map.paths[0], problems, caller);
+export const cards = (map, problems = [], caller) => cardsIn(draftFiles(repoDirs(map), problems), map, problems, caller);
 
-export function card(map, kind, { title, job = "none", draft, records, preview, body }) {
+export function card(map, kind, { title, job = "none", draft, records, preview, starts, body }) {
   const slug = slugOf(String(title ?? ""));
   if (!slug) throw new Error(`the title has no words: ${title}`);
   if (preview !== undefined && kind !== "publish") throw new Error("only a publish card takes --preview");
+  if (starts !== undefined && (kind !== "question" || !JOB_ROLES.includes(starts))) throw new Error(`--starts takes one of ${JOB_ROLES.join(", ")} on a question card`);
   const jobPath = job === "none" ? job : resolve(map.paths[0], job);
   const draftPath = draft === undefined ? undefined : resolve(draft);
   if (draftPath !== undefined && !existsSync(draftPath)) throw new Error(`the draft ${draft} does not exist`);
@@ -192,6 +202,7 @@ export function card(map, kind, { title, job = "none", draft, records, preview, 
     ["draft-sha", draftPath && sha256(draftPath)],
     ["records", records],
     ["preview", preview],
+    ["starts", starts],
     ["created", new Date().toISOString()],
   ].filter(([, value]) => value !== undefined && value !== "");
   const text = `${header.map(([key, value]) => `${key}: ${oneLine(value)}`).join("\n")}\n\n${String(body ?? "").trim()}\n`;
@@ -245,7 +256,7 @@ export const cardCheck = (file, map, caller) => checkCard(file, map, false, call
 
 function checkCard(file, map, ownClaim, caller) {
   const root = map.paths[0];
-  const found = judged(resolve(file), readFileSync(file, "utf8"), root, { ownClaim, caller });
+  const found = judged(resolve(file), readFileSync(file, "utf8"), map, { ownClaim, caller });
   if (!found) throw new Error(`${file} is not a card file: it has no kind: line`);
   if (found.refusal) throw new Error(`card refused: ${found.refusal}`);
   if (found.busy) throw new Error(`card refused: its job ${found.job} is still running and may rewrite the draft, or another live cockpit runs it`);
@@ -261,7 +272,7 @@ const underDrafts = (path, map) => repoDirs(map).map((dir) => join(dir, "plans",
 export function done(file, map) {
   const path = resolve(file);
   const root = map.paths[0];
-  const own = existsSync(path) && statSync(path).isFile() ? judged(path, readFileSync(path, "utf8"), root) : null;
+  const own = existsSync(path) && statSync(path).isFile() ? judged(path, readFileSync(path, "utf8"), map) : null;
   const draft = own?.draft && existsSync(resolve(root, own.draft)) ? realpathSync(resolve(root, own.draft)) : null;
   const named = (other) => other.draft && existsSync(resolve(root, other.draft)) && realpathSync(resolve(root, other.draft)) === draft;
   const keep = !draft || !underDrafts(draft, map) || cards(map).some((other) => realpathSync(other.path) !== realpathSync(path) && named(other));
@@ -309,19 +320,21 @@ const askable = (item, held) => !item.refusal && (item.kind === "publish" ? !ite
 export const MORE = "/tedy:pending lists them all";
 const render = (groups, limit) => groups.filter(([, items]) => items.length).map(([title, items]) => `${title}:\n${items.slice(0, limit).map((item) => `- ${clean(item)}`).join("\n")}${items.length > limit ? `\n- … ${items.length - limit} more; ${MORE}` : ""}`).join("\n\n");
 
-export function waitingText(map, { offline = false, limit = Infinity, budgetMs = Infinity, job, ask = false, held = true, caller, found: given, skipAsked = false } = {}) {
+export function waitingText(map, { offline = false, limit = Infinity, budgetMs = Infinity, job, ask = false, held = true, caller, found: given, skipAsked = false, clipReasons = false } = {}) {
   const root = map.paths[0];
   const named = ofJob(job);
   const ofNamed = (item) => !named || (item.job !== "none" && named(resolve(root, item.job)));
   if (ask) {
-    const asked = (given ?? cards(map, [], caller)).filter((item) => ofNamed(item) && askable(item, held));
-    return render([["To publish", asked.filter((item) => item.kind === "publish").map(publishLine)], ["Questions", asked.filter((item) => item.kind === "question").map(questionLine)]], limit);
+    const read = given ?? cards(map, [], caller);
+    const asked = read.filter((item) => ofNamed(item) && askable(item, held));
+    const delivered = read.filter((item) => ofNamed(item) && !item.refusal && item.kind === "question" && item.answer);
+    return render([["To publish", asked.filter((item) => item.kind === "publish").map(publishLine)], ["Questions", asked.filter((item) => item.kind === "question").map(questionLine)], ["Answered and delivered, archive each with pending.mjs done", delivered.map(questionLine)]], limit);
   }
   const dirs = repoDirs(map);
   const deadline = Date.now() + budgetMs;
   const problems = [];
   const drafts = draftFiles(dirs, problems);
-  const found = (given ?? cardsIn(drafts, root, problems, caller)).filter(ofNamed);
+  const found = (given ?? cardsIn(drafts, map, problems, caller)).filter(ofNamed);
   const typed = new Set(found.map((item) => item.path));
   const open = found.filter((item) => !item.refusal && !(skipAsked && askable(item, true)));
   const cardGroups = [
@@ -330,7 +343,7 @@ export function waitingText(map, { offline = false, limit = Infinity, budgetMs =
     ["Questions", open.filter((item) => item.kind === "question").map(questionLine)],
     ["For your information", open.filter((item) => item.kind === "notify").map((item) => `${clip(item.title)} ${item.path}`)],
     ["Started, not closed", found.filter((item) => item.status === "started").map((item) => `${clip(item.title)} (started ${item.started ?? "an unknown time"}) ${item.path}`)],
-    ["Refused cards", found.filter((item) => item.refusal && item.status !== "started").map((item) => `${clip(item.title ?? "untitled")}: ${item.refusal} ${item.path}`)],
+    ["Refused cards", found.filter((item) => item.refusal && item.status !== "started").map((item) => `${clip(item.title ?? "untitled")}: ${clipReasons ? clip(item.refusal) : item.refusal} ${item.path}`)],
   ];
   if (named) return render([...cardGroups, ["Could not check", problems]], limit);
   const unpushed = dirs.flatMap((dir) => {
@@ -390,14 +403,16 @@ function trustedRole(job) {
 export function settleClosedJob(map, file) {
   const root = map.paths[0];
   const real = realOrNull(resolve(file));
-  return cards(map).filter((item) => item.job !== "none" && realOrNull(resolve(root, item.job)) === real).map((item) => {
-    if (item.kind === "question" && item.status !== "refused" && item.status !== "started") {
-      cardNote(item.path, "its job was closed before the answer reached it", { refuse: true });
-      const [to] = done(item.path, map);
-      return `archived ${to}: its question was refused, because its job was closed before the answer reached it`;
-    }
-    return `still names the job: ${item.path} (${item.kind}${item.refusal ? `, ${item.refusal}` : ""})`;
+  const problems = [];
+  const named = cards(map, problems).filter((item) => item.job !== "none" && realOrNull(resolve(root, item.job)) === real);
+  const lines = named.map((item) => {
+    if (item.kind !== "question" || item.status === "refused" || item.status === "started" || item.starts) return `still names the job: ${item.path} (${item.kind}${item.refusal ? `, ${clip(item.refusal)}` : ""})`;
+    if (item.answer) return `archived ${done(item.path, map)[0]}: its answer was delivered`;
+    const reason = item.refusal ?? `${file} is closed; start a new job instead`;
+    cardNote(item.path, reason, { refuse: true });
+    return `archived ${done(item.path, map)[0]}: refused, ${reason}`;
   });
+  return [...lines, ...problems.map((problem) => `could not check: ${problem}`)];
 }
 
 export function closeFinished(map, file, { list = openPrs, caller = {} } = {}) {
@@ -440,7 +455,7 @@ function main([command, ...args]) {
     return 0;
   }
   if (command === "card" && args[0] && flag("title") && flag("body-file")) {
-    console.log(card(resolved.map, args[0], { title: flag("title"), job: flag("job"), draft: flag("draft"), records: flag("records"), preview: flag("preview"), body: readFileSync(flag("body-file"), "utf8") }));
+    console.log(card(resolved.map, args[0], { title: flag("title"), job: flag("job"), draft: flag("draft"), records: flag("records"), preview: flag("preview"), starts: flag("starts"), body: readFileSync(flag("body-file"), "utf8") }));
     return 0;
   }
   if (command === "card-note" && args[0] && flag("text")) {
@@ -455,7 +470,7 @@ function main([command, ...args]) {
     console.log(`started: ${args[0]} (${cardStart(args[0], resolved.map, String(flag("approved") ?? "").split(",").filter(Boolean), { cockpit: claudeProcess() })} block(s) to run in order)`);
     return 0;
   }
-  console.error('usage: pending.mjs list [--offline] [--job <job file>] | done <file under plans/> | stub "<action>" | card <publish|question|notify> --title <t> --body-file <f> [--job <f>] [--draft <f>] [--records <k,k>] [--preview ready|run] | card-note <card> --text <line> [--refuse] | card-check <card> | card-start <card> --approved <n,n,…>');
+  console.error('usage: pending.mjs list [--offline] [--job <job file>] | done <file under plans/> | stub "<action>" | card <publish|question|notify> --title <t> --body-file <f> [--job <f>] [--draft <f>] [--records <k,k>] [--preview ready|run] [--starts <role>] | card-note <card> --text <line> [--refuse] | card-check <card> | card-start <card> --approved <n,n,…>');
   return 2;
 }
 

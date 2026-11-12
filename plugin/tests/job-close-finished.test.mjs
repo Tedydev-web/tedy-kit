@@ -143,7 +143,7 @@ test("a plain close archives the job's open question cards with a refuse note an
   const out = w.run(["close", job]);
   assert.equal(out.status, 0, out.stderr);
   assert.match(out.stdout, new RegExp(`^closed: ${job}$`, "m"));
-  assert.match(out.stdout, new RegExp(`^archived ${join(w.root, "plans", "archive", "drafts", "261106-0915-question-which-toast.md")}: its question was refused, because its job was closed before the answer reached it$`, "m"));
+  assert.ok(out.stdout.includes(`archived ${join(w.root, "plans", "archive", "drafts", "261106-0915-question-which-toast.md")}: refused, ${job} is closed; start a new job instead`), out.stdout);
   assert.match(out.stdout, new RegExp(`^still names the job: ${notice} \\(notify\\)$`, "m"));
   assert.match(readFileSync(join(w.root, "plans", "archive", "drafts", "261106-0915-question-which-toast.md"), "utf8"), /^status: refused$/m);
 });
@@ -162,4 +162,30 @@ test("a kept dev job's launch record notes when the close command kept it", () =
   fakeGh(w, "echo https://github.com/o/r/pull/7");
   w.run(["close", dev, "--if-finished"]);
   assert.ok(Date.now() - Date.parse(w.record(dev).close_kept_at) < 60_000, JSON.stringify(w.record(dev)));
+});
+
+test("a plain close archives an answered question as delivered, leaves started and starts cards listed, and prints cards it could not read", { skip: process.getuid?.() === 0 }, () => {
+  const w = world();
+  const job = jobFile(w, { role: "pm", name: "gaps", status: "done" });
+  const drafts = join(w.root, "plans", "drafts");
+  mkdirSync(drafts, { recursive: true });
+  const answered = join(drafts, "261106-0915-question-answered.md");
+  writeFileSync(answered, `kind: question\ntitle: Answered\njob: ${job}\nanswer: Yes\n\nWhich?\n- Yes: y\n- No: n\n`);
+  const starts = join(drafts, "261106-0916-question-start-dev.md");
+  writeFileSync(starts, `kind: question\ntitle: Start dev\njob: ${job}\nstarts: dev\n\nStart a dev job?\n- Yes: y\n- No: n\n`);
+  const started = join(drafts, "261106-0917-question-started.md");
+  writeFileSync(started, `kind: question\ntitle: Started\njob: ${job}\nstatus: started\nstarted: 2026-11-12T01:00:00.000Z\n\nWhich?\n- A: a\n- B: b\n`);
+  const locked = join(drafts, "261106-0918-question-locked.md");
+  writeFileSync(locked, `kind: question\ntitle: Locked\njob: ${job}\n\nWhich?\n- A: a\n- B: b\n`);
+  chmodSync(locked, 0o000);
+  try {
+    const out = w.run(["close", job]);
+    assert.equal(out.status, 0, out.stderr);
+    assert.ok(out.stdout.includes(`archived ${join(w.root, "plans", "archive", "drafts", "261106-0915-question-answered.md")}: its answer was delivered`), out.stdout);
+    assert.match(out.stdout, new RegExp(`^still names the job: ${starts} \\(question\\)$`, "m"));
+    assert.match(out.stdout, new RegExp(`^still names the job: ${started} \\(question, started at `, "m"));
+    assert.match(out.stdout, new RegExp(`^could not check: ${locked}: EACCES$`, "m"));
+  } finally {
+    chmodSync(locked, 0o644);
+  }
 });

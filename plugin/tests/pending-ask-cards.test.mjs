@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { card, cardCheck, cardNote, finishedJobs, waitingText } from "../lib/pending.mjs";
 import { readCard } from "../lib/pending-cards.mjs";
-import { heldElsewhere, jobBusy } from "../lib/job.mjs";
+import { heldElsewhere, resumeRefusal } from "../lib/job.mjs";
 import { recordLaunch } from "../lib/job-files.mjs";
 import { STATE_DIR } from "../lib/state-dir.mjs";
 import { bound, jobFile, sleeper, world } from "./job-world-for-tests.mjs";
@@ -48,7 +48,7 @@ test("the ask list holds a question of a job whose agent ended its turn, even wh
     const working = jobFile(w, { name: "fix-toast", record: bound(cockpit, { agent_id: "d4e5f6", state: "running" }) });
     const asked = question(w, waiting, "Which toast");
     const parked = question(w, working, "Which colour");
-    const text = waitingText(w.map, { ask: true });
+    const text = waitingText(w.map, { ask: true, caller: { cockpit: { pid: cockpit.pid, start: cockpit.start } } });
     assert.equal(text, `Questions:\n- Which toast ${asked}`);
     assert.match(waitingText(w.map, { offline: true }), new RegExp(`^- Which colour \\(job running\\) ${parked}$`, "m"));
   } finally {
@@ -69,14 +69,14 @@ test("the ask list holds a publish card only once its job file is not running, a
   assert.equal(waitingText(w.map, { ask: true }), `To publish:\n- Status of 13 (run, 1 command, held: Not yet) ${ready}`);
 });
 
-test("the ask list leaves out answered, refused, started and notice cards, and a card with no job counts as not running", () => {
+test("the ask list asks no answered, refused, started or notice card, lists answered ones for archiving, and a card with no job counts as not running", () => {
   const w = here();
   const finished = jobFile(w, { name: "fix-toast", status: "done" });
   cardNote(question(w, finished, "Answered one"), "Yes");
   cardNote(question(w, finished, "Refused one"), "redo it", { refuse: true });
   card(w.map, "notify", { title: "CI is green", body: "All checks passed." });
   const loose = question(w, "none", "Loose one");
-  assert.equal(waitingText(w.map, { ask: true }), `Questions:\n- Loose one ${loose}`);
+  assert.match(waitingText(w.map, { ask: true }), new RegExp(`^Questions:\n- Loose one ${loose}\n\nAnswered and delivered, archive each with pending.mjs done:\n- Answered one \\(answered: Yes\\) `));
 });
 
 test("a done job's card is not asked or run while its agent still writes, nor a card whose job another live cockpit runs", async () => {
@@ -148,35 +148,6 @@ test("a card whose header holds more than the prefix before its kind line is sti
   assert.deepEqual(finishedJobs(w.map).map((item) => item.path), []);
 });
 
-test("a caller that cannot be identified finds a job bound to a live cockpit busy", async () => {
-  const cockpit = await sleeper();
-  try {
-    const w = here();
-    const job = jobFile(w, { name: "add-hello", status: "done", record: bound(cockpit, { state: "idle" }) });
-    assert.equal(jobBusy(job, { cockpit: null }), true);
-    assert.equal(jobBusy(job, { session: "s-cockpit", cockpit: null }), false);
-    assert.equal(jobBusy(job), false);
-  } finally {
-    cockpit.child.kill();
-    await cockpit.exited;
-  }
-});
-
-test("a card whose job can never be resumed is refused with the reason and never asked, and a publish card of a closed job is refused too", () => {
-  const w = here();
-  const closed = jobFile(w, { role: "pm", name: "closed", status: "closed" });
-  const bare = jobFile(w, { role: "pm", name: "bare", status: "done", record: null });
-  const gone = jobFile(w, { role: "pm", name: "gone", status: "done", record: { cwd: join(w.root, "no-such-folder") } });
-  const asked = [closed, bare, gone].map((job, n) => question(w, job, `Question ${n}`));
-  const publish = status(w, closed, "Status of 12", 12);
-  assert.equal(waitingText(w.map, { ask: true }), "");
-  const list = waitingText(w.map, { offline: true });
-  assert.match(list, new RegExp(`^- Question 0: its job is closed; start a new job ${asked[0]}$`, "m"));
-  assert.match(list, new RegExp(`^- Question 1: its job has no launch record, so an answer cannot reach it; start a new job ${asked[1]}$`, "m"));
-  assert.match(list, new RegExp(`^- Question 2: its job's folder .*no-such-folder no longer exists; start a new job ${asked[2]}$`, "m"));
-  assert.match(list, new RegExp(`^- Status of 12: its job is closed; start a new job ${publish}$`, "m"));
-});
-
 test("card --job and a hand-written card need a job file inside the jobs folder", () => {
   const w = here();
   writeFileSync(join(w.root, "README.md"), "to: tedy:pm\nfrom: cockpit\nstatus: done\n");
@@ -198,4 +169,31 @@ test("an unidentified caller finds a job held by a live cockpit held elsewhere, 
     cockpit.child.kill();
     await cockpit.exited;
   }
+});
+
+test("a card is refused with the very reason resume would give, for every permanent refusal, and a card that starts another role's job is still asked", () => {
+  const w = here();
+  const closed = jobFile(w, { role: "pm", name: "closed", status: "closed" });
+  const readonly = jobFile(w, { role: "dev", name: "readonly", status: "done", header: [`repo: ${join(w.root, "be")}`], record: { repo: join(w.root, "be") } });
+  const lied = jobFile(w, { role: "dev", name: "lied", status: "done" });
+  writeFileSync(lied, readFileSync(lied, "utf8").replace("to: tedy:dev", "to: tedy:pm"));
+  const asked = [closed, readonly, lied].map((job, n) => question(w, job, `Question ${n}`));
+  const publish = status(w, closed, "Status of 12", 12);
+  const starts = card(w.map, "question", { title: "Start a dev job", job: closed, starts: "dev", body: "Start a dev job for the toast?\n- Yes: start it\n- No: drop it\n" });
+  assert.equal(waitingText(w.map, { ask: true }), `Questions:\n- Start a dev job ${starts}`);
+  const list = waitingText(w.map, { offline: true });
+  for (const [n, job] of [closed, readonly, lied].entries()) {
+    const reason = resumeRefusal(w.map, job).reason;
+    assert.ok(list.includes(`- Question ${n}: ${reason} ${asked[n]}`), `${reason}\n${list}`);
+  }
+  assert.ok(list.includes(`- Status of 12: ${resumeRefusal(w.map, closed).reason} ${publish}`), list);
+  assert.throws(() => card(w.map, "question", { title: "Bad", job: closed, starts: "boss", body: "Which?\n- A: a\n- B: b\n" }), /--starts takes one of pm, dev, review, devops on a question card/);
+});
+
+test("an answered question is listed for archiving, since its answer was delivered", () => {
+  const w = here();
+  const job = jobFile(w, { role: "pm", name: "gaps", status: "done" });
+  const answered = question(w, job, "Which toast");
+  cardNote(answered, "Yes");
+  assert.equal(waitingText(w.map, { ask: true }), `Answered and delivered, archive each with pending.mjs done:\n- Which toast (answered: Yes) ${answered}`);
 });
