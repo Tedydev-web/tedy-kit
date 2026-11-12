@@ -80,7 +80,20 @@ test("carry refuses, and changes nothing, when the new commits change a commente
   w.checkout.pushPr("src/a.ts", "a2\n", "fix: label");
   const refused = await w.run("draft-lint", ["carry", "d.md", "--repo", "o/r"]);
   assert.equal(refused.code, 1, refused.out);
-  assert.match(refused.out, /^refused: carry: o\/r#701 moved from [0-9a-f]{8} to [0-9a-f]{8} and the new commits change commented files: src\/a\.ts; review them and redraft$/m);
+  assert.match(refused.out, /^refused: carry: o\/r#701 moved from [0-9a-f]{8} to [0-9a-f]{8} and the new commits change files the draft comments on or names: src\/a\.ts; review them and redraft$/m);
+  assert.equal(readFileSync(file, "utf8"), text);
+});
+
+test("carry refuses when the new commits change a file a comment body names, not only a commented path", async () => {
+  const w = world({ pr: 701, gh: { diff: DIFF, reviewComments: [] } });
+  const head = w.checkout.pr(701);
+  const file = w.file("d.md", `# PR #701: comment line by line (head ${head.slice(0, 7)})\n\n## 1. \`src/a.ts:10\`\nThe label differs from \`src/b.ts\`.\n`);
+  assert.equal((await w.run("draft-lint", ["pr-comment", "d.md", "--repo", "o/r"])).code, 0);
+  const text = readFileSync(file, "utf8");
+  w.checkout.pushPr("src/b.ts", "b2\n", "fix: label source");
+  const refused = await w.run("draft-lint", ["carry", "d.md", "--repo", "o/r"]);
+  assert.equal(refused.code, 1, refused.out);
+  assert.match(refused.out, /^refused: carry: o\/r#701 moved from [0-9a-f]{8} to [0-9a-f]{8} and the new commits change files the draft comments on or names: src\/b\.ts; review them and redraft$/m);
   assert.equal(readFileSync(file, "utf8"), text);
 });
 

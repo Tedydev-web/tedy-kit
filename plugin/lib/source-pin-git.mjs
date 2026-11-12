@@ -56,7 +56,7 @@ export function namedIn(texts, path, roots = []) {
   return texts.some((text) => readings(text).some((candidate) => pattern.test(candidate) || underFolder(candidate, lower, prefixes)));
 }
 
-const rootsOf = (pin, dir) => [...(pin.repo === "." ? [] : [pin.repo]), basename(dir), dir, realPath(dir)];
+export const rootsOf = (pin, dir) => [...(pin.repo === "." ? [] : [pin.repo]), basename(dir), dir, realPath(dir)];
 
 export const branchTokens = (text) => unique([...text.matchAll(/:\d+(?:[-,]\d+)*@(\w[\w./-]*)/g)].map((match) => match[1].replace(/[./-]+$/, "")));
 

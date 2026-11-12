@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { parseDraft, snapshotPath } from "./draft-lint.mjs";
-import { apiPullHead, changedPaths, fetchCommit, runGit } from "./source-pin-git.mjs";
+import { apiPullHead, changedPaths, fetchCommit, namedIn, rootsOf, runGit } from "./source-pin-git.mjs";
 import { carrySources, pinnedSources } from "./source-pins.mjs";
 
 const HEAD_LINE = /^(# PR #\d+(?::| —) comment line by line \(head )([0-9a-f]{7,40})(\)\s*)$/m;
@@ -24,8 +24,9 @@ export function carryDraft(file, repo, { git = runGit, headOf = apiPullHead } = 
   const from = git(pin.dir, ["rev-parse", "--verify", `${draft.sha}^{commit}`]);
   const commented = [...new Set(draft.comments.map((comment) => comment.path))];
   const changed = changedPaths(git, pin.dir, from, head);
-  const touched = commented.filter((path) => changed.includes(path));
-  if (touched.length) return { code: 1, line: `refused: carry: ${target} moved from ${from.slice(0, 8)} to ${head.slice(0, 8)} and the new commits change commented files: ${touched.join(", ")}; review them and redraft` };
+  const bodies = draft.comments.map((comment) => comment.body);
+  const touched = changed.filter((path) => commented.includes(path) || namedIn(bodies, path, rootsOf(pin, pin.dir)));
+  if (touched.length) return { code: 1, line: `refused: carry: ${target} moved from ${from.slice(0, 8)} to ${head.slice(0, 8)} and the new commits change files the draft comments on or names: ${touched.join(", ")}; review them and redraft` };
   const { atimeMs, mtimeMs } = statSync(file);
   const carried = withHead(text, head);
   writeFileSync(file, carried);
