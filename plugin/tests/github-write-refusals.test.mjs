@@ -175,7 +175,7 @@ test("pr-body refreshes a ready PR only with the recorded pr-body output for the
   assert.equal(generated.writes.length, 0);
 });
 
-test("post refuses while another writer holds the PR's record, writes nothing and leaves the ticket unused", async () => {
+test("post refuses while another writer holds the PR's record and writes nothing", async () => {
   const w = world({ pr: 701, gh: { diff: CLEAN_DIFF, reviewComments: [{ id: 1, path: "src/a.ts", line: 10, side: "RIGHT", commit_id: HEAD_MATCH }] } });
   const text = draft("The label is wrong.", 701, w.checkout.pr(701).slice(0, 7));
   w.file("d.md", text);
@@ -183,12 +183,10 @@ test("post refuses while another writer holds the PR's record, writes nothing an
   assert.equal(lint.code, 0, lint.out);
   const warnings = lint.out.split("\n").filter((line) => line.startsWith("warning: ")).map((line) => `${line}\n`).join("");
   const args = ["post", "d.md", "--repo", "o/r"];
-  w.approve(`${text}\n${warnings}${w.line("github-write", args)}`);
   w.holdRecord("github:o/r#701");
   const refused = await w.run("github-write", args);
   assert.equal(refused.code, 1, refused.out);
-  assert.match(refused.out, /^github-write: refused: github:o\/r#701 is being written by pid \d+ \(held by the test\) since 2026-11-05T01:00:00\.000Z; nothing was written and the approval is unused\. Run this command again when it finishes\.$/m);
+  assert.match(refused.out, /^github-write: refused: github:o\/r#701 is being written by pid \d+ \(held by the test\) since 2026-11-05T01:00:00\.000Z; nothing was written\. Run this command again when it finishes\.$/m);
   assert.deepEqual(w.writes(), []);
-  assert.equal(w.tickets(), 1);
   assert.deepEqual(w.ledger("github:o/r#701"), []);
 });

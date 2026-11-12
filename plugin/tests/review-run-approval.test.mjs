@@ -11,7 +11,7 @@ import { profileWith, tempDir } from "./temp-dir-for-tests.mjs";
 const EN = LABELS.en;
 const SHA = "0123456789abcdef0123456789abcdef01234567";
 const OTHER = "fedcba9876543210fedcba9876543210fedcba98";
-const HOOK = new URL("../scripts/publish-approval-ticket.mjs", import.meta.url).pathname;
+const HOOK = new URL("../scripts/review-run-approval.mjs", import.meta.url).pathname;
 const TEXT = `PR #12 head ${SHA}: tests run all of this PR's code. Run what?`;
 const question = (extra = {}) => ({ question: TEXT, header: EN["run.header"], multiSelect: false, options: [{ label: `${EN["run.lint"]} (Recommended)`, description: "d" }, { label: EN["run.all"], description: "d" }, { label: EN["run.none"], description: "d" }], ...extra });
 const hookInput = (questions, answers, extra = {}) => ({ session_id: "s1", tool_use_id: "toolu_1", hook_event_name: "PostToolUse", tool_name: "AskUserQuestion", tool_input: { questions }, tool_response: { questions, answers, annotations: {}, ...extra } });

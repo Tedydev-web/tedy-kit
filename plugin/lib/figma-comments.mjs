@@ -7,7 +7,6 @@ import { requestJson } from "./api-request.mjs";
 import { lintChatComment, mapLanguage } from "./draft-lint.mjs";
 import { logPostedText } from "./edit-log.mjs";
 import { resolveMap } from "./project-map.mjs";
-import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { notBefore, sinceTime } from "./since.mjs";
 import { RECHECK } from "./source-pin-git.mjs";
 import { nodeId } from "./source-pin-links.mjs";
@@ -149,7 +148,6 @@ async function main(input) {
   const args = target?.startsWith("--") ? [target, ...rest] : rest;
   const flags = { ...Object.fromEntries(args.flatMap((arg, index) => (arg.startsWith("--") ? [[arg.slice(2), args[index + 1]]] : []))), job };
   if (flags.since !== undefined) sinceTime(flags.since);
-  if (["post", "reply", "delete"].includes(command)) requireExplicitTarget("file", flags.file);
   const figma = client(flags);
   if (command === "list") {
     const { comments } = await figma.request(`/files/${figma.file}/comments`);
@@ -175,9 +173,8 @@ async function write(figma, command, target, flags, recorded) {
     if (!box) throw new Error(`node ${node} not found in ${figma.file}`);
     const twin = duplicateOnNode((await figma.request(`/files/${figma.file}/comments`)).comments, node, body);
     if (twin) throw new Error(`comment ${twin.id} on node ${node} already says this; nothing posted`);
-    const { notices, warnings } = await recheckTarget(figma, flags, node, body);
+    const { notices } = await recheckTarget(figma, flags, node, body);
     console.log(`WRITE → Figma ${figma.file} node ${node} : 1 comment`);
-    consumeApproval(process.argv, [body, ...warnings]);
     sayNotices(notices);
     const created = await figma.request(`/files/${figma.file}/comments`, { method: "POST", body: { message: body, client_meta: { node_id: node, node_offset: pinOffset(box) } } });
     recorded();
@@ -191,9 +188,8 @@ async function write(figma, command, target, flags, recorded) {
     const root = rootOf(comments, target);
     const twin = duplicateReply(comments, root.id, body);
     if (twin) throw new Error(`reply ${twin.id} in thread ${root.id} already says this; nothing posted`);
-    const { notices, warnings } = await recheckTarget(figma, flags, root.client_meta?.node_id ?? null, body);
+    const { notices } = await recheckTarget(figma, flags, root.client_meta?.node_id ?? null, body);
     console.log(`WRITE → Figma ${figma.file} thread ${root.id} : 1 reply`);
-    consumeApproval(process.argv, [body, ...warnings]);
     sayNotices(notices);
     const created = await figma.request(`/files/${figma.file}/comments`, { method: "POST", body: { message: body, comment_id: root.id } });
     recorded();
@@ -208,7 +204,6 @@ async function write(figma, command, target, flags, recorded) {
     if (!comment) throw new Error(`comment ${target} not found`);
     if (comment.user.handle !== me.handle) throw new Error(`comment ${target} belongs to ${comment.user.handle}; only your own comments are deleted`);
     console.log(`WRITE → Figma ${figma.file} : delete own comment ${target}`);
-    consumeApproval(process.argv, []);
     await figma.request(`/files/${figma.file}/comments/${target}`, { method: "DELETE" });
     recorded();
     console.log(`deleted ${target}`);

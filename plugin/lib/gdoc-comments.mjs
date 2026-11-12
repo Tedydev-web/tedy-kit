@@ -7,7 +7,6 @@ import { lintChatComment, mapLanguage } from "./draft-lint.mjs";
 import { logPostedText } from "./edit-log.mjs";
 import { canonicalJson } from "./figma-comments.mjs";
 import { resolveMap } from "./project-map.mjs";
-import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { notBefore, sinceTime } from "./since.mjs";
 import { splitJob, withRecords } from "./record-lock.mjs";
 import { pinnedSince, requireFresh, sayNotices, versionCheck } from "./source-pins.mjs";
@@ -283,7 +282,6 @@ async function main(input) {
   const args = target?.startsWith("--") ? [target, ...rest] : rest;
   const flags = { ...Object.fromEntries(args.flatMap((arg, index) => (arg.startsWith("--") ? [[arg.slice(2), args[index + 1]]] : []))), job };
   if (flags.since !== undefined) sinceTime(flags.since);
-  if (["reply", "anchor", "edit", "delete"].includes(command)) requireExplicitTarget("doc", flags.doc);
   if (command === "list") {
     const google = await session(flags);
     for (const comment of await listComments(google)) {
@@ -299,9 +297,8 @@ async function main(input) {
     const google = await session(flags, command === "anchor");
     return withRecords([docKey(google.doc)], { job: flags.job, since: pinnedSince(flags["body-file"]) }, async (recorded) => {
       if (alreadyPosted(await listComments(google), command, target, body)) throw new Error(`the Doc already has this ${command === "reply" ? `reply in thread ${target}` : "comment"}; nothing posted`);
-      const { notices, warnings } = await recheckDocTarget(google.doc, flags["body-file"], relintDoc(flags["body-file"], google.doc), { texts: [body] });
+      const { notices } = await recheckDocTarget(google.doc, flags["body-file"], relintDoc(flags["body-file"], google.doc), { texts: [body] });
       const approve = () => {
-        consumeApproval(process.argv, [body, ...warnings]);
         sayNotices(notices);
       };
       let id;
@@ -328,10 +325,9 @@ async function main(input) {
     return withRecords([docKey(google.doc)], { job: flags.job, since: pinnedSince(flags["body-file"]) }, async (recorded) => {
       const item = editTarget(await listComments(google), target, flags.reply);
       if (squash(item.content) === squash(body)) throw new Error("the posted text already matches the body file; nothing edited");
-      const { notices, warnings } = await recheckDocTarget(google.doc, flags["body-file"], relintDoc(flags["body-file"], google.doc), { texts: [body] });
+      const { notices } = await recheckDocTarget(google.doc, flags["body-file"], relintDoc(flags["body-file"], google.doc), { texts: [body] });
       const path = `${DRIVE}/files/${google.doc}/comments/${target}${flags.reply ? `/replies/${flags.reply}` : ""}?fields=id,content`;
       console.log(`WRITE → Google Doc ${google.doc} thread ${target}${flags.reply ? ` reply ${flags.reply}` : ""} : edit 1 ${flags.reply ? "reply" : "comment"}`);
-      consumeApproval(process.argv, [body, ...warnings]);
       sayNotices(notices);
       await google.request(path, { method: "PATCH", body: { content: body } });
       recorded();
@@ -379,7 +375,6 @@ async function main(input) {
     return withRecords([docKey(google.doc)], { job: flags.job, since: null }, async (recorded) => {
       deleteTarget(await listComments(google), target, flags.reply);
       console.log(`WRITE → Google Doc ${google.doc} thread ${target}${flags.reply ? ` reply ${flags.reply}` : ""} : delete 1 own ${flags.reply ? "reply" : "comment"}`);
-      consumeApproval(process.argv, []);
       await google.request(`${DRIVE}/files/${google.doc}/comments/${target}${flags.reply ? `/replies/${flags.reply}` : ""}`, { method: "DELETE" });
       recorded();
       if (stillThere(await listComments(google), target, flags.reply)) throw new Error(`${flags.reply ? `reply ${flags.reply}` : `comment ${target}`} still reads back after the delete`);

@@ -29,13 +29,7 @@ export const KIT_PUBLISH_ASK_RULES = Object.freeze([
   ...applyRules("doc-comment-file.mjs"),
 ]);
 
-export const stateDenyRules = (state = STATE_DIR) => [`Edit(/${resolve(state, "approvals")}/**)`, `Edit(/${resolve(state, "pr-bodies")}/**)`, `Edit(/${resolve(state, "drafts")}/**)`, `Edit(/${resolve(state, "review-runs")}/**)`];
-
-const retiredDenyRules = (state = STATE_DIR) => [`Edit(/${resolve(state, "drafts")}/*.sources.json)`];
-
-export const stateDenyOn = (deny) => stateDenyRules().every((rule) => deny.includes(rule));
-
-const KIT_SCRIPT =/github-write\.mjs|openproject\.mjs|figma-comments\.mjs|gdoc-comments\.mjs|doc-comment-file\.mjs/;
+export const retiredDenyRules = (state = STATE_DIR) => [`Edit(/${resolve(state, "approvals")}/**)`, `Edit(/${resolve(state, "pr-bodies")}/**)`, `Edit(/${resolve(state, "drafts")}/**)`, `Edit(/${resolve(state, "review-runs")}/**)`, `Edit(/${resolve(state, "drafts")}/*.sources.json)`];
 
 export function readSettings(file) {
   let data;
@@ -52,18 +46,14 @@ export function readSettings(file) {
   return { data, ask, deny };
 }
 
-export function plannedPermissions({ ask, deny }, mode) {
-  const rules = stateDenyRules();
-  const kept = deny.filter((rule) => !retiredDenyRules().includes(rule));
-  if (mode === "answer") return { ask: ask.filter((rule) => !KIT_PUBLISH_ASK_RULES.includes(rule)), deny: [...kept, ...rules.filter((rule) => !kept.includes(rule))] };
-  return { ask: [...ask, ...KIT_PUBLISH_ASK_RULES.filter((rule) => !ask.includes(rule))], deny: kept.filter((rule) => !rules.includes(rule)) };
+export function plannedPermissions({ ask, deny }) {
+  const retired = retiredDenyRules();
+  return { ask: [...ask, ...KIT_PUBLISH_ASK_RULES.filter((rule) => !ask.includes(rule))], deny: deny.filter((rule) => !retired.includes(rule)) };
 }
 
 const sameRules = (a, b) => a.length === b.length && a.every((rule, index) => rule === b[index]);
 
 export const unchanged = (current, next) => sameRules(current.ask, next.ask) && sameRules(current.deny, next.deny);
-
-export const leftoverKitRules = (ask) => ask.filter((rule) => typeof rule === "string" && !KIT_PUBLISH_ASK_RULES.includes(rule) && KIT_SCRIPT.test(rule));
 
 export function writePermissions(file, { data, ask, deny }, next) {
   const had = data.permissions ?? {};
@@ -79,5 +69,5 @@ export function writePermissions(file, { data, ask, deny }, next) {
   writeFileSync(temporary, `${JSON.stringify({ ...data, permissions }, null, 2)}\n`, { mode });
   chmodSync(temporary, mode);
   renameSync(temporary, target);
-  return { backup, removed: ask.filter((rule) => !next.ask.includes(rule)).length, added: next.ask.filter((rule) => !ask.includes(rule)).length };
+  return { backup, removed: deny.length - next.deny.length, added: next.ask.length - ask.length };
 }

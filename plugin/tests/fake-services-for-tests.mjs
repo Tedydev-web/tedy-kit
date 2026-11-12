@@ -1,17 +1,13 @@
 import { execFile, execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, readlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, readlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
-import { LABELS } from "../lib/labels.mjs";
-import { recordApprovals } from "../lib/publish-approval-ticket.mjs";
 import { ledgerPath, lockPath } from "../lib/record-lock.mjs";
-import { stateDenyRules } from "../lib/publish-approval-settings.mjs";
 import { pullRequestCheckout } from "./git-sibling-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const exec = promisify(execFile);
-const VI = LABELS.vi;
 export const SCRIPTS = new URL("../scripts/", import.meta.url).pathname;
 const REAL_GIT = execFileSync("which", ["git"], { encoding: "utf8" }).trim();
 
@@ -212,7 +208,7 @@ export function fakeOpenProject({ closedStatus = true } = {}) {
   return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve({ server, calls, workPackages, url: `http://127.0.0.1:${server.address().port}` })));
 }
 
-export function world({ mode = "answer", gh = {}, web = {}, map = { name: "w" }, opUrl = null, pr } = {}) {
+export function world({ mode, gh = {}, web = {}, map = { name: "w" }, opUrl = null, pr } = {}) {
   const dir = tempDir("tedy-world-");
   const checkout = pr !== undefined || map?.repos?.some((repo) => repo.path === ".") ? pullRequestCheckout(dir, pr ?? 701) : null;
   if (checkout) checkout.pr(pr ?? 701);
@@ -240,9 +236,8 @@ export function world({ mode = "answer", gh = {}, web = {}, map = { name: "w" },
   writeFileSync(join(dir, ".config", "figma", "token"), "figd_test\n");
   const state = join(dir, "state");
   const settings = join(dir, "claude-settings.json");
-  writeFileSync(settings, JSON.stringify({ permissions: { deny: stateDenyRules(state) } }));
+  writeFileSync(settings, JSON.stringify({ permissions: {} }));
   const env = { ...process.env, REAL_GIT, TEDY_CLAUDE_SETTINGS: settings, PATH: `${bin}:${process.env.PATH}`, HOME: dir, WRITES: writesLog, READS: readsLog, GH_FIXTURE: join(dir, "gh.json"), FAKE_WEB: join(dir, "web.json"), TEDY_STATE_DIR: state, TEDY_PROFILE_DIR: profile, OP_SYNC_DIR: join(dir, ".config", "op", "sync"), NODE_OPTIONS: `--import=${join(dir, "fake-fetch.mjs")}` };
-  const approve = (preview, question = "Q?") => recordApprovals({ session_id: "s", tool_use_id: "t", tool_input: { questions: [{ question, header: "x", multiSelect: false, options: [{ label: VI["post.asIs"], description: "d", preview }, { label: VI["post.hold"], description: "n" }] }] }, tool_response: { questions: [], answers: { [question]: VI["post.asIs"] }, annotations: { [question]: { preview } } } }, { dir: join(state, "approvals"), accepted: [VI["post.asIs"], VI["approve.all"]] });
   const run = (script, args) => exec("node", [join(SCRIPTS, `${script}.mjs`), ...args], { cwd: dir, env, timeout: 30_000 }).then((result) => ({ code: 0, out: `${result.stdout}${result.stderr}` }), (error) => ({ code: error.code, out: `${error.stdout ?? ""}${error.stderr ?? ""}` }));
   const writes = () => readFileSync(writesLog, "utf8").split("\n").filter(Boolean);
   const file = (name, text) => {
@@ -250,13 +245,6 @@ export function world({ mode = "answer", gh = {}, web = {}, map = { name: "w" },
     return join(dir, name);
   };
   const quote = (arg) => (/^[\w./:@=-]+$/.test(arg) ? arg : `'${arg}'`);
-  const tickets = () => {
-    try {
-      return readdirSync(join(state, "approvals")).filter((name) => name.endsWith(".json")).length;
-    } catch {
-      return 0;
-    }
-  };
   const reads = () => readFileSync(readsLog, "utf8").split("\n").filter(Boolean);
   const ledger = (key) => (existsSync(ledgerPath(key, state)) ? readFileSync(ledgerPath(key, state), "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)) : []);
   const holdRecord = (key) => {
@@ -264,5 +252,5 @@ export function world({ mode = "answer", gh = {}, web = {}, map = { name: "w" },
     writeFileSync(lockPath(key, state), JSON.stringify({ key, pid: process.pid, ns: readlinkSync("/proc/self/ns/pid"), at: "2026-11-05T01:00:00.000Z", command: "held by the test" }));
     return lockPath(key, state);
   };
-  return { dir, env, checkout, approve, run, writes, reads, settings, file, tickets, ledger, holdRecord, line: (script, args) => `node ${join(SCRIPTS, `${script}.mjs`)} ${args.map(quote).join(" ")}` };
+  return { dir, env, checkout, run, writes, reads, settings, file, ledger, holdRecord, line: (script, args) => `node ${join(SCRIPTS, `${script}.mjs`)} ${args.map(quote).join(" ")}` };
 }

@@ -7,7 +7,6 @@ import { addSlugs, buildPayload, foreignActivity, forgetSlugs, loadConfig, loadR
 import { closedStatuses, closestWorkPackage, listWorkPackages } from "./openproject-dedup.mjs";
 import { deleteRelation, setRelation } from "./openproject-relation.mjs";
 import { resolveMap } from "./project-map.mjs";
-import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { approvalLines, renderRollbackItem, renderWorkPackageDraft } from "./publish-approval-render.mjs";
 import { snapshotOnce, snapshotPath } from "./draft-lint.mjs";
 import { appendEditLog, frozenOriginal, labelText } from "./edit-log.mjs";
@@ -88,9 +87,9 @@ async function check(client, project, drafts) {
 const locksPath = (file) => `${snapshotPath(file)}.locks.json`;
 
 async function recheckLinks(file, relint, texts) {
-  const { refusals, notices, warnings } = await recheckPinned(file, relint, { texts });
+  const { refusals, notices } = await recheckPinned(file, relint, { texts });
   for (const line of refusals) console.log(line);
-  return refusals.length ? null : { notices, warnings };
+  return refusals.length ? null : { notices };
 }
 
 async function pinText(file, text, posted, pinnedAt) {
@@ -124,7 +123,6 @@ async function apply(client, project, drafts, file, recorded) {
   }
   const fresh = await recheckLinks(file, `openproject.mjs preview ${file} --project ${project}`, [readFileSync(file, "utf8")]);
   if (!fresh) return 1;
-  consumeApproval(process.argv, [...drafts.map((draft, index) => renderWorkPackageDraft(draft, plan[index])), ...fresh.warnings]);
   sayNotices(fresh.notices);
   const path = sidecarPath(client.host, project);
   const created = {};
@@ -207,7 +205,6 @@ async function quickSet(client, id, flags, recorded) {
     console.log(`refused: #${id} is at lock ${current.lockVersion}, not the previewed ${flags.lock}; read its activity, then preview again`);
     return 1;
   }
-  consumeApproval(process.argv, []);
   await client.request(`/api/v3/work_packages/${id}`, { method: "PATCH", body: payload });
   recorded();
   const read = await client.request(`/api/v3/work_packages/${id}`);
@@ -258,7 +255,6 @@ async function comment(client, id, flags, recorded) {
   }
   const fresh = await recheckLinks(file, `openproject.mjs comment ${id} --body-file ${file}`, [body]);
   if (!fresh) return 1;
-  consumeApproval(process.argv, [body, ...fresh.warnings]);
   sayNotices(fresh.notices);
   await client.request(`/api/v3/work_packages/${id}/activities`, { method: "POST", body: { comment: { raw: body } } });
   recorded();
@@ -308,7 +304,6 @@ async function commentEdit(client, id, flags, recorded) {
   }
   const fresh = await recheckLinks(file, `openproject.mjs comment-edit ${id} --body-file ${file}`, [body]);
   if (!fresh) return 1;
-  consumeApproval(process.argv, [body, ...fresh.warnings]);
   sayNotices(fresh.notices);
   await client.request(`/api/v3/activities/${id}`, { method: "PATCH", body: { comment: { raw: body } } });
   recorded();
@@ -373,7 +368,6 @@ async function rollback(client, project, flags, recorded) {
   const statuses = (await client.request("/api/v3/statuses"))._embedded.elements.filter((status) => status.isClosed);
   const closedStatus = statuses.find((status) => status.name.toLowerCase() === "closed") ?? statuses[0];
   if (action === "close" && !closedStatus) throw new Error("this instance has no closed status");
-  consumeApproval(process.argv, items.map(renderRollbackItem));
   const done = [];
   const failed = [];
   for (const item of items.toReversed()) {
@@ -396,7 +390,6 @@ async function main(input) {
   const { job, argv: [command, target, ...rest] } = splitJob(input);
   const args = command === "rollback" || command === "list" ? [target, ...rest].filter((arg) => arg !== undefined) : rest;
   const flags = { ...Object.fromEntries(args.flatMap((arg, index) => (arg.startsWith("--") ? [[arg.slice(2), args[index + 1] === undefined || args[index + 1].startsWith("--") ? true : args[index + 1]]] : []))), job };
-  if (command === "apply" || (command === "rollback" && flags.apply !== undefined)) requireExplicitTarget("project", flags.project);
   const client = loadConfig();
   if (command === "get" && target) {
     for (const path of getPaths(target, flags)) console.log(JSON.stringify(await client.request(path), null, 1));

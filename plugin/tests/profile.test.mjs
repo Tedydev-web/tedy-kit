@@ -30,13 +30,13 @@ test("the profile directory comes from TEDY_PROFILE_DIR, else ~/.config/tedy", (
 test("a missing config gives the defaults, with every personal gate off", () => {
   const config = loadConfig(profileWith({}));
   assert.deepEqual(config, DEFAULT_CONFIG);
-  assert.deepEqual(config.gates, { noComments: false, draftPrOnly: false, roleGate: false, ghWrites: false, publishQuote: false, publishApproval: "ask", pushExempt: [] });
+  assert.deepEqual(config.gates, { noComments: false, draftPrOnly: false, roleGate: false, ghWrites: false, publishQuote: false, pushExempt: [] });
   assert.equal(config.language.chat, "en");
 });
 
 test("a partial config keeps the defaults it does not set and expands ~ in pushExempt", () => {
   const dir = profileWith({ "config.json": JSON.stringify({ gates: { noComments: true, pushExempt: ["~/work/kit", "/abs/profile"] }, language: { chat: "vi" } }) });
-  assert.deepEqual(loadConfig(dir), { gates: { noComments: true, draftPrOnly: false, roleGate: false, ghWrites: false, publishQuote: false, publishApproval: "ask", pushExempt: [join(homedir(), "work/kit"), "/abs/profile"] }, language: { chat: "vi" } });
+  assert.deepEqual(loadConfig(dir), { gates: { noComments: true, draftPrOnly: false, roleGate: false, ghWrites: false, publishQuote: false, pushExempt: [join(homedir(), "work/kit"), "/abs/profile"] }, language: { chat: "vi" } });
 });
 
 test("an invalid config fails loudly, naming the file and the field", () => {
@@ -44,8 +44,8 @@ test("an invalid config fails loudly, naming the file and the field", () => {
     [{ gates: { noComments: "yes" } }, /gates\.noComments must be a boolean/],
     [{ gates: { ghWrites: 1 } }, /gates\.ghWrites must be a boolean/],
     [{ gates: { publishQuote: "yes" } }, /gates\.publishQuote must be a boolean/],
-    [{ gates: { publishApproval: "maybe" } }, /gates\.publishApproval must be "ask" or "answer"/],
-    [{ gates: { publishApproval: true } }, /gates\.publishApproval must be "ask" or "answer"/],
+    [{ gates: { publishApproval: "maybe" } }, /gates\.publishApproval is obsolete and, while it stays, must be "ask" or "answer"/],
+    [{ gates: { publishApproval: true } }, /gates\.publishApproval is obsolete and, while it stays, must be "ask" or "answer"/],
     [{ gates: { pushExempt: "/one" } }, /gates\.pushExempt must be an array of strings/],
     [{ gate: {} }, /unknown key "gate"/],
     [{ gates: { noComment: true } }, /unknown key "gates\.noComment"/],
@@ -114,6 +114,15 @@ test("doctor reports the profile, config, rules, overrides and maps, and exits 1
   const invalid = runDoctor({ TEDY_PROFILE_DIR: bad });
   assert.equal(invalid.status, 1);
   assert.match(invalid.stdout, /^fail config: invalid: .*gates\.roleGate must be a boolean/m);
+});
+
+test("doctor prints one obsolete line, and still passes, for a config that says publishApproval answer", () => {
+  const answer = runDoctor({ TEDY_PROFILE_DIR: profileWith({ "config.json": JSON.stringify({ gates: { publishApproval: "answer" } }), "rules.md": "r\n" }) });
+  assert.equal(answer.status, 0, answer.stdout);
+  assert.equal(answer.stdout.match(/^obsolete: .*$/gm).length, 1);
+  assert.match(answer.stdout, /^obsolete: gates\.publishApproval "answer" is read as ask, because a publish is approved once, at the command prompt \(ADR 0022\); run profile\.mjs publish-approval ask/m);
+  const ask = runDoctor({ TEDY_PROFILE_DIR: profileWith({ "config.json": JSON.stringify({ gates: { publishApproval: "ask" } }), "rules.md": "r\n" }) });
+  assert.doesNotMatch(ask.stdout, /obsolete/);
 });
 
 test("doctor fails when rules.md is over 6000 bytes", () => {

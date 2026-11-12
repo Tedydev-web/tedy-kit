@@ -8,7 +8,6 @@ import { chatLanguage, fill, labels } from "./labels.mjs";
 import { slugOf, stamp } from "./job-files.mjs";
 import { fetchTab, quoteCount } from "./prd-section.mjs";
 import { resolveMap } from "./project-map.mjs";
-import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { approvalLines, renderDocComment } from "./publish-approval-render.mjs";
 import { splitJob, withRecords } from "./record-lock.mjs";
 import { describePin, pinnedSince, pinnedSources, pinSourcesOf, recordPins, sayNotices } from "./source-pins.mjs";
@@ -102,13 +101,11 @@ async function post(itemsFile, flags) {
     for (const line of pinnedSources(itemsFile, "").warnings ?? []) console.log(line);
     return 0;
   }
-  requireExplicitTarget("doc", flags.doc, { expected: map.prd.doc });
   return withRecords([docKey(map.prd.doc)], { job: flags.job, since: pinnedSince(itemsFile) }, async (recorded) => {
     const google = await session({ doc: map.prd.doc }, true);
-    const { notices, warnings } = await recheckDocTarget(map.prd.doc, itemsFile, `doc-comment-file.mjs ${itemsFile}`, { texts: todo.map((item) => item.comment) });
+    const { notices } = await recheckDocTarget(map.prd.doc, itemsFile, `doc-comment-file.mjs ${itemsFile}`, { texts: todo.map((item) => item.comment) });
     const document = await readDocument(google);
     const ranges = todo.map((item) => findQuoteRange(document, tabOf(item.epic), item.quote));
-    consumeApproval(process.argv, [...todo.map((item) => renderDocComment(item, tabOf(item.epic))), ...warnings]);
     sayNotices(notices);
     const save = () => {
       writeFileSync(itemsFile, `${JSON.stringify(data, null, 2)}\n`);

@@ -16,13 +16,6 @@ const normalise = (text) =>
     .replace(/\s+/g, " ")
     .trim();
 
-function strings(value) {
-  if (typeof value === "string") return [value];
-  if (Array.isArray(value)) return value.flatMap(strings);
-  if (value && typeof value === "object") return Object.values(value).flatMap(strings);
-  return [];
-}
-
 export function publishes(command, cwd, read) {
   const found = [];
   let dir = cwd;
@@ -62,7 +55,7 @@ export function shownSince(entries, sinceMs) {
     entries
       .filter((entry) => entry.type === "assistant" && Date.parse(entry.timestamp ?? "") >= sinceMs)
       .flatMap((entry) => entry.message?.content ?? [])
-      .flatMap((block) => (block.type === "text" ? [block.text] : block.type === "tool_use" && block.name === "AskUserQuestion" ? strings(block.input) : []))
+      .flatMap((block) => (block.type === "text" ? [block.text] : []))
       .join("\n"),
   );
 }
@@ -75,7 +68,7 @@ export function unshown(found, entries, mtime) {
 }
 
 export const reasonFor = (missing) =>
-  `tedy gate: the user has not seen the exact text being published under their name since its last change (${missing.join(", ")}). Only two places count as shown: a text block in the reply, and an AskUserQuestion question or preview. Thinking does not count, and neither does Write or Bash input or any other tool's input. Put the whole body, verbatim, in the AskUserQuestion preview of the approval question, then post.`;
+  `tedy gate (publishQuote): refused, nothing was written. The user has not seen the exact text being published under their name since its last change; missing from the chat: ${missing.join(", ")}. Only a text block of the reply counts as shown; thinking, AskUserQuestion and every tool's input do not. Quote the whole body verbatim in one fenced block of the reply, with the lint's pinned:, warning: and notice: lines and the command, then run the command; its permission prompt is the approval.`;
 
 function transcriptSince(path, sinceMs) {
   let size = 0;

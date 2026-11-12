@@ -62,7 +62,7 @@ test("a held lock refuses at once with its holder, runs nothing and appends noth
     withRecords(["t2:a"], {}, async () => {
       ran = true;
     }),
-    { message: `refused: t2:a is being written by pid ${process.pid} (github-write.mjs post) since 2026-11-05T01:00:00.000Z; nothing was written and the approval is unused. Run this command again when it finishes.` },
+    { message: `refused: t2:a is being written by pid ${process.pid} (github-write.mjs post) since 2026-11-05T01:00:00.000Z; nothing was written. Run this command again when it finishes.` },
   );
   assert.equal(ran, false);
   assert.equal(existsSync(path), true);
@@ -163,7 +163,6 @@ test("a Figma post with --job before its node id posts to that node and records 
   assert.equal(lint.code, 0, lint.out);
   const warnings = lint.out.split("\n").filter((text) => text.startsWith("warning: ")).map((text) => `${text}\n`).join("");
   const args = ["post", "--job", "plans/jobs/one.md", "1:2", "--body-file", "f.md", "--file", "F"];
-  w.approve(`${body}${warnings}${w.line("figma-comments", args)}`);
   const posted = await w.run("figma-comments", args);
   assert.equal(posted.code, 0, posted.out);
   assert.equal(w.writes().length, 1);
@@ -261,7 +260,7 @@ try {
   clearTimeout(timer);
   const [a, b] = await Promise.all(runs);
   assert.equal(first.code, 1, first.err());
-  assert.match(first.err(), /^refused: t5:k is being written by pid \d+ \(.*\) since .*; nothing was written and the approval is unused\. Run this command again when it finishes\.$/m);
+  assert.match(first.err(), /^refused: t5:k is being written by pid \d+ \(.*\) since .*; nothing was written\. Run this command again when it finishes\.$/m);
   assert.deepEqual([a.code, b.code].sort(), [0, 1]);
   assert.equal(ledger("t5:k", state).length, 1);
 });
@@ -323,7 +322,6 @@ test("two drafts on one Figma file post one after the other, with no job and wit
     }
     for (const [index, body] of bodies.entries()) {
       const args = ["post", "1:2", "--body-file", `f${index}.md`, "--file", "F", ...job];
-      w.approve(`${body}${warnings[index]}${w.line("figma-comments", args)}`);
       const posted = await w.run("figma-comments", args);
       assert.equal(posted.code, 0, posted.out);
     }

@@ -8,7 +8,6 @@ import { appendEditLog, labelText } from "./edit-log.mjs";
 import { fetchTab, indexTab, quoteInText, UC_ID } from "./prd-section.mjs";
 import { generatedPrBodyOp } from "./openproject.mjs";
 import { resolveMap } from "./project-map.mjs";
-import { consumeApproval, requireExplicitTarget } from "./publish-approval-ticket.mjs";
 import { splitJob, withRecords } from "./record-lock.mjs";
 import { pinnedSince, pinnedSources, recheckPinned } from "./source-pins.mjs";
 
@@ -94,7 +93,6 @@ function gh(args, input) {
 }
 
 function currentRepo(flags) {
-  if (!flags["dry-run"]) requireExplicitTarget("repo", flags.repo);
   return flags.repo ?? gh(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]).trim();
 }
 
@@ -128,9 +126,9 @@ async function recheckSources(file, relint, texts) {
     console.log("refused: pass the body as --body-file <file> so draft-lint can pin its sources");
     return null;
   }
-  const { refusals, notices, warnings } = await recheckPinned(file, relint, { texts });
+  const { refusals, notices } = await recheckPinned(file, relint, { texts });
   for (const line of refusals) console.log(line);
-  return refusals.length ? null : { notices, warnings };
+  return refusals.length ? null : { notices };
 }
 
 const prHead = (repo, pr) => gh(["pr", "view", String(pr), "--repo", repo, "--json", "headRefOid", "-q", ".headRefOid"]).trim();
@@ -204,7 +202,6 @@ async function postDraft(file, flags, repo, recorded) {
     console.log(JSON.stringify(payload, null, 2));
     return 0;
   }
-  consumeApproval(process.argv, [finalText, ...fresh.warnings]);
   say(fresh.notices);
   const review = JSON.parse(gh(["api", "-X", "POST", `repos/${repo}/pulls/${final.pr}/reviews`, "--input", "-"], JSON.stringify(payload)));
   recorded();
@@ -244,7 +241,6 @@ async function edit(id, flags) {
       return 1;
     }
     console.log(`WRITE → ${repo} : edit review comment ${id}`);
-    consumeApproval(process.argv, [body, ...fresh.warnings]);
     say(fresh.notices);
     const updated = JSON.parse(gh(["api", "-X", "PATCH", `repos/${repo}/pulls/comments/${id}`, "--input", "-"], JSON.stringify({ body })));
     recorded();
@@ -258,7 +254,6 @@ async function edit(id, flags) {
 function minimize(nodeId, flags) {
   return writing(flags, [nodeKey(nodeId)], undefined, async (recorded) => {
     console.log(`WRITE → minimize ${nodeId} as OUTDATED`);
-    consumeApproval(process.argv, []);
     const query = "mutation($id: ID!) { minimizeComment(input: {subjectId: $id, classifier: OUTDATED}) { minimizedComment { isMinimized } } }";
     const result = JSON.parse(gh(["api", "graphql", "-f", `query=${query}`, "-f", `id=${nodeId}`]));
     recorded();
@@ -276,7 +271,6 @@ export function threadMutation(resolved) {
 function setThreadsResolved(threadIds, resolved, flags) {
   const { name, verb, query } = threadMutation(resolved);
   return writing(flags, threadIds.map(nodeKey), undefined, async (recorded) => {
-    consumeApproval(process.argv, []);
     for (const threadId of threadIds) {
       console.log(`WRITE → ${verb} review thread ${threadId}`);
       const result = JSON.parse(gh(["api", "graphql", "-f", `query=${query}`, "-f", `id=${threadId}`]));
@@ -306,7 +300,6 @@ async function reply(pr, id, flags) {
       return 1;
     }
     console.log(`WRITE → ${repo}#${pr} : reply to ${id}`);
-    consumeApproval(process.argv, [body, ...fresh.warnings]);
     say(fresh.notices);
     const created = JSON.parse(gh(["api", "-X", "POST", `repos/${repo}/pulls/${pr}/comments/${id}/replies`, "--input", "-"], JSON.stringify({ body })));
     recorded();
@@ -347,7 +340,6 @@ function prBody(number, flags) {
     }
     console.log(`WRITE → ${repo}#${number} : PR body`);
     if (flags["dry-run"]) return 0;
-    consumeApproval(process.argv, [body]);
     gh(["api", "-X", "PATCH", `repos/${repo}/pulls/${number}`, "--input", "-"], JSON.stringify({ body }));
     recorded();
     const same = view().body.trim() === body;

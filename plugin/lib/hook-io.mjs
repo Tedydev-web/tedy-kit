@@ -29,7 +29,7 @@ export function logGate(entry) {
   }
 }
 
-export const ALL_GATES_ON = Object.freeze({ noComments: true, draftPrOnly: true, roleGate: true, ghWrites: true, publishQuote: true, publishApproval: "ask", pushExempt: Object.freeze([]) });
+export const ALL_GATES_ON = Object.freeze({ noComments: true, draftPrOnly: true, roleGate: true, ghWrites: true, publishQuote: true, pushExempt: Object.freeze([]) });
 
 export function gateSwitches() {
   try {

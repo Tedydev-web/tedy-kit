@@ -1,6 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { STATE_DIR, logGate } from "./hook-io.mjs";
+import { pathToFileURL } from "node:url";
+import { STATE_DIR, logGate, readHookInput } from "./hook-io.mjs";
 import { chatLanguage, labels } from "./labels.mjs";
 
 export const runApprovalsDir = (state = STATE_DIR) => join(state, "review-runs");
@@ -50,7 +51,8 @@ export function recordRunApprovals(input, { dir = runApprovalsDir(), lang, now =
 
 export const hasRunApproval = (sha, dir = runApprovalsDir()) => existsSync(join(dir, `${sha}.json`));
 
-export function recordRunApprovalsFrom(input) {
+export function run() {
+  const input = readHookInput();
   try {
     const heads = recordRunApprovals(input);
     if (heads.length) logGate({ hook: "review-run-approval", decision: "approved", heads, tool_use_id: input.tool_use_id });
@@ -58,3 +60,5 @@ export function recordRunApprovalsFrom(input) {
     logGate({ hook: "review-run-approval", decision: "record-failed", error: error.message });
   }
 }
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();

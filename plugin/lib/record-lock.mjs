@@ -96,7 +96,7 @@ function unlinkIfSame(path, text) {
 }
 
 const heldRefusal = (key, held) =>
-  `refused: ${key} is being written by pid ${held?.lock?.pid ?? "unknown"} (${held?.lock?.command ?? "unknown command"}) since ${held?.lock?.at ?? (held ? new Date(held.mtimeMs).toISOString() : "a moment ago")}; nothing was written and the approval is unused. Run this command again when it finishes.`;
+  `refused: ${key} is being written by pid ${held?.lock?.pid ?? "unknown"} (${held?.lock?.command ?? "unknown command"}) since ${held?.lock?.at ?? (held ? new Date(held.mtimeMs).toISOString() : "a moment ago")}; nothing was written. Run this command again when it finishes.`;
 
 function tryAcquire(key, state) {
   const path = lockPath(key, state);

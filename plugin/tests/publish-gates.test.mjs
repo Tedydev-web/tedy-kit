@@ -89,7 +89,7 @@ test("posting needs every comment body shown to the user after the draft's last 
   assert.deepEqual(unshown(found, [say(500, quoted)], mtime).length, 2);
   assert.deepEqual(unshown(found, [say(2_000, "Đăng review PR #735 (2 comment) thế nào?")], mtime).length, 2);
   const asked = { type: "assistant", timestamp: at(2_000), message: { content: [{ type: "tool_use", name: "AskUserQuestion", input: { questions: [{ question: "Đăng?", options: [{ label: "Đăng", description: "c check lại chỗ này giúp e nha / đoạn này thiếu case rỗng" }] }] } }] } };
-  assert.deepEqual(unshown(found, [asked], mtime), []);
+  assert.equal(unshown(found, [asked], mtime).length, 2);
   assert.equal(publishes(`node /k/github-write.mjs post ${file} --dry-run`, "/", read).length, 0);
   for (const verb of ["reply 1 2", "edit 5"]) assert.equal(publishes(`node /k/github-write.mjs ${verb} --body-file b.md --dry-run`, "/w", () => "ok a").length, 1, verb);
   assert.equal(publishes(`node /k/github-write.mjs post ${file} --dry-run=no`, "/", read).length, 1);
@@ -102,7 +102,7 @@ test("posting needs every comment body shown to the user after the draft's last 
   assert.equal(unshown(reply, [say(10, "Reply thread 5?")], mtime).length, 1);
 });
 
-test("only reply text and AskUserQuestion strings count as shown, and the block reason names those channels", () => {
+test("only reply text counts as shown, never an AskUserQuestion string, and the block reason names its layer and what is missing", () => {
   const file = "/w/review-735-line-comments.md";
   const found = publishes(`node /k/github-write.mjs post ${file}`, "/", () => draft);
   const mtime = () => 1_000;
@@ -113,8 +113,8 @@ test("only reply text and AskUserQuestion strings count as shown, and the block 
   assert.deepEqual(missing, [`comment 1 of ${file}`, `comment 2 of ${file}`]);
   const reason = reasonFor(missing);
   assert.ok(reason.includes(`comment 1 of ${file}, comment 2 of ${file}`), reason);
-  for (const phrase of ["text block in the reply", "AskUserQuestion question or preview", "Thinking", "Write or Bash input", "verbatim", "AskUserQuestion preview"]) assert.ok(reason.includes(phrase), phrase);
-  assert.deepEqual(unshown(found, [ask({ preview: draft })], mtime), []);
+  for (const phrase of ["(publishQuote)", "nothing was written", "missing from the chat", "Only a text block of the reply", "thinking, AskUserQuestion", "verbatim", "permission prompt is the approval"]) assert.ok(reason.includes(phrase), phrase);
+  assert.equal(unshown(found, [ask({ preview: draft })], mtime).length, 2);
   const written = block({ type: "tool_use", name: "Write", input: { file_path: file, content: draft } });
   assert.equal(unshown(found, [written, ask({})], mtime).length, 2);
 });

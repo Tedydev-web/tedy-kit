@@ -56,14 +56,14 @@ const REVIEWED = [
   'git commit -m "docs: say doc-comment-file.mjs post items.json --apply"',
 ];
 
-test("a kit script name inside data a command only writes is not a publish, in ask and answer mode", () => {
+test("a kit script name inside data a command only writes is not a publish, also for a profile that still says answer", () => {
   for (const command of DATA) {
     assert.equal(dataOnlyCommand(command), true, command);
     assert.equal(hiddenPublish(command), null, command);
     assert.equal(quotedPublishes(command, "/w", () => "The label is wrong.").length, 0, command);
     for (const mode of ["ask", "answer"]) {
       assert.equal(decision(command, mode), "allow", `${mode}: ${command}`);
-      assert.equal(checkFailed(command, mode === "answer", "Bash", new Error("boom")).ask, true, `${mode}: ${command}`);
+      assert.equal(checkFailed(command, "Bash", new Error("boom")).ask, true, `${mode}: ${command}`);
     }
   }
 });
@@ -88,7 +88,7 @@ test("a kit script run directly, through an interpreter or a wrapper still publi
   for (const command of [`env X=1 ${REPLY}`, "/k/scripts/github-write.mjs reply 1 2 --body x", `(cd /w && env ${REPLY})`, "timeout 9 bun /k/scripts/openproject.mjs apply d.json", "nohup deno run -A /k/scripts/figma-comments.mjs delete 12"]) {
     assert.ok(hiddenPublish(command), command);
     assert.equal(decision(command, "ask"), "ask", command);
-    assert.equal(decision(command, "answer"), "allow", command);
+    assert.equal(decision(command, "answer"), "ask", command);
   }
   assert.equal(hiddenPublish(REPLY), null);
   for (const command of [`env X=1 ${REPLY}`, `echo $(${REPLY})`, `echo ${REPLY} > p.sh && sh p.sh`]) assert.equal(quotedPublishes(command, "/w", () => "").length, 1, command);
@@ -108,7 +108,7 @@ test("a sed -i edit of a draft holding a publish line asks, and so does a sed wh
 test("a form the reviewer found, and the two first examples, decide as before the data exemption", () => {
   for (const command of REVIEWED) {
     assert.equal(decision(command, "ask"), "ask", `ask: ${command}`);
-    assert.equal(decision(command, "answer"), "allow", `answer: ${command}`);
+    assert.equal(decision(command, "answer"), "ask", `answer: ${command}`);
     assert.equal(decision(command, "answer", CTX), "deny", `ctx: ${command}`);
   }
 });
@@ -138,8 +138,8 @@ test("data handed to a shell, eval, source, an interpreter or xargs is still ref
     [`/tmp/bin/printf '${REPLY}'`, "ask", "allow"],
     [`node /k/scripts/github-write.mjs post d.md && printf '%s\\n' '${REPLY}' >> notes.md`, "ask", "allow"],
   ];
-  for (const [command, ask, answer] of expected) {
+  for (const [command, ask] of expected) {
     assert.equal(decision(command, "ask"), ask, `ask: ${command}`);
-    assert.equal(decision(command, "answer"), answer, `answer: ${command}`);
+    assert.equal(decision(command, "answer"), ask, `answer: ${command}`);
   }
 });

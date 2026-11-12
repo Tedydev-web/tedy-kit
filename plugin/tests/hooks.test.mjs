@@ -45,9 +45,9 @@ test("role-gate also runs before a subagent spawn, so a forked job records its r
   for (const tool of ["AgentX", "SubAgent", "mcp__x__Agent", "Read"]) assert.ok(!matcher.test(tool), tool);
 });
 
-test("the publish-approval ticket hook runs after AskUserQuestion only", () => {
+test("the review run approval hook runs after AskUserQuestion only", () => {
   const { PostToolUse } = JSON.parse(readFileSync(new URL("../hooks/hooks.json", import.meta.url), "utf8")).hooks;
-  const entry = PostToolUse.find((item) => item.hooks.some((hook) => hook.command.includes("/publish-approval-ticket.mjs")));
+  const entry = PostToolUse.find((item) => item.hooks.some((hook) => hook.command.includes("/review-run-approval.mjs")));
   const matcher = new RegExp(entry.matcher);
   assert.ok(matcher.test("AskUserQuestion"));
   for (const tool of ["Bash", "AskUserQuestionX", "mcp__x__AskUserQuestion"]) assert.ok(!matcher.test(tool), tool);
@@ -68,12 +68,8 @@ test("the ask-cards hook runs on every prompt in a plain command group, never bl
   assert.deepEqual(hooks.UserPromptSubmit, [{ hooks: [{ type: "command", command: 'node "${CLAUDE_PLUGIN_ROOT}/scripts/session-hooks.mjs" ask-cards', timeout: 10 }] }]);
 });
 
-test("the ask-time approval gate runs before AskUserQuestion only, and a failure lets the question through", () => {
-  const { PreToolUse } = JSON.parse(readFileSync(new URL("../hooks/hooks.json", import.meta.url), "utf8")).hooks;
-  const entries = PreToolUse.filter((item) => item.hooks.some((hook) => hook.command.includes("/publish-approval-ask-gate.mjs")));
-  assert.equal(entries.length, 1);
-  const matcher = new RegExp(entries[0].matcher);
-  assert.ok(matcher.test("AskUserQuestion"));
-  for (const tool of ["Bash", "AskUserQuestionX", "mcp__x__AskUserQuestion"]) assert.ok(!matcher.test(tool), tool);
-  for (const hook of entries[0].hooks) assert.equal(hook.onFailure, undefined, hook.command);
+test("no hook runs before AskUserQuestion, and no hook names a publish approval ticket", () => {
+  const { hooks } = JSON.parse(readFileSync(new URL("../hooks/hooks.json", import.meta.url), "utf8"));
+  assert.equal(hooks.PreToolUse.some((item) => item.matcher && new RegExp(item.matcher).test("AskUserQuestion")), false);
+  assert.doesNotMatch(JSON.stringify(hooks), /publish-approval-(ticket|ask-gate)/);
 });

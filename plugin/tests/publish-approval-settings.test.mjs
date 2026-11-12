@@ -4,12 +4,12 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { chmodSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { KIT_PUBLISH_ASK_RULES, stateDenyRules } from "../lib/publish-approval-settings.mjs";
-const STATE_DENY = stateDenyRules();
+import { KIT_PUBLISH_ASK_RULES, retiredDenyRules } from "../lib/publish-approval-settings.mjs";
 import { loadConfig } from "../lib/profile.mjs";
 import { evaluate as guard } from "../gates/profile-guard-gate.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
+const RETIRED = retiredDenyRules();
 const SCRIPT = new URL("../scripts/profile.mjs", import.meta.url).pathname;
 const MARKER = "tedy-env-block-marker";
 const OTHER = ["Bash(gh pr merge*)", "Bash(*my-own-tool.mjs*send*)"];
@@ -30,120 +30,72 @@ const toggle = ({ profile, settings }, ...args) => spawnSync("node", [SCRIPT, "p
 const backups = ({ home }) => readdirSync(home).filter((name) => name !== "settings.json");
 const read = (file) => JSON.parse(readFileSync(file, "utf8"));
 
-test("answer removes exactly the kit's publish ask rules, after a 600 backup, and keeps every other key", () => {
-  const place = places();
+test("ask restores the kit's 22 publish ask rules after a 600 backup, keeps every other key and drops an obsolete answer mode from the config", () => {
+  const place = places({ config: { gates: { noComments: true, publishApproval: "answer" }, language: { chat: "vi" } }, rules: OTHER });
   const before = readFileSync(place.settings, "utf8");
-  const run = toggle(place, "answer");
+  const run = toggle(place, "ask");
   assert.equal(run.status, 0, run.stderr);
   const after = read(place.settings);
-  assert.deepEqual(after.permissions.ask, OTHER);
-  assert.deepEqual(after.permissions.deny, [SSH_DENY, ...STATE_DENY]);
-  assert.deepEqual({ ...after, permissions: { ...after.permissions, ask: null, deny: null } }, { ...place.data, permissions: { ...place.data.permissions, ask: null, deny: null } });
+  assert.deepEqual(after.permissions.ask, [...OTHER, ...KIT_PUBLISH_ASK_RULES]);
+  assert.deepEqual(after.permissions.deny, [SSH_DENY]);
+  assert.deepEqual({ ...after, permissions: { ...after.permissions, ask: null } }, { ...place.data, permissions: { ...place.data.permissions, ask: null } });
   assert.equal(statSync(place.settings).mode & 0o777, 0o600);
   const [backup] = backups(place);
   assert.equal(readFileSync(join(place.home, backup), "utf8"), before);
   assert.equal(statSync(join(place.home, backup)).mode & 0o777, 0o600);
-  assert.equal(loadConfig(place.profile).gates.publishApproval, "answer");
-  assert.equal(loadConfig(place.profile).gates.noComments, true);
+  assert.deepEqual(read(join(place.profile, "config.json")).gates, { noComments: true });
   assert.equal(read(join(place.profile, "config.json")).language.chat, "vi");
   assert.doesNotMatch(run.stdout + run.stderr, new RegExp(MARKER));
-  assert.match(run.stdout, /removed 22/);
+  assert.match(run.stdout, /restored 22 kit publish ask rules, removed 0 retired deny rules/);
+  assert.match(run.stdout, /removed the obsolete gates\.publishApproval "answer"/);
 });
 
-test("the toggle is idempotent and ask restores the same rules", () => {
-  const place = places();
-  toggle(place, "answer");
-  const once = readFileSync(place.settings, "utf8");
-  const again = toggle(place, "answer");
-  assert.equal(again.status, 0, again.stderr);
-  assert.equal(readFileSync(place.settings, "utf8"), once);
-  assert.equal(backups(place).length, 1);
-  const back = toggle(place, "ask");
-  assert.equal(back.status, 0, back.stderr);
-  assert.deepEqual(new Set(read(place.settings).permissions.ask), new Set([...OTHER, ...KIT_PUBLISH_ASK_RULES]));
-  assert.equal(read(place.settings).permissions.ask.length, 24);
-  assert.deepEqual(read(place.settings).permissions.deny, [SSH_DENY]);
-  assert.equal(loadConfig(place.profile).gates.publishApproval, "ask");
-  assert.deepEqual(read(join(place.profile, "config.json")).gates, { noComments: true });
-  assert.equal(statSync(place.settings).mode & 0o777, 0o600);
-  assert.equal(backups(place).length, 2);
-  toggle(place, "ask");
-  assert.equal(backups(place).length, 2);
-  assert.match(toggle(place).stdout, /publish approval: ask/);
-});
-
-test("answer denies file-tool edits to the approval tickets, the PR body records, the sources records and the review run approvals, and ask takes that back, writing only on a change", () => {
+test("ask removes the retired deny rules on the kit's records, is idempotent and writes only on a change", () => {
   const state = process.env.TEDY_STATE_DIR;
-  assert.deepEqual(STATE_DENY, [`Edit(/${join(state, "approvals")}/**)`, `Edit(/${join(state, "pr-bodies")}/**)`, `Edit(/${join(state, "drafts")}/**)`, `Edit(/${join(state, "review-runs")}/**)`]);
-  const narrow = `Edit(/${join(state, "drafts")}/*.sources.json)`;
-  const swapped = places({ rules: [], deny: [SSH_DENY, STATE_DENY[0], STATE_DENY[1], narrow] });
-  toggle(swapped, "answer");
-  assert.deepEqual(read(swapped.settings).permissions.deny, [SSH_DENY, ...STATE_DENY]);
-  const upgraded = places({ rules: [], deny: [SSH_DENY, STATE_DENY[0], narrow] });
-  toggle(upgraded, "answer");
-  assert.deepEqual(read(upgraded.settings).permissions.deny, [SSH_DENY, ...STATE_DENY]);
-  const leftover = places({ rules: [], deny: [SSH_DENY, narrow] });
-  toggle(leftover, "ask");
-  assert.deepEqual(read(leftover.settings).permissions.deny, [SSH_DENY]);
-  for (const rule of STATE_DENY) assert.match(rule, /^Edit\(\/\/[^~]/);
-  const place = places({ rules: [...KIT_PUBLISH_ASK_RULES], deny: null });
-  toggle(place, "answer");
-  assert.deepEqual(read(place.settings).permissions.deny, STATE_DENY);
-  assert.deepEqual(read(place.settings).permissions.ask, []);
-  assert.match(toggle(place).stdout, /record edit deny: on/);
-  for (const rule of STATE_DENY) assert.ok(toggle(place).stdout.includes(rule), rule);
-  const older = places({ rules: [], deny: [SSH_DENY, STATE_DENY[0]] });
-  assert.match(toggle(older).stdout, /record edit deny: off/);
-  toggle(older, "answer");
-  assert.deepEqual(read(older.settings).permissions.deny, [SSH_DENY, ...STATE_DENY]);
-  const ruleOnly = places({ rules: [], deny: [] });
-  assert.equal(toggle(ruleOnly, "answer").status, 0);
-  assert.deepEqual(read(ruleOnly.settings).permissions.deny, STATE_DENY);
-  assert.equal(backups(ruleOnly).length, 1);
-  assert.equal(statSync(ruleOnly.settings).mode & 0o777, 0o600);
-  toggle(ruleOnly, "answer");
-  assert.equal(backups(ruleOnly).length, 1);
-  toggle(ruleOnly, "ask");
-  assert.equal("deny" in read(ruleOnly.settings).permissions, false);
-  assert.deepEqual(read(ruleOnly.settings).permissions.ask, KIT_PUBLISH_ASK_RULES);
-  assert.match(toggle(ruleOnly).stdout, /record edit deny: off/);
-  toggle(place, "ask");
-  assert.equal("deny" in read(place.settings).permissions, false);
+  assert.deepEqual(RETIRED, [`Edit(/${join(state, "approvals")}/**)`, `Edit(/${join(state, "pr-bodies")}/**)`, `Edit(/${join(state, "drafts")}/**)`, `Edit(/${join(state, "review-runs")}/**)`, `Edit(/${join(state, "drafts")}/*.sources.json)`]);
+  const place = places({ deny: [SSH_DENY, ...RETIRED] });
+  assert.match(toggle(place).stdout, new RegExp(`retired deny rules in .*: ${RETIRED.length}`));
+  assert.equal(toggle(place, "ask").status, 0);
+  assert.deepEqual(read(place.settings).permissions.deny, [SSH_DENY]);
+  assert.equal(backups(place).length, 1);
+  const again = toggle(place, "ask");
+  assert.match(again.stdout, /every kit publish ask rule is present and no retired deny rule is left, not written/);
+  assert.equal(backups(place).length, 1);
+  assert.match(toggle(place).stdout, /kit publish ask rules in .*: 22\/22\nretired deny rules in .*: 0/);
+  const only = places({ deny: [RETIRED[0]] });
+  toggle(only, "ask");
+  assert.equal("deny" in read(only.settings).permissions, false);
 });
 
-test("a settings file with no ask rules gains them in ask mode, and gh pr merge survives both ways", () => {
-  const place = places({ rules: ["Bash(gh pr merge*)"] });
-  toggle(place, "ask");
-  assert.deepEqual(read(place.settings).permissions.ask, ["Bash(gh pr merge*)", ...KIT_PUBLISH_ASK_RULES]);
-  toggle(place, "answer");
-  assert.deepEqual(read(place.settings).permissions.ask, ["Bash(gh pr merge*)"]);
-});
-
-test("the toggle refuses without a config.json, a valid config, a readable settings file or a known mode, and writes nothing", () => {
-  for (const [place, args, message] of [
-    [places({ config: null }), ["answer"], /profile\.mjs init/],
-    [places({ config: { gates: { publishApproval: "maybe" } } }), ["answer"], /gates\.publishApproval must be "ask" or "answer"/],
-    [places(), ["sometimes"], /usage/],
+test("publish-approval answer is refused as gone, and the toggle refuses without a config.json, a valid config or a readable settings file, writing nothing", () => {
+  for (const [place, args, message, code] of [
+    [places({ rules: [] }), ["answer"], /publish-approval answer is gone.*ADR 0022.*nothing was written/, 2],
+    [places({ config: null, rules: [] }), ["ask"], /profile\.mjs init/, 1],
+    [places({ config: { gates: { publishApproval: "maybe" } }, rules: [] }), ["ask"], /gates\.publishApproval is obsolete and, while it stays, must be "ask" or "answer"/, 1],
+    [places(), ["sometimes"], /usage/, 2],
   ]) {
     const before = readFileSync(place.settings, "utf8");
     const run = toggle(place, ...args);
-    assert.notEqual(run.status, 0, args.join(" "));
+    assert.equal(run.status, code, args.join(" "));
     assert.match(run.stderr, message);
     assert.equal(readFileSync(place.settings, "utf8"), before);
     assert.equal(backups(place).length, 0);
   }
   const broken = places();
   writeFileSync(broken.settings, `{"env": {"TEDY_TOKEN": "${MARKER}"`);
-  const run = toggle(broken, "answer");
+  const run = toggle(broken, "ask");
   assert.notEqual(run.status, 0);
   assert.doesNotMatch(run.stdout + run.stderr, new RegExp(MARKER));
-  assert.equal(loadConfig(broken.profile).gates.publishApproval, "ask");
 });
 
-test("the profile guard asks before the toggle changes the mode", () => {
+test("a config that still says answer loads with no publish approval mode left in the gates", () => {
+  const place = places({ config: { gates: { publishApproval: "answer" } } });
+  assert.equal("publishApproval" in loadConfig(place.profile).gates, false);
+});
+
+test("the profile guard asks before the toggle rewrites the settings", () => {
   const profile = tempDir("tedy-toggle-guard-");
   const check = (command) => guard({ tool_name: "Bash", tool_input: { command }, cwd: "/" }, { profile, release: tempDir("tedy-toggle-release-") });
-  assert.ok(check("node /k/plugin/scripts/profile.mjs publish-approval answer"));
   assert.ok(check("node /k/plugin/lib/profile.mjs publish-approval ask"));
   assert.equal(check("node /k/plugin/scripts/profile.mjs publish-approval"), null);
   assert.equal(check("node /k/plugin/scripts/profile.mjs doctor"), null);

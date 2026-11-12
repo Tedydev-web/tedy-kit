@@ -3,16 +3,16 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSyn
 import { homedir } from "node:os";
 import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { CLAUDE_SETTINGS, KIT_PUBLISH_ASK_RULES, leftoverKitRules, plannedPermissions, readSettings, stateDenyOn, stateDenyRules, unchanged, writePermissions } from "./publish-approval-settings.mjs";
+import { CLAUDE_SETTINGS, KIT_PUBLISH_ASK_RULES, plannedPermissions, readSettings, retiredDenyRules, unchanged, writePermissions } from "./publish-approval-settings.mjs";
 
 const SHARED = fileURLToPath(new URL("../shared/", import.meta.url));
 const PERSONAL_GATES = ["noComments", "draftPrOnly", "roleGate", "ghWrites", "publishQuote"];
 const INIT_GATES = ["roleGate", "ghWrites", "publishQuote"];
 const CONVENTION_GATES = ["noComments", "draftPrOnly"];
-export const PUBLISH_APPROVAL_MODES = Object.freeze(["ask", "answer"]);
+const OBSOLETE_PUBLISH_APPROVAL = Object.freeze(["ask", "answer"]);
 
 export const DEFAULT_CONFIG = Object.freeze({
-  gates: Object.freeze({ noComments: false, draftPrOnly: false, roleGate: false, ghWrites: false, publishQuote: false, publishApproval: "ask", pushExempt: Object.freeze([]) }),
+  gates: Object.freeze({ noComments: false, draftPrOnly: false, roleGate: false, ghWrites: false, publishQuote: false, pushExempt: Object.freeze([]) }),
   language: Object.freeze({ chat: "en" }),
 });
 
@@ -46,13 +46,12 @@ export function loadConfig(dir = profileDir()) {
   checkKeys(file, gates, [...PERSONAL_GATES, "publishApproval", "pushExempt"], "gates.");
   checkKeys(file, language, ["chat"], "language.");
   for (const key of PERSONAL_GATES) if (key in gates && typeof gates[key] !== "boolean") throw new Error(`${file}: gates.${key} must be a boolean`);
-  if ("publishApproval" in gates && !PUBLISH_APPROVAL_MODES.includes(gates.publishApproval)) throw new Error(`${file}: gates.publishApproval must be "ask" or "answer"`);
+  if ("publishApproval" in gates && !OBSOLETE_PUBLISH_APPROVAL.includes(gates.publishApproval)) throw new Error(`${file}: gates.publishApproval is obsolete and, while it stays, must be "ask" or "answer"`);
   if ("pushExempt" in gates && !(Array.isArray(gates.pushExempt) && gates.pushExempt.every((path) => typeof path === "string" && path))) throw new Error(`${file}: gates.pushExempt must be an array of strings`);
   if ("chat" in language && !(typeof language.chat === "string" && language.chat.trim())) throw new Error(`${file}: language.chat must be a non-empty string`);
   return {
     gates: {
       ...Object.fromEntries(PERSONAL_GATES.map((key) => [key, gates[key] ?? DEFAULT_CONFIG.gates[key]])),
-      publishApproval: gates.publishApproval ?? DEFAULT_CONFIG.gates.publishApproval,
       pushExempt: (gates.pushExempt ?? []).map(expandHome),
     },
     language: { chat: language.chat ?? DEFAULT_CONFIG.language.chat },
@@ -89,7 +88,6 @@ export function initProfile(dir = profileDir(), conventions = []) {
   if (existsSync(config)) result.kept.push("config.json");
   else {
     const gates = { ...DEFAULT_CONFIG.gates, ...Object.fromEntries([...INIT_GATES, ...conventions].map((key) => [key, true])) };
-    delete gates.publishApproval;
     writeFileSync(config, `${JSON.stringify({ ...DEFAULT_CONFIG, gates }, null, 2)}\n`);
     result.created.push("config.json");
   }
@@ -178,6 +176,7 @@ function doctor(dir, env = process.env) {
     try {
       const on = PERSONAL_GATES.filter((key) => loadConfig(dir).gates[key]);
       check("config", [true, on.length ? `personal gates on: ${on.join(", ")}` : "personal gates off"]);
+      if (JSON.parse(readFileSync(join(dir, "config.json"), "utf8")).gates?.publishApproval === "answer") lines.push(OBSOLETE_ANSWER);
     } catch (error) {
       check("config", [false, `invalid: ${error.message}`]);
     }
@@ -198,44 +197,48 @@ function doctor(dir, env = process.env) {
   return status;
 }
 
-function publishApproval(dir, mode, settingsFile = CLAUDE_SETTINGS) {
+const OBSOLETE_ANSWER = 'obsolete: gates.publishApproval "answer" is read as ask, because a publish is approved once, at the command prompt (ADR 0022); run profile.mjs publish-approval ask to drop it, restore the kit publish ask rules and remove the retired deny rules';
+
+function publishApproval(dir, restore, settingsFile = CLAUDE_SETTINGS) {
   const file = join(dir, "config.json");
-  const settings = () => readSettings(settingsFile);
-  if (mode === undefined) {
-    const { ask, deny } = settings();
-    const present = KIT_PUBLISH_ASK_RULES.filter((rule) => ask.includes(rule)).length;
-    process.stdout.write(`publish approval: ${loadConfig(dir).gates.publishApproval}\nkit publish ask rules in ${settingsFile}: ${present}/${KIT_PUBLISH_ASK_RULES.length}\nrecord edit deny: ${stateDenyOn(deny) ? "on" : "off"} (${stateDenyRules().join(", ")})\n`);
+  const current = readSettings(settingsFile);
+  const retired = retiredDenyRules().filter((rule) => current.deny.includes(rule)).length;
+  if (!restore) {
+    const present = KIT_PUBLISH_ASK_RULES.filter((rule) => current.ask.includes(rule)).length;
+    process.stdout.write(`publish approval: one prompt per publish, from the kit publish ask rules\nkit publish ask rules in ${settingsFile}: ${present}/${KIT_PUBLISH_ASK_RULES.length}\nretired deny rules in ${settingsFile}: ${retired}\n`);
     return 0;
   }
-  if (!existsSync(file)) throw new Error(`${file} is missing; run profile.mjs init first, then switch the mode`);
+  if (!existsSync(file)) throw new Error(`${file} is missing; run profile.mjs init first`);
   loadConfig(dir);
   const raw = JSON.parse(readFileSync(file, "utf8"));
-  const current = settings();
-  const next = plannedPermissions(current, mode);
+  const next = plannedPermissions(current);
   const lines = [];
-  if (unchanged(current, next)) lines.push(`${settingsFile}: kit publish ask rules already ${mode === "answer" ? "removed" : "present"} and record edit deny already ${mode === "answer" ? "on" : "off"}, not written`);
+  if (unchanged(current, next)) lines.push(`${settingsFile}: every kit publish ask rule is present and no retired deny rule is left, not written`);
   else {
     const { backup, removed, added } = writePermissions(settingsFile, current, next);
-    lines.push(`${settingsFile}: removed ${removed}, restored ${added} kit publish ask rules; record edit deny ${mode === "answer" ? "on" : "off"} (${stateDenyRules().join(", ")}); backup ${backup}`);
+    lines.push(`${settingsFile}: restored ${added} kit publish ask rules, removed ${removed} retired deny rules; backup ${backup}`);
   }
-  const gates = { ...raw.gates, publishApproval: mode };
-  if (mode === "ask") delete gates.publishApproval;
-  if (JSON.stringify(gates) !== JSON.stringify(raw.gates ?? {})) writeFileSync(file, `${JSON.stringify({ ...raw, gates }, null, 2)}\n`);
-  lines.push(`publish approval: ${mode}`);
-  const leftover = mode === "answer" ? leftoverKitRules(next.ask) : [];
-  if (leftover.length) lines.push(`still prompts, not a kit rule: ${leftover.join(", ")}`);
+  if (raw.gates && "publishApproval" in raw.gates) {
+    const { publishApproval: dropped, ...gates } = raw.gates;
+    writeFileSync(file, `${JSON.stringify({ ...raw, gates }, null, 2)}\n`);
+    lines.push(`${file}: removed the obsolete gates.publishApproval "${dropped}"`);
+  }
   process.stdout.write(`${lines.join("\n")}\n`);
   return 0;
 }
 
-const USAGE = "usage: profile.mjs <path <relative-path>|doctor|init [noComments] [draftPrOnly]|publish-approval [ask|answer]>";
+const USAGE = "usage: profile.mjs <path <relative-path>|doctor|init [noComments] [draftPrOnly]|publish-approval [ask]>";
 
 function main([command, arg, ...rest]) {
   const dir = profileDir();
   if (command === "doctor") return doctor(dir);
-  if (command === "publish-approval" && !rest.length && (arg === undefined || PUBLISH_APPROVAL_MODES.includes(arg))) {
+  if (command === "publish-approval" && arg === "answer" && !rest.length) {
+    process.stderr.write(`publish-approval answer is gone: a publish is approved once, at the command prompt (ADR 0022); nothing was written. Run profile.mjs publish-approval ask to restore the kit publish ask rules.\n`);
+    return 2;
+  }
+  if (command === "publish-approval" && !rest.length && (arg === undefined || arg === "ask")) {
     try {
-      return publishApproval(dir, arg);
+      return publishApproval(dir, arg === "ask");
     } catch (error) {
       process.stderr.write(`${error.message}\n`);
       return 1;

@@ -436,12 +436,10 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
   const rewriteFor = (reason) => {
     rewrite ??= { allow: false, reason };
   };
-  if (gates.publishApproval !== "answer") {
-    const hidden = hiddenPublish(command);
-    if (hidden) askFor(`tedy gate: this publishes through a kit script in a form the permission rules do not match (\`${hidden.slice(0, 120)}\`). Allow it only if the user approved this exact publish; otherwise run it as a plain \`node <script> …\` command.`);
-    const uncovered = settingsFile ? uncoveredPublish(command, settingsFile) : null;
-    if (uncovered) askFor(uncovered);
-  }
+  const hidden = hiddenPublish(command);
+  if (hidden) askFor(`tedy gate: this publishes through a kit script in a form the permission rules do not match (\`${hidden.slice(0, 120)}\`). Allow it only if the user approved this exact publish; otherwise run it as a plain \`node <script> …\` command.`);
+  const uncovered = settingsFile ? uncoveredPublish(command, settingsFile) : null;
+  if (uncovered) askFor(uncovered);
   const { parts, tooDeep } = walkCommands(command, cwd);
   if (tooDeep) rewriteFor(`tedy gate: this command nests command substitutions too deeply to check. ${REWRITE}`);
   for (const { text: segment, piped, dir } of parts) {
@@ -547,7 +545,6 @@ export function bashInputs(input) {
 function judge(input, tool) {
   const command = input.tool_input?.command ?? "";
   const gates = gateSwitches();
-  const answerMode = gates.publishApproval === "answer";
   try {
     let result = CTX_TOOL.test(tool) && publishingSegments(command).length ? { allow: false, reason: CTX_PUBLISH_REASON } : evaluate(command, input.cwd ?? process.cwd(), { gates, settingsFile: CLAUDE_SETTINGS });
     if (result.allow || result.ask) {
@@ -566,13 +563,13 @@ function judge(input, tool) {
     if (!result.allow) logGate({ hook: "git-gate", decision: result.ask ? "ask" : "deny", tool, command: command.slice(0, 200), cwd: input.cwd, reason: result.reason });
     return result;
   } catch (error) {
-    return checkFailed(command, answerMode, tool, error);
+    return checkFailed(command, tool, error);
   }
 }
 
 const errorText = (error) => (error instanceof Error ? error.message : String(error));
 
-export function checkFailed(command, answerMode, tool, error) {
+export function checkFailed(command, tool, error) {
   const message = errorText(error);
   let text;
   let publish;
@@ -583,8 +580,7 @@ export function checkFailed(command, answerMode, tool, error) {
     logGate({ hook: "git-gate", decision: "deny", tool, error: `${message}; ${errorText(unreadableError)}` });
     return { allow: false, reason: `tedy gate: could not read this command (${errorText(unreadableError)}), so it is refused unchecked. ${REWRITE}` };
   }
-  logGate({ hook: "git-gate", decision: answerMode && publish ? "deny" : "ask", tool, command: text.slice(0, 200), error: message });
-  if (answerMode && publish) return { allow: false, reason: `tedy gate: could not check this command (${message}). Publish approval is in answer mode, where a publish is never asked twice, so it is refused; run the publish as a plain command of its own.` };
+  logGate({ hook: "git-gate", decision: "ask", tool, command: text.slice(0, 200), error: message });
   return { allow: false, ask: true, reason: publish ? `tedy gate: could not check this publish command (${message}). Approve only if you have seen the exact draft.` : `tedy gate: could not check this command (${message}). Allow it only if the user asked for it.` };
 }
 

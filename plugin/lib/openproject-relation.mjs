@@ -1,4 +1,3 @@
-import { consumeApproval } from "./publish-approval-ticket.mjs";
 
 const idOf = (href) => Number(href.split("/").pop());
 const ends = (relation) => [idOf(relation._links.from.href), idOf(relation._links.to.href)];
@@ -34,7 +33,6 @@ export async function setRelation(client, from, to, flags, recorded) {
     console.log(`WRITE → ${client.host} · #${from} #${to} : ${old ? "1 relation delete + " : ""}1 relation create; run again with --apply`);
     return 0;
   }
-  consumeApproval(process.argv, []);
   if (old) {
     await client.request(`/api/v3/relations/${old.id}`, { method: "DELETE" });
     recorded();
@@ -67,7 +65,6 @@ export async function deleteRelation(client, id, flags, recorded) {
     console.log(`WRITE → ${client.host} · #${ends(relation).join(" #")} : 1 relation delete; run again with --apply`);
     return 0;
   }
-  consumeApproval(process.argv, []);
   await client.request(`/api/v3/relations/${id}`, { method: "DELETE" });
   recorded();
   const left = (await relationsOf(client, ends(relation)[0])).some((other) => other.id === relation.id);

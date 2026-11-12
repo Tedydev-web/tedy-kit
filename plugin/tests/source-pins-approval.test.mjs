@@ -113,7 +113,7 @@ const CASES = [
   }],
 ];
 
-test("on every writer a moved pin's notice is printed only once the approval is spent, and never written", async () => {
+test("on every writer a moved pin's notice is printed and never written", async () => {
   for (const [name, setup] of CASES) {
     await withOpenProject(async (op) => {
       const { w, lint: lints, move, script, args, texts } = await setup(op);
@@ -121,23 +121,10 @@ test("on every writer a moved pin's notice is printed only once the approval is 
       for (const [lintScript, lintArgs] of lints) pins.push(...(await lint(w, lintScript, lintArgs)));
       assert.ok(pins.length, `${name}: no pinned: line`);
       move();
-      const unapproved = await w.run(script, args);
-      assert.match(unapproved.out, /no unused approval matches this write/, `${name}: ${unapproved.out}`);
-      assert.doesNotMatch(unapproved.out, /notice:/, name);
-      assert.deepEqual(sent(w), [], name);
-      const warnings = pins.filter((line) => line.startsWith("warning: "));
-      assert.ok(warnings.length, `${name}: no warning: line`);
-      w.approve([...texts, ...pins.filter((line) => !warnings.includes(line)), w.line(script, args)].join("\n"));
-      const unwarned = await w.run(script, args);
-      assert.match(unwarned.out, /no unused approval matches this write/, `${name}: ${unwarned.out}`);
-      assert.equal(w.tickets(), 1, name);
-      assert.deepEqual([...sent(w), ...op.calls], [], name);
       op.calls.length = 0;
-      w.approve([...texts, ...pins, w.line(script, args)].join("\n"));
       const posted = await w.run(script, args);
       assert.match(posted.out, /^notice: .* so it posts as drafted$/m, `${name}: ${posted.out}`);
       assert.doesNotMatch(posted.out, /refused/, `${name}: ${posted.out}`);
-      assert.equal(w.tickets(), 1, name);
       const written = [...sent(w), ...op.calls].join("\n");
       assert.ok(written.length, `${name}: nothing written`);
       assert.doesNotMatch(written, /notice|posts as drafted/, name);
@@ -145,7 +132,7 @@ test("on every writer a moved pin's notice is printed only once the approval is 
   }
 });
 
-test("a stale-source refusal leaves the approval ticket unused, on every path that rechecks pins", async () => {
+test("a stale-source refusal writes nothing, on every path that rechecks pins", async () => {
   const stale = [
     ["github-write post", async () => {
       const { w, sibling, draft } = gitWorld();
@@ -221,19 +208,17 @@ test("a stale-source refusal leaves the approval ticket unused, on every path th
       const { w, lint: [lintScript, lintArgs], move, script, args, texts, refusal } = await setup(op);
       const pins = await lint(w, lintScript, lintArgs);
       move();
-      w.approve([...texts, ...pins, w.line(script, args)].join("\n"));
       op.calls.length = 0;
       const result = await w.run(script, args);
       assert.notEqual(result.code, 0, name);
       assert.match(result.out, refusal, `${name}: ${result.out}`);
-      assert.doesNotMatch(result.out, /no unused approval|notice:/, name);
-      assert.equal(w.tickets(), 1, name);
+      assert.doesNotMatch(result.out, /notice:/, name);
       assert.deepEqual([...sent(w), ...op.calls], [], name);
     });
   }
 });
 
-test("a write refused for a missing sources record leaves its approval ticket unused", async () => {
+test("a write refused for a missing sources record writes nothing", async () => {
   const cases = [
     ["github-write", ["edit", "5", "--body-file", "b.md", "--repo", "o/r"], "The label is still wrong.", { gh: { write: { id: 5, html_url: "u", body: "x" }, comment: { pull_request_url: "https://api.github.com/repos/o/r/pulls/701" } } }, /refused: b\.md has no pinned sources; run draft-lint\.mjs pr-reply b\.md --pr 701 --repo o\/r \[--pinned-at <file pin-sources ran for>\],/],
     ["figma-comments", ["post", "1:2", "--body-file", "b.md", "--file", "F1"], "@lam Màn này thiếu trạng thái rỗng.", { web: { figma: [] } }, /refused: b\.md has no pinned sources; run draft-lint\.mjs figma-comment b\.md --file F1 --node 1:2 \[--pinned-at <file pin-sources ran for>\],/],
@@ -247,12 +232,10 @@ test("a write refused for a missing sources record leaves its approval ticket un
       const w = world({ ...options, opUrl: op.url });
       if (body) w.file("b.md", `${body}\n`);
       else w.file("items.json", JSON.stringify({ title: "PRD", items: [ITEM] }));
-      w.approve([body ?? `EPIC 09 · tab t.1 · UC_SW_13 BR1\nquote: ${ITEM.quote}\n${ITEM.comment}`, w.line(script, args)].join("\n"));
       op.calls.length = 0;
       const result = await w.run(script, args);
       assert.notEqual(result.code, 0, `${script} ${args[0]}`);
       assert.match(result.out, refusal, `${script} ${args[0]}: ${result.out}`);
-      assert.equal(w.tickets(), 1, `${script} ${args[0]}`);
       assert.deepEqual([...sent(w), ...op.calls], [], `${script} ${args[0]}`);
     });
   }
@@ -327,7 +310,7 @@ test("without an own OAuth client a Doc is pinned by its Drive text export: repl
   assert.equal(w.writes().length, 2);
 });
 
-test("a ready PR body refresh needs --repo and a ticket in answer mode, and neither in ask mode", async () => {
+test("a ready PR body refresh writes once, without --repo, also for a profile that still says answer", async () => {
   const op = await fakeOpenProject();
   try {
     for (const mode of ["answer", "ask"]) {
@@ -336,23 +319,9 @@ test("a ready PR body refresh needs --repo and a ticket in answer mode, and neit
       assert.equal(generated.code, 0, generated.out);
       w.file("p.md", generated.out);
       const bare = ["pr-body", "3", "--body-file", "p.md"];
-      const named = [...bare, "--repo", "o/r"];
-      if (mode === "ask") {
-        await w.run("github-write", bare);
-        assert.equal(w.writes().length, 1, mode);
-        assert.throws(() => readdirSync(join(w.dir, "state", "approvals")));
-        continue;
-      }
-      assert.match((await w.run("github-write", bare)).out, /name the write target with --repo/);
-      assert.match((await w.run("github-write", named)).out, /no unused approval matches this write/);
-      assert.deepEqual(w.writes(), []);
-      w.approve(`${generated.out.trim()}\n${w.line("github-write", named)}`);
-      await w.run("github-write", named);
-      assert.equal(w.writes().length, 1);
-      assert.ok(w.writes()[0].includes("repos/o/r/pulls/3"), w.writes()[0]);
-      assert.equal(w.tickets(), 0);
-      await w.run("github-write", named);
-      assert.equal(w.writes().length, 1);
+      await w.run("github-write", bare);
+      assert.equal(w.writes().length, 1, mode);
+      assert.throws(() => readdirSync(join(w.dir, "state", "approvals")));
     }
   } finally {
     op.server.close();
@@ -395,7 +364,7 @@ test("read pins of the Doc hold at the lint, and read pins of Figma nodes hold u
   assert.equal(sent(w).length, 0);
 });
 
-test("doc-comment-file post without --apply prints the warnings its lint recorded, for the approval preview", async () => {
+test("doc-comment-file post without --apply prints the warnings its lint recorded, for the quote before the write", async () => {
   const w = world({ mode: "ask", web: { document: textDoc(TAB), tabs: { "t.1": TAB } }, map: PRD_MAP });
   w.file("items.json", JSON.stringify({ title: "PRD", items: [ITEM] }));
   const lintWarnings = (await lint(w, "doc-comment-file", ["items.json"])).filter((line) => line.startsWith("warning: "));
@@ -432,7 +401,6 @@ test("a designer's edit to node A does not stop a post on node B, and a Doc chan
   const pins = await lint(w, "draft-lint", ["figma-comment", "f.md", "--file", "F1", "--node", "3-4", "--pinned-at", "ledger.md"]);
   changeWeb(w, { figmaModified: "2026-10-02T00:00:00Z", figmaNodes: { "1:2": { document: { id: "1:2", name: "designer edit" } } }, document: textDoc("Rewritten PRD\n") });
   const args = ["post", "3-4", "--body-file", "f.md", "--file", "F1"];
-  w.approve(["@lam Màn này thiếu trạng thái rỗng.", ...pins, w.line("figma-comments", args)].join("\n"));
   const posted = await w.run("figma-comments", args);
   assert.equal(posted.code, 0, posted.out);
   assert.match(posted.out, /^notice: Figma F1 lastModified changed .* node 3:4 is unchanged, so it posts as drafted$/m);
@@ -491,7 +459,7 @@ test("openproject preview, comment and comment-edit keep the read pins of --pinn
   });
 });
 
-test("a branch cite that no repo pins warns at the lint, and the post needs that warning in its approval", async () => {
+test("a branch cite that no repo pins warns at the lint, and the post still goes out", async () => {
   const { w, draft } = gitWorld();
   const cited = draft.replace("`src/a.ts:1@dev`", "`src/a.ts:1@release/9`");
   w.file("d.md", cited);
@@ -499,11 +467,6 @@ test("a branch cite that no repo pins warns at the lint, and the post needs that
   const warning = "warning: the cite @release/9 pins nothing: no repo in the project map has origin/release/9; check the branch name, or add pin-sources --branch <repo>:release/9 before the read";
   assert.ok(pins.includes(warning), pins.join("\n"));
   const args = ["post", "d.md", "--repo", "o/r"];
-  w.approve([cited, ...pins.filter((line) => line !== warning), w.line("github-write", args)].join("\n"));
-  const unwarned = await w.run("github-write", args);
-  assert.match(unwarned.out, /no unused approval matches this write/, unwarned.out);
-  assert.deepEqual(sent(w), []);
-  w.approve([cited, ...pins, w.line("github-write", args)].join("\n"));
   const posted = await w.run("github-write", args);
   assert.equal(posted.code, 0, posted.out);
   assert.equal(sent(w).length, 1);
