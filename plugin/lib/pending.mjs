@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { appendFileSync, closeSync, existsSync, lstatSync, openSync, readSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
-import { age, launchRecordPath, listJobs, parse, readRecord, slugOf, stamp } from "./job-files.mjs";
+import { age, launchRecordPath, listJobs, parse, readRecord, slugOf, stamp, updateRecord } from "./job-files.mjs";
 import { close as closeJob, closeHold, heldElsewhere, jobBusy, jobRecord, jobRole, olderKitStatus, resumeBlock } from "./job.mjs";
 import { CARD_KEYS, cardRefusal, headerLength, oneLine, readCard } from "./pending-cards.mjs";
 import { claudeProcess } from "./job-session-hooks.mjs";
@@ -408,7 +408,10 @@ export function closeFinished(map, file, { list = openPrs, caller = {} } = {}) {
     const { role, why } = trustedRole(job);
     if (!role) return `kept ${job.path}: ${why}`;
     const open = role === "dev" ? devHold(job, list) : null;
-    if (open) return `kept ${job.path}: ${open}`;
+    if (open) {
+      updateRecord(launchRecordPath(job.path), (record) => (record ? { ...record, close_kept_at: new Date().toISOString() } : undefined));
+      return `kept ${job.path}: ${open}`;
+    }
     const other = closeHold(job.path) ? null : heldElsewhere(job.path, caller);
     if (other) return `kept ${job.path}: its agent belongs to another live cockpit session (${other}), which may still resume it; close it there`;
     try {

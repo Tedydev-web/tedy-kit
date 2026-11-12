@@ -155,3 +155,11 @@ test("a notify card does not hold a done job open", () => {
   writeFileSync(join(w.root, "plans", "drafts", "261106-0916-notify-ci.md"), `kind: notify\ntitle: CI is green\njob: ${job}\n\nAll checks passed.\n`);
   assert.match(w.run(["close", "--if-finished"]).stdout, new RegExp(`^closed: ${job}$`, "m"));
 });
+
+test("a kept dev job's launch record notes when the close command kept it", () => {
+  const w = world();
+  const dev = jobFile(w, { role: "dev", name: "add-hello", status: "done", record: { repo: join(w.root, "fe"), branch: "feat/add-hello" } });
+  fakeGh(w, "echo https://github.com/o/r/pull/7");
+  w.run(["close", dev, "--if-finished"]);
+  assert.ok(Date.now() - Date.parse(w.record(dev).close_kept_at) < 60_000, JSON.stringify(w.record(dev)));
+});

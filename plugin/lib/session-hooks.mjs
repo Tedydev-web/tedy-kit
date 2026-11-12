@@ -1,9 +1,10 @@
-import { closeSync, existsSync, fstatSync, openSync, readSync, statSync } from "node:fs";
+import { closeSync, existsSync, fstatSync, mkdirSync, openSync, readSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { layoutOverride, memoryStats } from "./memory-stats.mjs";
 import { cards, clean, clip, finishedJobs, MORE, waitingText } from "./pending.mjs";
-import { closeHold, heldElsewhere, jobRole } from "./job.mjs";
+import { closeHold, heldElsewhere, jobRecord, jobRole } from "./job.mjs";
+import { STATE_DIR } from "./state-dir.mjs";
 import { claudeProcess } from "./job-session-hooks.mjs";
 import { currentTurn, gateSwitches, logGate, readHookInput, readTranscriptTail, toolUses } from "./hook-io.mjs";
 import { loadConfig, profileDir } from "./profile.mjs";
@@ -178,7 +179,36 @@ function capped(text) {
   return `${text.slice(0, cut)}${tail}`;
 }
 
-export const isCockpit = (input) => !input.agent_id && !Object.hasOwn(AGENT_ROLES, input.agent_type);
+export const isCockpit = (input) => !input.agent_id && !String(input.agent_type ?? "").startsWith("tedy:");
+
+const SAFE_SESSION = /^[\w-]+$/;
+const KEPT_QUIET_MS = 24 * 60 * 60 * 1000;
+const FRESH_START_MS = 60 * 60 * 1000;
+const startMarker = (session) => (typeof session === "string" && SAFE_SESSION.test(session) ? join(STATE_DIR, "ask-cards", session) : null);
+
+function markSessionStart(session) {
+  const marker = startMarker(session);
+  if (!marker) return;
+  try {
+    mkdirSync(join(STATE_DIR, "ask-cards"), { recursive: true });
+    writeFileSync(marker, `${new Date().toISOString()}\n`);
+  } catch (error) {
+    logGate({ hook: "ask-cards", decision: "start-marker-unwritten", error: error.message });
+  }
+}
+
+function justStarted(session) {
+  const marker = startMarker(session);
+  const at = marker ? statSync(marker, { throwIfNoEntry: false })?.mtimeMs : undefined;
+  if (at === undefined) return false;
+  rmSync(marker, { force: true });
+  return Date.now() - at < FRESH_START_MS;
+}
+
+const recentlyKept = (job) => {
+  const record = jobRecord(job.path);
+  return record?.role === "dev" && Date.now() - Date.parse(record.close_kept_at ?? "") < KEPT_QUIET_MS;
+};
 
 export function askCardsNotice(map, { held, caller, found }) {
   let text;
@@ -196,7 +226,7 @@ export function askCardsNotice(map, { held, caller, found }) {
 const closable = (job, perPrompt, caller) => {
   try {
     if (heldElsewhere(job.path, caller)) return false;
-    if (!perPrompt) return true;
+    if (!perPrompt) return !recentlyKept(job);
     const { role } = jobRole(job.path);
     return Boolean(role) && role !== "dev" && !closeHold(job.path);
   } catch {
@@ -273,7 +303,9 @@ function runPendingHandoffs() {
     const learn = resolved ? learnLine(input, resolved.map) : "";
     const caller = { session: input.session_id, cockpit: claudeProcess() };
     const read = resolved ? cockpitCards(resolved.map, caller) : null;
-    const notice = [configWarning(), resolved && sessionRoleCard(input), resolved && waitingNotice(resolved.map, { caller, found: read.problems.length ? undefined : read.found }), ...(resolved && isCockpit(input) ? cockpitNotices(resolved.map, caller, false, read) : []), learn].filter(Boolean).join("\n\n");
+    const blocks = resolved && isCockpit(input) ? cockpitNotices(resolved.map, caller, false, read).filter(Boolean) : [];
+    if (blocks.length) markSessionStart(input.session_id);
+    const notice = [configWarning(), resolved && sessionRoleCard(input), resolved && waitingNotice(resolved.map, { caller, found: read.problems.length ? undefined : read.found }), ...blocks, learn].filter(Boolean).join("\n\n");
     if (notice) process.stdout.write(JSON.stringify({ ...(learn && { systemMessage: learn }), hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: notice } }));
     if (learn) writeState(resolved.map.name, "learn_nudged", localDate());
   } catch (error) {
@@ -286,6 +318,10 @@ function runAskCards() {
   try {
     if (!isCockpit(input)) return;
     const resolved = resolveMap(input.cwd ?? process.cwd());
+    if (justStarted(input.session_id)) {
+      logGate({ hook: "ask-cards", decision: "skip-after-session-start", session: input.session_id });
+      return;
+    }
     const notice = resolved ? cockpitNotices(resolved.map, { session: input.session_id, cockpit: claudeProcess() }, true).filter(Boolean).join("\n\n") : "";
     if (notice) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: input.hook_event_name ?? "UserPromptSubmit", additionalContext: notice } }));
   } catch (error) {

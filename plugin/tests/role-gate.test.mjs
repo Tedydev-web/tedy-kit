@@ -331,6 +331,7 @@ test("a job asks before job.mjs close of another job or of itself and names the 
   assert.equal(gate.closeReason({ ...shell(`node /k/plugin/scripts/job.mjs close ${other}`), session_id: randomUUID() }, gate.agentRole({ session_id: randomUUID() })), null);
   assert.equal(closing(`node /k/plugin/scripts/job.mjs list && node /k/plugin/scripts/job.mjs stop ${own} --reason x`), null);
   assert.equal(closing("node /k/plugin/scripts/job.mjs close --if-finished"), "tedy role gate: this is a pm job (tedy:pm); job.mjs close --if-finished closes every done job that no card names and removes its worktree, which belongs to the cockpit. Allow it only if the user asked for it here.");
+  assert.equal(closing(`node /k/plugin/scripts/job.mjs close --if-finished ${other}`), `tedy role gate: this is a pm job (tedy:pm); job.mjs close ${other} --if-finished closes that job once it is done and no card names it, and removes its worktree, which belongs to the cockpit. Allow it only if the user asked for it here.`);
   assert.equal(closing(`node /k/plugin/scripts/job.mjs close ${other} --if-finished`), `tedy role gate: this is a pm job (tedy:pm); job.mjs close ${other} --if-finished closes that job once it is done and no card names it, and removes its worktree, which belongs to the cockpit. Allow it only if the user asked for it here.`);
 });
 
