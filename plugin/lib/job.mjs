@@ -168,6 +168,8 @@ export function olderKitStatus(record) {
   return alive(record) ? "older kit (session open)" : "older kit";
 }
 
+export const jobRecord = (file) => launchRecord(file);
+
 export function closeHold(file) {
   try {
     return agentHold(launchRecord(file))?.why ?? null;

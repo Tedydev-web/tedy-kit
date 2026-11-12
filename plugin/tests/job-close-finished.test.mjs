@@ -7,7 +7,6 @@ import { parse } from "../lib/job-files.mjs";
 import { bound, jobFile, sleeper, world } from "./job-world-for-tests.mjs";
 
 const status = (file) => parse(readFileSync(file, "utf8")).status;
-const withPr = (file, url = "https://github.com/o/r/pull/7") => appendFileSync(file, `\n## Outcome\n\nDraft PR ${url}, report plans/reports/dev.md\n`);
 const fakeGh = (w, body) => {
   writeFileSync(join(w.bin, "gh"), `#!/bin/sh\n${body}\n`);
   chmodSync(join(w.bin, "gh"), 0o755);
@@ -33,29 +32,50 @@ test("close --if-finished closes every done job no open card names, and leaves r
   assert.equal(w.run(["close", "--if-finished", "--reason", "x"]).status, 1);
 });
 
-test("a done dev job stays open while its PR is open or its state cannot be read, and closes once the PR is merged or closed", () => {
+test("a done dev job stays open while its recorded branch has an open PR, or the read fails, and closes once no PR from that branch is open", () => {
   const w = world();
-  const dev = jobFile(w, { role: "dev", name: "add-hello", status: "done" });
-  withPr(dev);
-  fakeGh(w, 'echo OPEN');
-  assert.equal(w.run(["close", dev, "--if-finished"]).stdout, `kept ${dev}: its PR https://github.com/o/r/pull/7 is open; it closes once the PR is merged or closed, or when the user asks\n`);
+  const log = join(w.root, "gh.log");
+  const repo = join(w.root, "fe");
+  const dev = jobFile(w, { role: "dev", name: "add-hello", status: "done", record: { repo, branch: "feat/add-hello" } });
+  fakeGh(w, `echo "$PWD|$*" >> "${log}"; echo https://github.com/o/r/pull/7`);
+  assert.equal(w.run(["close", dev, "--if-finished"]).stdout, `kept ${dev}: its branch feat/add-hello has an open PR (https://github.com/o/r/pull/7); it closes once that PR is merged or closed, or when the user asks\n`);
+  assert.deepEqual(readFileSync(log, "utf8").trim().split("\n"), [`${repo}|pr list --head feat/add-hello --state open --json url --jq .[].url`]);
   fakeGh(w, 'echo "HTTP 502" >&2; exit 1');
-  assert.match(w.run(["close", dev, "--if-finished"]).stdout, new RegExp(`^kept ${dev}: the state of its PR https://github\\.com/o/r/pull/7 could not be read \\(.*HTTP 502.*\\), so it stays open$`, "m"));
+  assert.match(w.run(["close", dev, "--if-finished"]).stdout, new RegExp(`^kept ${dev}: the open PRs of its branch feat/add-hello could not be read \\(.*HTTP 502.*\\), so it stays open$`, "m"));
   assert.equal(status(dev), "done");
-  fakeGh(w, 'echo MERGED');
+  fakeGh(w, "true");
   assert.match(w.run(["close", dev, "--if-finished"]).stdout, new RegExp(`^closed: ${dev}$`, "m"));
   assert.equal(status(dev), "closed");
 });
 
-test("a PR named outside the job's outcome, or by a job that is not dev, does not keep it open", () => {
+test("a done dev job whose launch record names no repository or branch stays open, whatever its outcome says, and a job of another role needs no PR read", () => {
   const w = world();
-  fakeGh(w, "echo OPEN");
-  const review = jobFile(w, { role: "review", name: "pr-7", status: "done" });
-  withPr(review);
+  fakeGh(w, 'echo "gh must not run" >&2; exit 1');
   const dev = jobFile(w, { role: "dev", name: "report-only", status: "done" });
-  writeFileSync(dev, readFileSync(dev, "utf8").replace("Add the line hello", "Rework https://github.com/o/r/pull/9: add the line hello"));
+  appendFileSync(dev, "\n## Outcome\n\nNo PR; report plans/reports/dev.md\n");
+  const review = jobFile(w, { role: "review", name: "pr-7", status: "done" });
+  appendFileSync(review, "\n## Outcome\n\nReviewed https://github.com/o/r/pull/7\n");
   const out = w.run(["close", "--if-finished"]);
-  assert.deepEqual([status(review), status(dev)], ["closed", "closed"], out.stdout + out.stderr);
+  assert.equal(out.status, 0, out.stderr);
+  assert.ok(out.stdout.includes(`kept ${dev}: its launch record names no repository and branch, so the kit cannot tell whether a PR from it is open; close it with plain job.mjs close when the user asks`), out.stdout);
+  assert.deepEqual([status(dev), status(review)], ["done", "closed"]);
+});
+
+test("close --if-finished closes nothing while a card cannot be read, and says why", { skip: process.getuid?.() === 0 }, () => {
+  const w = world();
+  const finished = jobFile(w, { role: "pm", name: "gaps", status: "done" });
+  mkdirSync(join(w.root, "plans", "drafts"), { recursive: true });
+  const unreadable = join(w.root, "plans", "drafts", "261106-0915-question-locked.md");
+  writeFileSync(unreadable, `kind: question\ntitle: Locked\njob: ${finished}\n\nWhich?\n- A: a\n- B: b\n`);
+  chmodSync(unreadable, 0o000);
+  try {
+    const out = w.run(["close", "--if-finished"]);
+    assert.equal(out.status, 1, out.stdout);
+    assert.match(out.stderr, new RegExp(`^job: a card could not be read \\(.*261106-0915-question-locked\\.md: EACCES\\), so no job was closed$`, "m"));
+    assert.equal(status(finished), "done");
+  } finally {
+    chmodSync(unreadable, 0o644);
+  }
 });
 
 test("close --if-finished keeps a done job whose agent still runs in a live cockpit, with close's own refusal", async () => {
@@ -71,30 +91,6 @@ test("close --if-finished keeps a done job whose agent still runs in a live cock
     cockpit.child.kill();
     await cockpit.exited;
   }
-});
-
-test("every outcome section counts up to the next note or outcome, whatever headings it holds, and a PR named as o/r#n, #n or on another host keeps the dev job open", () => {
-  const w = world();
-  const log = join(w.root, "gh.log");
-  fakeGh(w, `echo "$PWD|$*" >> "${log}"; echo OPEN`);
-  const nested = jobFile(w, { role: "dev", name: "nested", status: "done" });
-  appendFileSync(nested, "\n## Outcome\n\nDone.\n\n## PR\n\nDraft PR https://github.com/o/r/pull/7\n");
-  const short = jobFile(w, { role: "dev", name: "short", status: "done" });
-  appendFileSync(short, "\n## Outcome\n\nOpened o/r#8 for OP#21298.\n");
-  const bare = jobFile(w, { role: "dev", name: "bare", status: "done" });
-  appendFileSync(bare, "\n## Outcome\n\nOpened #9, task OP#21298.\n\n## Note 2026-11-12T01:00:00.000Z\n\nsee https://github.com/o/r/pull/99\n");
-  const hosted = jobFile(w, { role: "dev", name: "hosted", status: "done" });
-  appendFileSync(hosted, "\n## Outcome\n\nPR https://git.example.com/team/app/pull/3\n");
-  const out = w.run(["close", "--if-finished"]);
-  assert.equal(out.status, 0, out.stderr);
-  for (const [file, ref] of [[nested, "https://github.com/o/r/pull/7"], [short, "o/r#8"], [bare, "#9"], [hosted, "https://git.example.com/team/app/pull/3"]]) {
-    assert.ok(out.stdout.includes(`kept ${file}: its PR ${ref} is open;`), `${ref}\n${out.stdout}`);
-    assert.equal(status(file), "done");
-  }
-  const calls = readFileSync(log, "utf8").split("\n").filter(Boolean);
-  assert.ok(calls.includes(`${w.root}|pr view 8 --repo o/r --json state --jq .state`), calls.join("\n"));
-  assert.ok(calls.includes(`${w.root}|pr view 9 --json state --jq .state`), calls.join("\n"));
-  assert.ok(!calls.some((call) => /21298|pull\/99/.test(call)), calls.join("\n"));
 });
 
 test("a done job that a started or refused card still names is not closed", () => {

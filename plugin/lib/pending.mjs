@@ -4,7 +4,7 @@ import { appendFileSync, existsSync, lstatSync, mkdirSync, readdirSync, readFile
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { age, launchRecordPath, listJobs, parse, readRecord, slugOf, stamp } from "./job-files.mjs";
-import { close as closeJob, jobBusy, olderKitStatus } from "./job.mjs";
+import { close as closeJob, jobBusy, jobRecord, olderKitStatus } from "./job.mjs";
 import { cardRefusal, headerLength, oneLine, readCard } from "./pending-cards.mjs";
 import { resolveMap } from "./project-map.mjs";
 
@@ -324,56 +324,40 @@ export function waitingText(map, { offline = false, limit = Infinity, budgetMs =
   ], limit);
 }
 
-const PR_REFS = [
-  [/https?:\/\/[^\s/]+\/[\w.-]+\/[\w.-]+\/pull\/\d+/g, ([url]) => ({ label: url, args: ["pr", "view", url] })],
-  [/(?<![\w./-])([\w.-]+\/[\w.-]+)#(\d+)\b/g, ([label, repo, number]) => ({ label, args: ["pr", "view", number, "--repo", repo] })],
-  [/(?<![\w/#&])#(\d+)\b/g, ([label, number]) => ({ label, args: ["pr", "view", number] })],
-];
-
-export function outcomeRefs(text) {
-  let inside = false;
-  const lines = [];
-  for (const line of text.split("\n")) {
-    if (/^## Outcome\s*$/.test(line)) inside = true;
-    else if (/^## Note /.test(line)) inside = false;
-    else if (inside) lines.push(line);
-  }
-  const body = lines.join("\n");
-  const refs = PR_REFS.flatMap(([pattern, ref]) => [...body.matchAll(pattern)].map(ref));
-  return refs.filter((ref, index) => refs.findIndex((other) => other.label === ref.label) === index);
-}
-
-export function finishedJobs(map, found = cards(map)) {
+export function finishedJobs(map, found, problems = []) {
+  const read = found ?? cards(map, problems);
+  if (problems.length) throw new Error(`a card could not be read (${problems.join("; ")}), so no job was closed`);
   const root = map.paths[0];
-  const named = new Set(found.filter((item) => item.job !== "none").map((item) => realOrNull(resolve(root, item.job))));
-  return listJobs(map)
-    .filter((job) => job.status === "done" && !named.has(realOrNull(job.path)))
-    .map((job) => ({ ...job, prs: job.role === "dev" ? outcomeRefs(readFileSync(job.path, "utf8")) : [] }));
+  const named = new Set(read.filter((item) => item.job !== "none").map((item) => realOrNull(resolve(root, item.job))));
+  return listJobs(map).filter((job) => job.status === "done" && !named.has(realOrNull(job.path)));
 }
 
-export const prState = (ref, cwd) => execFileSync("gh", [...ref.args, "--json", "state", "--jq", ".state"], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 15000 }).trim();
+export const openPrs = (branch, cwd) => execFileSync("gh", ["pr", "list", "--head", branch, "--state", "open", "--json", "url", "--jq", ".[].url"], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 15000 }).split("\n").map((line) => line.trim()).filter(Boolean);
 
-function openPr(job, state, root) {
-  const cwd = [job.repo, job.cwd].find((dir) => dir && existsSync(dir)) ?? root;
-  for (const ref of job.prs) {
-    let current;
-    try {
-      current = state(ref, cwd);
-    } catch (error) {
-      const why = String(error.stderr ?? "").split("\n").find((line) => line.trim()) ?? error.message;
-      return `the state of its PR ${ref.label} could not be read (${why.trim()}), so it stays open`;
-    }
-    if (current !== "MERGED" && current !== "CLOSED") return `its PR ${ref.label} is ${current.toLowerCase() || "in an unknown state"}; it closes once the PR is merged or closed, or when the user asks`;
+function devHold(job, list) {
+  let record;
+  try {
+    record = jobRecord(job.path);
+  } catch (error) {
+    return `${error.message}, so it stays open`;
   }
-  return null;
+  if (!record?.repo || !record?.branch || !existsSync(record.repo)) return "its launch record names no repository and branch, so the kit cannot tell whether a PR from it is open; close it with plain job.mjs close when the user asks";
+  let urls;
+  try {
+    urls = list(record.branch, record.repo);
+  } catch (error) {
+    const why = String(error.stderr ?? "").split("\n").find((line) => line.trim()) ?? error.message;
+    return `the open PRs of its branch ${record.branch} could not be read (${why.trim()}), so it stays open`;
+  }
+  return urls.length ? `its branch ${record.branch} has an open PR (${urls.join(", ")}); it closes once that PR is merged or closed, or when the user asks` : null;
 }
 
-export function closeFinished(map, file, { state = prState } = {}) {
+export function closeFinished(map, file, { list = openPrs } = {}) {
   const only = ofJob(file);
   const found = finishedJobs(map).filter((job) => !only || only(job.path));
   if (only && !found.length) return [`kept ${file}: it is not done, or a card still names it`];
   return found.map((job) => {
-    const open = openPr(job, state, map.paths[0]);
+    const open = job.role === "dev" ? devHold(job, list) : null;
     if (open) return `kept ${job.path}: ${open}`;
     try {
       return closeJob(map, job.path);

@@ -192,10 +192,10 @@ export function askCardsNotice(map, { held, session, found }) {
   return capped(`${ASK_HEAD}\n${text}`);
 }
 
-export function closeJobsNotice(map, { perPrompt, found }) {
+export function closeJobsNotice(map, { perPrompt, found, problems }) {
   let jobs;
   try {
-    jobs = finishedJobs(map, found).filter((job) => !perPrompt || (!job.prs.length && !closeHold(job.path)));
+    jobs = finishedJobs(map, found, problems).filter((job) => !perPrompt || (job.role !== "dev" && !closeHold(job.path)));
   } catch (error) {
     logGate({ hook: "ask-cards", decision: "close-skipped", error: error.message });
     return "";
@@ -207,16 +207,18 @@ export function closeJobsNotice(map, { perPrompt, found }) {
 }
 
 function cockpitNotices(map, session, perPrompt) {
-  const found = cockpitCards(map, session);
-  return [askCardsNotice(map, { held: !perPrompt, session, found }), closeJobsNotice(map, { perPrompt, found })];
+  const problems = [];
+  const found = cockpitCards(map, session, problems);
+  return [askCardsNotice(map, { held: !perPrompt, session, found }), closeJobsNotice(map, { perPrompt, found, problems })];
 }
 
-function cockpitCards(map, session) {
+function cockpitCards(map, session, problems) {
   try {
-    return cards(map, [], session);
+    return cards(map, problems, session);
   } catch (error) {
     logGate({ hook: "ask-cards", decision: "cards-unread", error: error.message });
-    return undefined;
+    problems.push(error.message);
+    return [];
   }
 }
 

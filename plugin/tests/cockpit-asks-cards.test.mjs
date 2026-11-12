@@ -90,7 +90,7 @@ test("the per-prompt list leaves out a held publish card that the session start 
   assert.ok(text.endsWith("\n- … 2 more; /tedy:pending lists them all"), text);
 });
 
-test("each prompt and the session start tell the cockpit to close finished jobs no open card names, and only the session start lists a dev job whose outcome names a PR", () => {
+test("each prompt and the session start tell the cockpit to close finished jobs no open card names, and only the session start lists a dev job", () => {
   const c = cockpit();
   const pm = join(c.work, "plans", "jobs", "261106-0930-pm-gaps.md");
   writeFileSync(pm, "to: tedy:pm\nfrom: cockpit\nstatus: done\ncreated: 2026-11-06T02:30:00.000Z\ntitle: Gaps\n\nbody\n\n## Outcome\n\nreport plans/reports/gaps.md\n");
