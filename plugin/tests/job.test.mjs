@@ -422,7 +422,7 @@ test("close and resume refuse while a second agent recorded on the job runs in a
     assert.equal(refused.status, 1, refused.stdout);
     assert.equal(refused.stderr, `job: ${file}: ${held}stop it with TaskStop in that session, then close it again; nothing was closed\n`);
     const notResumed = w.run(["resume", file, "--note-file", note]);
-    assert.equal(notResumed.stderr, `job: ${file}: ${held}wait until it is idle, or stop it with TaskStop in that session, then resume it again; nothing was resumed\n`);
+    assert.equal(notResumed.stderr, `busy: ${file}: ${held}wait until it is idle, or stop it with TaskStop in that session, then resume it again; nothing was resumed\n`);
     updateRecord(launchRecordPath(file, w.state), (record) => ({ ...record, agents: { b2: "idle" } }));
     const closed = w.run(["close", file]);
     assert.equal(closed.status, 0, closed.stderr);
@@ -435,7 +435,7 @@ test("close and resume refuse while a second agent recorded on the job runs in a
     assert.match(w.run(["list"]).stdout, new RegExp(`^dev · two · lost \\(no launch record\\) · .* · ${file}$`, "m"));
     const pending = execFileSync(process.execPath, [join(PLUGIN, "scripts", "pending.mjs"), "list", "--offline"], { cwd: w.root, encoding: "utf8", env: w.env() });
     assert.match(pending, /^- dev: two \(running, /m);
-    assert.equal(w.run(["resume", file, "--note-file", note]).stderr, `job: ${file} has no launch record, so it was not started by job.mjs start here; close it and start a new job\n`);
+    assert.equal(w.run(["resume", file, "--note-file", note]).stderr, `refused: ${file} has no launch record, so it was not started by job.mjs start here; close it and start a new job\n`);
   } finally {
     live.child.kill("SIGKILL");
   }

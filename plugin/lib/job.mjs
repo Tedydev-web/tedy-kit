@@ -13,14 +13,20 @@ const DEV_SKILL = join(PLUGIN, "skills", "dev", "SKILL.md");
 const NAME_LIMIT = 32;
 const RESUMED = "is resumed: the latest ## Note in the job file, quoted below, is the rework request. Go on with it and end with job.mjs done or stop.";
 
-function writableRepo(map, given) {
+function repoRefusal(map, given) {
   const root = map.paths[0];
   const path = resolve(root, given);
   const repo = (map.repos ?? []).find((item) => resolve(root, item.path) === path);
-  if (!repo) throw new Error(`${given} is not a repository in the project map`);
-  if (repo.readonly) throw new Error(`${given} is read-only in the project map; a job may not write there`);
-  if (!existsSync(path)) throw new Error(`${path} does not exist`);
-  return path;
+  if (!repo) return `${given} is not a repository in the project map`;
+  if (repo.readonly) return `${given} is read-only in the project map; a job may not write there`;
+  if (!existsSync(path)) return `${path} does not exist`;
+  return null;
+}
+
+function writableRepo(map, given) {
+  const why = repoRefusal(map, given);
+  if (why) throw new Error(why);
+  return resolve(map.paths[0], given);
 }
 
 function startPrompt(role, file) {
@@ -46,24 +52,30 @@ const differences = (file, job, record) => RECORDED.filter((key) => job[key] !==
 
 const NAMED_ROLE = /^\d{6}-\d{4}-(pm|devops|dev|review)-/;
 
+const outsideJobs = (map, file, real) => (!existsSync(jobsDir(map)) || dirname(real) !== realpathSync(jobsDir(map)) ? `${file} is not under ${jobsDir(map)} of this project` : null);
+
 function inJobsDir(map, file) {
   const job = readJob(file);
   const real = realpathSync(job.path);
-  if (!existsSync(jobsDir(map)) || dirname(real) !== realpathSync(jobsDir(map))) throw new Error(`${file} is not under ${jobsDir(map)} of this project`);
+  const outside = outsideJobs(map, file, real);
+  if (outside) throw new Error(outside);
   return { ...job, real };
 }
 
-function trusted(map, file) {
-  const job = inJobsDir(map, file);
-  const named = basename(job.real).match(NAMED_ROLE)?.[1];
-  if (named !== job.role) throw new Error(`${file}: its to: ${job.to} does not match the role ${named ?? "(none)"} in its file name`);
-  const record = launchRecord(job.real);
-  if (!record || isTombstone(record)) return { ...job, record: null };
+function trustedJob(map, file) {
+  const job = readJob(file);
+  const real = realpathSync(job.path);
+  const outside = outsideJobs(map, file, real);
+  if (outside) return { reason: outside };
+  const named = basename(real).match(NAMED_ROLE)?.[1];
+  if (named !== job.role) return { reason: `${file}: its to: ${job.to} does not match the role ${named ?? "(none)"} in its file name` };
+  const record = launchRecord(real);
+  if (!record || isTombstone(record)) return { job: { ...job, real, record: null } };
   const [different] = differences(file, job, record);
-  if (different) throw new Error(`${different}; a job file may not change it`);
+  if (different) return { reason: `${different}; a job file may not change it` };
   const repo = record.repo ?? record.cwd;
-  if (repo !== map.paths[0]) writableRepo(map, repo);
-  return { ...job, record };
+  const why = repo === map.paths[0] ? null : repoRefusal(map, repo);
+  return why ? { reason: why } : { job: { ...job, real, record } };
 }
 
 function createJob(dir, base, text) {
@@ -294,28 +306,24 @@ export function prune(map, { days = 10, dryRun = false, now = Date.now() } = {})
 
 function olderWorktree(file, record) {
   const dir = record.session_cwd;
-  if (typeof dir !== "string" || !record.repo || dir === record.cwd) return "";
+  if (typeof dir !== "string" || !record.repo || dir === record.cwd) return { folder: "" };
   try {
-    return linkedWorktreeOf(record.repo, dir) ? ` Work in ${JSON.stringify(dir)}: the older kit's session worked this job there, so its branch and commits are there, not in the folder the job file's cwd names.` : "";
+    return { folder: linkedWorktreeOf(record.repo, dir) ? ` Work in ${JSON.stringify(dir)}: the older kit's session worked this job there, so its branch and commits are there, not in the folder the job file's cwd names.` : "" };
   } catch (error) {
-    throw new Error(`${file}: the kit cannot tell whether ${dir}, where an older kit's session worked this job, is a worktree of ${record.repo} (${error.message}); nothing was resumed`);
+    return { refusal: busy(`${file}: the kit cannot tell whether ${dir}, where an older kit's session worked this job, is a worktree of ${record.repo} (${error.message}); nothing was resumed`) };
   }
 }
 
 const sameProcess = (found, record) => Boolean(found) && found.pid === record.cockpit_pid && found.start === record.cockpit_pid_start;
 
-export function resumeRefusal(map, file, caller = {}) {
-  let job;
-  try {
-    job = trusted(map, file);
-  } catch (error) {
-    return { kind: "permanent", reason: error.message, agent: false };
-  }
-  const permanent = (reason, agent = false) => ({ kind: "permanent", reason, agent });
-  const busy = (reason) => ({ kind: "busy", reason, agent: true });
-  if (job.status === "closed") return permanent(`${file} is closed; start a new job instead`);
-  if (!job.record) return permanent(`${file} has no launch record, so it was not started by job.mjs start here; close it and start a new job`);
-  const { record } = job;
+const permanent = (reason, agent = false) => ({ kind: "permanent", reason, agent });
+const busy = (reason) => ({ kind: "busy", reason, agent: true });
+const REFUSAL = Symbol("refusal");
+const refused = (refusal) => Object.assign(new Error(refusal.reason), { kind: refusal.kind, [REFUSAL]: true });
+const asRefusal = (file, error) => (error?.[REFUSAL] ? error : refused(busy(`${file}: ${error?.message ?? error}; the resume did not finish, run it again`)));
+
+function recordRefusal(file, record, caller) {
+  if (!record || isTombstone(record)) return permanent(`${file} has no launch record, so it was not started by job.mjs start here; close it and start a new job`);
   if (!existsSync(record.cwd)) return permanent(`${file}: its folder ${record.cwd} no longer exists; close it and start a new job`);
   const older = fromOlderKit(record) && olderSession(record);
   if (older) return busy(`${file}: ${older}; end that session first, then resume it again; nothing was resumed`);
@@ -330,28 +338,54 @@ export function resumeRefusal(map, file, caller = {}) {
   return null;
 }
 
-export function resume(map, file, note, { caller = claudeProcess } = {}) {
-  if (!String(note ?? "").trim()) throw new Error("the note is empty");
-  const cockpit = caller();
-  const refusal = resumeRefusal(map, file, { cockpit });
-  if (refusal) throw new Error(refusal.reason);
-  const job = trusted(map, file);
-  const { record } = job;
-  const live = Boolean(record.agent_id) && cockpitAlive(record);
-  const folder = live ? "" : olderWorktree(file, record);
-  const agent = record.agent_id;
-  const name = record.agent_name ?? agentName(record.role, job.path);
+function resumePlan(map, file, caller, note) {
+  if (note !== undefined && !String(note).trim()) return { refusal: busy(`${file}: the note is empty; write the answers into the note file and resume it again; nothing was resumed`) };
+  if (!existsSync(file)) return { refusal: permanent(`${file} does not exist; start a new job instead`) };
+  let trust;
+  try {
+    trust = trustedJob(map, file);
+  } catch (error) {
+    return { refusal: busy(`${file}: ${error.message}; nothing was resumed, run it again`) };
+  }
+  if (trust.reason) return { refusal: permanent(trust.reason) };
+  const { job } = trust;
+  if (job.status === "closed") return { refusal: permanent(`${file} is closed; start a new job instead`) };
+  const refusal = recordRefusal(file, job.record, caller);
+  if (refusal) return { refusal };
+  const live = Boolean(job.record.agent_id) && cockpitAlive(job.record);
+  const older = live ? { folder: "" } : olderWorktree(file, job.record);
+  return older.refusal ? { refusal: older.refusal } : { job, folder: older.folder };
+}
+
+export const resumeRefusal = (map, file, caller = {}, note) => resumePlan(map, file, caller, note).refusal ?? null;
+
+function resumeWrites(file, { job, folder }, note, caller) {
+  let sent;
   updateRecord(launchRecordPath(job.real), (fresh) => {
-    if (fresh?.agent_id !== agent) throw new Error(`${file}: its launch record changed while resuming (agent ${fresh?.agent_id ?? "none"}, not ${agent ?? "none"}); nothing was resumed, run the command again`);
+    const again = recordRefusal(file, fresh, caller);
+    if (again) throw refused(again);
+    const live = Boolean(fresh.agent_id) && cockpitAlive(fresh);
+    sent = { live, agent: fresh.agent_id, role: fresh.role, name: fresh.agent_name ?? agentName(fresh.role, job.path) };
     if (live) return { ...fresh, state: "running" };
     const earlier = Object.keys(agentsOf(fresh));
-    return { ...withoutAgent(fresh), agent_name: name, ...cockpitOf(cockpit), ...(earlier.length && { earlier: [...(fresh.earlier ?? []), ...earlier] }) };
+    return { ...withoutAgent(fresh), agent_name: sent.name, ...cockpitOf(caller.cockpit), ...(earlier.length && { earlier: [...(fresh.earlier ?? []), ...earlier] }) };
   });
   const at = new Date().toISOString();
   writeAtomic(job.path, withSection(setStatus(job.text, "running", at), `Note ${at}`, note));
-  if (live) return { tool: "SendMessage", to: record.agent_id, message: `Job file ${JSON.stringify(job.path)} ${RESUMED}\n\n${note.trim()}` };
-  const prompt = `${startPrompt(record.role, job.path)}${folder} The job ${RESUMED}\n\n${note.trim()}`;
-  return { tool: "Agent", ...agentSpec(record.role, job.title ?? record.role, name, prompt) };
+  if (sent.live) return { tool: "SendMessage", to: sent.agent, message: `Job file ${JSON.stringify(job.path)} ${RESUMED}\n\n${note.trim()}` };
+  const prompt = `${startPrompt(sent.role, job.path)}${folder} The job ${RESUMED}\n\n${note.trim()}`;
+  return { tool: "Agent", ...agentSpec(sent.role, job.title ?? sent.role, sent.name, prompt) };
+}
+
+export function resume(map, file, note, { caller = claudeProcess } = {}) {
+  try {
+    const identity = { cockpit: caller() };
+    const plan = resumePlan(map, file, identity, String(note ?? ""));
+    if (plan.refusal) throw refused(plan.refusal);
+    return resumeWrites(file, plan, String(note), identity);
+  } catch (error) {
+    throw asRefusal(file, error);
+  }
 }
 
 function kitStatus(record) {
@@ -420,8 +454,13 @@ function main([command, target, ...rest]) {
   if (command === "resume" && target) {
     only("resume", rest, ["--note-file"], "resumed");
     if (text(given["note-file"])) {
-      print(resume(project(), target, readFileSync(given["note-file"], "utf8")));
-      return 0;
+      try {
+        print(resume(project(), target, readFileSync(given["note-file"], "utf8")));
+        return 0;
+      } catch (error) {
+        console.error(`${error.kind === "permanent" ? "refused" : "busy"}: ${error.message}`);
+        return 1;
+      }
     }
   }
   if (command === "close" && [target, ...rest].includes("--if-finished")) {

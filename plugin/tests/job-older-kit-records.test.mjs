@@ -143,7 +143,7 @@ test("resume of a job an older kit started refuses and writes nothing while the 
     const refused = w.run(["resume", file, "--note-file", note(w)]);
     assert.equal(refused.status, 1, refused.stdout);
     assert.equal(refused.stdout, "");
-    assert.equal(refused.stderr, `job: ${file}: the session an older kit recorded for this job (claude pid ${session.pid}) is still open; end that session first, then resume it again; nothing was resumed\n`);
+    assert.equal(refused.stderr, `busy: ${file}: the session an older kit recorded for this job (claude pid ${session.pid}) is still open; end that session first, then resume it again; nothing was resumed\n`);
     assert.equal(readFileSync(file, "utf8"), text);
     assert.equal(readFileSync(launchRecordPath(file, w.state), "utf8"), record);
     const other = w.run(["resume", reused, "--note-file", note(w)]);
