@@ -107,7 +107,7 @@ export function initProfile(dir = profileDir(), conventions = []) {
 }
 
 const MIN_CLAUDE_VERSION = [2, 1, 301];
-const RULES_BUDGET = 6000;
+const RULES_BUDGET = 6300;
 
 function git(dir, ...args) {
   try {

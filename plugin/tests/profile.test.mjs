@@ -125,13 +125,13 @@ test("doctor prints one obsolete line, and still passes, for a config that says 
   assert.doesNotMatch(ask.stdout, /obsolete/);
 });
 
-test("doctor fails when rules.md is over 6000 bytes", () => {
-  const within = runDoctor({ TEDY_PROFILE_DIR: profileWith({ "config.json": "{}", "rules.md": "r".repeat(6000) }) });
+test("doctor fails when rules.md is over 6300 bytes", () => {
+  const within = runDoctor({ TEDY_PROFILE_DIR: profileWith({ "config.json": "{}", "rules.md": "r".repeat(6300) }) });
   assert.equal(within.status, 0, within.stdout);
-  assert.match(within.stdout, /^ok rules-size: 6000 bytes$/m);
-  const over = runDoctor({ TEDY_PROFILE_DIR: profileWith({ "config.json": "{}", "rules.md": "r".repeat(6001) }) });
+  assert.match(within.stdout, /^ok rules-size: 6300 bytes$/m);
+  const over = runDoctor({ TEDY_PROFILE_DIR: profileWith({ "config.json": "{}", "rules.md": "r".repeat(6301) }) });
   assert.equal(over.status, 1);
-  assert.match(over.stdout, /^fail rules-size: 6001 bytes, over 6000$/m);
+  assert.match(over.stdout, /^fail rules-size: 6301 bytes, over 6300$/m);
   const none = runDoctor({ TEDY_PROFILE_DIR: profileWith({ "config.json": "{}" }) });
   assert.doesNotMatch(none.stdout, /rules-size/);
 });
