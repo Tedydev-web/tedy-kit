@@ -48,6 +48,8 @@ test("a card block may be exactly gh pr merge <n> --repo <owner/repo> --merge, -
     assert.equal(verdict.ask, true, method);
     assert.match(verdict.reason, /belongs to the user/);
   }
+  const withStatus = publish(map, `### 1\ngh pr merge 963 --repo o/r --squash\n\n### 2\nnode ${SCRIPTS}/openproject.mjs set 21298 --status Closed --apply --lock 4 --job ${JOB.split("/").pop()}\n- #21298 In review → Closed`, { job: JOB });
+  assert.equal(cardCheck(withStatus, map), 2);
   for (const command of [
     "gh pr merge 963 --repo o/r --squash --admin",
     "gh pr merge 963 --repo o/r --squash --auto",
