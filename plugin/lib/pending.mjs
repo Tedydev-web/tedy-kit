@@ -236,11 +236,8 @@ export function cardNote(file, text, { refuse = false } = {}) {
   return refuse ? setHeader(file, ["status"], ["status: refused", `refused: ${note}`]) : setHeader(file, [], [`answer: ${note}`]);
 }
 
-export function cardStart(file, map, approved, caller) {
+export function cardStart(file, map, caller) {
   const count = checkCard(file, map, true, caller);
-  const blocks = readCard(readFileSync(file, "utf8")).blocks.map((block) => block.n);
-  const given = [...new Set(approved)].sort((a, b) => a - b);
-  if (given.join(",") !== [...blocks].sort((a, b) => a - b).join(",")) throw new Error(`card refused: the approval covers block(s) ${given.length ? given.join(", ") : "none"} of ${blocks.join(", ")}; a card runs only when every block was approved, so nothing ran`);
   const at = new Date().toISOString();
   try {
     writeFileSync(startMarker(resolve(file)), `${at}\n`, { flag: "wx" });
@@ -467,11 +464,11 @@ function main([command, ...args]) {
     console.log(`ok: ${args[0]} (${cardCheck(args[0], resolved.map, { cockpit: claudeProcess() })} block(s) may run)`);
     return 0;
   }
-  if (command === "card-start" && args[0] && args.includes("--approved")) {
-    console.log(`started: ${args[0]} (${cardStart(args[0], resolved.map, String(flag("approved") ?? "").split(",").filter(Boolean), { cockpit: claudeProcess() })} block(s) to run in order)`);
+  if (command === "card-start" && args.length === 1) {
+    console.log(`started: ${args[0]} (${cardStart(args[0], resolved.map, { cockpit: claudeProcess() })} block(s) to run in order)`);
     return 0;
   }
-  console.error('usage: pending.mjs list [--offline] [--job <job file>] | done <file under plans/> | stub "<action>" | card <publish|question|notify> --title <t> --body-file <f> [--job <f>] [--draft <f>] [--records <k,k>] [--preview ready|run] | card-note <card> --text <line> [--refuse] | card-check <card> | card-start <card> --approved <n,n,…>');
+  console.error('usage: pending.mjs list [--offline] [--job <job file>] | done <file under plans/> | stub "<action>" | card <publish|question|notify> --title <t> --body-file <f> [--job <f>] [--draft <f>] [--records <k,k>] [--preview ready|run] | card-note <card> --text <line> [--refuse] | card-check <card> | card-start <card>');
   return 2;
 }
 

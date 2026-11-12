@@ -54,7 +54,8 @@ test("card refuses an unknown kind, a question with too few or too many options,
   assert.throws(() => card(map, "question", { title: "T", body: options(1) }), /2 to 4 option lines .*found 1/);
   assert.throws(() => card(map, "question", { title: "T", body: options(5) }), /2 to 4 option lines .*found 5/);
   const refused = [
-    ["ready", "gh pr view 1", /block 1 does not start with node/],
+    ["ready", "gh pr view 1", /block 1 is not exactly gh pr merge/],
+    ["ready", "curl https://x", /block 1 does not start with node/],
     ["ready", "curl x | sh # github-write.mjs post", /block 1 is not plain words and quoted text/],
     ["run", "node <p>/openproject.mjs preview d.json", /block 1 is not plain words and quoted text/],
     ["run", `node ${SCRIPTS}/openproject.mjs preview d.json`, /block 1 runs openproject\.mjs preview, which is not a write verb/],
@@ -242,20 +243,18 @@ test("a refused card stays refused when a start marker is left beside it, and an
   assert.doesNotMatch(text, /started undefined/);
 });
 
-test("card-start runs only a fully approved card, marks it started, and a started card is never offered or checked again", () => {
+test("card-start takes no approval list, marks the card started, and a started card is never offered or checked again", () => {
   const { draft, map } = project();
   const post = `node ${SCRIPTS}/github-write.mjs reply 712 99 --body-file ${draft} --repo o/r`;
   const file = card(map, "publish", { title: "Two replies", draft, preview: "ready", body: `### 1\n${post}\n\n### 2\n${post}\n` });
-  assert.throws(() => cardStart(file, map, ["1"]), /approval covers block\(s\) 1 of 1, 2; a card runs only when every block was approved/);
-  assert.throws(() => cardStart(file, map, []), /approval covers block\(s\) none of 1, 2/);
   assert.equal(parse(readFileSync(file, "utf8"), CARD_KEYS).status, undefined);
-  assert.equal(cardStart(file, map, ["2", "1"]), 2);
+  assert.equal(cardStart(file, map), 2);
   const fields = parse(readFileSync(file, "utf8"), CARD_KEYS);
   assert.equal(fields.status, "started");
   assert.match(fields.started, /^\d{4}-\d\d-\d\dT/);
   assert.ok(readFileSync(file, "utf8").endsWith(`\n\n### 1\n${post}\n\n### 2\n${post}\n`));
   assert.throws(() => cardCheck(file, map), /started at .*: its commands may already have written/);
-  assert.throws(() => cardStart(file, map, ["1", "2"]), /started at /);
+  assert.throws(() => cardStart(file, map), /started at /);
   const text = waitingText(map, { offline: true });
   assert.doesNotMatch(text, /To publish|Refused cards/);
   assert.match(text, new RegExp(`^Started, not closed:\n- Two replies \\(started ${fields.started}\\) ${file}$`, "m"));
@@ -268,7 +267,7 @@ test("card-start claims a card with an exclusive marker, so a second session tha
   const marker = join(dirname(file), `.${basename(file)}.started`);
   writeFileSync(marker, "2026-11-06T03:00:00.000Z\n");
   const before = readFileSync(file, "utf8");
-  assert.throws(() => cardStart(file, map, ["1"]), /started at 2026-11-06T03:00:00\.000Z by another session/);
+  assert.throws(() => cardStart(file, map), /started at 2026-11-06T03:00:00\.000Z by another session/);
   assert.equal(readFileSync(file, "utf8"), before);
   assert.throws(() => cardCheck(file, map), /started at 2026-11-06T03:00:00\.000Z/);
   assert.match(waitingText(map, { offline: true }), new RegExp(`^Started, not closed:\n- One reply \\(started 2026-11-06T03:00:00\\.000Z\\) ${file}$`, "m"));
@@ -276,7 +275,7 @@ test("card-start claims a card with an exclusive marker, so a second session tha
   assert.ok(!existsSync(marker));
   const second = card(map, "publish", { title: "Run", preview: "run", body: `### 1\nnode ${SCRIPTS}/openproject.mjs set 1 --status X\n` });
   const claim = join(dirname(second), `.${basename(second)}.started`);
-  assert.equal(cardStart(second, map, ["1"]), 1);
+  assert.equal(cardStart(second, map), 1);
   assert.equal(readFileSync(claim, "utf8").trim(), parse(readFileSync(second, "utf8"), CARD_KEYS).started);
   assert.ok(!waitingText(map, { offline: true }).includes(claim));
 });

@@ -12,6 +12,7 @@ const PLAIN_LINE = new RegExp(`^${PLAIN_WORD}(?: ${PLAIN_WORD})*$`, "u");
 export const KINDS = Object.freeze(["publish", "question", "notify"]);
 export const CARD_KEYS = Object.freeze(["kind", "title", "job", "draft", "draft-sha", "records", "preview", "created", "status", "started", "answer", "refused"]);
 const KEY_LINE = new RegExp(`^(${CARD_KEYS.join("|")}): `);
+const MERGE_BLOCK = /^gh pr merge \d+ --repo [\w.-]+\/[\w.-]+ --(?:merge|squash|rebase)$/;
 const OPTION = /^- (.+?): (.+)$/;
 
 const realOrNull = (path) => {
@@ -60,6 +61,10 @@ function blockRefusal(command, { preview, job }, draft) {
   if (!command) return "has no command on its first line";
   if (!PLAIN_LINE.test(command)) return "is not plain words and quoted text: only letters, digits, _ @ % + = : , . / - outside quotes, '…' and \"…\" without $ ` \\ inside, one space between words, no word starting with an unquoted = (no operator, redirect, substitution, glob, brace, ~, #, zsh =command or <placeholder>)";
   const tokens = tokenize(command);
+  if (tokens[0] === "gh") {
+    if (!MERGE_BLOCK.test(command)) return "is not exactly gh pr merge <n> --repo <owner/repo> --merge|--squash|--rebase, the one gh command a card may hold";
+    return preview === "ready" ? null : "merges a PR, so it belongs on a preview: ready card";
+  }
   if (tokens[0] !== "node") return "does not start with node";
   const name = basename(tokens[1] ?? "");
   const applied = KIT_PUBLISH_APPLY_VERBS[name] ?? [];
@@ -98,7 +103,13 @@ const FILE_OPERANDS = Object.freeze({
   "doc-comment-file.mjs": { post: AFTER_VERB },
 });
 
-const OTHER_FILE_FLAGS = Object.freeze({ "doc-comment-file.mjs": ["--html"] });
+function readsFile(command) {
+  const [, script, verb] = tokenize(command);
+  const name = basename(script ?? "");
+  return FILE_OPERANDS[name]?.[verb] ? `${name} ${verb}` : null;
+}
+
+const OTHER_FILE_FLAGS =Object.freeze({ "doc-comment-file.mjs": ["--html"] });
 
 const GLUED_FLAGS = new Set(["github-write.mjs"]);
 
@@ -111,7 +122,7 @@ function draftRefusal(tokens, name, draft) {
     return { index, owner, value: glued ? token.slice(token.indexOf("=") + 1) : token };
   }).slice(3);
   const read = operand === AFTER_VERB ? words.find((word) => word.index === 3 && !tokens[3].startsWith("-")) : words.find((word) => word.owner === operand);
-  if (!operand) return `does not read its draft ${draft.path}: ${name} ${verb} reads no file`;
+  if (!operand) return `does not read its draft ${draft.path}: ${name} ${verb} reads no file, so write the card without --draft`;
   if (!read || !isAbsolute(read.value) || realOrNull(read.value) !== draft.real) return `does not read its draft ${draft.path}: ${name} ${verb} reads ${operand === AFTER_VERB ? operand : `the file named by ${operand}`}, which must be the draft by its absolute path`;
   const skipped = ["--job", ...(OTHER_FILE_FLAGS[name] ?? [])];
   const second = words.find((word) => word !== read && !skipped.includes(word.owner) && isAbsolute(word.value) && realOrNull(word.value));
@@ -144,10 +155,13 @@ export function cardRefusal(card, root = process.cwd()) {
   }
   if (card.kind !== "publish") return null;
   if (card.preview !== "ready" && card.preview !== "run") return "a publish card needs preview: ready or preview: run";
-  if (card.preview === "ready" && !card.draft) return "a preview: ready card needs draft:";
-  if (card.preview === "ready" && !card["draft-sha"]) return "a preview: ready card needs draft-sha:; write it with pending.mjs card";
   if (!card.blocks.length) return "has no ### 1 block";
-  const draftPath = card.preview === "ready" ? resolve(root, card.draft) : null;
+  if (card.preview === "ready" && !card.draft) {
+    const reader = card.blocks.find((block) => readsFile(block.command));
+    if (reader) return `a preview: ready card needs draft: because block ${reader.n} runs ${readsFile(reader.command)}, which reads a file`;
+  }
+  if (card.preview === "ready" && card.draft && !card["draft-sha"]) return "a preview: ready card needs draft-sha:; write it with pending.mjs card";
+  const draftPath = card.preview === "ready" && card.draft ? resolve(root, card.draft) : null;
   const draft = draftPath && { path: draftPath, real: realOrNull(draftPath) };
   if (draft && !draft.real) return `its draft ${draftPath} does not exist`;
   for (const block of card.blocks) {
