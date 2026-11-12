@@ -6,11 +6,18 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { DEFAULT_CONFIG, initProfile, loadConfig, overrides, profileDir, resolveShared } from "../lib/profile.mjs";
+import { KIT_PUBLISH_ASK_RULES } from "../lib/publish-approval-settings.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const SCRIPT = new URL("../lib/profile.mjs", import.meta.url).pathname;
 const SHARED = new URL("../shared/", import.meta.url).pathname;
-const doctorEnv = (extra) => ({ ...process.env, TEDY_CLAUDE_MD: "/nonexistent/CLAUDE.md", TEDY_KNOWN_MARKETPLACES: "/nonexistent/known.json", TEDY_CLAUDE_VERSION: "2.1.302", ...extra });
+const settingsWith = (ask) => {
+  const file = join(tempDir("tedy-doctor-settings-"), "settings.json");
+  writeFileSync(file, JSON.stringify({ permissions: { ask } }));
+  return file;
+};
+const FULL_SETTINGS = settingsWith(KIT_PUBLISH_ASK_RULES);
+const doctorEnv = (extra) => ({ ...process.env, TEDY_CLAUDE_MD: "/nonexistent/CLAUDE.md", TEDY_KNOWN_MARKETPLACES: "/nonexistent/known.json", TEDY_CLAUDE_VERSION: "2.1.302", TEDY_CLAUDE_SETTINGS: FULL_SETTINGS, ...extra });
 const runDoctor = (extra) => spawnSync("node", [SCRIPT, "doctor"], { encoding: "utf8", env: doctorEnv(extra) });
 
 function profileWith(files) {
@@ -114,6 +121,19 @@ test("doctor reports the profile, config, rules, overrides and maps, and exits 1
   const invalid = runDoctor({ TEDY_PROFILE_DIR: bad });
   assert.equal(invalid.status, 1);
   assert.match(invalid.stdout, /^fail config: invalid: .*gates\.roleGate must be a boolean/m);
+});
+
+test("doctor counts the kit's 22 publish ask rules in the settings and fails under 22, naming publish-approval ask", () => {
+  const dir = profileWith({ "config.json": "{}", "rules.md": "r\n" });
+  const full = runDoctor({ TEDY_PROFILE_DIR: dir });
+  assert.equal(full.status, 0, full.stdout);
+  assert.match(full.stdout, /^ok publish-ask-rules: 22\/22 in .*settings\.json$/m);
+  const short = runDoctor({ TEDY_PROFILE_DIR: dir, TEDY_CLAUDE_SETTINGS: settingsWith(KIT_PUBLISH_ASK_RULES.slice(2)) });
+  assert.equal(short.status, 1, short.stdout);
+  assert.match(short.stdout, /^fail publish-ask-rules: 20\/22 in .*settings\.json, so a kit publish may not prompt; run profile\.mjs publish-approval ask$/m);
+  const missing = runDoctor({ TEDY_PROFILE_DIR: dir, TEDY_CLAUDE_SETTINGS: "/nonexistent/settings.json" });
+  assert.equal(missing.status, 1);
+  assert.match(missing.stdout, /^fail publish-ask-rules: \/nonexistent\/settings\.json: not readable as JSON .*; run profile\.mjs publish-approval ask$/m);
 });
 
 test("doctor prints one obsolete line, and still passes, for a config that says publishApproval answer", () => {

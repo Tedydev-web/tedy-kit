@@ -142,6 +142,18 @@ function claudeVersion(env) {
   return [ok, `${found[0]}${ok ? "" : `, below ${MIN_CLAUDE_VERSION.join(".")}`}`];
 }
 
+function publishAskRules(file) {
+  let ask;
+  try {
+    ({ ask } = readSettings(file));
+  } catch (error) {
+    return [false, `${error.message}; run profile.mjs publish-approval ask`];
+  }
+  const present = KIT_PUBLISH_ASK_RULES.filter((rule) => ask.includes(rule)).length;
+  const count = `${present}/${KIT_PUBLISH_ASK_RULES.length} in ${file}`;
+  return present === KIT_PUBLISH_ASK_RULES.length ? [true, count] : [false, `${count}, so a kit publish may not prompt; run profile.mjs publish-approval ask`];
+}
+
 function releaseWorktree(dir, env) {
   const file = env.TEDY_KNOWN_MARKETPLACES || join(homedir(), ".claude", "plugins", "known_marketplaces.json");
   let entry;
@@ -183,6 +195,7 @@ function doctor(dir, env = process.env) {
   }
   check("claude-md-imports", claudeMdImports(env));
   check("claude-version", claudeVersion(env));
+  check("publish-ask-rules", publishAskRules(CLAUDE_SETTINGS));
   check("release-worktree", releaseWorktree(resolve(dir), env));
   if (existsSync(join(dir, "rules.md"))) {
     const size = statSync(join(dir, "rules.md")).size;

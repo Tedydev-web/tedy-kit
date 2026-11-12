@@ -24,7 +24,7 @@ Every run starts with `node <plugin>/scripts/profile.mjs doctor`. When its first
 4. When no line of `~/.claude/CLAUDE.md` imports the profile's `rules.md` (any `@` path that resolves to it, `~` included), ask one `AskUserQuestion` before touching it; on approval back it up and append `@<profile>/rules.md`, so the rules load in every new session.
 5. Quote the `profile.mjs doctor` output and say that any gate can be switched in `config.json` (`<plugin>/shared/profile-layout.md`). Then continue with the bare run or the update.
 
-Any other `fail` line in the `profile.mjs doctor` output (`release-worktree`, `rules-size`, `claude-md-imports`, `claude-version`, `config`): quote it, then one `AskUserQuestion` whether to fix it now or continue with it open.
+Any other `fail` line in the `profile.mjs doctor` output (`release-worktree`, `rules-size`, `claude-md-imports`, `claude-version`, `publish-ask-rules`, `config`): quote it, then one `AskUserQuestion` whether to fix it now or continue with it open.
 
 ## Bare run: `/tedy:setup`
 
