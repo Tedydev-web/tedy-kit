@@ -22,6 +22,7 @@ function cockpit() {
   const job = (status) => {
     const file = join(work, "plans", "jobs", "261106-0900-dev-add-hello.md");
     writeFileSync(file, `to: tedy:dev\nfrom: cockpit\nstatus: ${status}\ncreated: 2026-11-06T02:00:00.000Z\ntitle: Add hello\n\nbody\n`);
+    recordLaunch(file, { role: "dev", cwd: work }, state);
     return file;
   };
   const question = (file, title = "Which toast") => {

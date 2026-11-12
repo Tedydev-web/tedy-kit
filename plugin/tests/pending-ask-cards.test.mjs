@@ -6,7 +6,8 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { card, cardCheck, cardNote, finishedJobs, waitingText } from "../lib/pending.mjs";
 import { readCard } from "../lib/pending-cards.mjs";
-import { jobBusy } from "../lib/job.mjs";
+import { heldElsewhere, jobBusy } from "../lib/job.mjs";
+import { recordLaunch } from "../lib/job-files.mjs";
 import { STATE_DIR } from "../lib/state-dir.mjs";
 import { bound, jobFile, sleeper, world } from "./job-world-for-tests.mjs";
 
@@ -155,6 +156,44 @@ test("a caller that cannot be identified finds a job bound to a live cockpit bus
     assert.equal(jobBusy(job, { cockpit: null }), true);
     assert.equal(jobBusy(job, { session: "s-cockpit", cockpit: null }), false);
     assert.equal(jobBusy(job), false);
+  } finally {
+    cockpit.child.kill();
+    await cockpit.exited;
+  }
+});
+
+test("a card whose job can never be resumed is refused with the reason and never asked, and a publish card of a closed job is refused too", () => {
+  const w = here();
+  const closed = jobFile(w, { role: "pm", name: "closed", status: "closed" });
+  const bare = jobFile(w, { role: "pm", name: "bare", status: "done", record: null });
+  const gone = jobFile(w, { role: "pm", name: "gone", status: "done", record: { cwd: join(w.root, "no-such-folder") } });
+  const asked = [closed, bare, gone].map((job, n) => question(w, job, `Question ${n}`));
+  const publish = status(w, closed, "Status of 12", 12);
+  assert.equal(waitingText(w.map, { ask: true }), "");
+  const list = waitingText(w.map, { offline: true });
+  assert.match(list, new RegExp(`^- Question 0: its job is closed; start a new job ${asked[0]}$`, "m"));
+  assert.match(list, new RegExp(`^- Question 1: its job has no launch record, so an answer cannot reach it; start a new job ${asked[1]}$`, "m"));
+  assert.match(list, new RegExp(`^- Question 2: its job's folder .*no-such-folder no longer exists; start a new job ${asked[2]}$`, "m"));
+  assert.match(list, new RegExp(`^- Status of 12: its job is closed; start a new job ${publish}$`, "m"));
+});
+
+test("card --job and a hand-written card need a job file inside the jobs folder", () => {
+  const w = here();
+  writeFileSync(join(w.root, "README.md"), "to: tedy:pm\nfrom: cockpit\nstatus: done\n");
+  mkdirSync(join(w.root, "plans", "jobs"), { recursive: true });
+  writeFileSync(join(w.root, "plans", "jobs", "notes.md"), "not a job\n");
+  const body = "Which?\n- A: a\n- B: b\n";
+  assert.throws(() => card(w.map, "question", { title: "Outside", job: "README.md", body }), /card refused: its job file .*README\.md is not in .*plans\/jobs/);
+  assert.throws(() => card(w.map, "question", { title: "Not a job", job: "plans/jobs/notes.md", body }), /card refused: its job file .*notes\.md is not a job file/);
+});
+
+test("an unidentified caller finds a job held by a live cockpit held elsewhere, as the busy check does", async () => {
+  const cockpit = await sleeper();
+  try {
+    const w = here();
+    const job = jobFile(w, { name: "add-hello", status: "done", record: bound(cockpit, { state: "idle" }) });
+    assert.equal(heldElsewhere(job, { cockpit: null }), "s-cockpit");
+    assert.equal(heldElsewhere(job, { session: "s-cockpit", cockpit: null }), null);
   } finally {
     cockpit.child.kill();
     await cockpit.exited;

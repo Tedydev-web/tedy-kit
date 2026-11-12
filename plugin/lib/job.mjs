@@ -184,8 +184,23 @@ const unidentified = (caller) => !caller.session && caller.cockpit === null;
 
 export function heldElsewhere(file, caller = {}) {
   const record = launchRecord(file);
-  if (!record || isTombstone(record) || !elsewhere(record, caller)) return null;
-  return record.session_id ?? `claude pid ${record.cockpit_pid}`;
+  if (!record || isTombstone(record)) return null;
+  const held = elsewhere(record, caller) || (unidentified(caller) && Boolean(record.agent_id) && cockpitAlive(record));
+  return held ? record.session_id ?? `claude pid ${record.cockpit_pid}` : null;
+}
+
+export function resumeBlock(file) {
+  let job;
+  try {
+    job = readJob(file);
+  } catch (error) {
+    return error.message;
+  }
+  if (job.status === "closed") return "its job is closed; start a new job";
+  const record = launchRecord(job.path);
+  if (!record || isTombstone(record)) return "its job has no launch record, so an answer cannot reach it; start a new job";
+  if (!record.cwd || !existsSync(record.cwd)) return `its job's folder ${record.cwd ?? "(none)"} no longer exists; start a new job`;
+  return null;
 }
 
 export function jobRole(file) {
@@ -424,8 +439,12 @@ function main([command, target, ...rest]) {
   }
   if (command === "close" && target) {
     only("close", rest, ["--reason"], "closed");
-    console.log(close(project(), target, text(given.reason)));
-    return 0;
+    const map = project();
+    const closed = close(map, target, text(given.reason));
+    return import("./pending.mjs").then(({ settleClosedJob }) => {
+      console.log([closed, ...settleClosedJob(map, target)].join("\n"));
+      return 0;
+    });
   }
   if (command === "list") {
     console.log(list(project()).join("\n") || "No jobs are open.");

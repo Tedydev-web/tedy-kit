@@ -1,7 +1,7 @@
 import { existsSync, realpathSync } from "node:fs";
-import { basename, isAbsolute, join, resolve } from "node:path";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parse } from "./job-files.mjs";
+import { parse, readJob } from "./job-files.mjs";
 import { KIT_PUBLISH_APPLY_VERBS, KIT_PUBLISH_WRITE_VERBS } from "./publish-approval-settings.mjs";
 import { jobFlag } from "./record-lock.mjs";
 import { tokenize } from "./shell-segments.mjs";
@@ -118,10 +118,25 @@ function draftRefusal(tokens, name, draft) {
   return second ? `names a second file ${second.value}, which draft-sha: does not pin` : null;
 }
 
+function jobFileRefusal(path, root) {
+  if (!existsSync(path)) return `its job file ${path} does not exist`;
+  const jobs = realOrNull(join(root, "plans", "jobs"));
+  if (!jobs || realOrNull(dirname(path)) !== jobs) return `its job file ${path} is not in ${join(root, "plans", "jobs")}`;
+  try {
+    readJob(path);
+  } catch {
+    return `its job file ${path} is not a job file`;
+  }
+  return null;
+}
+
 export function cardRefusal(card, root = process.cwd()) {
   if (!KINDS.includes(card.kind)) return `unknown card kind ${card.kind}; use publish, question or notify`;
   if (!card.title) return "has no title";
-  if (card.job && card.job !== "none" && !existsSync(resolve(root, card.job))) return `its job file ${resolve(root, card.job)} does not exist`;
+  if (card.job && card.job !== "none") {
+    const why = jobFileRefusal(resolve(root, card.job), root);
+    if (why) return why;
+  }
   if (card.kind === "notify" && !card.body) return "has no text";
   if (card.kind === "question") {
     if (card.options.length < 2 || card.options.length > 4) return `a question card needs 2 to 4 option lines "- <label>: <consequence>", found ${card.options.length}`;

@@ -132,3 +132,26 @@ test("close --if-finished keeps a done job whose idle agent another live cockpit
     await cockpit.exited;
   }
 });
+
+test("a plain close archives the job's open question cards with a refuse note and names the cards that still name it", () => {
+  const w = world();
+  const job = jobFile(w, { role: "pm", name: "gaps", status: "done" });
+  question(w, job);
+  const asked = join(w.root, "plans", "drafts", "261106-0915-question-which-toast.md");
+  const notice = join(w.root, "plans", "drafts", "261106-0916-notify-ci.md");
+  writeFileSync(notice, `kind: notify\ntitle: CI is green\njob: ${job}\n\nAll checks passed.\n`);
+  const out = w.run(["close", job]);
+  assert.equal(out.status, 0, out.stderr);
+  assert.match(out.stdout, new RegExp(`^closed: ${job}$`, "m"));
+  assert.match(out.stdout, new RegExp(`^archived ${join(w.root, "plans", "archive", "drafts", "261106-0915-question-which-toast.md")}: its question was refused, because its job was closed before the answer reached it$`, "m"));
+  assert.match(out.stdout, new RegExp(`^still names the job: ${notice} \\(notify\\)$`, "m"));
+  assert.match(readFileSync(join(w.root, "plans", "archive", "drafts", "261106-0915-question-which-toast.md"), "utf8"), /^status: refused$/m);
+});
+
+test("a notify card does not hold a done job open", () => {
+  const w = world();
+  const job = jobFile(w, { role: "pm", name: "gaps", status: "done" });
+  mkdirSync(join(w.root, "plans", "drafts"), { recursive: true });
+  writeFileSync(join(w.root, "plans", "drafts", "261106-0916-notify-ci.md"), `kind: notify\ntitle: CI is green\njob: ${job}\n\nAll checks passed.\n`);
+  assert.match(w.run(["close", "--if-finished"]).stdout, new RegExp(`^closed: ${job}$`, "m"));
+});

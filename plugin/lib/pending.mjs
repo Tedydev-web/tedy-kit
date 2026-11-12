@@ -4,7 +4,7 @@ import { appendFileSync, closeSync, existsSync, lstatSync, openSync, readSync, m
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { age, launchRecordPath, listJobs, parse, readRecord, slugOf, stamp } from "./job-files.mjs";
-import { close as closeJob, closeHold, heldElsewhere, jobBusy, jobRecord, jobRole, olderKitStatus } from "./job.mjs";
+import { close as closeJob, closeHold, heldElsewhere, jobBusy, jobRecord, jobRole, olderKitStatus, resumeBlock } from "./job.mjs";
 import { CARD_KEYS, cardRefusal, headerLength, oneLine, readCard } from "./pending-cards.mjs";
 import { claudeProcess } from "./job-session-hooks.mjs";
 import { resolveMap } from "./project-map.mjs";
@@ -126,11 +126,12 @@ function cardText(path) {
 function jobStates(root, caller) {
   const known = new Map();
   return (job) => {
-    if (!job || job === "none") return { running: false, busy: false };
+    if (!job || job === "none") return { running: false, busy: false, blocked: null, closed: false };
     const path = resolve(root, job);
     if (!known.has(path)) {
       const present = existsSync(path);
-      known.set(path, { running: present && parse(readFileSync(path, "utf8")).status === "running", busy: present && jobBusy(path, caller) });
+      const status = present ? parse(readFileSync(path, "utf8")).status : undefined;
+      known.set(path, { running: status === "running", busy: present && jobBusy(path, caller), blocked: present ? resumeBlock(path) : null, closed: status === "closed" });
     }
     return known.get(path);
   };
@@ -156,8 +157,9 @@ function judged(path, text, root, { ownClaim = false, caller, state = jobStates(
     found.status === "refused" ? `refused: ${found.refused ?? "no reason given"}`
     : found.status === "started" ? `started at ${found.started ?? "an unknown time"}: its commands may already have written; check their read-backs, then pending.mjs done the card, or card-note --refuse it`
     : cardRefusal(found, root);
-  const { running, busy } = state(found.job);
-  return { path, ...found, refusal, running, busy: busy || (running && found.kind !== "question") };
+  const { running, busy, blocked, closed } = state(found.job);
+  const stuck = refusal ? null : found.kind === "question" ? blocked : found.kind === "publish" && closed ? blocked : null;
+  return { path, ...found, refusal: refusal ?? stuck, running, busy: busy || (running && found.kind !== "question") };
 }
 
 function cardsIn(files, root, problems = [], caller) {
@@ -353,7 +355,7 @@ export function finishedJobs(map, found, problems = []) {
   const read = found ?? cards(map, problems);
   if (problems.length) throw new Error(`a card could not be read (${problems.join("; ")}), so no job was closed`);
   const root = map.paths[0];
-  const named = new Set(read.filter((item) => item.job !== "none").map((item) => realOrNull(resolve(root, item.job))));
+  const named = new Set(read.filter((item) => item.job !== "none" && item.kind !== "notify").map((item) => realOrNull(resolve(root, item.job))));
   return listJobs(map).filter((job) => job.status === "done" && !named.has(realOrNull(job.path)));
 }
 
@@ -383,6 +385,19 @@ function trustedRole(job) {
   } catch (error) {
     return { role: null, why: `${error.message}, so it stays open` };
   }
+}
+
+export function settleClosedJob(map, file) {
+  const root = map.paths[0];
+  const real = realOrNull(resolve(file));
+  return cards(map).filter((item) => item.job !== "none" && realOrNull(resolve(root, item.job)) === real).map((item) => {
+    if (item.kind === "question" && item.status !== "refused" && item.status !== "started") {
+      cardNote(item.path, "its job was closed before the answer reached it", { refuse: true });
+      const [to] = done(item.path, map);
+      return `archived ${to}: its question was refused, because its job was closed before the answer reached it`;
+    }
+    return `still names the job: ${item.path} (${item.kind}${item.refusal ? `, ${item.refusal}` : ""})`;
+  });
 }
 
 export function closeFinished(map, file, { list = openPrs, caller = {} } = {}) {
