@@ -6,7 +6,7 @@ import { GITHUB_WRITE_DRY_RUN_VERBS, githubWriteDryRun, parseFlags } from "./cli
 import { lintComment, lintDraft, mapLanguage, parseDraft, readDiff, snapshotPath } from "./draft-lint.mjs";
 import { appendEditLog, labelText } from "./edit-log.mjs";
 import { fetchTab, indexTab, quoteInText, UC_ID } from "./prd-section.mjs";
-import { logRefusal, refusedLine } from "./hook-io.mjs";
+import { logGate, logRefusal, refusedLine } from "./hook-io.mjs";
 import { generatedPrBodyOp } from "./openproject.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { splitJob, withRecords } from "./record-lock.mjs";
@@ -93,6 +93,13 @@ function gh(args, input) {
   return execFileSync("gh", args, { encoding: "utf8", input, maxBuffer: 64 * 1024 * 1024, stdio: ["pipe", "pipe", "pipe"] });
 }
 
+let sent = false;
+
+function send(args, input) {
+  sent = true;
+  return gh(args, input);
+}
+
 function currentRepo(flags) {
   return flags.repo ?? gh(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]).trim();
 }
@@ -175,7 +182,7 @@ async function postDraft(file, flags, repo, recorded) {
   const original = existsSync(snapshotPath(file)) ? readFileSync(snapshotPath(file), "utf8") : finalText;
   const draft = parseDraft(original);
   const final = lintDraft(finalText, readDiff(parseDraft(finalText).pr, repo), mapLanguage("pr_review"));
-  if (final.pr !== draft.pr || final.sha !== draft.sha) throw new Error(`the draft now names a different PR or head than the frozen original at ${snapshotPath(file)}; never edit the head line by hand: to move the draft to a new PR head run draft-lint.mjs carry ${file} --repo ${repo}`);
+  if (final.pr !== draft.pr || final.sha !== draft.sha) return refuse("github-write", [`refused: the draft now names a different PR or head than the frozen original at ${snapshotPath(file)}; never edit the head line by hand: to move the draft to a new PR head run draft-lint.mjs carry ${file} --repo ${repo}`]);
   if (final.problems.length) return refuse("github-write", final.problems.map((item) => `${item.index}. ${item.location}: ${item.problem}`));
   const head = prHead(repo, final.pr);
   if (!head.startsWith(final.sha)) return refuse("github-write", [`refused: PR head moved from ${final.sha} to ${head.slice(0, 8)}; if the new commits change no commented file, run draft-lint.mjs carry ${file} --repo ${repo}, otherwise review them and redraft`]);
@@ -202,10 +209,11 @@ async function postDraft(file, flags, repo, recorded) {
     return 0;
   }
   say(fresh.notices);
-  const review = JSON.parse(gh(["api", "-X", "POST", `repos/${repo}/pulls/${final.pr}/reviews`, "--input", "-"], JSON.stringify(payload)));
+  const review = JSON.parse(send(["api", "-X", "POST", `repos/${repo}/pulls/${final.pr}/reviews`, "--input", "-"], JSON.stringify(payload)));
   recorded();
   const posted = JSON.parse(gh(["api", "--paginate", "--slurp", `repos/${repo}/pulls/${final.pr}/reviews/${review.id}/comments`])).flat();
-  for (const comment of posted) console.log(`${comment.id} ${comment.path}:${comment.line ?? comment.original_line} ${comment.side ?? "RIGHT"} ${comment.commit_id.slice(0, 8)}`);
+  const drafted = (comment) => final.comments.find((candidate) => candidate.path === comment.path && normalise(candidate.body) === normalise(comment.body ?? ""))?.line;
+  for (const comment of posted) console.log(`${comment.id} ${comment.path}:${comment.line ?? comment.original_line ?? drafted(comment) ?? "?"} ${comment.side ?? "RIGHT"} ${comment.commit_id.slice(0, 8)}`);
   logEdits(labelEdits(draft.comments, final.comments).map((entry) => ({ repo, pr: final.pr, sha: final.sha, review: review.id, ...entry })));
   if (posted.length !== final.comments.length) {
     console.log(`posted ${posted.length} of ${final.comments.length} comments; open the PR and check`);
@@ -235,7 +243,7 @@ async function edit(id, flags) {
     if (refusal) return refuse("pins", [refusal]);
     console.log(`WRITE → ${repo} : edit review comment ${id}`);
     say(fresh.notices);
-    const updated = JSON.parse(gh(["api", "-X", "PATCH", `repos/${repo}/pulls/comments/${id}`, "--input", "-"], JSON.stringify({ body })));
+    const updated = JSON.parse(send(["api", "-X", "PATCH", `repos/${repo}/pulls/comments/${id}`, "--input", "-"], JSON.stringify({ body })));
     recorded();
     logEdits([{ repo, key: String(id), label: "post-edit", draft: null, posted: body }]);
     if (normalise(updated.body) !== normalise(body)) throw new Error(`comment ${id} body differs after PATCH`);
@@ -248,7 +256,7 @@ function minimize(nodeId, flags) {
   return writing(flags, [nodeKey(nodeId)], undefined, async (recorded) => {
     console.log(`WRITE → minimize ${nodeId} as OUTDATED`);
     const query = "mutation($id: ID!) { minimizeComment(input: {subjectId: $id, classifier: OUTDATED}) { minimizedComment { isMinimized } } }";
-    const result = JSON.parse(gh(["api", "graphql", "-f", `query=${query}`, "-f", `id=${nodeId}`]));
+    const result = JSON.parse(send(["api", "graphql", "-f", `query=${query}`, "-f", `id=${nodeId}`]));
     recorded();
     if (result.data?.minimizeComment?.minimizedComment?.isMinimized !== true) throw new Error(`${nodeId} is not minimized: ${JSON.stringify(result.errors ?? result)}`);
     console.log(`minimized ${nodeId}`);
@@ -266,7 +274,7 @@ function setThreadsResolved(threadIds, resolved, flags) {
   return writing(flags, threadIds.map(nodeKey), undefined, async (recorded) => {
     for (const threadId of threadIds) {
       console.log(`WRITE → ${verb} review thread ${threadId}`);
-      const result = JSON.parse(gh(["api", "graphql", "-f", `query=${query}`, "-f", `id=${threadId}`]));
+      const result = JSON.parse(send(["api", "graphql", "-f", `query=${query}`, "-f", `id=${threadId}`]));
       recorded();
       if (result.data?.[name]?.thread?.isResolved !== resolved) throw new Error(`${threadId} is not ${verb}d: ${JSON.stringify(result.errors ?? result)}`);
       console.log(`${verb}d ${threadId}`);
@@ -288,7 +296,7 @@ async function reply(pr, id, flags) {
     if (refusal) return refuse("pins", [refusal]);
     console.log(`WRITE → ${repo}#${pr} : reply to ${id}`);
     say(fresh.notices);
-    const created = JSON.parse(gh(["api", "-X", "POST", `repos/${repo}/pulls/${pr}/comments/${id}/replies`, "--input", "-"], JSON.stringify({ body })));
+    const created = JSON.parse(send(["api", "-X", "POST", `repos/${repo}/pulls/${pr}/comments/${id}/replies`, "--input", "-"], JSON.stringify({ body })));
     recorded();
     logEdits([{ repo, pr: Number(pr), key: String(id), label: "reply", draft: null, posted: body }]);
     console.log(`replied ${created.id}: ${created.html_url}`);
@@ -324,7 +332,7 @@ function prBody(number, flags) {
     }
     console.log(`WRITE → ${repo}#${number} : PR body`);
     if (flags["dry-run"]) return 0;
-    gh(["api", "-X", "PATCH", `repos/${repo}/pulls/${number}`, "--input", "-"], JSON.stringify({ body }));
+    send(["api", "-X", "PATCH", `repos/${repo}/pulls/${number}`, "--input", "-"], JSON.stringify({ body }));
     recorded();
     const same = view().body.trim() === body;
     console.log(same ? `updated #${number} body` : `written, but the read-back differs; open #${number} and check`);
@@ -364,7 +372,9 @@ export function run() {
   main(process.argv.slice(2)).then(
     (code) => process.exit(code),
     (error) => {
+      logGate({ hook: "github-write", decision: "failed", sent, error: error.message });
       console.error(`github-write: ${error.message}`);
+      console.error(sent ? "github-write: a write was sent before this failed; check on GitHub what it changed before running this again" : "github-write: nothing was written");
       process.exit(1);
     },
   );

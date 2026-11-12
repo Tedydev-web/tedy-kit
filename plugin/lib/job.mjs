@@ -4,7 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { age, createAtomic, JOB_ROLES, jobsDir, launchRecordPath, listJobs, missingSections, readJob, readRecord, recordLaunch, render, setKey, setStatus, slugOf, stamp, updateRecord, withSection, writeAtomic } from "./job-files.mjs";
 import { addWorktree, git as gitRun, linkedWorktreeOf, merged, planWorktree, removeWorktree } from "./job-worktrees.mjs";
 import { agentRunning, agentsOf, alive, busyAgents, claudeProcess, cockpitAlive } from "./job-session-hooks.mjs";
-import { resolveMap } from "./project-map.mjs";
+import { loadMaps, resolveMap } from "./project-map.mjs";
 
 const SKILLS = { pm: "tedy:pm", review: "tedy:review-pr" };
 const PLUGIN = fileURLToPath(new URL("..", import.meta.url)).replace(/\/$/, "");
@@ -426,8 +426,9 @@ function only(command, args, allowed, verb) {
 
 function project() {
   const resolved = resolveMap(process.cwd());
-  if (!resolved) throw new Error(`no project map covers ${process.cwd()}; run /tedy:setup`);
-  return resolved.map;
+  if (resolved) return resolved.map;
+  const roots = loadMaps().flatMap((entry) => (entry.map.paths?.[0] ? [`${entry.map.paths[0]} (${entry.map.name})`] : []));
+  throw new Error(`no project map covers ${process.cwd()}; ${roots.length ? `run job.mjs from the root of a mapped project: ${roots.join(", ")}` : "run /tedy:setup"}`);
 }
 
 const text = (value) => (typeof value === "string" ? value : undefined);
