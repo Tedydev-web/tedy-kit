@@ -31,7 +31,7 @@ test("the cockpit asks each job's open cards by the pending skill's steps, a job
   const cockpit = jobs.match(/^5\. Questions go through question cards.*$/m)?.[0] ?? "";
   for (const phrase of ["<plugin>/skills/pending/SKILL.md", "step 2", "step 3", "pending.mjs list --job <job file>", "names the card file", "asked again at the next trigger", "decided itself", "manual and recovery view"]) assert.ok(cockpit.includes(phrase), phrase);
   assert.doesNotMatch(jobs, /Approve with `\/tedy:pending`/);
-  assert.match(jobs, /^6\. Answers and rework go through SendMessage\.[\s\S]*?`pending\.mjs done <card>` archives the card/m);
+  assert.match(jobs, /^6\. Answers and rework go through SendMessage\.[\s\S]*?archive it \(`pending\.mjs done <card>`\) only after its call went out/m);
   const job = jobs.match(/^2\. A job cannot ask the user.*$/m)?.[0] ?? "";
   for (const phrase of ["local, reversible choice yourself", "the next-step menu included", "publishing under the user's name", "a push or PR beyond this job's own task branch and draft PR", "a merge", "a scope cut", "picking a side in a conflict between sources", "a destructive or irreversible step", "job.mjs done"]) assert.ok(job.includes(phrase), phrase);
   const points = read("shared/decision-points.md");
@@ -47,7 +47,23 @@ test("the cockpit closes a finished job on its notification turn with close --if
   const cockpit = jobs.match(/^5\. Questions go through question cards.*$/m)?.[0] ?? "";
   assert.ok(cockpit.includes("job.mjs close <job file> --if-finished"), "Cockpit 5");
   const close = jobs.match(/^7\. Close: .*$/m)?.[0] ?? "";
-  for (const phrase of ["close --if-finished", "no open card names", "a dev job whose PR", "merged or closed", "when the user asks", "every refusal of `close`"]) assert.ok(close.includes(phrase), phrase);
+  for (const phrase of ["close --if-finished", "no card names", "a dev job whose PR", "merged or closed", "when the user asks", "every refusal of `close`"]) assert.ok(close.includes(phrase), phrase);
+  const pending = read("skills/pending/SKILL.md");
+  const closing = pending.match(/^   - Once no card names a job .*$/m)?.[0] ?? "";
+  assert.ok(closing.includes("job.mjs close <job file> --if-finished"), closing);
+  assert.doesNotMatch(pending, /as `done` or `stopped`, run `node \$\{CLAUDE_PLUGIN_ROOT\}\/scripts\/job\.mjs close <job file>`/);
+});
+
+test("an answer is written onto its card only after resume sent it, a refused card is archived by the job that redoes it, and a job never runs untrusted code alone", () => {
+  const pending = read("skills/pending/SKILL.md");
+  const questions = pending.match(/^3\. \*\*Questions\.\*\*.*$/m)?.[0] ?? "";
+  for (const phrase of ["first `job.mjs resume`", "only after that call went out", "When `resume` refuses", "leave the card as it is"]) assert.ok(questions.includes(phrase), phrase);
+  const jobs = read("shared/jobs.md");
+  assert.match(jobs, /^6\. Answers and rework go through SendMessage\.[\s\S]*?only after its call went out/m);
+  const job = jobs.match(/^2\. A job cannot ask the user.*$/m)?.[0] ?? "";
+  assert.ok(job.includes("running a PR's code or other untrusted code"), job);
+  const publish = jobs.match(/^3\. Every write that needs the user's approval.*$/m)?.[0] ?? "";
+  assert.ok(publish.includes("then `pending.mjs done <refused card>`"), publish);
 });
 
 test("every kit write a skill runs after a question is approved by an approve.all or post.asIs option, never by the merge or next-step answer", () => {
