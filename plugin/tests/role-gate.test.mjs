@@ -526,6 +526,31 @@ test("the gate entry asks a bound job agent before job.mjs close with the role g
   assert.equal(existsSync(join(stateDir, "session-roles", job.input.session_id)), false);
 });
 
+test("a job is asked, in every mode, before it runs a kit publish command itself, and the reason names the card to write instead", () => {
+  const card = "/w/acme/plans/jobs/261110-1100-review-x.md";
+  const publish = (command, who = job("tedy:review")) => gate.publishReason({ ...shell(command), ...who }, gate.agentRole({ ...shell(command), ...who }), card);
+  const reason = publish("node /k/plugin/scripts/github-write.mjs reply 1 2 --body-file b.md --repo o/r");
+  assert.match(reason, /^tedy role gate: this is a review job \(tedy:review\); node \/k\/plugin\/scripts\/github-write\.mjs reply 1 2 --body-file b\.md --repo o\/r publishes under the user's name, which a job never runs itself: write it as a publish card with `pending\.mjs card publish --job \/w\/acme\/plans\/jobs\/261110-1100-review-x\.md …` in \/w\/acme\/plans\/drafts\/, and the cockpit runs it with the user's approval\./);
+  assert.match(publish("cd /w && node /k/plugin/scripts/openproject.mjs set 12 --status X --apply --lock 1") ?? "", /openproject\.mjs set 12 --status X --apply --lock 1 publishes/);
+  assert.equal(publish("node /k/plugin/scripts/openproject.mjs set 12 --status X"), null);
+  assert.equal(publish("node /k/plugin/scripts/github-write.mjs post d.md --repo o/r", { session_id: randomUUID() }), null);
+});
+
+test("the gate entry asks a bound job before a kit publish with the role gate off, and lets the cockpit run it", () => {
+  const root = tempDir("tedy-role-root-");
+  const profile = tempDir("tedy-role-profile-");
+  writeFileSync(join(profile, "config.json"), JSON.stringify({ gates: { roleGate: false } }));
+  mkdirSync(join(profile, "projects"));
+  writeFileSync(join(profile, "projects", "shop.md"), `# map\n\n\`\`\`json\n${JSON.stringify({ name: "shop", paths: [root], repos: [] })}\n\`\`\`\n`);
+  const stateDir = tempDir("tedy-state-");
+  const job = spawnedJob("review", { state: stateDir, root });
+  const entry = (extra) => execFileSync("node", [new URL("../gates/role-gate.mjs", import.meta.url).pathname], { input: JSON.stringify({ tool_name: "Bash", tool_input: { command: "node /k/plugin/scripts/github-write.mjs resolve PRRT_a" }, cwd: root, session_id: job.input.session_id, ...extra }), encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: stateDir } });
+  const decision = JSON.parse(entry(job.input)).hookSpecificOutput;
+  assert.equal(decision.permissionDecision, "ask");
+  assert.ok(decision.permissionDecisionReason.includes(`pending.mjs card publish --job ${job.file} …\` in ${join(root, "plans", "drafts")}/`), decision.permissionDecisionReason);
+  assert.equal(entry({}), "");
+});
+
 test("a bound job's own subagents are judged as the cockpit, a tedy:reviewer one included, and the reviewer gate still checks the tedy:reviewer one", () => {
   const job = spawnedJob("review", { record: { agent_id: "a-job" }, agent: "a-job" });
   assert.deepEqual(gate.spawnedRole(job.input), { role: "review", label: "tedy:review" });

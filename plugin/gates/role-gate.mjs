@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { bashInputs, classify } from "./git-gate.mjs";
+import { bashInputs, classify, publishingSegments } from "./git-gate.mjs";
 import { jobsDir } from "../lib/job-files.mjs";
 import { jobOfAgent } from "../lib/job-session-hooks.mjs";
 import { profileDir } from "../lib/profile.mjs";
@@ -192,6 +192,15 @@ export function closeReason(input, who) {
   return `tedy role gate: this is a ${who.role} job (${who.label}); job.mjs close ${[...new Set(names)].join(", ")} ${effect}, which belongs to the cockpit. Allow it only if the user asked for it here.`;
 }
 
+export function publishReason(input, who, jobFile) {
+  if (!who) return null;
+  const cwd = input.cwd ?? process.cwd();
+  const found = (bashInputs(input).inputs ?? []).filter((item) => item.tool_name === "Bash").flatMap((item) => publishingSegments(item.tool_input?.command ?? ""));
+  if (!found.length) return null;
+  const card = jobFile ? `\`pending.mjs card publish --job ${jobFile} …\` in ${join(dirname(dirname(jobFile)), "drafts")}/` : `\`pending.mjs card publish --job <this job file> …\` in the project's plans/drafts/ under ${cwd}`;
+  return `tedy role gate: this is a ${who.role} job (${who.label}); ${found.map((segment) => segment.trim().slice(0, 160)).join("; ")} publishes under the user's name, which a job never runs itself: write it as a publish card with ${card}, and the cockpit runs it with the user's approval. Allow it only if the user asked for it here.`;
+}
+
 const JOBS_DOC = fileURLToPath(new URL("../shared/jobs.md", import.meta.url));
 
 export function agentReason(who, action, map = {}) {
@@ -234,7 +243,7 @@ export function run() {
     let spawned = null;
     if (!who && jobAgentType(input)) {
       const probe = { role: AGENT_ROLES[input.agent_type], label: input.agent_type };
-      const asks = closeReason(input, probe) || kitStateReason(input, probe);
+      const asks = closeReason(input, probe) || kitStateReason(input, probe) || publishReason(input, probe);
       const job = asks || gateSwitches().roleGate ? jobOfAgent(input) : null;
       if (job) {
         try {
@@ -256,14 +265,24 @@ export function run() {
       ask(closing ?? kitState);
       return;
     }
-    if (!gateSwitches().roleGate) return;
+    const publishing = publishReason(input, who, who ? jobOfAgent(input)?.file : undefined);
+    const askPublish = () => {
+      logGate({ hook: "role-gate", decision: "ask", agent_type: input.agent_type, role: who.role, kind: "job-publish", tool: input.tool_name });
+      ask(publishing);
+    };
+    if (!gateSwitches().roleGate) {
+      if (publishing) askPublish();
+      return;
+    }
     if (resolved === null) logGate({ hook: "role-gate", decision: "job-map-missing", agent_type: input.agent_type });
     if (!resolved) resolved = resolveMap(cwd);
     const verdict = resolved && judge(input, resolved.map, who);
-    if (verdict) {
-      logGate({ hook: "role-gate", decision: verdict.reason ? "ask" : "allow", agent_type: input.agent_type, role: verdict.role, kind: verdict.kind, tool: input.tool_name });
-      if (verdict.reason) ask(verdict.reason);
+    if (verdict?.reason || !publishing) {
+      if (verdict) logGate({ hook: "role-gate", decision: verdict.reason ? "ask" : "allow", agent_type: input.agent_type, role: verdict.role, kind: verdict.kind, tool: input.tool_name });
+      if (verdict?.reason) ask(verdict.reason);
+      return;
     }
+    askPublish();
   } catch (error) {
     logGate({ hook: "role-gate", decision: "ask-on-error", error: error.message });
     ask(`tedy gate: could not check which session role owns this write (${error.message}). Allow it only if the user asked for it, then fix the project map.`);
