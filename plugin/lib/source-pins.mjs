@@ -145,6 +145,13 @@ export function pinnedSources(file, relint) {
   return { sources: record.sources, warnings: record.warnings, pinnedAt: record.pinnedAt, at: record.at };
 }
 
+export function carrySources(file, text, pin, head) {
+  const path = sourcesPath(file);
+  const record = JSON.parse(readFileSync(path, "utf8"));
+  const sources = record.sources.map((candidate) => (candidate.kind === "git" && candidate.pr === pin.pr && candidate.github === pin.github ? { ...candidate, sha: head } : candidate));
+  writeFileSync(path, `${JSON.stringify({ ...record, sha256: digest(text), sources }, null, 1)}\n`);
+}
+
 export function pinnedSince(file) {
   if (typeof file !== "string") return null;
   const { at, sources } = pinnedSources(file, "");

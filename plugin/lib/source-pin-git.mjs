@@ -131,7 +131,7 @@ function hasCommit(git, dir, sha) {
   }
 }
 
-function fetchCommit(git, dir, remote, sha) {
+export function fetchCommit(git, dir, remote, sha) {
   if (hasCommit(git, dir, sha)) return;
   git(dir, ["fetch", "-q", "origin", remote]);
   if (!hasCommit(git, dir, sha)) git(dir, ["fetch", "-q", "origin", sha]);
@@ -246,7 +246,7 @@ export function pinPullHead(pr, repos, { repo } = {}, git = runGit, headOf = api
   }
 }
 
-function changedPaths(git, dir, from, to) {
+export function changedPaths(git, dir, from, to) {
   const fields = git(dir, ["diff", "--name-status", "--no-renames", "-z", from, to]).split("\0");
   const paths = [];
   for (let index = 1; index < fields.length; index += 2) if (fields[index]) paths.push(fields[index]);

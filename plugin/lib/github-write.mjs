@@ -165,14 +165,14 @@ async function postDraft(file, flags, repo, recorded) {
   const original = existsSync(snapshotPath(file)) ? readFileSync(snapshotPath(file), "utf8") : finalText;
   const draft = parseDraft(original);
   const final = lintDraft(finalText, readDiff(parseDraft(finalText).pr, repo), mapLanguage("pr_review"));
-  if (final.pr !== draft.pr || final.sha !== draft.sha) throw new Error(`the draft now names a different PR or head than the frozen original at ${snapshotPath(file)}`);
+  if (final.pr !== draft.pr || final.sha !== draft.sha) throw new Error(`the draft now names a different PR or head than the frozen original at ${snapshotPath(file)}; never edit the head line by hand: to move the draft to a new PR head run draft-lint.mjs carry ${file} --repo ${repo}`);
   if (final.problems.length) {
     for (const item of final.problems) console.log(`${item.index}. ${item.location}: ${item.problem}`);
     return 1;
   }
   const head = prHead(repo, final.pr);
   if (!head.startsWith(final.sha)) {
-    console.log(`refused: PR head moved from ${final.sha} to ${head.slice(0, 8)}; review the new commits and redraft`);
+    console.log(`refused: PR head moved from ${final.sha} to ${head.slice(0, 8)}; if the new commits change no commented file, run draft-lint.mjs carry ${file} --repo ${repo}, otherwise review them and redraft`);
     return 1;
   }
   const sources = { prd: await loadPrd(final.comments), diff: readDiff(final.pr, repo), inRepo: inRepoAt(head) };

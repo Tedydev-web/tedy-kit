@@ -9,6 +9,7 @@ import { resolveMap } from "./project-map.mjs";
 import { nodeId } from "./source-pin-links.mjs";
 import { secretShaped } from "./public-scan.mjs";
 import { describePin, pinSourcesOf, recordPins, writeReadPins } from "./source-pins.mjs";
+import { carryDraft } from "./draft-carry.mjs";
 
 export const MAX_BODY = 360;
 export const MAX_CHAT = 600;
@@ -264,6 +265,13 @@ async function main([kind, file, ...flags]) {
   const every = (name) => flags.flatMap((arg, index) => (arg === name && flags[index + 1] !== undefined ? [flags[index + 1]] : []));
   const pinnedAt = flag("--pinned-at");
   if (kind === "pin-sources" && file) return pinSources(file, flag, every);
+  if (kind === "carry" && file) {
+    const repo = repoOf(flag);
+    if (!repo) throw new Error("carry needs --repo <owner/repo>, the repository the review goes to");
+    const { code, line } = carryDraft(file, repo);
+    console.log(line);
+    return code;
+  }
   if ((kind === "doc-comment" || kind === "figma-comment") && file) {
     const text = readFileSync(file, "utf8");
     const problems = lintChatComment(text, kind.replace("-comment", ""), mapLanguage("doc_figma"));
@@ -286,7 +294,7 @@ async function main([kind, file, ...flags]) {
     return record(file, text, taken.pins, { clean: "clean: pr-reply", none: "no repo in the project map", texts: [text], pinnedAt, warnings: taken.warnings, freeze: false });
   }
   if (kind !== "pr-comment" || !file) {
-    console.error("usage: draft-lint.mjs pin-sources <draft or ledger> [--pr <n> [--repo <owner/repo>]] [--branch <repo>:<branch>]… [--doc <id>] [--file <key> --node <node-id>[,<node-id>…]] | pr-comment <draft.md> [--diff <file>] [--repo <owner/repo>] [--pinned-at <file>] | pr-reply <body.txt> --pr <n> [--repo <owner/repo>] [--pinned-at <file>] | doc-comment <body.txt> [--doc <id>] [--pinned-at <file>] | figma-comment <body.txt> [--file <key>] [--node <node-id>] [--pinned-at <file>]");
+    console.error("usage: draft-lint.mjs pin-sources <draft or ledger> [--pr <n> [--repo <owner/repo>]] [--branch <repo>:<branch>]… [--doc <id>] [--file <key> --node <node-id>[,<node-id>…]] | pr-comment <draft.md> [--diff <file>] [--repo <owner/repo>] [--pinned-at <file>] | carry <draft.md> --repo <owner/repo> | pr-reply <body.txt> --pr <n> [--repo <owner/repo>] [--pinned-at <file>] | doc-comment <body.txt> [--doc <id>] [--pinned-at <file>] | figma-comment <body.txt> [--file <key>] [--node <node-id>] [--pinned-at <file>]");
     return 2;
   }
   const text = readFileSync(file, "utf8");
