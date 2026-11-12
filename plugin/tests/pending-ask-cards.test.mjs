@@ -1,7 +1,7 @@
 import "./test-isolation.mjs";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { card, cardCheck, cardNote, waitingText } from "../lib/pending.mjs";
@@ -10,6 +10,7 @@ import { bound, jobFile, sleeper, world } from "./job-world-for-tests.mjs";
 
 const SCRIPTS = new URL("../scripts/", import.meta.url).pathname.replace(/\/$/, "");
 const PENDING = join(SCRIPTS, "pending.mjs");
+const FAKE_COCKPIT = new URL("./fake-cockpit-for-tests.mjs", import.meta.url).pathname;
 
 const here = () => ({ ...world(), state: STATE_DIR });
 const question = (w, job, title) => card(w.map, "question", { title, job, body: `${title}?\n- Yes: go on\n- No: stop here\n` });
@@ -84,12 +85,51 @@ test("a done job's card is not asked or run while its agent still writes, nor a 
     const late = question(w, writing, "Which toast");
     const theirs = question(w, elsewhere, "Which colour");
     const run = status(w, writing, "Status of 12", 12);
-    assert.equal(waitingText(w.map, { ask: true, session: "s-other" }), `Questions:\n- Which colour ${theirs}`);
-    assert.equal(waitingText(w.map, { ask: true, session: "s-cockpit" }), "");
+    assert.equal(waitingText(w.map, { ask: true, caller: { session: "s-other" } }), `Questions:\n- Which colour ${theirs}`);
+    assert.equal(waitingText(w.map, { ask: true, caller: { session: "s-cockpit" } }), "");
     assert.match(waitingText(w.map, { offline: true }), new RegExp(`^- Which toast \\(job running\\) ${late}$`, "m"));
     assert.throws(() => cardCheck(run, w.map), /its job .* is still running and may rewrite the draft/);
   } finally {
     cockpit.child.kill();
     await cockpit.exited;
   }
+});
+
+test("card --job resolves against the project root and refuses a job file that does not exist, and a hand-written card naming a missing job is refused", () => {
+  const w = here();
+  const job = jobFile(w, { name: "add-hello", status: "done" });
+  const relative = job.slice(w.root.length + 1);
+  const file = card(w.map, "question", { title: "Which toast", job: relative, body: "Which?\n- A: a\n- B: b\n" });
+  assert.match(readFileSync(file, "utf8"), new RegExp(`^job: ${job}$`, "m"));
+  assert.throws(() => card(w.map, "question", { title: "Lost", job: "plans/jobs/261106-0900-dev-missing.md", body: "Which?\n- A: a\n- B: b\n" }), /card refused: its job file .*261106-0900-dev-missing\.md does not exist/);
+  const hand = join(w.root, "plans", "drafts", "261106-0930-question-hand.md");
+  writeFileSync(hand, `kind: question\ntitle: Hand\njob: ${join(w.root, "plans", "jobs", "261106-0900-dev-gone.md")}\n\nWhich?\n- A: a\n- B: b\n`);
+  assert.match(waitingText(w.map, { offline: true }), /^Refused cards:\n- Hand: its job file .*261106-0900-dev-gone\.md does not exist /m);
+});
+
+test("card-check and the ask list treat a job whose agent another live cockpit runs as busy", async () => {
+  const cockpit = await sleeper();
+  try {
+    const w = world();
+    const job = jobFile(w, { name: "add-hello", status: "done", record: bound(cockpit, { state: "idle" }) });
+    const run = card(w.map, "publish", { title: "Status of 12", job, preview: "run", body: `### 1\nnode ${SCRIPTS}/openproject.mjs set 12 --status "In Review" --job ${job}\n- #12 Task 12\n` });
+    const pending = (args) => spawnSync(process.execPath, [FAKE_COCKPIT, PENDING, ...args], { cwd: w.root, encoding: "utf8", env: w.env(), argv0: "claude" });
+    const checked = pending(["card-check", run]);
+    assert.equal(checked.status, 1, checked.stdout);
+    assert.match(checked.stderr, /card refused: its job .* is still running and may rewrite the draft, or another live cockpit runs it/);
+    assert.match(pending(["list", "--offline"]).stdout, /^- Status of 12 \(run, 1 command, job running\) /m);
+  } finally {
+    cockpit.child.kill();
+    await cockpit.exited;
+  }
+});
+
+test("a card longer than the header prefix is still read whole, and a large draft with no card header is listed as a draft", () => {
+  const w = here();
+  const job = jobFile(w, { name: "add-hello", status: "done" });
+  const long = card(w.map, "question", { title: "Long one", job, body: `${"Context line.\n".repeat(600)}Which?\n- A: a\n- B: b\n` });
+  const big = join(w.root, "plans", "drafts", "big-notes.md");
+  writeFileSync(big, `# notes\n\n${"x".repeat(2_000_000)}\n`);
+  assert.equal(waitingText(w.map, { ask: true }), `Questions:\n- Long one ${long}`);
+  assert.match(waitingText(w.map, { offline: true }), new RegExp(`^Drafts waiting on the user:\\n- ${big}$`, "m"));
 });

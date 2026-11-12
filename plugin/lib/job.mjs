@@ -178,12 +178,13 @@ export function closeHold(file) {
   }
 }
 
-export function jobBusy(file, session) {
+export function jobBusy(file, { session, cockpit } = {}) {
   const job = readJob(file);
   if (job.status === "closed") return false;
   const record = launchRecord(job.path);
   if (!record || isTombstone(record)) return false;
-  if (session && record.session_id && record.session_id !== session && cockpitAlive(record)) return true;
+  const elsewhere = (session && record.session_id && record.session_id !== session) || (cockpit && record.cockpit_pid && !sameProcess(cockpit, record));
+  if (elsewhere && cockpitAlive(record)) return true;
   return Boolean(agentHold(record) || (fromOlderKit(record) && olderSession(record)));
 }
 

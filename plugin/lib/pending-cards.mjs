@@ -1,4 +1,4 @@
-import { realpathSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { basename, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "./job-files.mjs";
@@ -121,6 +121,7 @@ function draftRefusal(tokens, name, draft) {
 export function cardRefusal(card, root = process.cwd()) {
   if (!KINDS.includes(card.kind)) return `unknown card kind ${card.kind}; use publish, question or notify`;
   if (!card.title) return "has no title";
+  if (card.job && card.job !== "none" && !existsSync(resolve(root, card.job))) return `its job file ${resolve(root, card.job)} does not exist`;
   if (card.kind === "notify" && !card.body) return "has no text";
   if (card.kind === "question") {
     if (card.options.length < 2 || card.options.length > 4) return `a question card needs 2 to 4 option lines "- <label>: <consequence>", found ${card.options.length}`;

@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { layoutOverride, memoryStats } from "./memory-stats.mjs";
 import { cards, clip, finishedJobs, MORE, waitingText } from "./pending.mjs";
 import { closeHold } from "./job.mjs";
+import { claudeProcess } from "./job-session-hooks.mjs";
 import { currentTurn, gateSwitches, logGate, readHookInput, readTranscriptTail, toolUses } from "./hook-io.mjs";
 import { loadConfig, profileDir } from "./profile.mjs";
 import { resolveMap } from "./project-map.mjs";
@@ -152,10 +153,10 @@ export function configWarning(dir = profileDir()) {
   }
 }
 
-export function waitingNotice(map, { session } = {}) {
+export function waitingNotice(map, { caller, found } = {}) {
   let text;
   try {
-    text = waitingText(map, { offline: true, limit: 10, budgetMs: 8000, session, skipAsked: true });
+    text = waitingText(map, { offline: true, limit: 10, budgetMs: 8000, caller, found, skipAsked: true });
   } catch (error) {
     logGate({ hook: "pending-handoffs", decision: "waiting-list-skipped", error: error.message });
     return "";
@@ -179,10 +180,10 @@ function capped(text) {
 
 export const isCockpit = (input) => !input.agent_id && !Object.hasOwn(AGENT_ROLES, input.agent_type);
 
-export function askCardsNotice(map, { held, session, found }) {
+export function askCardsNotice(map, { held, caller, found }) {
   let text;
   try {
-    text = waitingText(map, { ask: true, held, limit: 10, session, found });
+    text = waitingText(map, { ask: true, held, limit: 10, caller, found });
   } catch (error) {
     logGate({ hook: "ask-cards", decision: "skip-on-error", error: error.message });
     return "";
@@ -206,19 +207,17 @@ export function closeJobsNotice(map, { perPrompt, found, problems }) {
   return capped(`${CLOSE_HEAD}\n${jobs.slice(0, 10).map((job) => `- ${job.role}: ${clip(job.title)} ${job.path}`).join("\n")}${more}`);
 }
 
-function cockpitNotices(map, session, perPrompt) {
-  const problems = [];
-  const found = cockpitCards(map, session, problems);
-  return [askCardsNotice(map, { held: !perPrompt, session, found }), closeJobsNotice(map, { perPrompt, found, problems })];
+function cockpitNotices(map, caller, perPrompt, read = cockpitCards(map, caller)) {
+  return [askCardsNotice(map, { held: !perPrompt, caller, found: read.found }), closeJobsNotice(map, { perPrompt, found: read.found, problems: read.problems })];
 }
 
-function cockpitCards(map, session, problems) {
+function cockpitCards(map, caller) {
+  const problems = [];
   try {
-    return cards(map, problems, session);
+    return { found: cards(map, problems, caller), problems };
   } catch (error) {
     logGate({ hook: "ask-cards", decision: "cards-unread", error: error.message });
-    problems.push(error.message);
-    return [];
+    return { found: [], problems: [...problems, error.message] };
   }
 }
 
@@ -261,7 +260,9 @@ function runPendingHandoffs() {
       return;
     }
     const learn = resolved ? learnLine(input, resolved.map) : "";
-    const notice = [configWarning(), resolved && sessionRoleCard(input), resolved && waitingNotice(resolved.map, { session: input.session_id }), ...(resolved && isCockpit(input) ? cockpitNotices(resolved.map, input.session_id, false) : []), learn].filter(Boolean).join("\n\n");
+    const caller = { session: input.session_id, cockpit: claudeProcess() };
+    const read = resolved ? cockpitCards(resolved.map, caller) : null;
+    const notice = [configWarning(), resolved && sessionRoleCard(input), resolved && waitingNotice(resolved.map, { caller, found: read.problems.length ? undefined : read.found }), ...(resolved && isCockpit(input) ? cockpitNotices(resolved.map, caller, false, read) : []), learn].filter(Boolean).join("\n\n");
     if (notice) process.stdout.write(JSON.stringify({ ...(learn && { systemMessage: learn }), hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: notice } }));
     if (learn) writeState(resolved.map.name, "learn_nudged", localDate());
   } catch (error) {
@@ -274,7 +275,7 @@ function runAskCards() {
   try {
     if (!isCockpit(input)) return;
     const resolved = resolveMap(input.cwd ?? process.cwd());
-    const notice = resolved ? cockpitNotices(resolved.map, input.session_id, true).filter(Boolean).join("\n\n") : "";
+    const notice = resolved ? cockpitNotices(resolved.map, { session: input.session_id, cockpit: claudeProcess() }, true).filter(Boolean).join("\n\n") : "";
     if (notice) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: input.hook_event_name ?? "UserPromptSubmit", additionalContext: notice } }));
   } catch (error) {
     logGate({ hook: "ask-cards", decision: "skip-on-error", error: error.message });
