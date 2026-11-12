@@ -56,8 +56,8 @@ test("the cockpit closes a finished job on its notification turn with close --if
 
 test("an answer is written onto its card only after resume sent it, a refused card is archived by the job that redoes it, and a job never runs untrusted code alone", () => {
   const pending = read("skills/pending/SKILL.md");
-  const questions = pending.match(/^3\. \*\*Questions\.\*\*.*$/m)?.[0] ?? "";
-  for (const phrase of ["one `job.mjs resume` per job", "only after that call went out", "When `resume` refuses", "leave the card as it is"]) assert.ok(questions.includes(phrase), phrase);
+  const questions = pending.match(/^3\. \*\*Questions\.\*\*[\s\S]*?(?=^\d\. )/m)?.[0] ?? "";
+  for (const phrase of ["one `job.mjs resume` per job", "Only after that call went out", "When `resume` refuses", "leave every card of that job as it is"]) assert.ok(questions.includes(phrase), phrase);
   const jobs = read("shared/jobs.md");
   assert.match(jobs, /^6\. Answers and rework go through SendMessage\.[\s\S]*?only after its call went out/m);
   const job = jobs.match(/^2\. A job cannot ask the user.*$/m)?.[0] ?? "";
@@ -68,15 +68,28 @@ test("an answer is written onto its card only after resume sent it, a refused ca
 
 test("all answers of one round for a job go back in one note and one resume, and a reworded card is refused only after its note went out", () => {
   const pending = read("skills/pending/SKILL.md");
-  const questions = pending.match(/^3\. \*\*Questions\.\*\*.*$/m)?.[0] ?? "";
-  for (const phrase of ["one note file per job", "one `job.mjs resume` per job", "each of that job's cards"]) assert.ok(questions.includes(phrase), phrase);
+  const questions = pending.match(/^3\. \*\*Questions\.\*\*[\s\S]*?(?=^\d\. )/m)?.[0] ?? "";
+  for (const phrase of ["one note file per job", "one `job.mjs resume` per job", "`card-note --refuse` each reworded card"]) assert.ok(questions.includes(phrase), phrase);
   const reword = pending.match(/^   - On `approve\.reword`.*$/m)?.[0] ?? "";
-  assert.ok(reword.indexOf("job.mjs resume") !== -1 && reword.indexOf("job.mjs resume") < reword.indexOf("--refuse"), reword);
+  assert.ok(reword.includes("comes only after that note went out"), reword);
   const jobs = read("shared/jobs.md");
-  assert.match(jobs, /^6\. Answers and rework go through SendMessage\. Put every answer and rework of one round for a job into one note file/m);
+  assert.match(jobs, /^6\. Answers and rework go through SendMessage\.[\s\S]*?Then put every answer and rework of that round for the job into one note file/m);
   const close = jobs.match(/^7\. Close: .*$/m)?.[0] ?? "";
   assert.ok(close.includes("gh pr list --head <branch> --state open"), close);
   assert.doesNotMatch(close, /named in its outcome/);
+});
+
+test("each job's round runs its approved cards before the one resume, and a refusal that only says the job is busy leaves the card open", () => {
+  const pending = read("skills/pending/SKILL.md");
+  const round = pending.match(/^   - \*\*Round per job\.\*\*.*$/m)?.[0] ?? "";
+  const order = ["card-start", "one `job.mjs resume`", "card-note"].map((phrase) => round.indexOf(phrase));
+  assert.ok(order.every((at) => at !== -1) && order[0] < order[1] && order[1] < order[2], round);
+  assert.ok(round.includes("still running or another live cockpit runs it, leave the card open"), round);
+  const jobs = read("shared/jobs.md");
+  assert.match(jobs, /^6\. Answers and rework go through SendMessage\.[\s\S]*?run every approved card of the job first/m);
+  assert.match(jobs, /When the SendMessage or Agent call fails after `resume`, the record stays running: TaskStop that agent by its id, or wait until the cockpit exits, then `resume` again\./);
+  assert.doesNotMatch(jobs, /no open card/);
+  assert.doesNotMatch(pending, /Both refuse and writes/);
 });
 
 test("every kit write a skill runs after a question is approved by an approve.all or post.asIs option, never by the merge or next-step answer", () => {
