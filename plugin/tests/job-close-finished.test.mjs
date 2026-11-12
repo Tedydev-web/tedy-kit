@@ -29,7 +29,7 @@ test("close --if-finished closes every done job no open card names, and leaves r
   assert.deepEqual([status(finished), status(waiting), status(running)], ["closed", "done", "running"]);
   const one = w.run(["close", running, "--if-finished"]);
   assert.equal(one.status, 0, one.stderr);
-  assert.equal(one.stdout, `kept ${running}: it is not done, or an open card still names it\n`);
+  assert.equal(one.stdout, `kept ${running}: it is not done, or a card still names it\n`);
   assert.equal(w.run(["close", "--if-finished", "--reason", "x"]).status, 1);
 });
 
@@ -71,4 +71,40 @@ test("close --if-finished keeps a done job whose agent still runs in a live cock
     cockpit.child.kill();
     await cockpit.exited;
   }
+});
+
+test("every outcome section counts up to the next note or outcome, whatever headings it holds, and a PR named as o/r#n, #n or on another host keeps the dev job open", () => {
+  const w = world();
+  const log = join(w.root, "gh.log");
+  fakeGh(w, `echo "$PWD|$*" >> "${log}"; echo OPEN`);
+  const nested = jobFile(w, { role: "dev", name: "nested", status: "done" });
+  appendFileSync(nested, "\n## Outcome\n\nDone.\n\n## PR\n\nDraft PR https://github.com/o/r/pull/7\n");
+  const short = jobFile(w, { role: "dev", name: "short", status: "done" });
+  appendFileSync(short, "\n## Outcome\n\nOpened o/r#8 for OP#21298.\n");
+  const bare = jobFile(w, { role: "dev", name: "bare", status: "done" });
+  appendFileSync(bare, "\n## Outcome\n\nOpened #9, task OP#21298.\n\n## Note 2026-11-12T01:00:00.000Z\n\nsee https://github.com/o/r/pull/99\n");
+  const hosted = jobFile(w, { role: "dev", name: "hosted", status: "done" });
+  appendFileSync(hosted, "\n## Outcome\n\nPR https://git.example.com/team/app/pull/3\n");
+  const out = w.run(["close", "--if-finished"]);
+  assert.equal(out.status, 0, out.stderr);
+  for (const [file, ref] of [[nested, "https://github.com/o/r/pull/7"], [short, "o/r#8"], [bare, "#9"], [hosted, "https://git.example.com/team/app/pull/3"]]) {
+    assert.ok(out.stdout.includes(`kept ${file}: its PR ${ref} is open;`), `${ref}\n${out.stdout}`);
+    assert.equal(status(file), "done");
+  }
+  const calls = readFileSync(log, "utf8").split("\n").filter(Boolean);
+  assert.ok(calls.includes(`${w.root}|pr view 8 --repo o/r --json state --jq .state`), calls.join("\n"));
+  assert.ok(calls.includes(`${w.root}|pr view 9 --json state --jq .state`), calls.join("\n"));
+  assert.ok(!calls.some((call) => /21298|pull\/99/.test(call)), calls.join("\n"));
+});
+
+test("a done job that a started or refused card still names is not closed", () => {
+  const w = world();
+  const started = jobFile(w, { role: "pm", name: "started", status: "done" });
+  const refused = jobFile(w, { role: "pm", name: "refused", status: "done" });
+  mkdirSync(join(w.root, "plans", "drafts"), { recursive: true });
+  writeFileSync(join(w.root, "plans", "drafts", "261106-0915-question-started.md"), `kind: question\ntitle: Started\njob: ${started}\nstatus: started\nstarted: 2026-11-12T01:00:00.000Z\n\nWhich?\n- A: a\n- B: b\n`);
+  writeFileSync(join(w.root, "plans", "drafts", "261106-0916-question-refused.md"), `kind: question\ntitle: Refused\njob: ${refused}\nstatus: refused\nrefused: redo it\n\nWhich?\n- A: a\n- B: b\n`);
+  const out = w.run(["close", "--if-finished"]);
+  assert.equal(out.status, 0, out.stderr);
+  assert.deepEqual([status(started), status(refused)], ["done", "done"], out.stdout);
 });

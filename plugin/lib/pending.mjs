@@ -315,38 +315,46 @@ export function waitingText(map, { offline = false, limit = Infinity, budgetMs =
   ], limit);
 }
 
-const PR_URL = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+/g;
+const PR_REFS = [
+  [/https?:\/\/[^\s/]+\/[\w.-]+\/[\w.-]+\/pull\/\d+/g, ([url]) => ({ label: url, args: ["pr", "view", url] })],
+  [/(?<![\w./-])([\w.-]+\/[\w.-]+)#(\d+)\b/g, ([label, repo, number]) => ({ label, args: ["pr", "view", number, "--repo", repo] })],
+  [/(?<![\w/#&])#(\d+)\b/g, ([label, number]) => ({ label, args: ["pr", "view", number] })],
+];
 
-export function outcomePrs(text) {
+export function outcomeRefs(text) {
   let inside = false;
   const lines = [];
   for (const line of text.split("\n")) {
-    if (line.startsWith("## ")) inside = line.trim() === "## Outcome";
+    if (/^## Outcome\s*$/.test(line)) inside = true;
+    else if (/^## Note /.test(line)) inside = false;
     else if (inside) lines.push(line);
   }
-  return [...new Set(lines.join("\n").match(PR_URL) ?? [])];
+  const body = lines.join("\n");
+  const refs = PR_REFS.flatMap(([pattern, ref]) => [...body.matchAll(pattern)].map(ref));
+  return refs.filter((ref, index) => refs.findIndex((other) => other.label === ref.label) === index);
 }
 
-export function finishedJobs(map) {
+export function finishedJobs(map, found = cards(map)) {
   const root = map.paths[0];
-  const named = new Set(cards(map).filter((item) => !item.refusal && item.job !== "none").map((item) => realOrNull(resolve(root, item.job))));
+  const named = new Set(found.filter((item) => item.job !== "none").map((item) => realOrNull(resolve(root, item.job))));
   return listJobs(map)
     .filter((job) => job.status === "done" && !named.has(realOrNull(job.path)))
-    .map((job) => ({ ...job, prs: job.role === "dev" ? outcomePrs(readFileSync(job.path, "utf8")) : [] }));
+    .map((job) => ({ ...job, prs: job.role === "dev" ? outcomeRefs(readFileSync(job.path, "utf8")) : [] }));
 }
 
-export const prState = (url) => execFileSync("gh", ["pr", "view", url, "--json", "state", "--jq", ".state"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 15000 }).trim();
+export const prState = (ref, cwd) => execFileSync("gh", [...ref.args, "--json", "state", "--jq", ".state"], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], timeout: 15000 }).trim();
 
-function openPr(job, state) {
-  for (const url of job.prs) {
+function openPr(job, state, root) {
+  const cwd = [job.repo, job.cwd].find((dir) => dir && existsSync(dir)) ?? root;
+  for (const ref of job.prs) {
     let current;
     try {
-      current = state(url);
+      current = state(ref, cwd);
     } catch (error) {
       const why = String(error.stderr ?? "").split("\n").find((line) => line.trim()) ?? error.message;
-      return `the state of its PR ${url} could not be read (${why.trim()}), so it stays open`;
+      return `the state of its PR ${ref.label} could not be read (${why.trim()}), so it stays open`;
     }
-    if (current !== "MERGED" && current !== "CLOSED") return `its PR ${url} is ${current.toLowerCase() || "in an unknown state"}; it closes once the PR is merged or closed, or when the user asks`;
+    if (current !== "MERGED" && current !== "CLOSED") return `its PR ${ref.label} is ${current.toLowerCase() || "in an unknown state"}; it closes once the PR is merged or closed, or when the user asks`;
   }
   return null;
 }
@@ -354,9 +362,9 @@ function openPr(job, state) {
 export function closeFinished(map, file, { state = prState } = {}) {
   const only = ofJob(file);
   const found = finishedJobs(map).filter((job) => !only || only(job.path));
-  if (only && !found.length) return [`kept ${file}: it is not done, or an open card still names it`];
+  if (only && !found.length) return [`kept ${file}: it is not done, or a card still names it`];
   return found.map((job) => {
-    const open = openPr(job, state);
+    const open = openPr(job, state, map.paths[0]);
     if (open) return `kept ${job.path}: ${open}`;
     try {
       return closeJob(map, job.path);
