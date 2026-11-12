@@ -100,7 +100,8 @@ function send(args, input) {
   return gh(args, input);
 }
 
-function currentRepo(flags) {
+function currentRepo(flags, verb) {
+  if (!flags["dry-run"] && typeof flags.repo !== "string") throw new Error(`refused: name the target repository with --repo <owner/repo> on the command line, so the permission prompt shows it: github-write.mjs ${verb} … --repo <owner/repo>`);
   return flags.repo ?? gh(["repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"]).trim();
 }
 
@@ -173,7 +174,7 @@ const nodeKey = (id) => `github:node:${id}`;
 const writing = (flags, keys, file, write) => withRecords(flags["dry-run"] ? [] : keys, { job: flags.job, since: pinnedSince(file) }, write);
 
 async function post(file, flags) {
-  const repo = currentRepo(flags);
+  const repo = currentRepo(flags, "post");
   return writing(flags, [prKey(repo, parseDraft(readFileSync(file, "utf8")).pr)], file, (recorded) => postDraft(file, flags, repo, recorded));
 }
 
@@ -231,7 +232,7 @@ function readBody(flags) {
 }
 
 async function edit(id, flags) {
-  const repo = currentRepo(flags);
+  const repo = currentRepo(flags, "edit");
   const body = readBody(flags);
   const pr = JSON.parse(gh(["api", `repos/${repo}/pulls/comments/${id}`])).pull_request_url?.match(/\/pulls\/(\d+)$/)?.[1];
   if (!pr) return refuse("github-write", [`refused: review comment ${id} in ${repo} names no pull request; nothing edited`]);
@@ -284,7 +285,7 @@ function setThreadsResolved(threadIds, resolved, flags) {
 }
 
 async function reply(pr, id, flags) {
-  const repo = currentRepo(flags);
+  const repo = currentRepo(flags, "reply");
   const body = readBody(flags);
   return writing(flags, [prKey(repo, pr)], flags["body-file"], async (recorded) => {
     const twin = replyExists(prComments(repo, pr), id, body);
@@ -319,7 +320,7 @@ export function prBodyRefusal(pr, me, body, generatedFor) {
 
 function prBody(number, flags) {
   if (typeof flags["body-file"] !== "string") throw new Error("pr-body needs --body-file <file>");
-  const repo = currentRepo(flags);
+  const repo = currentRepo(flags, "pr-body");
   const body = readFileSync(flags["body-file"], "utf8").trim();
   const view = () => JSON.parse(gh(["pr", "view", String(number), "--repo", repo, "--json", "number,isDraft,author,body"]));
   return writing(flags, [prKey(repo, number)], undefined, async (recorded) => {

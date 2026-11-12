@@ -210,6 +210,19 @@ test("eval graders check facts only: no llm or baseline grader in any case", asy
   for (const path of graders) assert.doesNotMatch(readFileSync(new URL(path, evals), "utf8"), /^type:\s*(llm|baseline)\s*$/m, path);
 });
 
+test("every github-write command line in the skills that writes to a repository names --repo", async () => {
+  const skills = new URL("../skills/", import.meta.url);
+  let checked = 0;
+  for (const path of readdirSync(skills, { recursive: true }).filter((name) => name.endsWith(".md"))) {
+    for (const span of readFileSync(new URL(path, skills), "utf8").match(/github-write\.mjs (?:post|edit|reply|pr-body)\b[^`\n]*/g) ?? []) {
+      if (!span.includes("<") || span.includes("--dry-run")) continue;
+      checked += 1;
+      assert.ok(span.includes("--repo"), `${path}: ${span}`);
+    }
+  }
+  assert.ok(checked >= 4, String(checked));
+});
+
 test("a refused write is fixed by what its refusal names, and the kit's approval settings are never the remedy", () => {
   const rules = read("shared/decision-points.md");
   assert.match(rules, /^- When a kit write is refused, fix what its refusal names \(its last line names the check that refused: `refused by github-write`, `refused by pins`, `card refused by card-check`\), quote the text again and run the command again\. Never change the kit's approval settings \(`profile\.mjs publish-approval`\) to get past a refusal\.$/m);

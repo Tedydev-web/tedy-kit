@@ -39,6 +39,16 @@ test("a failure says whether anything was written: nothing before the first writ
   assert.deepEqual(failing.writes, []);
 });
 
+test("every github-write write that has a target repository names it with --repo, so the prompt shows it; a dry run does not need it", () => {
+  for (const args of [["post", "d.md"], ["edit", "5", "--body-file", "b.md"], ["reply", "701", "5", "--body-file", "b.md"], ["pr-body", "3", "--body-file", "b.md"]]) {
+    const result = runWithFakeGh(GITHUB_WRITE, args, { fixture: { repo: "o/r" } });
+    assert.equal(result.status, 1, args.join(" "));
+    assert.match(result.out, new RegExp(`^github-write: refused: name the target repository with --repo <owner/repo> on the command line, so the permission prompt shows it: github-write\\.mjs ${args[0]} `, "m"), args.join(" "));
+    assert.match(result.out, /^github-write: nothing was written$/m, args.join(" "));
+    assert.deepEqual(result.writes, [], args.join(" "));
+  }
+});
+
 test("job.mjs run outside every mapped folder names the mapped project roots", () => {
   const root = tempDir("tedy-job-root-");
   const outside = tempDir("tedy-job-outside-");

@@ -310,7 +310,7 @@ test("without an own OAuth client a Doc is pinned by its Drive text export: repl
   assert.equal(w.writes().length, 2);
 });
 
-test("a ready PR body refresh writes once, without --repo, also for a profile that still says answer", async () => {
+test("a ready PR body refresh is refused without --repo and writes once with it, also for a profile that still says answer", async () => {
   const op = await fakeOpenProject();
   try {
     for (const mode of ["answer", "ask"]) {
@@ -319,8 +319,11 @@ test("a ready PR body refresh writes once, without --repo, also for a profile th
       assert.equal(generated.code, 0, generated.out);
       w.file("p.md", generated.out);
       const bare = ["pr-body", "3", "--body-file", "p.md"];
-      await w.run("github-write", bare);
+      assert.match((await w.run("github-write", bare)).out, /refused: name the target repository with --repo/);
+      assert.equal(w.writes().length, 0, mode);
+      await w.run("github-write", [...bare, "--repo", "o/r"]);
       assert.equal(w.writes().length, 1, mode);
+      assert.ok(w.writes()[0].includes("repos/o/r/pulls/3"), w.writes()[0]);
       assert.throws(() => readdirSync(join(w.dir, "state", "approvals")));
     }
   } finally {
