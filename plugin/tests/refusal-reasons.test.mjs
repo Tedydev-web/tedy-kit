@@ -39,6 +39,19 @@ test("a pin refusal names the pins layer, and the gate log holds it", async () =
   assert.match(entry.reason, /changed after its sources were pinned/);
 });
 
+test("a lock refusal is logged under the lock layer, for every writer that takes records", async () => {
+  const w = world({ pr: 701, gh: { diff: DIFF, reviewComments: [{ id: 1, path: "src/a.ts", line: 10, side: "RIGHT", commit_id: "0".repeat(40) }] } });
+  const head = w.checkout.pr(701);
+  w.file("d.md", `# PR #701: comment line by line (head ${head.slice(0, 7)})\n\n## 1. \`src/a.ts:10\`\nThe label is wrong.\n`);
+  assert.equal((await w.run("draft-lint", ["pr-comment", "d.md", "--repo", "o/r"])).code, 0);
+  w.holdRecord("github:o/r#701");
+  const refused = await w.run("github-write", ["post", "d.md", "--repo", "o/r"]);
+  assert.equal(refused.code, 1, refused.out);
+  assert.match(refused.out, /^github-write: nothing was written$/m);
+  const entry = logged(join(w.dir, "state")).find((line) => line.decision === "refused" && line.hook === "lock");
+  assert.match(entry.reason, /github:o\/r#701 is being written by pid/);
+});
+
 test("card-check and card-start refusals name their layer and are logged", () => {
   const root = tempDir("tedy-refusal-cards-");
   mkdirSync(join(root, "plans", "drafts"), { recursive: true });

@@ -1,10 +1,15 @@
 import { createHash } from "node:crypto";
 import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync, readlinkSync, statSync, unlinkSync, writeSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { logGate } from "./hook-io.mjs";
+import { logGate, logRefusal } from "./hook-io.mjs";
 import { STATE_DIR } from "./state-dir.mjs";
 
 const FOREIGN_LOCK_MS = 30 * 60 * 1000;
+
+function ledgerRefusal(reason) {
+  logRefusal("ledger", reason);
+  return new Error(reason);
+}
 
 const digest = (key) => createHash("sha256").update(key).digest("hex").slice(0, 16);
 
@@ -111,7 +116,9 @@ function tryAcquire(key, state) {
 function acquire(key) {
   const got = tryAcquire(key);
   if (got.path) return got;
-  throw new Error(heldRefusal(key, got.held));
+  const reason = heldRefusal(key, got.held);
+  logRefusal("lock", reason);
+  throw new Error(reason);
 }
 
 const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -185,7 +192,7 @@ export async function withRecords(keys, { job, since } = {}, fn) {
   try {
     for (const key of sorted) held.push({ key, ...acquire(key) });
     const conflicts = ledgerConflicts(sorted, { job: name, since });
-    if (conflicts.length) throw new Error(conflicts.map((entry) => `refused: ${entry.key} got a kit write from job ${entry.job} at ${entry.at}, after this draft's sources were pinned at ${since}; read the record again, update the draft, lint it and ask the user again.`).join("\n"));
+    if (conflicts.length) throw ledgerRefusal(conflicts.map((entry) => `refused: ${entry.key} got a kit write from job ${entry.job} at ${entry.at}, after this draft's sources were pinned at ${since}; read the record again, update the draft, lint it and ask the user again.`).join("\n"));
     let done = false;
     const recorded = () => {
       if (done) return;
