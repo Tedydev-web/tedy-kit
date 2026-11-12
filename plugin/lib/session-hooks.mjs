@@ -169,10 +169,10 @@ const ASK_HEAD = `Open cards wait on the user's answer: ask them in this turn. R
 
 export const isCockpit = (input) => !input.agent_id && !Object.hasOwn(AGENT_ROLES, input.agent_type);
 
-export function askCardsNotice(map, { held }) {
+export function askCardsNotice(map, { held, session }) {
   let text;
   try {
-    text = waitingText(map, { ask: true, held, limit: 10 });
+    text = waitingText(map, { ask: true, held, limit: 10, session });
   } catch (error) {
     logGate({ hook: "ask-cards", decision: "skip-on-error", error: error.message });
     return "";
@@ -236,7 +236,7 @@ function runPendingHandoffs() {
       return;
     }
     const learn = resolved ? learnLine(input, resolved.map) : "";
-    const notice = [configWarning(), resolved && sessionRoleCard(input), resolved && waitingNotice(resolved.map), resolved && isCockpit(input) && askCardsNotice(resolved.map, { held: true }), resolved && isCockpit(input) && closeJobsNotice(resolved.map, { perPrompt: false }), learn].filter(Boolean).join("\n\n");
+    const notice = [configWarning(), resolved && sessionRoleCard(input), resolved && waitingNotice(resolved.map), resolved && isCockpit(input) && askCardsNotice(resolved.map, { held: true, session: input.session_id }), resolved && isCockpit(input) && closeJobsNotice(resolved.map, { perPrompt: false }), learn].filter(Boolean).join("\n\n");
     if (notice) process.stdout.write(JSON.stringify({ ...(learn && { systemMessage: learn }), hookSpecificOutput: { hookEventName: "SessionStart", additionalContext: notice } }));
     if (learn) writeState(resolved.map.name, "learn_nudged", localDate());
   } catch (error) {
@@ -249,7 +249,7 @@ function runAskCards() {
   try {
     if (!isCockpit(input)) return;
     const resolved = resolveMap(input.cwd ?? process.cwd());
-    const notice = resolved ? [askCardsNotice(resolved.map, { held: false }), closeJobsNotice(resolved.map, { perPrompt: true })].filter(Boolean).join("\n\n") : "";
+    const notice = resolved ? [askCardsNotice(resolved.map, { held: false, session: input.session_id }), closeJobsNotice(resolved.map, { perPrompt: true })].filter(Boolean).join("\n\n") : "";
     if (notice) process.stdout.write(JSON.stringify({ hookSpecificOutput: { hookEventName: input.hook_event_name ?? "UserPromptSubmit", additionalContext: notice } }));
   } catch (error) {
     logGate({ hook: "ask-cards", decision: "skip-on-error", error: error.message });

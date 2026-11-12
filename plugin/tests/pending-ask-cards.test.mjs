@@ -4,7 +4,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import { card, cardNote, waitingText } from "../lib/pending.mjs";
+import { card, cardCheck, cardNote, waitingText } from "../lib/pending.mjs";
 import { STATE_DIR } from "../lib/state-dir.mjs";
 import { bound, jobFile, sleeper, world } from "./job-world-for-tests.mjs";
 
@@ -73,4 +73,23 @@ test("the ask list leaves out answered, refused, started and notice cards, and a
   card(w.map, "notify", { title: "CI is green", body: "All checks passed." });
   const loose = question(w, "none", "Loose one");
   assert.equal(waitingText(w.map, { ask: true }), `Questions:\n- Loose one ${loose}`);
+});
+
+test("a done job's card is not asked or run while its agent still writes, nor a card whose job another live cockpit runs", async () => {
+  const cockpit = await sleeper();
+  try {
+    const w = here();
+    const writing = jobFile(w, { name: "add-hello", status: "done", record: bound(cockpit, { state: "running" }) });
+    const elsewhere = jobFile(w, { name: "fix-toast", status: "done", record: bound(cockpit, { agent_id: "d4e5f6", session_id: "s-other", state: "idle" }) });
+    const late = question(w, writing, "Which toast");
+    const theirs = question(w, elsewhere, "Which colour");
+    const run = status(w, writing, "Status of 12", 12);
+    assert.equal(waitingText(w.map, { ask: true, session: "s-other" }), `Questions:\n- Which colour ${theirs}`);
+    assert.equal(waitingText(w.map, { ask: true, session: "s-cockpit" }), "");
+    assert.match(waitingText(w.map, { offline: true }), new RegExp(`^- Which toast \\(job running\\) ${late}$`, "m"));
+    assert.throws(() => cardCheck(run, w.map), /its job .* is still running and may rewrite the draft/);
+  } finally {
+    cockpit.child.kill();
+    await cockpit.exited;
+  }
 });
