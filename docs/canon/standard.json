@@ -413,7 +413,7 @@
       "class": "platform",
       "problems": ["S32"],
       "enforced": { "kind": "test", "file": "plugin/tests/canon-checks.test.mjs", "title": "a kit hook on an event that adds text to every prompt or every subagent spawn fails, except the cockpit's one ask-cards prompt hook" },
-      "notCovered": "How long the text of an allowed session-start, compaction or Stop hook grows is not bounded; the ask-cards text is bounded by card and job count, not by the length of a title.",
+      "notCovered": "How long the text of an allowed session-start, compaction or Stop hook grows is not bounded; the ask-cards text is capped at 3000 characters per block, with each title clipped to 120.",
       "approved": "2026-10-30"
     },
     {
