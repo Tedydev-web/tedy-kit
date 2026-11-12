@@ -40,7 +40,7 @@ test("the cockpit asks each job's open cards by the pending skill's steps, a job
   const pending = read("skills/pending/SKILL.md");
   assert.match(pending, /^description: Manual and recovery view of what waits on the user/m);
   const approve = pending.match(/^2\. \*\*Approve\.\*\*[\s\S]*?(?=^3\. )/m)?.[0] ?? "";
-  for (const phrase of ["no `AskUserQuestion`", "verbatim", "fenced block", "pending.mjs card-start <card>", "permission prompt is the approval"]) assert.ok(approve.includes(phrase), phrase);
+  for (const phrase of ["no `AskUserQuestion`", "verbatim", "fenced block", "pending.mjs card-start <card>", "permission prompt is the approval", "Stop at the first block that fails or is refused", "never run a later block", "which blocks already wrote"]) assert.ok(approve.includes(phrase), phrase);
   assert.doesNotMatch(approve, /--approved/);
 });
 

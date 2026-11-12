@@ -170,10 +170,10 @@ function judged(path, text, map, { ownClaim = false, caller, state = jobStates(m
   const found = claimed === null ? read : { ...read, status: "started", started: claimed || undefined };
   const delivered = found.kind === "question" && Boolean(found.answer);
   const refusal =
-    delivered ? cardRefusal({ ...found, job: "none" }, root)
+    delivered ? cardRefusal({ ...found, job: "none" }, root, map)
     : found.status === "refused" ? `refused: ${found.refused ?? "no reason given"}`
     : found.status === "started" ? `started at ${found.started ?? "an unknown time"}: its commands may already have written; check their read-backs, then pending.mjs done the card, or card-note --refuse it`
-    : cardRefusal(found, root);
+    : cardRefusal(found, root, map);
   const job = state(found.job);
   const { stuck, busy } = jobView(found, job);
   return { path, ...found, refusal: refusal ?? (found.status === "started" ? null : stuck), running: job.running, busy };
@@ -212,7 +212,7 @@ export function card(map, kind, { title, job = "none", draft, records, preview, 
     ["created", new Date().toISOString()],
   ].filter(([, value]) => value !== undefined && value !== "");
   const text = `${header.map(([key, value]) => `${key}: ${oneLine(value)}`).join("\n")}\n\n${String(body ?? "").trim()}\n`;
-  const refusal = cardRefusal(readCard(text) ?? { kind }, map.paths[0]);
+  const refusal = cardRefusal(readCard(text) ?? { kind }, map.paths[0], map);
   if (refusal) throw cardRefused("card", refusal);
   const dir = join(map.paths[0], "plans", "drafts");
   mkdirSync(dir, { recursive: true });

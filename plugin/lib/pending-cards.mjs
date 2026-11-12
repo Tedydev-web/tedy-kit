@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { parse, readJob } from "./job-files.mjs";
 import { KIT_PUBLISH_APPLY_VERBS, KIT_PUBLISH_WRITE_VERBS } from "./publish-approval-settings.mjs";
 import { jobFlag } from "./record-lock.mjs";
+import { mapRepos, repoSlug, runGit } from "./source-pin-git.mjs";
 import { tokenize } from "./shell-segments.mjs";
 
 const PLAIN_WORD = String.raw`(?!(?:''|"")*=)(?:[\p{L}\p{N}\p{M}_@%+=:,./-]|'[^']*'|"[^"$\x60\\]*")+`;
@@ -141,7 +142,23 @@ function jobFileRefusal(path, root) {
   return null;
 }
 
-export function cardRefusal(card, root = process.cwd()) {
+function mergeRefusal(blocks, map) {
+  const merges = blocks.filter((block) => MERGE_BLOCK.test(block.command));
+  if (!merges.length) return null;
+  if (merges[0] !== blocks[0]) return `block ${merges[0].n} merges a PR, so it must be block 1 of its card, before any other write`;
+  if (merges.length > 1) return `block ${merges[1].n} is a second merge; a card holds at most one`;
+  const repo = tokenize(merges[0].command)[5];
+  const slugs = mapRepos(map ?? {}).flatMap(({ dir }) => {
+    try {
+      return [repoSlug(runGit(dir, ["remote", "get-url", "origin"]))].filter(Boolean);
+    } catch {
+      return [];
+    }
+  });
+  return slugs.some((slug) => slug.toLowerCase() === repo.toLowerCase()) ? null : `block 1 merges ${repo}, which is not a repo of the project map (${slugs.join(", ") || "none found"})`;
+}
+
+export function cardRefusal(card, root = process.cwd(), map = null) {
   if (!KINDS.includes(card.kind)) return `unknown card kind ${card.kind}; use publish, question or notify`;
   if (!card.title) return "has no title";
   if (card.job && card.job !== "none") {
@@ -168,5 +185,5 @@ export function cardRefusal(card, root = process.cwd()) {
     const why = blockRefusal(block.command, card, draft);
     if (why) return `block ${block.n} ${why}`;
   }
-  return null;
+  return mergeRefusal(card.blocks, map);
 }

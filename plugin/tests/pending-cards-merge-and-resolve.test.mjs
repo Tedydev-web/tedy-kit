@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { evaluate } from "../gates/git-gate.mjs";
 import { card, cardCheck, cardStart } from "../lib/pending.mjs";
+import { git } from "./git-sibling-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const SCRIPTS = new URL("../scripts/", import.meta.url).pathname.replace(/\/$/, "");
@@ -17,7 +18,14 @@ function project() {
   writeFileSync(join(root, JOB), "to: tedy:review\nfrom: cockpit\nstatus: done\ncreated: c\ntitle: Review 963\n\nx\n");
   const draft = join(root, "plans", "drafts", "reply-963.md");
   writeFileSync(draft, "Fixed it.\n");
-  return { root, draft, map: { name: "shop", paths: [root], repos: [] } };
+  const repos = ["fe", "be"].map((name) => {
+    const dir = join(root, name);
+    mkdirSync(dir);
+    git(dir, "init", "-q");
+    git(dir, "remote", "add", "origin", `https://github.com/o/r-${name}.git`);
+    return { path: name, role: name.toUpperCase() };
+  });
+  return { root, draft, map: { name: "shop", paths: [root], repos } };
 }
 
 const publish = (map, body, extra = {}) => card(map, "publish", { title: "T", preview: "ready", body: `${body}\n`, ...extra });
@@ -48,7 +56,7 @@ test("a card block may be exactly gh pr merge <n> --repo <owner/repo> --merge, -
     assert.equal(verdict.ask, true, method);
     assert.match(verdict.reason, /belongs to the user/);
   }
-  const withStatus = publish(map, `### 1\ngh pr merge 963 --repo o/r --squash\n\n### 2\nnode ${SCRIPTS}/openproject.mjs set 21298 --status Closed --apply --lock 4 --job ${JOB.split("/").pop()}\n- #21298 In review → Closed`, { job: JOB });
+  const withStatus = publish(map, `### 1\ngh pr merge 963 --repo o/r-fe --squash\n\n### 2\nnode ${SCRIPTS}/openproject.mjs set 21298 --status Closed --apply --lock 4 --job ${JOB.split("/").pop()}\n- #21298 In review → Closed`, { job: JOB });
   assert.equal(cardCheck(withStatus, map), 2);
   for (const command of [
     "gh pr merge 963 --repo o/r --squash --admin",
@@ -60,5 +68,14 @@ test("a card block may be exactly gh pr merge <n> --repo <owner/repo> --merge, -
     "gh pr merge 963 --squash --repo o/r",
     "gh pr view 963 --repo o/r",
   ]) assert.throws(() => publish(map, `### 1\n${command}`), /block 1 is not exactly gh pr merge <n> --repo <owner\/repo> --merge\|--squash\|--rebase, the one gh command a card may hold/, command);
-  assert.throws(() => card(map, "publish", { title: "T", preview: "run", body: "### 1\ngh pr merge 963 --repo o/r --squash\n" }), /block 1 merges a PR, so it belongs on a preview: ready card/);
+  assert.throws(() => card(map, "publish", { title: "T", preview: "run", body: "### 1\ngh pr merge 963 --repo o/r-fe --squash\n" }), /block 1 merges a PR, so it belongs on a preview: ready card/);
+});
+
+test("a merge block must be block 1, only one per card, and merge a repo of the project map", () => {
+  const { map } = project();
+  const set = `node ${SCRIPTS}/openproject.mjs set 21298 --status Closed --apply --lock 4`;
+  assert.throws(() => publish(map, `### 1\n${set}\n\n### 2\ngh pr merge 963 --repo o/r-fe --squash`), /block 2 merges a PR, so it must be block 1 of its card, before any other write/);
+  assert.throws(() => publish(map, "### 1\ngh pr merge 963 --repo o/r-fe --squash\n\n### 2\ngh pr merge 964 --repo o/r-be --squash"), /block 2 is a second merge; a card holds at most one/);
+  assert.throws(() => publish(map, "### 1\ngh pr merge 963 --repo o/other --squash"), /block 1 merges o\/other, which is not a repo of the project map \(o\/r-fe, o\/r-be\)/);
+  assert.ok(publish(map, "### 1\ngh pr merge 963 --repo O/R-BE --squash"));
 });
