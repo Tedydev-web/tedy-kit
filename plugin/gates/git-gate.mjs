@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { basename, isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ALL_GATES_ON, ask, deny, gateSwitches, logGate, readHookInput } from "../lib/hook-io.mjs";
-import { CLAUDE_SETTINGS } from "../lib/publish-approval-settings.mjs";
+import { CLAUDE_SETTINGS, KIT_PUBLISH_APPLY_VERBS, KIT_PUBLISH_WRITE_VERBS } from "../lib/publish-approval-settings.mjs";
 import { resolveMap } from "../lib/project-map.mjs";
 import { shellWords, splitSegments, substitutions, tokenize, walkCommands } from "../lib/shell-segments.mjs";
 import { INTERPRETER, SHELLS, readsUnreadableCode, redirectLength, scriptOperand, variableScriptArguments, withoutRedirects } from "../lib/shell-program-arguments.mjs";
@@ -68,6 +68,9 @@ export { CLAUDE_SETTINGS };
 const REWRITING_PUSH = /^(-f|--force|--force-with-lease(=.*)?|--force-if-includes|--mirror|--all|--prune|-d|--delete)$/;
 export const CTX_TOOL = /__ctx_(execute|execute_file|batch_execute)$/;
 const CTX_PUBLISH_REASON = "tedy gate: this publishes through a kit script from a context-mode tool, where the user's permission rules never ask. Run the publish as a plain Bash command of its own, so the permission rule asks the user before it goes out.";
+const KIT_WRITER = /(?:github-write|openproject|figma-comments|gdoc-comments|doc-comment-file)\.mjs/;
+const KIT_VERB = new RegExp(`(?<![\\w-])(?:${[...new Set([...Object.values(KIT_PUBLISH_WRITE_VERBS), ...Object.values(KIT_PUBLISH_APPLY_VERBS)].flat())].join("|")})(?![\\w-])`);
+const CTX_CODE_PUBLISH_REASON = "tedy gate: this context-mode code names a kit publish script with a write verb, and code in a language other than shell is not something the gate or the user's permission rules can read, so it would write with no prompt. It is refused. Run the publish as a plain Bash command of its own, `node <plugin>/scripts/<script>.mjs <verb> …`, so the permission rule asks the user before it writes.";
 const CTX_LANGUAGES = new Set(["javascript", "typescript", "python", "ruby", "go", "rust", "php", "perl", "r", "elixir", "csharp"]);
 
 function graphQuery(args) {
@@ -538,6 +541,7 @@ export function bashInputs(input) {
   }
   if (typeof toolInput.language !== "string" || typeof toolInput.code !== "string") return { malformed: "`language` or `code` is not a string" };
   if (toolInput.language === "shell") return { inputs: [shell(toolInput.code)] };
+  if (KIT_WRITER.test(toolInput.code) && KIT_VERB.test(toolInput.code)) return { refused: CTX_CODE_PUBLISH_REASON };
   if (CTX_LANGUAGES.has(toolInput.language)) return { inputs: [] };
   return { malformed: `language \`${toolInput.language.slice(0, 40)}\` is not one the gate knows` };
 }
@@ -586,7 +590,12 @@ export function checkFailed(command, tool, error) {
 
 export function run() {
   const input = readHookInput({ askOnFailure: true });
-  const { inputs, malformed } = bashInputs(input);
+  const { inputs, malformed, refused } = bashInputs(input);
+  if (refused) {
+    logGate({ hook: "git-gate", decision: "deny", tool: input.tool_name, cwd: input.cwd, reason: refused });
+    deny(refused);
+    return;
+  }
   if (malformed) {
     const reason = `tedy gate: could not read this context-mode call (${malformed}), so it is refused unchecked. Send shell code as \`code\` with \`language: "shell"\`, or batch commands as a list of \`{ label, command }\`.`;
     logGate({ hook: "git-gate", decision: "deny", tool: input.tool_name, cwd: input.cwd, reason });

@@ -36,6 +36,23 @@ test("an uncovered kit publish asks and a covered one passes to the ask rule, al
   }
 });
 
+test("context-mode code in a non-shell language that names a kit writer and a publish verb is denied, with the plain Bash route in the reason", () => {
+  const tool = "mcp__plugin_context-mode_context-mode__ctx_execute";
+  for (const [language, code] of [
+    ["javascript", 'require("node:child_process").execFileSync("node", ["/k/scripts/github-write.mjs", "post", "d.md", "--repo", "o/r"]);'],
+    ["python", 'import subprocess\nsubprocess.run(["node", "/k/scripts/openproject.mjs", "set", "12", "--status", "X", "--apply", "--lock", "1"])'],
+    ["typescript", 'Bun.spawn(["node", "/k/plugin/scripts/figma-comments.mjs", "reply", "1", "--body-file", "b.md"]);'],
+  ]) {
+    const decision = gate("", { tool, toolInput: { language, code } });
+    assert.equal(decision?.permissionDecision, "deny", language);
+    assert.match(decision.permissionDecisionReason, /kit publish script .* plain Bash command/, language);
+  }
+  const file = gate("", { tool: "mcp__plugin_context-mode_context-mode__ctx_execute_file", toolInput: { path: "/w/x.json", language: "javascript", code: 'require("child_process").execSync("node /k/scripts/gdoc-comments.mjs anchor --doc D")' } });
+  assert.equal(file?.permissionDecision, "deny");
+  assert.equal(gate("", { tool, toolInput: { language: "javascript", code: 'console.log("github-write.mjs is the writer")' } }), null);
+  assert.equal(gate("", { tool, toolInput: { language: "python", code: 'print(len(open("notes.md").read()))' } }), null);
+});
+
 test("the gate's other checks hold", () => {
   const merge = gate("gh pr merge 12");
   assert.equal(merge?.permissionDecision, "ask");
