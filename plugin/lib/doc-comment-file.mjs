@@ -10,6 +10,7 @@ import { resolveMap } from "./project-map.mjs";
 import { approvalLines, renderDocComment } from "./publish-approval-render.mjs";
 import { withRecords } from "./record-lock.mjs";
 import { describePin, pinnedSources, pinSourcesOf, recordPins, sayNotices } from "./source-pins.mjs";
+import { exitAfterOutput } from "./cli-exit.mjs";
 
 const GROUPS = ["A", "B"];
 
@@ -173,7 +174,7 @@ async function main(input) {
 
 export function run() {
   main(process.argv.slice(2)).then(
-    (code) => process.exit(code),
+    (code) => exitAfterOutput(code),
     (error) => {
       console.error(`doc-comment-file: ${error.message}`);
       process.exit(1);

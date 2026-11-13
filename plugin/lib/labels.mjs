@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import { loadConfig } from "./profile.mjs";
+import { exitAfterOutput } from "./cli-exit.mjs";
 
 export const LABELS = {
   en: {
@@ -143,7 +144,7 @@ function main([asked]) {
 }
 
 export function run() {
-  process.exit(main(process.argv.slice(2)));
+  exitAfterOutput(main(process.argv.slice(2)));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();

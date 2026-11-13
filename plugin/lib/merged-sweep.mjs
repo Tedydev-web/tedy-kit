@@ -11,6 +11,7 @@ import { notBefore, sinceTime } from "./since.mjs";
 import { gatherFacts, listPullRequests } from "./op-status.mjs";
 import { mapRepos } from "./source-pin-git.mjs";
 import { flowOf, linkedIds, planStatus } from "./status-flow.mjs";
+import { exitAfterOutput } from "./cli-exit.mjs";
 
 export const searchSince = (since) => `${new Date(sinceTime(since)).toISOString().slice(0, 19)}Z`;
 
@@ -138,7 +139,7 @@ async function main(argv) {
 
 export function run() {
   main(process.argv.slice(2)).then(
-    (code) => process.exit(code),
+    (code) => exitAfterOutput(code),
     (error) => {
       console.error(`merged-sweep: ${error.message}`);
       process.exit(1);

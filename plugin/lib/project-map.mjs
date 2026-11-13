@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import { fetchTab } from "./prd-section.mjs";
 import { profileDir } from "./profile.mjs";
 import { discover } from "./project-discover.mjs";
+import { exitAfterOutput } from "./cli-exit.mjs";
 
 export const PROJECTS_DIR = join(profileDir(), "projects");
 
@@ -184,7 +185,7 @@ async function main([command, cwd = process.cwd()]) {
 
 export function run() {
   main(process.argv.slice(2)).then(
-    (code) => process.exit(code),
+    (code) => exitAfterOutput(code),
     (error) => {
       console.error(`project-map: ${error.message}`);
       process.exit(1);

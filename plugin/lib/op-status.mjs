@@ -5,6 +5,7 @@ import { loadConfig } from "./openproject-client.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { mapRepos } from "./source-pin-git.mjs";
 import { flowOf, linkedIds, planStatus } from "./status-flow.mjs";
+import { exitAfterOutput } from "./cli-exit.mjs";
 
 const userId = (link) => link?.href?.split("/").pop() ?? null;
 
@@ -74,7 +75,7 @@ async function main(argv) {
 
 export function run() {
   main(process.argv.slice(2)).then(
-    (code) => process.exit(code),
+    (code) => exitAfterOutput(code),
     (error) => {
       console.error(`op-status: ${error.message}`);
       process.exit(1);

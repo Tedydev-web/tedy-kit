@@ -9,6 +9,7 @@ import { resolveMap } from "./project-map.mjs";
 import { notBefore, sinceTime } from "./since.mjs";
 import { withRecords } from "./record-lock.mjs";
 import { requireFresh, sayNotices, versionCheck } from "./source-pins.mjs";
+import { exitAfterOutput } from "./cli-exit.mjs";
 
 const DRIVE = "https://www.googleapis.com/drive/v3";
 const DOCS = "https://docs.googleapis.com/v1";
@@ -385,7 +386,7 @@ async function main(input) {
 
 export function run() {
   main(process.argv.slice(2)).then(
-    (code) => process.exit(code),
+    (code) => exitAfterOutput(code),
     (error) => {
       console.error(`gdoc-comments: ${error.message}`);
       process.exit(1);

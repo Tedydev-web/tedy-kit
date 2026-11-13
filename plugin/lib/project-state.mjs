@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { STATE_DIR } from "./hook-io.mjs";
 import { loadMaps, PROJECTS_DIR, resolveMap } from "./project-map.mjs";
+import { exitAfterOutput } from "./cli-exit.mjs";
 
 const isTimestamp = (value) => /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/.test(value) && !Number.isNaN(Date.parse(value));
 
@@ -77,7 +78,7 @@ function main(argv) {
 }
 
 export function run() {
-  process.exit(main(process.argv.slice(2)));
+  exitAfterOutput(main(process.argv.slice(2)));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();

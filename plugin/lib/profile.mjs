@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { isAbsolute, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { CLAUDE_SETTINGS, KIT_PUBLISH_ASK_RULES, plannedPermissions, readSettings, retiredDenyRules, unchanged, writePermissions } from "./publish-approval-settings.mjs";
+import { exitAfterOutput } from "./cli-exit.mjs";
 
 const SHARED = fileURLToPath(new URL("../shared/", import.meta.url));
 const PERSONAL_GATES = ["noComments", "draftPrOnly", "ghWrites", "publishQuote"];
@@ -281,7 +282,7 @@ function main([command, arg, ...rest]) {
 }
 
 export function run() {
-  process.exit(main(process.argv.slice(2)));
+  exitAfterOutput(main(process.argv.slice(2)));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();

@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { ISSUE_OR_PR, PINNED_BLOB } from "./prior-art.mjs";
+import { exitAfterOutput } from "./cli-exit.mjs";
 
 const EVIDENCE = /^\s*- (\S+)(?: "(.+)")?\s*$/;
 const COMMAND = /^\s*- `[^`]+` \(/;
@@ -86,7 +87,7 @@ function main(files) {
 }
 
 export function run() {
-  process.exit(main(process.argv.slice(2)));
+  exitAfterOutput(main(process.argv.slice(2)));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();

@@ -9,6 +9,7 @@ import { generatedPrBodyOp } from "./openproject.mjs";
 import { prdFiles, resolveMap } from "./project-map.mjs";
 import { withRecords } from "./record-lock.mjs";
 import { pinnedSources, recheckPinned } from "./source-pins.mjs";
+import { exitAfterOutput } from "./cli-exit.mjs";
 
 const normalise = (text) => text.replace(/\s+/g, " ").trim();
 
@@ -335,7 +336,7 @@ async function main(input) {
 
 export function run() {
   main(process.argv.slice(2)).then(
-    (code) => process.exit(code),
+    (code) => exitAfterOutput(code),
     (error) => {
       logGate({ hook: "github-write", decision: "failed", sent, error: error.message });
       console.error(`github-write: ${error.message}`);

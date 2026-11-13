@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { SECRET_SHAPE } from "./api-request.mjs";
+import { exitAfterOutput } from "./cli-exit.mjs";
 
 const HOME_PATH = /\/(?:home|Users)\/[A-Za-z0-9._-]+\//;
 const EMAIL = /[A-Za-z0-9._%+-]+@((?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,})/g;
@@ -158,7 +159,7 @@ function main(argv) {
 }
 
 export function run() {
-  process.exit(main(process.argv.slice(2)));
+  exitAfterOutput(main(process.argv.slice(2)));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();

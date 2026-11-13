@@ -14,6 +14,7 @@ import { withRecords } from "./record-lock.mjs";
 import { describePin, pinSourcesOf, recheckPinned, recordPins, sayNotices } from "./source-pins.mjs";
 import { countWords, lintDrafts, lintWorkPackage, readiness, readinessLine } from "./task-lint.mjs";
 import { bareWorkPackageRefs, foreignRefsAdvice, foreignWorkPackageRefs } from "./work-package-refs.mjs";
+import { exitAfterOutput } from "./cli-exit.mjs";
 
 function projectOf(flags) {
   const project = flags.project ?? resolveMap(process.cwd())?.map.tracker?.project;
@@ -436,7 +437,7 @@ async function main(input) {
 
 export function run() {
   main(process.argv.slice(2)).then(
-    (code) => process.exit(code),
+    (code) => exitAfterOutput(code),
     (error) => {
       console.error(`openproject: ${error.message}`);
       process.exit(1);

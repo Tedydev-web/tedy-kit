@@ -11,6 +11,7 @@ import { RECHECK } from "./source-pin-git.mjs";
 import { nodeId } from "./source-pin-links.mjs";
 import { withRecords } from "./record-lock.mjs";
 import { pinnedSources, requireFresh, sayNotices, versionCheck } from "./source-pins.mjs";
+import { exitAfterOutput } from "./cli-exit.mjs";
 
 const API = "https://api.figma.com/v1";
 
@@ -210,7 +211,7 @@ async function write(figma, command, target, flags, recorded) {
 
 export function run() {
   main(process.argv.slice(2)).then(
-    (code) => process.exit(code),
+    (code) => exitAfterOutput(code),
     (error) => {
       console.error(`figma-comments: ${error.message}`);
       process.exit(1);

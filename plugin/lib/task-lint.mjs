@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { chatLanguage, labels } from "./labels.mjs";
 import { resolveMap } from "./project-map.mjs";
+import { exitAfterOutput } from "./cli-exit.mjs";
 
 const REQUIRED = {
   epic: [["outcome"], ["context"], ["acceptance criteria"], ["definition of done"]],
@@ -174,7 +175,7 @@ function main(files) {
 }
 
 export function run() {
-  process.exit(main(process.argv.slice(2)));
+  exitAfterOutput(main(process.argv.slice(2)));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();

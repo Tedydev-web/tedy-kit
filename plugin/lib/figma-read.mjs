@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { client } from "./figma-comments.mjs";
 import { notBefore, sinceTime } from "./since.mjs";
+import { exitAfterOutput } from "./cli-exit.mjs";
 
 const FRAME_TYPES = ["FRAME", "SECTION", "COMPONENT", "COMPONENT_SET"];
 const BOX_KEYS = ["absoluteBoundingBox", "absoluteRenderBounds"];
@@ -131,7 +132,7 @@ async function main([command, target, ...rest]) {
 
 export function run() {
   main(process.argv.slice(2)).then(
-    (code) => process.exit(code),
+    (code) => exitAfterOutput(code),
     (error) => {
       console.error(`figma-read: ${error.message}`);
       process.exit(1);

@@ -3,6 +3,7 @@ import { appendFileSync, existsSync, lstatSync, mkdirSync, readdirSync, realpath
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import { resolveMap } from "./project-map.mjs";
+import { exitAfterOutput } from "./cli-exit.mjs";
 
 export const slugOf = (text) => text.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/g, "d").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40);
 
@@ -159,7 +160,7 @@ function main([command, ...args]) {
 
 export function run() {
   try {
-    process.exit(main(process.argv.slice(2)));
+    exitAfterOutput(main(process.argv.slice(2)));
   } catch (error) {
     console.error(`pending: ${error.message}`);
     process.exit(1);

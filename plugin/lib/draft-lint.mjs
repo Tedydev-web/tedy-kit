@@ -10,6 +10,7 @@ import { nodeId } from "./source-pin-links.mjs";
 import { secretShaped } from "./public-scan.mjs";
 import { describePin, pinSourcesOf, recordPins, writeReadPins } from "./source-pins.mjs";
 import { carryDraft } from "./draft-carry.mjs";
+import { exitAfterOutput } from "./cli-exit.mjs";
 
 export const MAX_BODY = 360;
 export const MAX_CHAT = 600;
@@ -314,7 +315,7 @@ async function main([kind, file, ...flags]) {
 
 export function run() {
   main(process.argv.slice(2)).then(
-    (code) => process.exit(code),
+    (code) => exitAfterOutput(code),
     (error) => {
       console.error(`draft-lint: ${error.message}`);
       process.exit(1);

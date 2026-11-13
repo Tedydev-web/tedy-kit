@@ -5,6 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseDraft } from "./draft-lint.mjs";
 import { chatLanguage, fill, labels } from "./labels.mjs";
 import { KIT_PUBLISH_APPLY_VERBS, KIT_PUBLISH_WRITE_VERBS } from "./publish-approval-settings.mjs";
+import { exitAfterOutput } from "./cli-exit.mjs";
 
 const SCRIPTS = fileURLToPath(new URL("../scripts/", import.meta.url));
 const BOOLEAN_FLAGS = new Set(["apply", "delete", "dry-run", "summary"]);
@@ -196,7 +197,7 @@ export function run() {
     process.stdout.write(`${summary}\n\nnode ${quote(join(SCRIPTS, "publish-batch.mjs"))} ${quote(positional[0])} --shows "${summary}"\n`);
     process.exit(0);
   }
-  process.exit(runBatch(items, { shows: shownSummary(argv), summary }));
+  exitAfterOutput(runBatch(items, { shows: shownSummary(argv), summary }));
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run();
