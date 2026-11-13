@@ -30,7 +30,7 @@ Status: accepted (2026-11-04)
   The private index lists the pages first, so the instruction to read the index before designing reaches the answer before the raw notes.
 - From ADR 0017 on, the `## Prior art` section carries `position: <slug> conforms`, `position: <slug> deviates: <reason>` or `position: none (<why>)`. `plugin/tests/adr-prior-art.test.mjs` requires the line, and checks the slug where the pages exist.
 - A ring or kit-status move waits for the user. The lint marks a page pending and never moves it.
-- The rule enters `docs/canon/standard.json` in the next standard version, as ADR 0014 did for its techniques.
+- The rule enters `archive/governance-v0.3.4:docs/canon/standard.json` in the next standard version, as ADR 0014 did for its techniques.
 
 ## Prior art
 

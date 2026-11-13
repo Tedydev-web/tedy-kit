@@ -72,9 +72,9 @@ Status: superseded in its launch adapters by [ADR 0019](0019-jobs-run-as-native-
   - "close and prune remove a core worktree only when it is a registered worktree of the recorded repository on the recorded branch";
   - an edited job file header changes nothing close or prune removes;
   - "close removes a clean core worktree whose git ls-files output passes 1 MiB" and "a git failure while close checks the worktree, after the session has ended, keeps the tree with the reason, prints every line and still closes the job".
-- `plugin/tests/job-probes.test.mjs`: the eval probes keep no background launch.
+- `archive/governance-v0.3.4:plugin/tests/job-probes.test.mjs`: the eval probes keep no background launch.
 - `plugin/tests/git-gate-script-names-in-data.test.mjs`: "a sed -i edit of a draft holding a publish line asks, and so does a sed whose later operand becomes a script".
-- `plugin/tests/canon-checks.test.mjs`: "a kit hook on an event that adds text to every prompt or every subagent spawn fails" keeps UserPromptSubmit out of hooks.json.
+- `archive/governance-v0.3.4:plugin/tests/canon-checks.test.mjs`: "a kit hook on an event that adds text to every prompt or every subagent spawn fails" keeps UserPromptSubmit out of hooks.json.
 - Isolation: every job test puts a fake `herdr` first on PATH, and `test-isolation.mjs` points `TEDY_T3_SETTINGS` at a scratch file.
 
 ## Prior art

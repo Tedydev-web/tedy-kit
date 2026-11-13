@@ -6,7 +6,7 @@ Clarifies: the row "Blind LLM-judge acceptance" in 0007.
 
 ## Context
 - 0007 rejected an LLM judge that grades style: the judge reads the same style docs it grades, 6 pairs gave no power, and models prefer their own text. That reasoning stands.
-- It never covered graders that check facts, or a run of the same task without the plugin. The kit's eval already uses deterministic graders (`tool_used` in `plugin/evals/review-approval-menu/graders/`).
+- It never covered graders that check facts, or a run of the same task without the plugin. The kit's eval already uses deterministic graders (`tool_used` in `archive/governance-v0.3.4:plugin/evals/review-approval-menu/graders/`).
 - Claude Code 2.1.302 ships `claude plugin eval --ablation with-without`, which runs each case with and without the plugin and reports both scores.
 - Kit changes so far were judged by reading the diff. Nothing showed whether a skill line changed what the agent does.
 

@@ -27,7 +27,7 @@ Status: accepted (2026-11-04); implemented in v0.2.24; superseded in part by [AD
 - Role-gate tests that read `agent_type` without a `claude agents` lookup.
 - Inbox tests: a card block that is not exactly one kit publish command is refused, and an unanswered question publishes nothing.
 - Argv tests for each role's allowlist in the job launcher.
-- A live probe in `plugin/evals/probes/run-probes.sh` for the platform facts below, outside `npm test`.
+- A live probe in `archive/governance-v0.3.4:plugin/evals/probes/run-probes.sh` for the platform facts below, outside `npm test`.
 
 ## Prior art
 
@@ -70,7 +70,7 @@ Status: accepted (2026-11-04); implemented in v0.2.24; superseded in part by [AD
 - Weakest link: no study measured job agents against standing role sessions for one person. The decision rests on what the industry builds, the failure reports of systems built on long-lived agent mailboxes, and the user's own friction figures.
 
 ## Measured
-Probe run 2026-11-06 on Claude Code 2.1.318 with `plugin/evals/probes/run-probes.sh` blocks [9] to [13b] and a body-less probe agent. Served model `claude-sonnet-5-5` (the Explore subagent in [9] ran on `claude-opus-4-8` through the user's alias remap). Spend about USD 6.4: the `-p` runs measured USD 2.03, and the background sessions are estimated at USD 4.4 from their transcript usage, priced at the rate of the [12] parent run.
+Probe run 2026-11-06 on Claude Code 2.1.318 with `archive/governance-v0.3.4:plugin/evals/probes/run-probes.sh` blocks [9] to [13b] and a body-less probe agent. Served model `claude-sonnet-5-5` (the Explore subagent in [9] ran on `claude-opus-4-8` through the user's alias remap). Spend about USD 6.4: the `-p` runs measured USD 2.03, and the background sessions are estimated at USD 4.4 from their transcript usage, priced at the rate of the [12] parent run.
 - [9] Hooks see a plugin agent's scoped name: PreToolUse and SessionStart input carry `agent_type: probe:zz-job-probe`, so tedy jobs read `tedy:<role>`. A subagent's input carries its own `agent_type` (`Explore`), an `agent_id` and the parent's `session_id`. A body-less agent still lists the model-invocable skills.
 - [10] A body-less plugin agent resolves under `--agent`; one `-p` call cost USD 0.225 to 0.437.
 - [11] `--bg` does not honour `--session-id`: the session gets its own id, and the launch prints `backgrounded · <short id> · <name>`, where the short id is the first 8 characters of the `sessionId` in `claude agents --json`. `--name` shows. The `--settings` `env` block reaches hooks. `agent_type` holds under `--bg`, `permission_mode` is the user's default mode, a slash command as the first prompt starts a `disable-model-invocation` skill, the Stop hook carries `agent_type` with entrypoint `cli`, and the transcript has `usage` lines.

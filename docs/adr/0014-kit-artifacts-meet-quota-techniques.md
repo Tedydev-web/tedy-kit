@@ -8,7 +8,7 @@ Status: accepted (2026-10-30); T2 amended by [ADR 0021](0021-the-cockpit-asks-ea
 - The user chose techniques T1 to T6 (2026-10-30). Eleven sources are studied as supplement sources of sweep `261021-canon`.
 
 ## Decision
-- T1, footprint (Q7, Q8, Q9): `docs/canon/footprint-budget.json` holds the characters of every skill's and agent's `description` and `when_to_use`, which Claude Code lists in every session (2,628 at tedy 0.2.16). `footprintErrors` fails a total over the budget, and a budget higher than at the latest release tag unless the standard version rose.
+- T1, footprint (Q7, Q8, Q9): `archive/governance-v0.3.4:docs/canon/footprint-budget.json` holds the characters of every skill's and agent's `description` and `when_to_use`, which Claude Code lists in every session (2,628 at tedy 0.2.16). `footprintErrors` fails a total over the budget, and a budget higher than at the latest release tag unless the standard version rose.
 - T2, hook output (Q3, Q10): `hookEventErrors` fails a `hooks.json` that registers an event whose output enters the context on every prompt or every subagent spawn (UserPromptSubmit, UserPromptExpansion, InstructionsLoaded, SubagentStart). The kit's hooks speak at session start, after compaction and on a prose question only.
 - T3, skill model (Q4): `skillModelErrors` fails a skill whose front matter sets `model:`, because a skill model switches the session model and starts a cold prompt cache. Agents may pin a model at their own boundary.
 - T4, reviewer spawn context (Q16): `plugin/agents/reviewer.md` sets `omitClaudeMd: true` and restates the kit rules it needs, adopted only if an ADR 0009 arm shows the review findings hold without the user's CLAUDE.md.
