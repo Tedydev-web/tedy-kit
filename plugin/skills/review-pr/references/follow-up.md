@@ -32,7 +32,7 @@ node <plugin>/scripts/github-write.mjs unresolve <thread-node-id>...
 - Before the quote, write each reply or edit body after the step 2 read and lint it with `node <plugin>/scripts/draft-lint.mjs pr-reply <file> --pr <n> --repo <owner/repo> --pinned-at <the step 2 key>`, which checks those read pins (draft-format.md, Pinned sources); put its `warning:` lines in the reply with the body. `reply` and `edit` refuse a body that was not linted or changed since, one linted for another repo or PR, and a PR whose head GitHub shows moved off the pin, and recheck the pins as `draft-format.md` (Pinned sources) describes.
 - `reply`: one sentence in the map's `language.pr_review`, same lint as a review comment; for "not fixed yet" or a rebuttal.
 - One reply per thread: if the user already replied on the thread, `edit` that reply into one sentence covering everything still open instead of adding another; if extra replies exist, merge them and `minimize` the rest (overlapping replies are hard for the author to follow).
-- `edit`: rewording a comment the user asked to change; the old text stays in the edit log.
+- `edit`: rewording a comment the user asked to change.
 - `minimize`: hides an outdated comment as OUTDATED instead of deleting it, for a request to delete old comments.
 - `resolve <thread-node-id>...`: only when the user asks in that turn to resolve, and only threads whose fix you verified in code at the current head (or whose question was answered and checked); list them with the evidence first, then resolve. Threads waiting on BE/PM or on an open reply stay open.
 - `unresolve <thread-node-id>...`: only when the user asks in that turn to reopen a thread, for example one resolved before its fix was verified.

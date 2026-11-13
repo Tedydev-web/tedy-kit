@@ -1,25 +1,9 @@
 import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { alreadyOnPr, buildReviewPayload, labelEdits, replyExists, threadMutation, verifyComment } from "../lib/github-write.mjs";
+import { alreadyOnPr, buildReviewPayload, replyExists, threadMutation, verifyComment } from "../lib/github-write.mjs";
 
 const c = (path, line, body) => ({ path, line, body });
-
-test("labelEdits compares the frozen draft with the final text by path:line", () => {
-  const draft = [
-    c("a.ts", 1, "Nút đang sai ạ.\n\nPRD EPIC 09 · UC_SW_08 step 3:\n> button Ask the group."),
-    c("a.ts", 2, "Toast dư dấu chấm ạ."),
-    c("b.ts", 5, "Sheet đóng sớm ạ."),
-    c("c.ts", 9, "Thiếu helper ạ."),
-  ];
-  const final = [
-    c("a.ts", 1, "Nút đang sai ạ."),
-    c("a.ts", 2, "Toast dư dấu chấm ạ."),
-    c("b.ts", 5, "Sheet đóng trước khi gọi API ạ."),
-    c("d.ts", 3, "Anh tự thêm ạ."),
-  ];
-  assert.deepEqual(labelEdits(draft, final).map((entry) => `${entry.key} ${entry.label}`), ["a.ts:1 trimmed", "a.ts:2 unchanged", "b.ts:5 edited", "c.ts:9 cut", "d.ts:3 added"]);
-});
 
 test("the review payload posts inline comments only, as COMMENT, pinned to the commit", () => {
   const payload = buildReviewPayload([c("a.ts", 1, "x ạ.")], "f".repeat(40));

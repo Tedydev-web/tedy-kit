@@ -237,7 +237,7 @@ async function record(file, text, pins, { clean, none, texts, pinnedAt, warnings
   console.log(clean);
   console.log(kept.length ? kept.map(describePin).join("\n") : `pinned: ${none}`);
   const frozen = freeze && snapshotOnce(file, text);
-  if (frozen) console.log(`original frozen for the edit log: ${frozen}`);
+  if (frozen) console.log(`original frozen: ${frozen}`);
   return 0;
 }
 

@@ -4,7 +4,6 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { GITHUB_WRITE_DRY_RUN_VERBS, githubWriteDryRun, parseFlags } from "./cli-flags.mjs";
 import { lintComment, lintDraft, mapLanguage, parseDraft, readDiff, snapshotPath } from "./draft-lint.mjs";
-import { appendEditLog, labelText } from "./edit-log.mjs";
 import { fetchTab, indexTab, quoteInText, UC_ID } from "./prd-section.mjs";
 import { logGate, logRefusal, refusedLine } from "./hook-io.mjs";
 import { generatedPrBodyOp } from "./openproject.mjs";
@@ -13,32 +12,6 @@ import { withRecords } from "./record-lock.mjs";
 import { pinnedSources, recheckPinned } from "./source-pins.mjs";
 
 const normalise = (text) => text.replace(/\s+/g, " ").trim();
-
-function keyed(comments) {
-  const seen = new Map();
-  return comments.map((comment) => {
-    const base = `${comment.path}:${comment.line}`;
-    const count = (seen.get(base) ?? 0) + 1;
-    seen.set(base, count);
-    return [count > 1 ? `${base}#${count}` : base, comment.body];
-  });
-}
-
-export function labelEdits(draft, final) {
-  const before = new Map(keyed(draft));
-  const after = new Map(keyed(final));
-  const entries = [];
-  for (const [key, drafted] of before) {
-    const posted = after.get(key);
-    if (posted === undefined) {
-      entries.push({ key, label: "cut", draft: drafted, posted: null });
-      continue;
-    }
-    entries.push({ key, label: labelText(drafted, posted), draft: drafted, posted });
-  }
-  for (const [key, posted] of after) if (!before.has(key)) entries.push({ key, label: "added", draft: null, posted });
-  return entries;
-}
 
 export const alreadyOnPr = (existing, comments) =>
   comments.flatMap((comment) => {
@@ -163,10 +136,6 @@ const say = (lines) => {
   for (const line of lines) console.log(line);
 };
 
-function logEdits(entries) {
-  appendEditLog(entries.map((entry) => ({ channel: "pr-comment", ...entry })));
-}
-
 const prKey = (repo, pr) => `github:${repo.toLowerCase()}#${pr}`;
 
 const nodeKey = (id) => `github:node:${id}`;
@@ -215,7 +184,6 @@ async function postDraft(file, flags, repo, recorded) {
   const posted = JSON.parse(gh(["api", "--paginate", "--slurp", `repos/${repo}/pulls/${final.pr}/reviews/${review.id}/comments`])).flat();
   const drafted = (comment) => final.comments.find((candidate) => candidate.path === comment.path && normalise(candidate.body) === normalise(comment.body ?? ""))?.line;
   for (const comment of posted) console.log(`${comment.id} ${comment.path}:${comment.line ?? comment.original_line ?? drafted(comment) ?? "?"} ${comment.side ?? "RIGHT"} ${comment.commit_id.slice(0, 8)}`);
-  logEdits(labelEdits(draft.comments, final.comments).map((entry) => ({ repo, pr: final.pr, sha: final.sha, review: review.id, ...entry })));
   if (posted.length !== final.comments.length) {
     console.log(`posted ${posted.length} of ${final.comments.length} comments; open the PR and check`);
     return 1;
@@ -246,7 +214,6 @@ async function edit(id, flags) {
     say(fresh.notices);
     const updated = JSON.parse(send(["api", "-X", "PATCH", `repos/${repo}/pulls/comments/${id}`, "--input", "-"], JSON.stringify({ body })));
     recorded();
-    logEdits([{ repo, key: String(id), label: "post-edit", draft: null, posted: body }]);
     if (normalise(updated.body) !== normalise(body)) throw new Error(`comment ${id} body differs after PATCH`);
     console.log(`edited ${id}: ${updated.html_url}`);
     return 0;
@@ -299,7 +266,6 @@ async function reply(pr, id, flags) {
     say(fresh.notices);
     const created = JSON.parse(send(["api", "-X", "POST", `repos/${repo}/pulls/${pr}/comments/${id}/replies`, "--input", "-"], JSON.stringify({ body })));
     recorded();
-    logEdits([{ repo, pr: Number(pr), key: String(id), label: "reply", draft: null, posted: body }]);
     console.log(`replied ${created.id}: ${created.html_url}`);
     return 0;
   });

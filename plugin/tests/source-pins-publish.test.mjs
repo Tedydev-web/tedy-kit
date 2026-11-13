@@ -362,7 +362,8 @@ test("a post refused for a moved PR head is redrafted on the same path: pin-sour
   writeFileSync(draft, draftAt(second));
   const relinted = lint("pr-comment", draft, "--diff", join(work, "pr.diff"), "--repo", "o/fe");
   assert.equal(relinted.status, 0, relinted.out);
-  assert.match(relinted.out, /^original frozen for the edit log: /m);
+  assert.match(relinted.out, /^original frozen: /m);
+  assert.doesNotMatch(relinted.out, /edit log/);
   const posted = runWithFakeGh(WRITE, ["post", draft, "--repo", "o/fe"], { ...options, fixture: { diff: CLEAN_DIFF, head: second, write: { id: 9, html_url: "u" }, reviewComments: [{ id: 1, path: "src/a.ts", line: 10, commit_id: second }] } });
   assert.equal(posted.status, 0, posted.out);
   assert.equal(posted.writes.length, 1);

@@ -8,8 +8,7 @@ import { closedStatuses, closestWorkPackage, listWorkPackages } from "./openproj
 import { deleteRelation, setRelation } from "./openproject-relation.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { approvalLines, renderRollbackItem, renderWorkPackageDraft } from "./publish-approval-render.mjs";
-import { snapshotOnce, snapshotPath } from "./draft-lint.mjs";
-import { appendEditLog, frozenOriginal, labelText } from "./edit-log.mjs";
+import { snapshotPath } from "./draft-lint.mjs";
 import { chatLanguage } from "./labels.mjs";
 import { withRecords } from "./record-lock.mjs";
 import { describePin, pinSourcesOf, recheckPinned, recordPins, sayNotices } from "./source-pins.mjs";
@@ -423,27 +422,13 @@ async function main(input) {
       const text = readFileSync(target, "utf8");
       const pins = await pinText(target, text, text, flags["pinned-at"]);
       if (!pins) return 1;
-      if (snapshotOnce(target, text)) console.log("original drafts frozen for the edit log");
       writeFileSync(locksPath(target), JSON.stringify(locks));
       for (const pin of pins) console.log(describePin(pin));
       console.log(approvalLines(drafts.map((draft, index) => renderWorkPackageDraft(draft, plan[index]))));
       return 0;
     }
-    const original = frozenOriginal(target);
-    const originals = original ? Object.fromEntries(JSON.parse(original).map((draft) => [draft.slug, draft])) : {};
     const updated = planWrites(drafts, JSON.parse(readSidecar(sidecarPath(client.host, project)))).flatMap((step) => (step.id ? [record("wp", step.id)] : []));
-    const code = await withRecords([record("project", project), ...updated], (recorded) => apply(client, project, drafts, target, recorded));
-    if (code !== 0) return code;
-    const text = (item) => `${item.subject}\n${item.description}`;
-    const kept = new Set(drafts.map((draft) => draft.slug));
-    appendEditLog([
-      ...drafts.map((draft) => {
-        const before = originals[draft.slug];
-        return { channel: "tracker-task", key: draft.slug, label: before ? labelText(text(before), text(draft)) : original ? "added" : "no-original", draft: before ? text(before) : null, posted: text(draft) };
-      }),
-      ...Object.values(originals).filter((draft) => !kept.has(draft.slug)).map((draft) => ({ channel: "tracker-task", key: draft.slug, label: "cut", draft: text(draft), posted: null })),
-    ]);
-    return code;
+    return withRecords([record("project", project), ...updated], (recorded) => apply(client, project, drafts, target, recorded));
   }
   console.error("usage: openproject.mjs get <id> [--relations] [--activities] | get <api path> | list [--parent <id>] [--assignee <name>] [--status open|<name>] [--type <name>] [--project <id>] | preview <drafts.json> [--project <id>] | apply <drafts.json> [--project <id>] | set <id> [--status <name>] [--assignee <name>] [--priority <name>] [--estimate <hours>] [--start <YYYY-MM-DD>] [--due <YYYY-MM-DD>] [--apply --lock <n>] | comment <id> --body-file <file> [--apply] | comment-edit <activity-id> --body-file <file> [--apply] | relation <from-id> <to-id> --type <relates|blocks|precedes|follows|…> [--apply] | relation-delete <relation-id> [--apply] | pr-body <id> | rollback [--project <id>] [--delete] [--apply]");
   return 2;

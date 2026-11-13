@@ -30,5 +30,4 @@ Times that change on every run stay out of the map, so a profile kept in git doe
 
 | Field | Meaning |
 |---|---|
-| `learned_until` | Date (YYYY-MM-DD) up to which `/tedy:learn` has folded corrections in |
 | `last_reply_check` | ISO timestamp of the last reply sweep by `/tedy:pm` |

@@ -48,7 +48,7 @@ test("a partial config keeps the defaults it does not set and expands ~ in pushE
 
 test("a config that still holds gates.roleGate loads, the key is ignored whatever its value, and init no longer writes it", () => {
   for (const value of [true, false, "on"]) assert.deepEqual(loadConfig(profileWith({ "config.json": JSON.stringify({ gates: { roleGate: value, ghWrites: true } }) })).gates, { ...DEFAULT_CONFIG.gates, ghWrites: true });
-  const dir = join(tempDir("tedy-profile-no-role-gate-"), "profile");
+  const dir = join(tempDir("tedy-profile-no-rolegate-"), "profile");
   initProfile(dir);
   assert.equal("roleGate" in JSON.parse(readFileSync(join(dir, "config.json"), "utf8")).gates, false);
 });

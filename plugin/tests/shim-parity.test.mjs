@@ -10,9 +10,9 @@ import { tempDir } from "./temp-dir-for-tests.mjs";
 const PLUGIN = fileURLToPath(new URL("../", import.meta.url));
 const GATES = ["git-gate", "no-comments-gate", "tracker-token-gate", "profile-guard-gate", "reviewer-gate", "review-run-gate"];
 const HOOKS = ["push-report", "review-run-approval", "session-hooks"];
-const CLIS = ["doc-comment-file", "draft-lint", "edit-rate", "figma-comments", "figma-read", "gdoc-comments", "github-write", "labels", "memory-stats", "merged-sweep", "op-status", "openproject", "pending", "prd-section", "prior-art-index", "pr-execution-surface", "prior-art-verify", "profile", "project-map", "project-state", "public-scan", "publish-batch", "review-worktree", "task-lint"];
+const CLIS = ["doc-comment-file", "draft-lint", "figma-comments", "figma-read", "gdoc-comments", "github-write", "labels", "merged-sweep", "op-status", "openproject", "pending", "prd-section", "prior-art-index", "pr-execution-surface", "prior-art-verify", "profile", "project-map", "project-state", "public-scan", "publish-batch", "review-worktree", "task-lint"];
 
-const NO_FAILURE_PATH = ["edit-rate", "labels"];
+const NO_FAILURE_PATH = ["labels"];
 
 const home = tempDir("tedy-shim-parity-");
 const profile = join(home, "profile");
@@ -25,7 +25,6 @@ writeFileSync(join(home, "drafts.json"), "[]\n");
 mkdirSync(join(home, "tree"));
 const PASSING = {
   "draft-lint": ["doc-comment", join(home, "body.txt")],
-  "edit-rate": [],
   labels: [],
   profile: ["path", "rules.md"],
   "public-scan": ["tree", join(home, "tree")],

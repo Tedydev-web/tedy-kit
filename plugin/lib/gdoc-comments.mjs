@@ -4,7 +4,6 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { redact, REQUEST_TIMEOUT_MS, requestJson, send } from "./api-request.mjs";
 import { lintChatComment, mapLanguage } from "./draft-lint.mjs";
-import { logPostedText } from "./edit-log.mjs";
 import { canonicalJson } from "./figma-comments.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { notBefore, sinceTime } from "./since.mjs";
@@ -315,7 +314,6 @@ async function main(input) {
       const found = comments.some((comment) => (command === "reply" ? comment.id === id && comment.replies.some((reply) => reply.content.trim() === body) : comment.content.trim() === body));
       if (!found) throw new Error("the comment could not be read back with the same text");
       console.log("posted and read back unchanged");
-      logPostedText(command === "reply" ? "doc-reply" : "doc-comment", flags["body-file"], id ?? "anchored", body);
       return 0;
     });
   }
@@ -334,7 +332,6 @@ async function main(input) {
       const after = editTarget(await listComments(google), target, flags.reply);
       if (after.content.trim() !== body) throw new Error("the edited text could not be read back unchanged");
       console.log("edited and read back unchanged");
-      logPostedText(flags.reply ? "doc-reply" : "doc-comment", flags["body-file"], flags.reply ?? target, body);
       return 0;
     });
   }

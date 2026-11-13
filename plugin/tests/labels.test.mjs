@@ -34,6 +34,10 @@ test("no pack keeps a hand-off label, because the kit no longer hands work betwe
   for (const [code, pack] of Object.entries(LABELS)) assert.deepEqual(Object.keys(pack).filter((key) => key.startsWith("handoff.")), [], code);
 });
 
+test("no pack keeps a learn label, because the learn skill is removed", () => {
+  for (const [code, pack] of Object.entries(LABELS)) assert.deepEqual(Object.keys(pack).filter((key) => key.startsWith("learn.")), [], code);
+});
+
 test("the command prints the table for the profile's chat language, or the one asked for", () => {
   const vi = spawnSync("node", [SCRIPT], { encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: profileWith({ language: { chat: "vi" } }) } });
   assert.equal(vi.status, 0);

@@ -2,7 +2,10 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, relative } from "node:path";
-import { PROJECTS_ROOT, projectSlug } from "./memory-stats.mjs";
+
+export const PROJECTS_ROOT = join(homedir(), ".claude", "projects");
+
+export const projectSlug = (path) => path.replace(/[^A-Za-z0-9]/g, "-");
 
 const STACK_MARKERS = [
   ["package.json", "node"],

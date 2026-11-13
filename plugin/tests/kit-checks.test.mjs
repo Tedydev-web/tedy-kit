@@ -98,7 +98,7 @@ test("no published kit file names a file the kit retired", () => {
 
 test("every kit skill opens with a persona paragraph, then iron laws, then a not-this-skill section", () => {
   const skills = kitSkills(REPO);
-  assert.ok(skills.length >= 7, String(skills.length));
+  assert.ok(skills.length >= 6, String(skills.length));
   assert.deepEqual(skillSectionErrors(skills), []);
 });
 

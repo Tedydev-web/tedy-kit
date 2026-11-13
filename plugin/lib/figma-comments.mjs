@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { requestJson } from "./api-request.mjs";
 import { lintChatComment, mapLanguage } from "./draft-lint.mjs";
-import { logPostedText } from "./edit-log.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { notBefore, sinceTime } from "./since.mjs";
 import { RECHECK } from "./source-pin-git.mjs";
@@ -179,7 +178,6 @@ async function write(figma, command, target, flags, recorded) {
     const created = await figma.request(`/files/${figma.file}/comments`, { method: "POST", body: { message: body, client_meta: { node_id: node, node_offset: pinOffset(box) } } });
     recorded();
     await verify(figma, created.id, body);
-    logPostedText("figma-comment", flags["body-file"], created.id, body);
     return 0;
   }
   if (command === "reply" && target) {
@@ -194,7 +192,6 @@ async function write(figma, command, target, flags, recorded) {
     const created = await figma.request(`/files/${figma.file}/comments`, { method: "POST", body: { message: body, comment_id: root.id } });
     recorded();
     await verify(figma, created.id, body);
-    logPostedText("figma-reply", flags["body-file"], created.id, body);
     return 0;
   }
   if (command === "delete" && target) {

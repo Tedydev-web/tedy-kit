@@ -14,9 +14,8 @@ test("a field written for a map reads back, and other fields stay untouched", ()
   const dir = tempDir("tedy-state-");
   assert.deepEqual(readState("alpha", dir), {});
   writeState("alpha", "last_reply_check", "2026-10-08T06:30:00Z", dir);
-  writeState("alpha", "learned_until", "2026-10-07", dir);
   writeState("alpha", "last_reply_check", "2026-10-08T08:10:00Z", dir);
-  assert.deepEqual(readState("alpha", dir), { last_reply_check: "2026-10-08T08:10:00Z", learned_until: "2026-10-07" });
+  assert.deepEqual(readState("alpha", dir), { last_reply_check: "2026-10-08T08:10:00Z" });
   assert.deepEqual(JSON.parse(readFileSync(join(dir, "projects", "alpha.json"), "utf8")), readState("alpha", dir));
 });
 
@@ -24,19 +23,8 @@ test("an unknown field or a malformed value is refused", () => {
   const dir = tempDir("tedy-state-");
   assert.throws(() => writeState("alpha", "sessions", "x", dir), /unknown state field "sessions"/);
   assert.throws(() => writeState("alpha", "last_reply_check", "yesterday", dir), /last_reply_check must be an ISO timestamp/);
-  assert.throws(() => writeState("alpha", "learned_until", "2026-10-07 10:00", dir), /learned_until must be a date \(YYYY-MM-DD\) or an ISO timestamp/);
-  assert.throws(() => writeState("alpha", "learn_held", "2026-10-08T00:00:00Z", dir), /learn_held must be a date/);
-  assert.throws(() => writeState("alpha", "learn_held", "2026-02-31", dir), /learn_held must be a date/);
-  assert.throws(() => writeState("../escape", "learned_until", "2026-10-08", dir), /map name/);
-});
-
-test("the learn marker takes a date or an ISO timestamp, and the nudge marks take a date", () => {
-  const dir = tempDir("tedy-state-");
-  writeState("alpha", "learned_until", "2026-10-07", dir);
-  writeState("alpha", "learned_until", "2026-10-18T13:10:00+07:00", dir);
-  writeState("alpha", "learn_nudged", "2026-10-18", dir);
-  writeState("alpha", "learn_held", "2026-10-18", dir);
-  assert.deepEqual(readState("alpha", dir), { learned_until: "2026-10-18T13:10:00+07:00", learn_nudged: "2026-10-18", learn_held: "2026-10-18" });
+  for (const field of ["learned_until", "learn_nudged", "learn_held"]) assert.throws(() => writeState("alpha", field, "2026-10-07", dir), new RegExp(`unknown state field "${field}"; use last_reply_check`));
+  assert.throws(() => writeState("../escape", "last_reply_check", "2026-10-08T00:00:00Z", dir), /map name/);
 });
 
 test("migrate copies the timestamps a map still carries, skips nulls and never overwrites a newer state", () => {
@@ -47,8 +35,8 @@ test("migrate copies the timestamps a map still carries, skips nulls and never o
     { file: "/p/beta.md", map: { name: "beta", learned_until: "2026-10-07", last_reply_check: "2026-10-08T06:30:00Z" } },
     { file: "/p/gamma.md", map: { name: "gamma", learned_until: null, last_reply_check: null } },
   ];
-  assert.deepEqual(migrateStates(maps, dir), ["alpha.last_reply_check", "alpha.learned_until", "beta.learned_until"]);
-  assert.deepEqual(readState("beta", dir), { last_reply_check: "2026-10-09T00:00:00Z", learned_until: "2026-10-07" });
+  assert.deepEqual(migrateStates(maps, dir), ["alpha.last_reply_check"]);
+  assert.deepEqual(readState("beta", dir), { last_reply_check: "2026-10-09T00:00:00Z" });
   assert.deepEqual(readState("gamma", dir), {});
   assert.deepEqual(migrateStates(maps, dir), []);
 });
@@ -68,5 +56,5 @@ test("the command finds the map from the working directory and keeps state out o
   const outside = spawnSync("node", [SCRIPT, "get", "last_reply_check"], { encoding: "utf8", env, cwd: state });
   assert.equal(outside.status, 1);
   assert.match(outside.stderr, /no project map covers/);
-  assert.equal(spawnSync("node", [SCRIPT, "get", "learned_until", "--map", "alpha"], { encoding: "utf8", env, cwd: state }).status, 0);
+  assert.equal(spawnSync("node", [SCRIPT, "get", "last_reply_check", "--map", "alpha"], { encoding: "utf8", env, cwd: state }).status, 0);
 });

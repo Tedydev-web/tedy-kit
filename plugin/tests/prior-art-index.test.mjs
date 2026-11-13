@@ -59,7 +59,6 @@ test("the index groups every entry under each of its domains, marks notes with t
   assert.match(index, /^- \[Cache the stable prefix\]\(notes\/p\.md\) \(note, unrated, reddit, x, unverified 2026-10-27\): a prompt repeats across turns$/m);
   assert.ok(index.indexOf("## cost:") < index.indexOf("## evals:"));
   assert.doesNotMatch(index, /^## testing:/m);
-  assert.ok(renderIndex(entries, { preface: "## Positions\n\n- p\n" }).indexOf("## Positions") < renderIndex(entries, { preface: "## Positions\n\n- p\n" }).indexOf("## Contents"));
   const privateIndex = renderIndex(entries, { link: privateLink });
   assert.match(privateIndex, /\]\(\.\.\/a\.md\)/);
   assert.match(privateIndex, /\]\(notes\/p\.md\)/);

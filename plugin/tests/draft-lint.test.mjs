@@ -90,7 +90,7 @@ test("lintDraft asks new drafts to use the colon header", () => {
   assert.ok(problems.some((problem) => /header/.test(problem.problem)));
 });
 
-test("the first clean lint freezes the original once, so later edits by the user stay measurable", async () => {
+test("the first clean lint freezes the original once, so a later edit by the user cannot move the draft's PR or head", async () => {
   const { readFileSync } = await import("node:fs");
   const { snapshotOnce, snapshotPath } = await import("../lib/draft-lint.mjs");
   const dir = tempDir("tedy-snap-");

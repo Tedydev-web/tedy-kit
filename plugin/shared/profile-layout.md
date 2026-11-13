@@ -11,13 +11,12 @@ The engine (this plugin) holds no personal or project data. Everything that belo
   projects/<name>/       notes too long for a map, such as review-calibration.md
   public-denylist.txt    terms public-scan.mjs must never find in a public repository
   release-tag            the tag a linked-worktree plugin install must sit on; profile.mjs doctor checks it
-  reports/               /tedy:learn reports
   docs/                  your own guides, such as a user guide naming your projects and sessions
 ```
 
 A file at `<profile>/style/<name>.md` overrides `plugin/shared/style/<name>.md`. Skills read style samples through `node <plugin>/scripts/profile.mjs path style/<name>.md`, which prints the profile copy when it exists and the engine copy otherwise.
 
-Runtime state (gate log, edit log, draft snapshots, last check times) lives in `TEDY_STATE_DIR`, default `~/.local/state/tedy`, never in the profile, so a profile kept in git does not churn.
+Runtime state (gate log, draft snapshots, last check times) lives in `TEDY_STATE_DIR`, default `~/.local/state/tedy`, never in the profile, so a profile kept in git does not churn.
 
 ## config.json
 

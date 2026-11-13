@@ -43,6 +43,9 @@ test("pm, dev and review-pr run inline: work for another role is named and the u
   const points = read("shared/decision-points.md");
   assert.doesNotMatch(points, /jobs\.md|In a job|A job asks no menu|cockpit|pending\.mjs card/);
   assert.match(points, /^- Under Remote Control a question never times out and the session waits for the user\./m);
+  const run = points.match(/^- On a yes to running another role's skill, .*$/m)?.[0] ?? "";
+  for (const phrase of ["the Skill tool", "`disable-model-invocation: true`", "`/tedy:dev`", "read `<plugin>/skills/<name>/SKILL.md`"]) assert.ok(run.includes(phrase), phrase);
+  for (const name of ["dev", "reconcile", "setup"]) assert.match(read(`skills/${name}/SKILL.md`), /^disable-model-invocation: true$/m, name);
 });
 
 test("/tedy:pending lists what waits on the user and archives a finished draft, with no cards or jobs", () => {
@@ -78,12 +81,6 @@ test("every role that moves a work package's status follows one status procedure
   for (const phrase of ["`merge.header`", "`merge.yes`", "`merge.no`", "--merging <n>", "gh pr merge <n>", "status-flow.md"]) assert.ok(merge.includes(phrase), phrase);
   assert.match(read("skills/review-pr/SKILL.md"), /^4\. Merge only on the user's yes \(`references\/status-after-merge\.md`\), never close a PR;/m);
   assert.ok(script("op-status"));
-});
-
-test("learn reads every mapped repo's memory, ranks each lesson by the strongest form, and scans what leaves the project", () => {
-  const learn = read("skills/learn/SKILL.md");
-  for (const phrase of ["memory-stats.mjs", "public-scan.mjs file", "pending.mjs stub", "repeat-of", "learn_held", "## Metrics", "gate-log.jsonl", "baseline", "ISO timestamp", "docs/prior-art/", "none found"]) assert.ok(learn.includes(phrase), phrase);
-  for (const name of ["memory-stats", "public-scan", "pending", "project-state", "edit-rate"]) assert.ok(script(name), name);
 });
 
 test("one blast-radius procedure sees every tracked file, reads siblings from the remote ref, and every role that traces callers points to it", () => {

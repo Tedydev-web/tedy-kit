@@ -1,6 +1,6 @@
 # 0017: Position pages state the best current method per design question, and a lint keeps them honest
 
-Status: accepted (2026-11-04)
+Status: archived 2026-11-13 by [ADR 0023](0023-roles-run-inline-and-the-job-layer-is-removed.md): the position lint (`positions.mjs` and its use in `prior-art-index.mjs`) is removed, and the position pages stay as reading docs; accepted (2026-11-04)
 
 ## Context
 - The knowledge base held 45 public cards and 360 private notes, indexed by domain. It could say which source is good and what its code does, but not which method is best for a question the kit meets again.

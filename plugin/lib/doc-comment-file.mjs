@@ -2,7 +2,6 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { lintChatComment } from "./draft-lint.mjs";
-import { logPostedText } from "./edit-log.mjs";
 import { docKey, findQuoteRange, insertAnchored, readDocument, recheckDocTarget, session } from "./gdoc-comments.mjs";
 import { chatLanguage, fill, labels } from "./labels.mjs";
 import { slugOf, stamp } from "./pending.mjs";
@@ -117,7 +116,6 @@ async function post(itemsFile, flags) {
       const body = item.comment.trim();
       const id = await insertAnchored(google, ranges[index], body, recorded);
       item.posted = { id, at: new Date().toISOString() };
-      logPostedText("doc-comment", itemsFile, id, body);
       save();
       console.log(`posted ${id} · EPIC ${item.epic} · ${item.where}`);
     }
