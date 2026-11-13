@@ -1,7 +1,7 @@
 import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { checkItems, commentLink, pendingItems, renderFile } from "../lib/doc-comment-file.mjs";
+import { checkItems, commentLink, docOf, pendingItems, renderFile } from "../lib/doc-comment-file.mjs";
 import { anchorComment, insertAnchored } from "../lib/gdoc-comments.mjs";
 import { quoteCount } from "../lib/prd-section.mjs";
 
@@ -76,4 +76,9 @@ test("an anchored Doc comment refuses before any request or approval when the ca
   await assert.rejects(anchorComment(google, "t.1", "Crypto", "Ví nào trả a?", () => (approved = true)), /afterWrite/);
   assert.deepEqual(requests, []);
   assert.equal(approved, false);
+});
+
+test("a project whose map has no PRD Google Doc is told so before any Doc comment is checked or posted", () => {
+  assert.equal(docOf({ prd: { doc: "1abc", tabs: {} } }), "1abc");
+  for (const prd of [undefined, false, { files: ["research/docs/adr"] }]) assert.throws(() => docOf({ prd }), /no PRD Google Doc \(prd\.doc\)/);
 });

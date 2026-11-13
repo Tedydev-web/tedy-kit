@@ -76,6 +76,11 @@ ${sections}
 
 export const pendingItems = (items) => items.filter((item) => !item.posted);
 
+export function docOf(map) {
+  if (!map.prd?.doc) throw new Error("the project map has no PRD Google Doc (prd.doc), so there is no Doc to comment on; raise the question in a tracker comment or a PR comment instead");
+  return map.prd.doc;
+}
+
 async function post(itemsFile, flags) {
   if (!itemsFile || !flags.html) {
     console.error("usage: doc-comment-file.mjs post <items.json> --html <pm-comments-….html> [--apply [--doc <prd doc id>]]");
@@ -84,25 +89,26 @@ async function post(itemsFile, flags) {
   const resolved = resolveMap(process.cwd());
   if (!resolved) throw new Error(`no project map covers ${process.cwd()}; run /tedy:setup`);
   const { map } = resolved;
+  const doc = docOf(map);
   const data = JSON.parse(readFileSync(itemsFile, "utf8"));
   const tabOf = (epic) => map.prd?.tabs?.[epic]?.tab;
   const todo = pendingItems(data.items);
   const tabsText = {};
-  for (const tab of new Set(todo.map((item) => tabOf(item.epic)).filter(Boolean))) tabsText[tab] = await fetchTab(map.prd.doc, tab);
+  for (const tab of new Set(todo.map((item) => tabOf(item.epic)).filter(Boolean))) tabsText[tab] = await fetchTab(doc, tab);
   const problems = checkItems(todo, tabsText, tabOf, map.language?.doc_figma ?? chatLanguage());
   if (problems.length) {
     console.error(`doc-comment-file: nothing posted; fix these first:\n${problems.map((problem) => `- ${problem}`).join("\n")}`);
     return 1;
   }
   console.log(approvalLines(todo.map((item) => renderDocComment(item, tabOf(item.epic)))));
-  console.log(`WRITE → Google Doc ${map.prd.doc} : ${todo.length} anchored comments (${data.items.length - todo.length} already posted)`);
+  console.log(`WRITE → Google Doc ${doc} : ${todo.length} anchored comments (${data.items.length - todo.length} already posted)`);
   if (!flags.apply) {
     for (const line of pinnedSources(itemsFile, "").warnings ?? []) console.log(line);
     return 0;
   }
-  return withRecords([docKey(map.prd.doc)], async (recorded) => {
-    const google = await session({ doc: map.prd.doc }, true);
-    const { notices } = await recheckDocTarget(map.prd.doc, itemsFile, `doc-comment-file.mjs ${itemsFile}`, { texts: todo.map((item) => item.comment) });
+  return withRecords([docKey(doc)], async (recorded) => {
+    const google = await session({ doc }, true);
+    const { notices } = await recheckDocTarget(doc, itemsFile, `doc-comment-file.mjs ${itemsFile}`, { texts: todo.map((item) => item.comment) });
     const document = await readDocument(google);
     const ranges = todo.map((item) => findQuoteRange(document, tabOf(item.epic), item.quote));
     sayNotices(notices);
@@ -110,7 +116,7 @@ async function post(itemsFile, flags) {
       writeFileSync(itemsFile, `${JSON.stringify(data, null, 2)}\n`);
       const lang = chatLanguage();
       const checkedAt = new Date().toLocaleString(labels(lang)["doc.locale"], { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-      writeFileSync(flags.html, renderFile({ title: data.title, doc: map.prd.doc, items: data.items, checkedAt, lang }));
+      writeFileSync(flags.html, renderFile({ title: data.title, doc, items: data.items, checkedAt, lang }));
     };
     for (const [index, item] of todo.entries()) {
       const body = item.comment.trim();
@@ -136,16 +142,17 @@ async function main(input) {
   const resolved = resolveMap(process.cwd());
   if (!resolved) throw new Error(`no project map covers ${process.cwd()}; run /tedy:setup`);
   const { map } = resolved;
+  const doc = docOf(map);
   const text = readFileSync(itemsFile, "utf8");
   const { title, items } = JSON.parse(text);
   const pinnedAt = flagValue(rest, "--pinned-at");
   const comments = items.map((item) => item.comment ?? "");
-  const taken = await pinSourcesOf(comments.join("\n"), { docs: [map.prd.doc] }, { readKey: pinnedAt ?? itemsFile });
+  const taken = await pinSourcesOf(comments.join("\n"), { docs: [doc] }, { readKey: pinnedAt ?? itemsFile });
   for (const problem of taken.problems) console.log(`sources: ${problem}`);
   if (taken.problems.length) return 1;
   const tabOf = (epic) => map.prd?.tabs?.[epic]?.tab;
   const tabsText = {};
-  for (const tab of new Set(items.map((item) => tabOf(item.epic)).filter(Boolean))) tabsText[tab] = await fetchTab(map.prd.doc, tab);
+  for (const tab of new Set(items.map((item) => tabOf(item.epic)).filter(Boolean))) tabsText[tab] = await fetchTab(doc, tab);
   const lang = chatLanguage();
   const checkedAt = new Date().toLocaleString(labels(lang)["doc.locale"], { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
   const problems = checkItems(items, tabsText, tabOf, map.language?.doc_figma ?? chatLanguage());
@@ -159,7 +166,7 @@ async function main(input) {
   const dir = join(map.paths[0], "plans", "drafts");
   mkdirSync(dir, { recursive: true });
   const path = join(dir, `pm-comments-${stamp()}-${slugOf(title)}.html`);
-  writeFileSync(path, renderFile({ title, doc: map.prd.doc, items, checkedAt, lang }));
+  writeFileSync(path, renderFile({ title, doc, items, checkedAt, lang }));
   console.log(path);
   return 0;
 }
