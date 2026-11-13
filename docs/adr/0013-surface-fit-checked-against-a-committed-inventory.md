@@ -1,6 +1,6 @@
 # 0013: Every kit need is judged against a committed Claude Code inventory, and the kit goes first where prior art stops
 
-Status: accepted (2026-10-30)
+Status: accepted (2026-10-30); archived 2026-11-13: its checks, records and suites left main and live at tag `archive/governance-v0.3.4`
 
 ## Context
 - ADR 0011 left S27 (Claude Code surface fit) and S32 (quota efficiency) partial because no studied source failed an artifact on either, "so the kit would be first; they wait for evidence".

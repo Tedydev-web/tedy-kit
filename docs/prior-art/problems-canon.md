@@ -19,7 +19,7 @@ A problem is one behaviour a kit-development standard must get right. Problems a
 - Kit checks that already cover part of the frame: the sweep-record gate, the ADR and commit prior-art gates, the measured-ADR check, the skill-size test, public-scan, shim parity and rule citations.
 - `gate-log.jsonl` was not read for this registry; it lives in the profile and records gate decisions, not kit changes.
 - Frequency is a count of observed events; `none` means no event source records it, not that it never happens.
-- A line cite marked `(at <commit>)` points at that commit's file, read with `git show <commit>:<path>`. The "mitigated by" column is the state when each row was written; what enforces each problem now is the `problems` field of the rules in [the standard ledger](../canon/standard.json).
+- A line cite marked `(at <commit>)` points at that commit's file, read with `git show <commit>:<path>`. The "mitigated by" column is the state when each row was written; the standard ledger that mapped each problem to its rules is archived at tag `archive/governance-v0.3.4` (`docs/canon/standard.json`).
 
 ## Problems
 

@@ -2,6 +2,8 @@
 
 Every ADR from 0009 on has a `## Prior art` section, and every `feat`/`fix` commit carries an `ADR:` or `Prior-art:` trailer. `plugin/tests/adr-prior-art.test.mjs` and `plugin/tests/commit-prior-art.test.mjs` check the shape; `plugin/scripts/prior-art-verify.mjs <file>` checks pinned lines and issue states against GitHub; depth is checked by review and by the user's spot-check.
 
+The sweep toolchain this page describes (topic configs, screening, the v4 sweep records and their gates) was archived on 2026-11-13 and lives at tag `archive/governance-v0.3.4`. Notes, the card template and `prior-art-index.mjs` stay on main.
+
 ## Steps
 
 1. **Discover.** GitHub search and topics, awesome lists, plugin marketplaces; X (`twitter search`), Reddit (`rdt search`), YouTube (`yt-dlp` transcripts), Facebook (`opencli`); arXiv and Semantic Scholar (the academic channel). Try the channel itself; a doctor report that calls a channel unavailable is not evidence. Each topic (a role, a skill, a mechanism) has one config, `docs/prior-art/topics/<topic>.json`: registry, id prefix, frame label and steps, problems, terms, sweep name, `pilot_rows` (default 20), the `sessions` (A: a Claude model; B: one model on another family, run through `agy`, with a Claude `fallback` used when `agy` is not on PATH and optional `pilot_also` models that screen the pilot for information), and per stratum (config, product, local) the channels, the stop row and the forced repositories. The stop row stays `null` until the toolchain writes it. A topic too wide for one 60-row bound is split into `facets`, each with:

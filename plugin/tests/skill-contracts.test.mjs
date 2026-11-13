@@ -209,14 +209,6 @@ test("every publish quotes the verbatim text in one fenced block of the reply be
   assert.match(read("shared/decision-points.md"), /^- Publishing is never asked with `AskUserQuestion`\./m);
 });
 
-test("eval graders check facts only: no llm or baseline grader in any case", async () => {
-  const { readdirSync } = await import("node:fs");
-  const evals = new URL("../evals/", import.meta.url);
-  const graders = readdirSync(evals, { recursive: true }).filter((path) => /(^|\/)graders\/[^/]+\.md$/.test(path));
-  assert.ok(graders.length > 0);
-  for (const path of graders) assert.doesNotMatch(readFileSync(new URL(path, evals), "utf8"), /^type:\s*(llm|baseline)\s*$/m, path);
-});
-
 test("every github-write command line in the skills that writes to a repository names --repo", async () => {
   const skills = new URL("../skills/", import.meta.url);
   let checked = 0;
@@ -241,5 +233,4 @@ test("no file in the plugin uses the retired publish menus or answer-mode ticket
   const files = readdirSync(root, { recursive: true }).filter((path) => /\.(?:mjs|md|json|py)$/.test(path) && !path.includes("node_modules"));
   assert.ok(files.length > 100, String(files.length));
   assert.deepEqual(files.filter((path) => retired.test(readFileSync(new URL(path, root), "utf8"))), []);
-  assert.doesNotMatch(readFileSync(new URL("../../docs/canon/surface-fit.json", import.meta.url), "utf8"), /approval ticket/);
 });

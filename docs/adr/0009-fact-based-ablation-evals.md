@@ -1,6 +1,6 @@
 # 0009: Kit changes are measured with fact-based ablation evals
 
-Status: accepted (2026-10-18)
+Status: accepted (2026-10-18); archived 2026-11-13: its checks, records and suites left main and live at tag `archive/governance-v0.3.4`
 
 Clarifies: the row "Blind LLM-judge acceptance" in 0007.
 
