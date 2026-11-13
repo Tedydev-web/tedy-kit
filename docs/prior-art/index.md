@@ -4,13 +4,14 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
 
 ## Contents
 
-- agent-skills: 15 entries
+- agent-skills: 16 entries
 - ai-models: 3 entries
 - cost: 18 entries
 - evals: 12 entries
 - governance: 12 entries
-- guardrails: 11 entries
+- guardrails: 13 entries
 - platform: 8 entries
+- product-pm: 3 entries
 - qa: 2 entries
 - release: 7 entries
 - research: 1 entry
@@ -120,6 +121,8 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - Patch releases add surfaces
   - Merging each extraction with the previous one keeps every value ever seen, so a removed surface never shows up as drift (S27)
   - An extraction that loses more than half of a field's values fails instead of passing as an upstream removal, though its message says 30% where the code tests 50% (S27)
+- [SonarSource/SonarJS](sonarsource-sonarjs.md): you require every PR or commit to name its ticket and need a written form for the change that has none
+  - A ticket-less change is written as an explicit word in the place the ticket key goes, so a reader and a check can tell a deliberate choice from a forgotten link
 - [unclebob/ub-mode](ub-mode.md): someone proposes adopting a famous author's principle checklist skill, CRAP/duplication/mutation thresholds, or "push to main" autonomy in an agent coding workflow
   - Prose-only gate
   - Stub-out and mutation checks
@@ -541,6 +544,8 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - Surface, zero-test refusal
   - Surface, skipped-check rule
   - Surface, silent skip and retries
+- [cleartax/jira-lint](cleartax-jira-lint.md): you lint PRs for a Jira key and decide which PRs are exempt
+  - Exemption by branch pattern or author is a repository-wide rule, so a single PR cannot record why it has no ticket
 - [dshakes/compass](compass.md): you set up hooks, a guardrail policy and a spend gate for Claude Code
   - Each guardrail rule is ablated against a labelled corpus and classed load-bearing, unmeasured, broken or inconclusive; CI fails on any broken rule or on unmeasured rules above a floor of 0, an unparseable ablation is inconclusive rather than a finding, and nothing is deleted automatically (S31, S10)
   - CI runs the MCP pin check and the doctor (also run in CI) runs the vendor manifest drift check (S12, S15, S5)
@@ -587,6 +592,8 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - Over-implementation is untested features, methods or error handling
   - A guard that errors fails closed and says why
   - Strict test-first needs carve-outs or it loops
+- [sscarduzio/elasticsearch-readonlyrest-plugin](readonlyrest-pr-conventions.md): a CI check refuses a PR without a ticket key and you design the escape hatch for a change that needs none
+  - The ticket check stays strict and names its own escape hatch in the refusal, so the author learns the opt-out at the moment it is needed
 - [ucsandman/DashClaw](dashclaw.md): you grade and hold agent actions through hooks and must prove the hook still blocks after harness changes
   - After a harness change, prove the gate still blocks by driving a synthetic forbidden action through the installed hook and witnessing whether it ran, never by reading the gate's own log (S16, S8); a run that cannot prove it is reported broken, and the probe records the measured runtime version and a sha256 of the hook source
   - A hook timeout is a unit-sensitive contract with the harness, and a cancelled hook fails open there (S16, S26)
@@ -658,6 +665,15 @@ Every studied source and distilled finding, grouped by what it teaches. Read the
   - A mid-session switch on a warm large context is a counted cost, 113 switches in one month on one machine, 102 of them above 100k tokens, about 592 USD of estimated cache writes (Q4, S32)
   - A hook on the switch does not replace a static check on skill front matter (Q4, S32)
   - Warn at the switch, synchronously, with the cost and the hand-off (Q4)
+
+## product-pm: requirements, trackers, reviews of specs and design
+
+- [cleartax/jira-lint](cleartax-jira-lint.md): you lint PRs for a Jira key and decide which PRs are exempt
+  - Exemption by branch pattern or author is a repository-wide rule, so a single PR cannot record why it has no ticket
+- [SonarSource/SonarJS](sonarsource-sonarjs.md): you require every PR or commit to name its ticket and need a written form for the change that has none
+  - A ticket-less change is written as an explicit word in the place the ticket key goes, so a reader and a check can tell a deliberate choice from a forgotten link
+- [sscarduzio/elasticsearch-readonlyrest-plugin](readonlyrest-pr-conventions.md): a CI check refuses a PR without a ticket key and you design the escape hatch for a change that needs none
+  - The ticket check stays strict and names its own escape hatch in the refusal, so the author learns the opt-out at the moment it is needed
 
 ## qa: testers, end users and acceptance of what is built
 

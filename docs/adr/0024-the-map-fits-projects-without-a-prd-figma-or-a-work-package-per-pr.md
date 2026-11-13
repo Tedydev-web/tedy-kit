@@ -27,6 +27,25 @@ Status: accepted 2026-11-13 (user decision); amends the PR link rule of [ADR 000
   - Lesson: where no PRD exists, recorded decisions are the reviewable spec an agent works from.
   - Taken: `prd.files` may point at a project's ADR folder, and an accepted ADR outranks a proposed one.
 
-no social prior art: 2026-11-13 x: "Claude Code agent no PRD spec ADRs as source of truth"; youtube: "AI coding agent workflow project without PRD or Figma use architecture decision records"
+- Kent C. Dodds on ADRs for agents (public post on X, studied 2026-11-13, via x)
+  - https://x.com/kentcdodds/status/2118758407993966953 "ADRs and primitives are a huge leverage point for getting your agents to build the right thing."
+  - https://x.com/kentcdodds/status/2118798048101015879 "If they conflict at some point the agent marks it as superseded by #NNNN and that works fine"
+  - Lesson: agents read ADRs and follow them, and a conflict between ADRs is settled by the newer one superseding the older.
+  - Taken: a project's ADR folder is a valid written spec in `prd.files`, and an ADR's status line decides whether it binds.
+- SonarSource/SonarJS (SONAR Source-Available License v1.0, studied 2026-11-13, via github)
+  - card: sonarsource-sonarjs
+  - https://github.com/SonarSource/SonarJS/blob/9d7da9d1b891dba0610f679bab88553ce4da8fc9/.claude/skills/sonar-docs/SKILL.md#L43 "Use `No-Jira` if there's no ticket."
+  - Lesson: a change without a ticket writes a fixed word where the key goes, so a deliberate choice differs from a forgotten link.
+  - Taken: `OP#none: <reason>` on the body's first line, with a reason SonarJS does not ask for.
+- sscarduzio/elasticsearch-readonlyrest-plugin (GPL-3.0, studied 2026-11-13, via github)
+  - card: readonlyrest-pr-conventions
+  - https://github.com/sscarduzio/elasticsearch-readonlyrest-plugin/blob/e6585310a63b030365681ae243a519c46a74cead/ci/pr-conventions/checks/10-title-jira-key.sh#L4 "# Escape hatch: the `no-jira` label, for a change that does not need a ticket."
+  - Lesson: the ticket check stays strict and names its escape hatch in its own refusal.
+  - Taken: git-gate's refusal names `OP#none: <reason>`; the choice sits in the body, because the gate reads the command and not the PR's labels.
+- cleartax/jira-lint (MIT, studied 2026-11-13, via github)
+  - card: cleartax-jira-lint
+  - https://github.com/cleartax/jira-lint/blob/0b90e54c614ba320d44d4d2b02df4c0c7fa70f89/README.md#L169 "A regex to ignore running `jira-lint` on certain branches, like production etc."
+  - Lesson: exemptions by branch pattern or bot author are repository-wide and record no reason per PR.
+  - Not taken: no project-level switch; the user decides each PR without a work package.
 
 position: tracker-status conforms
