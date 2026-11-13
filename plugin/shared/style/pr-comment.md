@@ -5,7 +5,7 @@ Default samples for line comments on a teammate's pull request. A profile copy a
 ## Shape
 
 - One sentence about the current state of the code, ending the way `draft-lint` requires for the language (a full stop in English). No fix, no severity, no greeting, no thanks.
-- When a PRD rule backs the comment, add a blank line, then `PRD EPIC <nn> · <UC> <locator>:` and the rule quoted verbatim on `> ` lines.
+- When a PRD rule backs the comment, add a blank line, then `PRD EPIC <nn> · <UC> <locator>:` and the rule quoted verbatim on `> ` lines. Without a PRD, a rule from the map's `prd.files` (an ADR, an architecture doc) goes under `SPEC <path>:<line>:` the same way.
 - UI copy and PRD wording in straight double quotes; identifiers and library messages in backticks.
 - At most 360 characters per comment; the team reads the problem and finds the fix themselves.
 

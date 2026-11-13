@@ -17,6 +17,7 @@ export const MAX_CHAT = 600;
 const HEADER = /^# PR #(\d+)(:| —) comment line by line \(head ([0-9a-f]{7,40})\)\s*$/m;
 const SECTION = /^## (\d+)\. `([^`]+):(\d+)`\s*$/gm;
 const PRD_HEADER = new RegExp(`^PRD EPIC \\d{2} · ${UC_ID.source} .+:$`);
+export const SPEC_HEADER = /^SPEC (\S+\.md):(\d+):$/;
 const FOREIGN_SCRIPT = /[^\p{Script=Latin}\p{Script=Common}\p{Script=Inherited}]/u;
 const MENTION = /(?<![\w.@/+-])@[A-Za-z0-9][\w-]*/;
 const COMMENT_RULES = {
@@ -120,16 +121,17 @@ export function lintComment(body, lang) {
   rest.forEach((line, offset) => {
     const previous = offset === 0 ? first : rest[offset - 1];
     if (!line.trim()) return;
-    if (line.startsWith("PRD ")) {
-      if (!PRD_HEADER.test(line)) problems.push(`PRD header must read "PRD EPIC <nn> · <UC> <locator>:", got "${line}"`);
+    if (line.startsWith("PRD ") || line.startsWith("SPEC ")) {
+      if (line.startsWith("PRD ") && !PRD_HEADER.test(line)) problems.push(`PRD header must read "PRD EPIC <nn> · <UC> <locator>:", got "${line}"`);
+      if (line.startsWith("SPEC ") && !SPEC_HEADER.test(line)) problems.push(`SPEC header must read "SPEC <path>:<line>:" with the path of a prd.files markdown file, got "${line}"`);
       if (!rest[offset + 1]?.startsWith("> ")) problems.push(`"${line}" must be followed by a "> " quote line`);
       return;
     }
     if (line.startsWith("> ")) {
-      if (!previous.startsWith("PRD ") && !previous.startsWith("> ")) problems.push('a "> " quote must sit right under its PRD header');
+      if (!/^(PRD|SPEC) |^> /.test(previous)) problems.push('a "> " quote must sit right under its PRD or SPEC header');
       return;
     }
-    problems.push(`only a PRD block may follow the first sentence, got "${line}"`);
+    problems.push(`only a PRD block or a SPEC block may follow the first sentence, got "${line}"`);
   });
   return problems;
 }

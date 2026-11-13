@@ -15,6 +15,8 @@ PRD EPIC <nn> · <UC_XX_nn> <locator>:
 ---
 ```
 
+A project without a PRD cites a rule from the map's `prd.files` (an ADR or an architecture doc) in a `SPEC <path>:<line>:` block instead, `<path>` relative to `paths[0]` and the `> ` lines copied from that file; `github-write.mjs post` refuses a path the map does not list or a quote not in the file. Only an accepted ADR backs a comment.
+
 Follow `pr-comment.md`: the samples carry the voice, the avoid list carries the corrections. UI copy and PRD wording in straight double quotes; identifiers and library messages in backticks.
 
 ## Approval

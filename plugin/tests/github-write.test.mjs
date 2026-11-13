@@ -49,3 +49,12 @@ test("resolve and unresolve send their own thread mutation and read back isResol
   assert.deepEqual(threadMutation(true), { name: "resolveReviewThread", verb: "resolve", query: "mutation($id: ID!) { resolveReviewThread(input: {threadId: $id}) { thread { isResolved } } }" });
   assert.deepEqual(threadMutation(false), { name: "unresolveReviewThread", verb: "unresolve", query: "mutation($id: ID!) { unresolveReviewThread(input: {threadId: $id}) { thread { isResolved } } }" });
 });
+
+test("a SPEC block passes only when its file is in the map's prd.files and the quote is verbatim there", () => {
+  const spec = { "research/docs/adr/0001-ledger.md": "# ADR 0001\n\n- **Status:** Accepted\n\nThe ledger is double-entry\non Postgres.\n" };
+  const body = (header, quote) => `Ledger đang ghi một bút toán ạ.\n\n${header}\n> ${quote}`;
+  assert.deepEqual(verifyComment(c("a.ts", 1, body("SPEC research/docs/adr/0001-ledger.md:5:", "The ledger is double-entry on Postgres.")), { ...sources, spec }), { refusals: [], unverified: [] });
+  assert.match(verifyComment(c("a.ts", 1, body("SPEC research/docs/adr/0001-ledger.md:5:", "The ledger is single-entry.")), { ...sources, spec }).refusals[0], /not verbatim in research\/docs\/adr\/0001-ledger\.md/);
+  assert.match(verifyComment(c("a.ts", 1, body("SPEC research/docs/adr/0009-x.md:1:", "x")), { ...sources, spec }).refusals[0], /not in the project map's prd\.files/);
+  assert.match(verifyComment(c("a.ts", 1, body("SPEC research/docs/adr/0001-ledger.md:5:", "The ledger is double-entry on Postgres.")), sources).refusals[0], /not in the project map's prd\.files/);
+});

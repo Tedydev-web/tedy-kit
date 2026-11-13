@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { GITHUB_WRITE_DRY_RUN_VERBS, githubWriteDryRun, parseFlags } from "./cli-flags.mjs";
-import { lintComment, lintDraft, mapLanguage, parseDraft, readDiff, snapshotPath } from "./draft-lint.mjs";
+import { lintComment, lintDraft, mapLanguage, parseDraft, readDiff, snapshotPath, SPEC_HEADER } from "./draft-lint.mjs";
 import { fetchTab, indexTab, quoteInText, UC_ID } from "./prd-section.mjs";
 import { logGate, logRefusal, refusedLine } from "./hook-io.mjs";
 import { generatedPrBodyOp } from "./openproject.mjs";
@@ -30,17 +31,24 @@ export function buildReviewPayload(comments, commitId) {
 function prdBlocks(lines) {
   const blocks = [];
   for (const line of lines) {
-    if (line.startsWith("PRD ")) blocks.push({ header: line, quote: [] });
+    if (line.startsWith("PRD ") || line.startsWith("SPEC ")) blocks.push({ header: line, quote: [] });
     else if (line.startsWith("> ") && blocks.length) blocks[blocks.length - 1].quote.push(line.slice(2));
   }
   return blocks;
 }
 
-export function verifyComment(comment, { prd, diff, inRepo }) {
+export function verifyComment(comment, { prd, spec = {}, diff, inRepo }) {
   const refusals = [];
   const unverified = [];
   const [first, ...rest] = comment.body.split("\n");
   for (const { header, quote } of prdBlocks(rest)) {
+    const specPath = header.match(SPEC_HEADER)?.[1];
+    if (header.startsWith("SPEC ")) {
+      const quoted = quote.join(" ");
+      if (!specPath || spec[specPath] === undefined) refusals.push(`${specPath ?? header} is not in the project map's prd.files; cite a file the map lists, or add its folder with /tedy:setup update`);
+      else if (!quoteInText(quoted, spec[specPath])) refusals.push(`the quote under "${header}" is not verbatim in ${specPath}: "${quoted.slice(0, 80)}"`);
+      continue;
+    }
     const epic = header.match(/^PRD EPIC (\d{2}) · /)?.[1];
     const id = header.match(UC_ID)?.[0];
     const text = prd[epic] ?? prd["*"];
@@ -93,14 +101,16 @@ function inRepoAt(head) {
 async function loadPrd(comments) {
   const map = resolveMap(process.cwd())?.map;
   const prd = {};
-  if (!map?.prd) return prd;
-  if (map.prd.files?.length) prd["*"] = prdFiles(map).map((file) => readFileSync(file, "utf8")).join("\n");
+  const spec = {};
+  if (!map?.prd) return { prd, spec };
+  for (const file of prdFiles(map)) spec[relative(map.paths[0], file)] = readFileSync(file, "utf8");
+  if (map.prd.files?.length) prd["*"] = Object.values(spec).join("\n");
   const epics = new Set(comments.flatMap((comment) => [...comment.body.matchAll(/^PRD EPIC (\d{2}) · /gm)].map((match) => match[1])));
   for (const epic of epics) {
     const tab = map.prd.tabs?.[epic]?.tab;
     if (map.prd.doc && tab) prd[epic] = await fetchTab(map.prd.doc, tab);
   }
-  return prd;
+  return { prd, spec };
 }
 
 function refuse(layer, lines) {
@@ -156,7 +166,7 @@ async function postDraft(file, flags, repo, recorded) {
   if (final.problems.length) return refuse("github-write", final.problems.map((item) => `${item.index}. ${item.location}: ${item.problem}`));
   const head = prHead(repo, final.pr);
   if (!head.startsWith(final.sha)) return refuse("github-write", [`refused: PR head moved from ${final.sha} to ${head.slice(0, 8)}; if the new commits change no commented file, run draft-lint.mjs carry ${file} --repo ${repo}, otherwise review them and redraft`]);
-  const sources = { prd: await loadPrd(final.comments), diff: readDiff(final.pr, repo), inRepo: inRepoAt(head) };
+  const sources = { ...(await loadPrd(final.comments)), diff: readDiff(final.pr, repo), inRepo: inRepoAt(head) };
   const refused = [];
   for (const comment of final.comments) {
     const { refusals, unverified } = verifyComment(comment, sources);

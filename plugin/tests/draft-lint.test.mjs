@@ -214,3 +214,10 @@ test("every sample in the Doc and Figma style guide passes the lint it teaches",
   assert.ok(samples.length >= 4);
   for (const [, channel, text] of samples) assert.deepEqual(lintChatComment(text, channel.toLowerCase(), "en"), [], text);
 });
+
+test("a SPEC block quotes a line of the written spec in prd.files under a path:line header", () => {
+  const ok = "Ledger đang ghi một bút toán ạ.\n\nSPEC research/docs/adr/0001-ledger.md:5:\n> The ledger is double-entry on Postgres.";
+  assert.deepEqual(lintComment(ok, "vi"), []);
+  assert.ok(lintComment("Ledger đang sai ạ.\n\nSPEC research/docs/adr/0001-ledger.md:\n> The ledger is double-entry.", "vi").some((problem) => /SPEC header must read "SPEC <path>:<line>:"/.test(problem)));
+  assert.ok(lintComment("Ledger đang sai ạ.\n\nSPEC research/docs/adr/0001-ledger.md:5:\nThe ledger is double-entry.", "vi").some((problem) => /followed by a "> " quote/.test(problem)));
+});
