@@ -2,7 +2,7 @@
 
 A problem is one behaviour kit use must get right so that a task spends the least Claude Code quota for the same result quality. Problems are listed top-down from a fixed frame, so techniques are searched per problem instead of collected from sources. Generic names only; the user's logs and kit files are evidence, not names. A problem whose only lever lowers quality is out of scope (study plan, Scope) and listed under Dropped candidates.
 
-Status: approved by the user on 2026-10-21 ~08:15 as drafted, with the decisions listed under Decisions. Rows Q8, Q9, Q24 and Q25 were re-checked on Claude Code 2.1.305 on 2026-10-21. The topic config is `docs/prior-art/topics/quota.json`.
+Status: approved by the user on 2026-10-21 ~08:15 as drafted, with the decisions listed under Decisions. Rows Q8, Q9, Q24 and Q25 were re-checked on Claude Code 2.1.305 on 2026-10-21. The topic config is `archive/governance-v0.3.4:docs/prior-art/topics/quota.json`.
 
 ## Frame
 
@@ -16,7 +16,7 @@ Status: approved by the user on 2026-10-21 ~08:15 as drafted, with the decisions
 
 - The study plan is `plans/261020-1530-tedy-kit-quota-efficiency-study/plan.md` in the workspace, outside the kit.
 - `pilot:N` is line N of the pilot report (`plans/reports/research-261020-1520-claude-code-cost-and-cache-optimization.md` in the workspace, outside the kit), as read on 2026-10-20 at 192 lines and 24,357 bytes and unchanged on 2026-10-21, so a later edit that shifts the line numbers can be detected: 30 days of the user's usage aggregates (2026-09-20 to 2026-10-20, 46,918 deduped requests, versions 2.1.284 to 2.1.303, evaluated against the installed 2.1.304), claims checked against primary docs, and a size audit of kit and global surfaces at kit HEAD 9f823f4.
-- Kit paths (`plugin/...`, `docs/...`, `README.md`) are relative to the kit repository root; their line numbers were re-checked at ca7c0a8.
+- Kit paths (`archive/governance-v0.3.4:plugin/...`, `archive/governance-v0.3.4:docs/...`, `README.md`) are relative to the kit repository root; their line numbers were re-checked at ca7c0a8.
 - `surfaces:N` is line N of `docs/prior-art/claude-code-surfaces.md` (Claude Code 2.1.302 inventory).
 - `memory-doc:N` is line N of https://code.claude.com/docs/en/memory.md, fetched 2026-10-20.
 - Rows Q8, Q9, Q24 and Q25 were re-checked on 2026-10-21 against the installed Claude Code 2.1.305 (`claude --version`). These pages were fetched that day and are cited by section heading: `skills-doc` (https://code.claude.com/docs/en/skills.md), `costs-doc` (https://code.claude.com/docs/en/costs.md), `statusline-doc` (https://code.claude.com/docs/en/statusline.md), `plugin-evals-doc` (https://code.claude.com/docs/en/plugin-evals.md), `plugin-measure-doc` (https://code.claude.com/docs/en/plugins/measure.md) and `changelog` (https://github.com/anthropics/claude-code/blob/main/CHANGELOG.md, top entry 2.1.305). `plugin details` is the output of `claude plugin details tedy` (Claude Code 2.1.305) for the installed tedy 0.2.6.
@@ -113,7 +113,7 @@ Dropped because the claim does not hold on 2.1.304 (no lever left):
 
 ## Facets
 
-`docs/prior-art/topics/quota.json` holds these facets. They partition Q1 to Q25 with no overlap, as `facetErrors` in `plugin/lib/sweep-record.mjs` requires, and the topic's top-level `terms` are the union of the facet terms below. Sweep names follow the canon pattern; the topic-level sweep name is a placeholder that the calibration draw renames to its date.
+`archive/governance-v0.3.4:docs/prior-art/topics/quota.json` holds these facets. They partition Q1 to Q25 with no overlap, as `facetErrors` in `archive/governance-v0.3.4:plugin/lib/sweep-record.mjs` requires, and the topic's top-level `terms` are the union of the facet terms below. Sweep names follow the canon pattern; the topic-level sweep name is a placeholder that the calibration draw renames to its date.
 
 - `cache` (cache lifetime and prefix stability): Q1, Q2, Q3, Q4, Q5, Q6. Sweep `261020-quota-cache`. Terms: prompt caching, cache ttl, promptCacheTtl, cache hit, cache miss, cache invalidation, prefix, model switch, gateway, proxy, usage window, rate limit.
 - `footprint` (what loads at session start and skill load): Q7, Q8, Q9, Q10. Sweep `261020-quota-footprint`. Terms: CLAUDE.md, context budget, progressive disclosure, path-scoped rules, skill description, skill listing, auto memory, output style, additionalContext, UserPromptSubmit, SubagentStart.
