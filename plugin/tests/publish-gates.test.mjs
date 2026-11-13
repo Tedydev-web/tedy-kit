@@ -37,6 +37,18 @@ test("a PR in a tracked project must carry OP#<id> in its body", () => {
   assert.equal(evaluate('gh pr create --draft --body ""', "/somewhere/else", { projectsDir: dir }).allow, true);
 });
 
+test("a PR the user chose to open without a work package says so with OP#none and a reason", () => {
+  const { dir, repo } = projects();
+  const create = (rest) => evaluate(`gh pr create --draft --base dev --title "fix: x" ${rest}`, repo, { projectsDir: dir });
+  writeFileSync(join(repo, "none.md"), "OP#none: CI hotfix agreed with the tech lead\n\n## Goal\nX.\n");
+  assert.equal(create("--body-file none.md").allow, true);
+  writeFileSync(join(repo, "bare.md"), "OP#none:\n\n## Goal\nX.\n");
+  assert.equal(create("--body-file bare.md").allow, false);
+  writeFileSync(join(repo, "inline.md"), "Fixes the build, see OP#none: later\n");
+  assert.equal(create("--body-file inline.md").allow, false);
+  assert.match(create('--body ""').reason, /OP#none: <reason>/);
+});
+
 test("a PR body edit in a tracked project must keep OP#<id>, with ghWrites on or off", () => {
   const { dir, repo } = projects();
   for (const gates of [ALL_GATES_ON, { ...ALL_GATES_ON, ghWrites: false }]) {

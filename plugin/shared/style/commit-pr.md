@@ -12,7 +12,7 @@ Default samples. A profile copy at `<profile>/style/commit-pr.md` replaces this 
 
 - Title is the commit subject of the main change. Opened as a draft; the user marks it ready.
 - The body states the problem, the cause and what changed, with PRD codes, and carries `OP#<id>` for the tracker item it does, so the tracker shows the PR and `merged-sweep.mjs` can move the item after merge.
-- In a project with a tracker there is no PR without a work package: ask whether to run `/tedy:pm` for one first. git-gate denies `gh pr create` without `OP#<id>` in the body.
+- In a project with a tracker a PR without a work package is the user's choice: ask whether to run `/tedy:pm` for one first, or open the PR with `OP#none: <the user's reason>` as the body's first line. git-gate denies `gh pr create` with neither in the body.
 - One tracker task, one branch, one PR; the reviewer merges.
 - Open a PR or push a new branch only when the user asks for it in that request. A request for a report means report only.
 

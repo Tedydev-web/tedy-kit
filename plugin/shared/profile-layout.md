@@ -35,7 +35,7 @@ The defaults apply when no profile exists. `profile.mjs init [noComments] [draft
 
 Gates that protect every user stay on regardless of the config:
 - a prompt before a push to an integration branch, before a push that rewrites history, and before `gh pr merge`, `gh pr ready` or the equivalent `gh api` calls;
-- in a project whose map has a `tracker`, a refusal of `gh pr create` without `OP#<id>` in the body;
+- in a project whose map has a `tracker`, a refusal of `gh pr create` whose body carries neither `OP#<id>` nor a first line `OP#none: <reason>`;
 - a prompt before a `node <script>` publish that no `permissions.ask` rule covers, or whose form the rules do not match;
 - the tracker token gate and the profile guard.
 
