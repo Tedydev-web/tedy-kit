@@ -1,9 +1,10 @@
 import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { cardBlocks, linkedIds, readSince, searchSince, sweepPlan, writeSince } from "../lib/merged-sweep.mjs";
+import { batchItems, linkedIds, readSince, searchSince, sweepPlan, writeSince } from "../lib/merged-sweep.mjs";
+import { batchSummary, readBatch } from "../lib/publish-batch.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const wp = (id, type, status, assignee = 140) => ({
@@ -74,7 +75,7 @@ test("the sweep remembers where it stopped per project", () => {
 test("the sweep's GitHub search mark is the same instant as the stored mark, whatever offset it carries, and a missing subject is tolerated", () => {
   assert.equal(searchSince("2026-10-17T10:00:00+07:00"), "2026-10-17T03:00:00Z");
   assert.equal(searchSince("2026-10-17T03:00:00.000Z"), "2026-10-17T03:00:00Z");
-  assert.doesNotThrow(() => cardBlocks([{ id: 2, type: "Task", from: "a", to: "b", assign: null, event: "merged", prs: [pr(11, "merged")] }]));
+  assert.doesNotThrow(() => batchItems([{ id: 2, type: "Task", from: "a", to: "b", assign: null, lock: 1, event: "merged", prs: [pr(11, "merged")] }]));
 });
 
 const sweepRun = async (args, ghExit) => {
@@ -108,35 +109,17 @@ test("a repo that cannot be listed keeps the stored mark so its merged PRs are s
   assert.equal(mark, null);
 });
 
-test("the card body holds one set block per work package, by the absolute plugin path, with its row under it, and passes the card check", async () => {
-  const { cardBlocks } = await import("../lib/merged-sweep.mjs");
-  const { cardRefusal, readCard } = await import("../lib/pending-cards.mjs");
+test("the batch holds one set item per work package with --apply and the lock it was planned at, and publish-batch reads and summarises it", () => {
   const { updates } = sweepPlan({ gathered: [entry(wp(1, "Task", "Merged/Code Review"), [pr(1, "merged")]), entry(wp(2, "Bug", "In progress"), [pr(2, "merged")], ["Tester"])], meId: 140, tracker: TRACKER });
-  const scripts = new URL("../scripts/", import.meta.url).pathname;
-  const body = cardBlocks(updates);
-  assert.equal(body, `### 1\nnode "${scripts}openproject.mjs" set 1 --status "Closed"\n- #1 Task 1 (Task, Merged/Code Review → Closed) · merged: shop-fe#1 https://github.com/o/shop-fe/pull/1\n\n### 2\nnode "${scripts}openproject.mjs" set 2 --status "Fixed (Dev Done)" --assignee "Tess Ter"\n- #2 Bug 2 (Bug, In progress → Fixed (Dev Done), assign Tess Ter) · merged: shop-fe#2 https://github.com/o/shop-fe/pull/2\n`);
-  assert.equal(cardRefusal(readCard(`kind: publish\ntitle: Status\njob: none\npreview: run\n\n${body}`)), null);
-});
-
-test("card blocks quote a plugin path with a space and names with quotes, and still pass the card check", async () => {
-  const { cpSync } = await import("node:fs");
-  const { pathToFileURL } = await import("node:url");
-  const { tokenize } = await import("../lib/shell-segments.mjs");
-  const plugin = join(tempDir("tedy-sweep-space-"), "sp ace", "plugin");
-  for (const dir of ["lib", "scripts", "gates", "shared"]) cpSync(new URL(`../${dir}/`, import.meta.url).pathname, join(plugin, dir), { recursive: true });
-  const copied = await import(pathToFileURL(join(plugin, "lib", "merged-sweep.mjs")).href);
-  const { cardRefusal, readCard } = await import(pathToFileURL(join(plugin, "lib", "pending-cards.mjs")).href);
-  const update = (id, to, assign = null) => ({ id, subject: "s", type: "Task", from: "a", to, assign, event: "merged", prs: [] });
-  const odd = `He said "hi" and it's $5 \\ ok`;
-  const card = readCard(`kind: publish\ntitle: S\njob: none\npreview: run\n\n${copied.cardBlocks([update(1, "Won't fix"), update(2, 'Say "done"', "O'Neil"), update(3, odd, "D'Arcy \"DJ\"")])}`);
-  assert.equal(cardRefusal(card), null);
-  const script = join(plugin, "scripts", "openproject.mjs");
-  assert.deepEqual(card.blocks.map((block) => tokenize(block.command)), [
-    ["node", script, "set", "1", "--status", "Won't fix"],
-    ["node", script, "set", "2", "--status", 'Say "done"', "--assignee", "O'Neil"],
-    ["node", script, "set", "3", "--status", odd, "--assignee", "D'Arcy \"DJ\""],
+  const items = batchItems(updates);
+  assert.deepEqual(items, [
+    ["openproject.mjs", "set", "1", "--status", "Closed", "--apply", "--lock", "3"],
+    ["openproject.mjs", "set", "2", "--status", "Fixed (Dev Done)", "--assignee", "Tess Ter", "--apply", "--lock", "3"],
   ]);
-  assert.throws(() => copied.cardBlocks([update(4, "Two\nlines")]), /#4: the name holds a line break, so no card command can carry it/);
+  const file = join(tempDir("tedy-sweep-batch-"), "batch.json");
+  writeFileSync(file, JSON.stringify({ items }));
+  assert.deepEqual(readBatch(file), items);
+  assert.equal(batchSummary(items, "/", "en"), "Publish 2 items under your name: 1) OP #1 set status=Closed; 2) OP #2 set status=Fixed (Dev Done), assignee=Tess Ter");
 });
 
 async function inboxWorld({ sessions }) {
@@ -176,64 +159,45 @@ async function inboxWorld({ sessions }) {
     const { existsSync, readdirSync } = await import("node:fs");
     return existsSync(join(repo, "plans", sub)) ? readdirSync(join(repo, "plans", sub)).map((name) => join(repo, "plans", sub, name)) : [];
   };
-  return { run, files, repo, state, host: `127.0.0.1_${port}`, close: () => server.close() };
+  return { run, files, repo, state, env, close: () => server.close() };
 }
 
-test("a sweep writes one run card with a block per update and no hand-off, even in a map that lists a pm session, moves the mark, and a sweep with nothing new writes no card", async () => {
-  const { parse } = await import("../lib/job-files.mjs");
-  const { CARD_KEYS, readCard } = await import("../lib/pending-cards.mjs");
+test("a sweep writes one ready batch under plans/drafts with an item per update, prints its --summary command, which publish-batch runs, and moves the mark; a sweep with nothing new writes none", async () => {
+  const { execFileSync } = await import("node:child_process");
   const world = await inboxWorld({ sessions: [{ name: "PM - Shop", role: "pm" }] });
   try {
     const out = await world.run([]);
-    const cards = await world.files("drafts");
-    assert.equal(cards.length, 1, out);
-    assert.match(out, new RegExp(`^card: ${cards[0]}$`, "m"));
-    const text = readFileSync(cards[0], "utf8");
-    const fields = parse(text, CARD_KEYS);
-    assert.deepEqual([fields.kind, fields.preview, fields.job, fields.records, fields.title], ["publish", "run", "none", `op:${world.host}:wp:21,op:${world.host}:wp:22`, "Status from PRs: 2 work package(s)"]);
-    assert.deepEqual(readCard(text).blocks.map((block) => block.command.replace(/^node "[^"]+\/openproject\.mjs" /, "")), ['set 21 --status "Closed"', 'set 22 --status "Closed"']);
+    const drafts = await world.files("drafts");
+    assert.equal(drafts.length, 1, out);
+    assert.match(drafts[0], /\/plans\/drafts\/\d{6}-\d{4}-status-from-prs\.json$/);
+    assert.match(out, new RegExp(`^batch: ${drafts[0]}$`, "m"));
+    assert.deepEqual(readBatch(drafts[0]), [
+      ["openproject.mjs", "set", "21", "--status", "Closed", "--apply", "--lock", "1"],
+      ["openproject.mjs", "set", "22", "--status", "Closed", "--apply", "--lock", "1"],
+    ]);
+    const command = out.split("\n").find((line) => line.startsWith("node ") && line.endsWith(" --summary"));
+    assert.ok(command, out);
+    const [, script, batch] = command.split(" ");
+    assert.match(script, /\/scripts\/publish-batch\.mjs$/);
+    assert.equal(batch, drafts[0]);
+    const summary = execFileSync("node", [script, batch, "--summary"], { cwd: world.repo, env: world.env, encoding: "utf8" });
+    assert.match(summary, /OP #21 set status=Closed; 2\) OP #22 set status=Closed/);
+    assert.doesNotMatch(out, /^card: /m);
     assert.deepEqual(await world.files("reports"), []);
-    const mark = readSince("shop", world.state);
-    assert.notEqual(mark, null);
+    assert.notEqual(readSince("shop", world.state), null);
     const again = await world.run(["--inbox"]);
     assert.equal((await world.files("drafts")).length, 1, again);
-    assert.doesNotMatch(again, /^card: /m);
-    assert.notEqual(readSince("shop", world.state), null);
+    assert.doesNotMatch(again, /^batch: /m);
   } finally {
     world.close();
   }
 });
 
-test("--job names the job in the card and on every set command, and the card passes the card check", async () => {
-  const { mkdirSync, writeFileSync } = await import("node:fs");
-  const { parse } = await import("../lib/job-files.mjs");
-  const { CARD_KEYS, cardRefusal, readCard } = await import("../lib/pending-cards.mjs");
-  const { tokenize } = await import("../lib/shell-segments.mjs");
-  const world = await inboxWorld({ sessions: [] });
-  try {
-    const { repo } = world;
-    const job = join(repo, "plans", "jobs", "261106-0900-review-sweep.md");
-    mkdirSync(join(repo, "plans", "jobs"), { recursive: true });
-    writeFileSync(job, "to: tedy:review\nfrom: cockpit\nstatus: running\ncreated: 2026-11-06T02:00:00.000Z\ntitle: sweep\n\nbody\n");
-    const out = await world.run(["--job", job]);
-    const [card] = await world.files("drafts");
-    assert.ok(card, out);
-    const text = readFileSync(card, "utf8");
-    assert.equal(parse(text, CARD_KEYS).job, job);
-    const blocks = readCard(text).blocks.map((block) => tokenize(block.command));
-    assert.equal(blocks.length, 2);
-    for (const tokens of blocks) assert.deepEqual(tokens.slice(-2), ["--job", job]);
-    assert.equal(cardRefusal(readCard(text), repo), null);
-  } finally {
-    world.close();
-  }
-});
-
-test("--job without a file, and the removed --handoff and --from, are refused before the sweep runs, while --inbox is still taken", async () => {
-  for (const args of [["--job"], ["--inbox", "--job"], ["--handoff", "--from", "Review - Shop"], ["--from", "Review - Shop"]]) {
+test("--job and the removed --handoff and --from are refused before the sweep runs, while --inbox is still taken", async () => {
+  for (const args of [["--job"], ["--job", "plans/jobs/a.md"], ["--inbox", "--job"], ["--handoff", "--from", "Review - Shop"], ["--from", "Review - Shop"]]) {
     const { out, mark } = await sweepRun(args, false);
     assert.equal(out.status, 2, args.join(" "));
-    assert.equal(out.stderr, "usage: merged-sweep.mjs [--since <ISO time>] [--job <job file>]\n", args.join(" "));
+    assert.equal(out.stderr, "usage: merged-sweep.mjs [--since <ISO time>]\n", args.join(" "));
     assert.equal(mark, null, args.join(" "));
   }
   const inbox = await sweepRun(["--since", "2026-10-01T00:00:00Z", "--inbox"], false);

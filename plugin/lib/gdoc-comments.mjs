@@ -8,8 +8,8 @@ import { logPostedText } from "./edit-log.mjs";
 import { canonicalJson } from "./figma-comments.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { notBefore, sinceTime } from "./since.mjs";
-import { splitJob, withRecords } from "./record-lock.mjs";
-import { pinnedSince, requireFresh, sayNotices, versionCheck } from "./source-pins.mjs";
+import { withRecords } from "./record-lock.mjs";
+import { requireFresh, sayNotices, versionCheck } from "./source-pins.mjs";
 
 const DRIVE = "https://www.googleapis.com/drive/v3";
 const DOCS = "https://docs.googleapis.com/v1";
@@ -278,9 +278,9 @@ export async function listComments(google) {
 }
 
 async function main(input) {
-  const { job, argv: [command, target, ...rest] } = splitJob(input);
+  const [command, target, ...rest] = input;
   const args = target?.startsWith("--") ? [target, ...rest] : rest;
-  const flags = { ...Object.fromEntries(args.flatMap((arg, index) => (arg.startsWith("--") ? [[arg.slice(2), args[index + 1]]] : []))), job };
+  const flags = Object.fromEntries(args.flatMap((arg, index) => (arg.startsWith("--") ? [[arg.slice(2), args[index + 1]]] : [])));
   if (flags.since !== undefined) sinceTime(flags.since);
   if (command === "list") {
     const google = await session(flags);
@@ -295,7 +295,7 @@ async function main(input) {
   if ((command === "reply" && target) || command === "anchor") {
     const body = readBody(flags);
     const google = await session(flags, command === "anchor");
-    return withRecords([docKey(google.doc)], { job: flags.job, since: pinnedSince(flags["body-file"]) }, async (recorded) => {
+    return withRecords([docKey(google.doc)], async (recorded) => {
       if (alreadyPosted(await listComments(google), command, target, body)) throw new Error(`the Doc already has this ${command === "reply" ? `reply in thread ${target}` : "comment"}; nothing posted`);
       const { notices } = await recheckDocTarget(google.doc, flags["body-file"], relintDoc(flags["body-file"], google.doc), { texts: [body] });
       const approve = () => {
@@ -322,7 +322,7 @@ async function main(input) {
   if (command === "edit" && target) {
     const body = readBody(flags);
     const google = await session(flags);
-    return withRecords([docKey(google.doc)], { job: flags.job, since: pinnedSince(flags["body-file"]) }, async (recorded) => {
+    return withRecords([docKey(google.doc)], async (recorded) => {
       const item = editTarget(await listComments(google), target, flags.reply);
       if (squash(item.content) === squash(body)) throw new Error("the posted text already matches the body file; nothing edited");
       const { notices } = await recheckDocTarget(google.doc, flags["body-file"], relintDoc(flags["body-file"], google.doc), { texts: [body] });
@@ -372,7 +372,7 @@ async function main(input) {
   }
   if (command === "delete" && target) {
     const google = await session(flags);
-    return withRecords([docKey(google.doc)], { job: flags.job, since: null }, async (recorded) => {
+    return withRecords([docKey(google.doc)], async (recorded) => {
       deleteTarget(await listComments(google), target, flags.reply);
       console.log(`WRITE → Google Doc ${google.doc} thread ${target}${flags.reply ? ` reply ${flags.reply}` : ""} : delete 1 own ${flags.reply ? "reply" : "comment"}`);
       await google.request(`${DRIVE}/files/${google.doc}/comments/${target}${flags.reply ? `/replies/${flags.reply}` : ""}`, { method: "DELETE" });

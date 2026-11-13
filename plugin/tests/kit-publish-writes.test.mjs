@@ -72,31 +72,12 @@ test("github-write pr-body, resolve and unresolve write once", async () => {
   await onceOnly(unresolve, "github-write", ["unresolve", "PRRT_a"], () => unresolve.writes().length, ["github:node:PRRT_a"]);
 });
 
-test("github-write reply writes once, and records the job it names by its file name", async () => {
+test("github-write reply writes once and appends one ledger line that names no job", async () => {
   const w = world({ pr: 1, gh: { write: { id: 5, html_url: "u" } } });
   w.file("b.md", "Fixed it.\n");
   await lint(w, "draft-lint", ["pr-reply", "b.md", "--pr", "1", "--repo", "o/r"]);
-  await onceOnly(w, "github-write", ["reply", "1", "123", "--body-file", "b.md", "--repo", "o/r", "--job", "plans/jobs/reply.md"], () => w.writes().length, ["github:o/r#1"]);
-  assert.equal(w.ledger("github:o/r#1")[0].job, "reply.md");
-});
-
-test("every writer refuses a --job with no file, placed last or written --job=, before it writes", async () => {
-  const cases = [
-    ["github-write", ["minimize", "IC_x"]],
-    ["openproject", ["set", "21298", "--status", "Closed", "--apply"]],
-    ["figma-comments", ["post", "1:2", "--body-file", "f.md", "--file", "F"]],
-    ["gdoc-comments", ["reply", "c1", "--body-file", "g.md", "--doc", "D"]],
-    ["doc-comment-file", ["post", "items.json", "--html", "x.html", "--doc", "D", "--apply"]],
-  ];
-  for (const [script, args] of cases) {
-    for (const job of ["--job", "--job="]) {
-      const w = world();
-      const result = await w.run(script, [...args, job]);
-      assert.equal(result.code, 1, result.out);
-      assert.ok(result.out.includes(`${script}: --job needs a job file path; nothing was written`), `${script} ${job}: ${result.out}`);
-      assert.deepEqual(w.writes(), []);
-    }
-  }
+  await onceOnly(w, "github-write", ["reply", "1", "123", "--body-file", "b.md", "--repo", "o/r"], () => w.writes().length, ["github:o/r#1"]);
+  assert.equal("job" in w.ledger("github:o/r#1")[0], false);
 });
 
 test("a write whose ledger line cannot be appended still reads back and exits 0, with a warning", async () => {

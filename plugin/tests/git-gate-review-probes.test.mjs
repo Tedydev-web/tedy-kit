@@ -6,7 +6,6 @@ import { writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { evaluate } from "../gates/git-gate.mjs";
-import { classifyAction } from "../gates/role-gate.mjs";
 import { pushTargets } from "../lib/push-report.mjs";
 import { splitSegments, tokenize } from "../lib/shell-segments.mjs";
 import { profileWith, tempDir } from "./temp-dir-for-tests.mjs";
@@ -217,15 +216,6 @@ test("honest: a quoted kit publish through Bash passes to the ask rule that matc
   assert.equal(judge("node /k/github-wr*.mjs minimize x"), "deny");
 });
 
-test("honest: role-gate classifies a kit script write with a quoted subcommand like the plain one (review F8)", () => {
-  const map = { name: "shop", paths: ["/w/shop"], repos: [{ path: "shop-fe" }], sessions: [{ name: "PM", role: "pm" }, { name: "Dev", role: "dev" }] };
-  const classify = (command, tool = "Bash") => classifyAction(tool === "Bash" ? { tool_name: "Bash", cwd: "/w/shop", tool_input: { command } } : { tool_name: EXECUTE, cwd: "/w/shop", tool_input: { language: "shell", code: command } }, map)?.kind;
-  assert.equal(classify("node x/github-write.mjs \x27pr-body\x27 7", EXECUTE), "code");
-  assert.equal(classify("node x/github-write.mjs \x27pr-body\x27 7"), "code");
-  assert.equal(classify("node x/github-write.mjs re\x27\x27solve PRRT_1"), "pr-review");
-  assert.equal(classify("node x/openproject.mjs \"apply\" d.json"), "tracker");
-});
-
 function repos() {
   const root = tempDir("tedy-ctx-cwd-");
   const make = (name, branch) => {
@@ -298,9 +288,6 @@ test("honest: a push or commit inside a subshell is judged in the subshell's dir
   assert.equal(hook(BATCH, { commands: [`(cd ${main} && git push origin master)`] }, { cwd: feat, projectDir: feat }), "ask");
   assert.equal(verdict(`(cd ${feat} && git push)`, main), "allow");
   assert.equal(verdict(`(cd ${feat} && npm test) && git push`, main), "ask");
-  const map = { name: "shop", paths: ["/w/shop"], repos: [{ path: "shop-fe" }], sessions: [{ name: "PM", role: "pm" }, { name: "Dev", role: "dev" }] };
-  assert.deepEqual(classifyAction({ tool_name: "Bash", cwd: "/w/shop", tool_input: { command: "(cd shop-fe && git commit -m x)" } }, map), { kind: "code", repo: "shop-fe" });
-  assert.deepEqual(classifyAction({ tool_name: EXECUTE, cwd: "/w/shop", tool_input: { language: "shell", code: "(cd shop-fe && git commit -m x)" } }, map), { kind: "code", repo: "shop-fe" });
 });
 
 test("parentheses that are not a subshell keep their current behaviour", () => {
@@ -400,11 +387,7 @@ test("honest: a push in $(…) or backticks is judged in the directory of the co
   assert.equal(verdict(`cd ${feat} && out=$(git push 2>&1)`, main), "allow");
 });
 
-test("role-gate and push-report follow a cd behind a keyword and look inside $(…) (round 3)", () => {
-  const map = { name: "shop", paths: ["/w/shop"], repos: [{ path: "shop-fe" }], sessions: [{ name: "PM", role: "pm" }, { name: "Dev", role: "dev" }] };
-  const role = (command) => classifyAction({ tool_name: "Bash", cwd: "/w/shop", tool_input: { command } }, map);
-  assert.deepEqual(role("if cd shop-fe; then git commit -m x; fi"), { kind: "code", repo: "shop-fe" });
-  assert.deepEqual(role("cd shop-fe && OUT=$(git commit -m x)"), { kind: "code", repo: "shop-fe" });
+test("push-report follows a cd behind a keyword and looks inside $(…) (round 3)", () => {
   assert.deepEqual(pushTargets("{ cd app; git push; }", "/w"), ["/w/app"]);
   assert.deepEqual(pushTargets("cd app && OUT=$(git push 2>&1)", "/w"), ["/w/app"]);
 });

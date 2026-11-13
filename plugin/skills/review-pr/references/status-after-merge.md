@@ -2,11 +2,9 @@
 
 ## Sweep (step 1a)
 
-Run from any directory the project map covers: `node <plugin>/scripts/merged-sweep.mjs`, or in a review job `node <plugin>/scripts/merged-sweep.mjs --job <this job file>`.
+Run from any directory the project map covers: `node <plugin>/scripts/merged-sweep.mjs`.
 
-It finds the user's PRs opened, merged or reverted since the last sweep whose body links a work package (`OP#<id>`) assigned to the user, plans each package from all of its PRs (`<plugin>/shared/status-flow.md`), writes one publish card with a `set` command per package and prints `card: <path>`. Mention that path in one line of the reply; it never blocks the review, and the cockpit asks the card like every open card (`<plugin>/shared/jobs.md`, Cockpit 5).
-
-With `--job`, the card and each of its `set` commands name the job, so the cockpit applies the batch only after the job is done and does not close the job while the card is open.
+It finds the user's PRs opened, merged or reverted since the last sweep whose body links a work package (`OP#<id>`) assigned to the user, plans each package from all of its PRs (`<plugin>/shared/status-flow.md`), writes a ready batch with one `set … --apply --lock <n>` item per package to `plans/drafts/<stamp>-status-from-prs.json`, and prints an `update #<id> …` line per package, `batch: <path>` and the `publish-batch.mjs <path> --summary` command. It never blocks the review. When it printed a batch, run that `--summary` command, show each `update` line as the item (`<plugin>/shared/decision-points.md`) and run the `--shows` command it prints in the same turn; its permission prompt is the approval. Then `pending.mjs done <path>`. A "No" leaves the statuses as they are and the batch in `plans/drafts/`; a `set` refused because the work package moved past its lock needs the sweep's plan again (`<plugin>/shared/status-flow.md`).
 
 ## Merge step (step 12)
 

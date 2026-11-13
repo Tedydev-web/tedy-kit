@@ -1,7 +1,6 @@
 import "./test-isolation.mjs";
 import { evaluate as gitGate, hiddenPublish, splitSegments } from "../gates/git-gate.mjs";
 import { evaluate as trackerToken } from "../gates/tracker-token-gate.mjs";
-import { classifyAction } from "../gates/role-gate.mjs";
 import { checkEdit } from "../gates/no-comments-gate.mjs";
 import { publishes } from "../gates/publish-quote-gate.mjs";
 import { reviewRunVerdict } from "../gates/review-run-gate.mjs";
@@ -45,7 +44,6 @@ const TARGETS = {
   "git-gate hiddenPublish (PUBLISH)": (text) => hiddenPublish(text),
   "git-gate splitSegments (HEREDOC, SHELL_WRAPPER)": (text) => splitSegments(text),
   "tracker-token-gate evaluate (TOKEN_FILE, WRITE_VERB)": (text) => trackerToken({ command: text }, "op.example.com"),
-  "role-gate classifyAction (SCRIPT_WRITES)": (text) => classifyAction({ tool_name: "Bash", tool_input: { command: text }, cwd: "/w" }, { paths: ["/w"] }),
   "no-comments-gate checkEdit (comment-scan DIRECTIVE, TEST_PATH)": (text) => checkEdit("Edit", { file_path: "/w/x.mjs", old_string: "", new_string: text }),
   "publish-quote-gate publishes (SCRIPT)": (text) => publishes(text, "/w", () => ""),
   "review-run-gate reviewRunVerdict (MANAGERS, DIR_FLAGS, REVIEW_FOLDER)": (text) => reviewRunVerdict({ tool_name: "Bash", cwd: "/w", tool_input: { command: text } }),

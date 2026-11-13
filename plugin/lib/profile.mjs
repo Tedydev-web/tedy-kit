@@ -6,13 +6,13 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { CLAUDE_SETTINGS, KIT_PUBLISH_ASK_RULES, plannedPermissions, readSettings, retiredDenyRules, unchanged, writePermissions } from "./publish-approval-settings.mjs";
 
 const SHARED = fileURLToPath(new URL("../shared/", import.meta.url));
-const PERSONAL_GATES = ["noComments", "draftPrOnly", "roleGate", "ghWrites", "publishQuote"];
-const INIT_GATES = ["roleGate", "ghWrites", "publishQuote"];
+const PERSONAL_GATES = ["noComments", "draftPrOnly", "ghWrites", "publishQuote"];
+const INIT_GATES = ["ghWrites", "publishQuote"];
 const CONVENTION_GATES = ["noComments", "draftPrOnly"];
 const OBSOLETE_PUBLISH_APPROVAL = Object.freeze(["ask", "answer"]);
 
 export const DEFAULT_CONFIG = Object.freeze({
-  gates: Object.freeze({ noComments: false, draftPrOnly: false, roleGate: false, ghWrites: false, publishQuote: false, pushExempt: Object.freeze([]) }),
+  gates: Object.freeze({ noComments: false, draftPrOnly: false, ghWrites: false, publishQuote: false, pushExempt: Object.freeze([]) }),
   language: Object.freeze({ chat: "en" }),
 });
 
@@ -43,7 +43,7 @@ export function loadConfig(dir = profileDir()) {
   const language = raw.language ?? {};
   if (!isObject(gates)) throw new Error(`${file}: gates must be an object`);
   if (!isObject(language)) throw new Error(`${file}: language must be an object`);
-  checkKeys(file, gates, [...PERSONAL_GATES, "publishApproval", "pushExempt"], "gates.");
+  checkKeys(file, gates, [...PERSONAL_GATES, "publishApproval", "roleGate", "pushExempt"], "gates.");
   checkKeys(file, language, ["chat"], "language.");
   for (const key of PERSONAL_GATES) if (key in gates && typeof gates[key] !== "boolean") throw new Error(`${file}: gates.${key} must be a boolean`);
   if ("publishApproval" in gates && !OBSOLETE_PUBLISH_APPROVAL.includes(gates.publishApproval)) throw new Error(`${file}: gates.publishApproval is obsolete and, while it stays, must be "ask" or "answer"`);

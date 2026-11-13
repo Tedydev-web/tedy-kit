@@ -8,7 +8,6 @@ import { fileURLToPath } from "node:url";
 import { batchSummary, itemSummary, readBatch, runBatch } from "../lib/publish-batch.mjs";
 import { KIT_PUBLISH_ASK_RULES } from "../lib/publish-approval-settings.mjs";
 import { check } from "../gates/publish-quote-gate.mjs";
-import { classifyActions } from "../gates/role-gate.mjs";
 import { profileWith, tempDir } from "./temp-dir-for-tests.mjs";
 
 const GATE_ENTRY = join(dirname(fileURLToPath(import.meta.url)), "../gates/git-gate.mjs");
@@ -138,9 +137,3 @@ test("a batch item that posts PR text the chat has not shown is refused by the p
   assert.equal(check({ tool_input: { command }, cwd: dir, transcript_path: transcript }), null);
 });
 
-test("the role gate sees each item of a batch, so a batch cannot carry another role's write", () => {
-  const dir = tempDir("tedy-batch-role-");
-  batchFile([["github-write.mjs", "resolve", "PRRT_1", "--repo", "o/r"], ["openproject.mjs", "comment", "1", "--body-file", "a.txt", "--apply"], ["github-write.mjs", "pr-body", "3", "--body-file", "b.md", "--repo", "o/r"]], dir);
-  const kinds = classifyActions({ tool_name: "Bash", tool_input: { command: 'node /k/plugin/scripts/publish-batch.mjs batch.json --shows "x"' }, cwd: dir }, { repos: [] }).map((action) => action.kind);
-  assert.deepEqual(kinds, ["pr-review", "tracker", "code"]);
-});

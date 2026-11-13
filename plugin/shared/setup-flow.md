@@ -20,7 +20,7 @@ Every run starts with `node <plugin>/scripts/profile.mjs doctor`. When its first
    - `conventions.noComments`: source holds no comments; the description says JSDoc, license headers and `TODO` lines are then blocked and only tool directives pass.
    - `conventions.draftPrOnly`: pull requests open as drafts.
    - `conventions.none`: neither.
-3. `node <plugin>/scripts/profile.mjs init` followed by each chosen key (`noComments`, `draftPrOnly`), with `TEDY_PROFILE_DIR=<folder>` in front for another folder. It creates `config.json` with `roleGate`, `ghWrites` and `publishQuote` on plus the chosen keys, `rules.md` from the template and `projects/`, and never overwrites a file.
+3. `node <plugin>/scripts/profile.mjs init` followed by each chosen key (`noComments`, `draftPrOnly`), with `TEDY_PROFILE_DIR=<folder>` in front for another folder. It creates `config.json` with `ghWrites` and `publishQuote` on plus the chosen keys, `rules.md` from the template and `projects/`, and never overwrites a file.
 4. When no line of `~/.claude/CLAUDE.md` imports the profile's `rules.md` (any `@` path that resolves to it, `~` included), ask one `AskUserQuestion` before touching it; on approval back it up and append `@<profile>/rules.md`, so the rules load in every new session.
 5. Quote the `profile.mjs doctor` output and say that any gate can be switched in `config.json` (`<plugin>/shared/profile-layout.md`). Then continue with the bare run or the update.
 

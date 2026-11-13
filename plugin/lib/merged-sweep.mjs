@@ -1,8 +1,9 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { card } from "./pending.mjs";
+import { pathToFileURL } from "node:url";
+import { stamp } from "./pending.mjs";
+import { itemCommand } from "./publish-batch.mjs";
 import { STATE_DIR } from "./hook-io.mjs";
 import { loadConfig } from "./openproject-client.mjs";
 import { resolveMap } from "./project-map.mjs";
@@ -35,25 +36,27 @@ export function sweepPlan({ gathered, meId, tracker }) {
     if (plan.skip) skipped.push({ id, why: plan.skip });
     else {
       const prs = facts.prs.filter((pr) => pr.base === pr.integration && pr.state !== "closed");
-      updates.push({ id, subject: workPackage.subject, type: facts.type, from: facts.status, to: plan.to, assign: plan.assign === "author" ? workPackage._links.author.title : null, event: plan.event, prs });
+      updates.push({ id, subject: workPackage.subject, type: facts.type, from: facts.status, to: plan.to, assign: plan.assign === "author" ? workPackage._links.author.title : null, lock: workPackage.lockVersion, event: plan.event, prs });
     }
   }
   return { updates, skipped };
 }
 
-const updateRow = (update) => `- #${update.id} ${String(update.subject ?? "").replace(/\s+/g, " ")} (${update.type}, ${update.from} → ${update.to}${update.assign ? `, assign ${update.assign}` : ""}) · ${update.event}: ${update.prs.map((pr) => `${pr.repo}#${pr.number} ${pr.url ?? ""}`.trim()).join(", ")}`;
+export const batchItems = (updates) => updates.map((update) => ["openproject.mjs", "set", String(update.id), "--status", update.to, ...(update.assign ? ["--assignee", update.assign] : []), "--apply", "--lock", String(update.lock)]);
 
-const OPENPROJECT_SCRIPT = fileURLToPath(new URL("../scripts/openproject.mjs", import.meta.url));
-
-const quoted = (value, id) => {
-  if (/[\r\n]/.test(value)) throw new Error(`#${id}: the name holds a line break, so no card command can carry it; rename it in the tracker or set this work package by hand`);
-  if (!/["$`\\]/.test(value)) return `"${value}"`;
-  return `'${value.replaceAll("'", `'"'"'`)}'`;
-};
-
-const cardCommand = (update, job) => `node ${quoted(OPENPROJECT_SCRIPT, update.id)} set ${update.id} --status ${quoted(update.to, update.id)}${update.assign ? ` --assignee ${quoted(update.assign, update.id)}` : ""}${job ? ` --job ${quoted(job, update.id)}` : ""}`;
-
-export const cardBlocks = (updates, job) => updates.map((update, index) => `### ${index + 1}\n${cardCommand(update, job)}\n${updateRow(update)}\n`).join("\n");
+function writeBatch(map, updates) {
+  const dir = join(map.paths[0], "plans", "drafts");
+  mkdirSync(dir, { recursive: true });
+  for (let n = 1; ; n += 1) {
+    const file = join(dir, `${stamp()}-status-from-prs${n === 1 ? "" : `-${n}`}.json`);
+    try {
+      writeFileSync(file, `${JSON.stringify({ items: batchItems(updates) }, null, 2)}\n`, { flag: "wx" });
+      return file;
+    } catch (error) {
+      if (error.code !== "EEXIST") throw error;
+    }
+  }
+}
 
 const sincePath = (dir) => join(dir, "merged-sweep.json");
 
@@ -88,12 +91,10 @@ function listedPrs(map, since, withOpen) {
 
 async function main(argv) {
   const flag = (name) => (argv.includes(name) ? argv[argv.indexOf(name) + 1] : undefined);
-  const job = flag("--job");
-  if (argv.includes("--handoff") || argv.includes("--from") || (argv.includes("--job") && (!job || job.startsWith("--")))) {
-    console.error("usage: merged-sweep.mjs [--since <ISO time>] [--job <job file>]");
+  if (["--handoff", "--from", "--job"].some((name) => argv.includes(name))) {
+    console.error("usage: merged-sweep.mjs [--since <ISO time>]");
     return 2;
   }
-  if (job && !existsSync(job)) throw new Error(`the job file ${job} does not exist`);
   const resolved = resolveMap(process.cwd());
   if (!resolved) throw new Error(`no project map covers ${process.cwd()}; run /tedy:setup`);
   const { map } = resolved;
@@ -108,9 +109,8 @@ async function main(argv) {
   const ids = [...new Set(prs.flatMap((pr) => linkedIds(pr.body)))];
   console.log(`since ${since}: ${prs.filter((pr) => pr.mergedAt).length} merged and ${prs.filter((pr) => !pr.mergedAt).length} newly opened PR(s), ${ids.length} linked work package(s)`);
   let updates = [];
-  let client = null;
   if (ids.length) {
-    client = loadConfig();
+    const client = loadConfig();
     const meId = (await client.request("/api/v3/users/me")).id;
     const repos = mapRepos(map).map((repo) => ({ ...repo, integration: repo.branches[0] }));
     const gathered = [];
@@ -128,9 +128,8 @@ async function main(argv) {
     for (const skip of picked.skipped) console.log(`skip #${skip.id}: ${skip.why}`);
   }
   if (updates.length) {
-    const title = `Status from PRs: ${updates.length} work package(s)`;
-    const path = card(map, "publish", { title, job: job && resolve(job), records: updates.map((update) => `op:${client.host}:wp:${update.id}`).join(","), preview: "run", body: cardBlocks(updates, job && resolve(job)) });
-    console.log(`card: ${path}`);
+    const path = writeBatch(map, updates);
+    console.log(`batch: ${path}\n${itemCommand(["publish-batch.mjs", path, "--summary"])}`);
   }
   if (skipped.length) console.log(`mark kept at ${since}: ${skipped.length} repo(s) could not be listed`);
   else writeSince(map.name, startedAt);

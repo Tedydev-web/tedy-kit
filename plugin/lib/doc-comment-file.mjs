@@ -5,12 +5,12 @@ import { lintChatComment } from "./draft-lint.mjs";
 import { logPostedText } from "./edit-log.mjs";
 import { docKey, findQuoteRange, insertAnchored, readDocument, recheckDocTarget, session } from "./gdoc-comments.mjs";
 import { chatLanguage, fill, labels } from "./labels.mjs";
-import { slugOf, stamp } from "./job-files.mjs";
+import { slugOf, stamp } from "./pending.mjs";
 import { fetchTab, quoteCount } from "./prd-section.mjs";
 import { resolveMap } from "./project-map.mjs";
 import { approvalLines, renderDocComment } from "./publish-approval-render.mjs";
-import { splitJob, withRecords } from "./record-lock.mjs";
-import { describePin, pinnedSince, pinnedSources, pinSourcesOf, recordPins, sayNotices } from "./source-pins.mjs";
+import { withRecords } from "./record-lock.mjs";
+import { describePin, pinnedSources, pinSourcesOf, recordPins, sayNotices } from "./source-pins.mjs";
 
 const GROUPS = ["A", "B"];
 
@@ -101,7 +101,7 @@ async function post(itemsFile, flags) {
     for (const line of pinnedSources(itemsFile, "").warnings ?? []) console.log(line);
     return 0;
   }
-  return withRecords([docKey(map.prd.doc)], { job: flags.job, since: pinnedSince(itemsFile) }, async (recorded) => {
+  return withRecords([docKey(map.prd.doc)], async (recorded) => {
     const google = await session({ doc: map.prd.doc }, true);
     const { notices } = await recheckDocTarget(map.prd.doc, itemsFile, `doc-comment-file.mjs ${itemsFile}`, { texts: todo.map((item) => item.comment) });
     const document = await readDocument(google);
@@ -129,8 +129,8 @@ async function post(itemsFile, flags) {
 const flagValue = (args, name) => (args.includes(name) ? args[args.indexOf(name) + 1] : undefined);
 
 async function main(input) {
-  const { job, argv: [itemsFile, ...rest] } = splitJob(input);
-  if (itemsFile === "post") return post(rest[0]?.startsWith("--") ? undefined : rest[0], { html: flagValue(rest, "--html"), doc: flagValue(rest, "--doc"), apply: rest.includes("--apply"), job });
+  const [itemsFile, ...rest] = input;
+  if (itemsFile === "post") return post(rest[0]?.startsWith("--") ? undefined : rest[0], { html: flagValue(rest, "--html"), doc: flagValue(rest, "--doc"), apply: rest.includes("--apply") });
   if (!itemsFile || itemsFile.startsWith("-")) {
     console.error('usage: doc-comment-file.mjs <items.json>   items.json = { "title": "...", "items": [{ "group": "A|B", "epic": "09", "where": "UC_SW_13 BR1", "quote": "...", "comment": "...", "note": "..." }] }');
     return 2;

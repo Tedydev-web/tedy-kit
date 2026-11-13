@@ -35,7 +35,7 @@ export function logRefusal(layer, reason, fields = {}) {
   logGate({ hook: layer, decision: "refused", ...fields, reason });
 }
 
-export const ALL_GATES_ON = Object.freeze({ noComments: true, draftPrOnly: true, roleGate: true, ghWrites: true, publishQuote: true, pushExempt: Object.freeze([]) });
+export const ALL_GATES_ON = Object.freeze({ noComments: true, draftPrOnly: true, ghWrites: true, publishQuote: true, pushExempt: Object.freeze([]) });
 
 export function gateSwitches() {
   try {

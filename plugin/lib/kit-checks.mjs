@@ -146,12 +146,8 @@ export function kitSourceFiles(repo) {
 
 const PER_TURN_EVENTS = ["UserPromptSubmit", "UserPromptExpansion", "InstructionsLoaded", "SubagentStart"];
 
-const ASK_CARDS = 'node "${CLAUDE_PLUGIN_ROOT}/scripts/session-hooks.mjs" ask-cards';
-
-const onlyAskCards = (event, groups) => event === "UserPromptSubmit" && groups?.length === 1 && groups[0].hooks?.length === 1 && groups[0].hooks[0].type === "command" && groups[0].hooks[0].command === ASK_CARDS;
-
-export function hookEventErrors(events, registered = {}) {
-  return events.filter((event) => PER_TURN_EVENTS.includes(event) && !onlyAskCards(event, registered[event])).map((event) => `hooks.json registers ${event}, whose output enters the context on every prompt or every subagent spawn`);
+export function hookEventErrors(events) {
+  return events.filter((event) => PER_TURN_EVENTS.includes(event)).map((event) => `hooks.json registers ${event}, whose output enters the context on every prompt or every subagent spawn`);
 }
 
 export const kitHooks = (repo) => JSON.parse(readFileSync(join(repo, "plugin/hooks/hooks.json"), "utf8")).hooks ?? {};

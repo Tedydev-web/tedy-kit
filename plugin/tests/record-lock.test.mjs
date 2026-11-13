@@ -2,9 +2,9 @@ import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, readlinkSync, rmSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readlinkSync, rmSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { jobFlag, ledgerConflicts, ledgerPath, lockPath, splitJob, withLockSync, withRecords } from "../lib/record-lock.mjs";
+import { ledgerPath, lockPath, withRecords } from "../lib/record-lock.mjs";
 import { world } from "./fake-services-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
@@ -34,7 +34,7 @@ const deadPid = () => spawnSync(process.execPath, ["-e", ""]).pid;
 
 test("a write takes its locks, appends one ledger line per key once, and releases the locks", async () => {
   let inside;
-  const result = await withRecords(["t1:b", "t1:a", "t1:a"], {}, async (recorded) => {
+  const result = await withRecords(["t1:b", "t1:a", "t1:a"], async (recorded) => {
     inside = [existsSync(lockPath("t1:a")), existsSync(lockPath("t1:b"))];
     recorded();
     recorded();
@@ -48,7 +48,7 @@ test("a write takes its locks, appends one ledger line per key once, and release
     const lines = ledger(key);
     assert.equal(lines.length, 1, key);
     assert.equal(lines[0].key, key);
-    assert.equal(lines[0].job, null);
+    assert.equal("job" in lines[0], false);
     assert.equal(lines[0].pid, process.pid);
     assert.equal(typeof lines[0].command, "string");
     assert.ok(!Number.isNaN(Date.parse(lines[0].at)));
@@ -59,7 +59,7 @@ test("a held lock refuses at once with its holder, runs nothing and appends noth
   const path = hold("t2:a");
   let ran = false;
   await assert.rejects(
-    withRecords(["t2:a"], {}, async () => {
+    withRecords(["t2:a"], async () => {
       ran = true;
     }),
     { message: `refused: t2:a is being written by pid ${process.pid} (github-write.mjs post) since 2026-11-05T01:00:00.000Z; nothing was written. Run this command again when it finishes.` },
@@ -70,7 +70,7 @@ test("a held lock refuses at once with its holder, runs nothing and appends noth
 });
 
 test("a dead holder, a reused pid and an unreadable old lock are broken; a live holder is never broken by age; another namespace's lock is broken only after 30 minutes", async () => {
-  const write = async (key) => withRecords([key], {}, async (recorded) => recorded());
+  const write = async (key) => withRecords([key], async (recorded) => recorded());
   hold("t3:dead", { pid: deadPid() });
   await write("t3:dead");
   hold("t3:reused", { start: "1" });
@@ -98,7 +98,7 @@ test("a dead holder, a reused pid and an unreadable old lock are broken; a live 
 
 test("a write that fails releases its locks, and keeps its ledger line only when it wrote", async () => {
   await assert.rejects(
-    withRecords(["t4:before"], {}, async () => {
+    withRecords(["t4:before"], async () => {
       throw new Error("boom before");
     }),
     /boom before/,
@@ -106,7 +106,7 @@ test("a write that fails releases its locks, and keeps its ledger line only when
   assert.equal(existsSync(lockPath("t4:before")), false);
   assert.deepEqual(ledger("t4:before"), []);
   await assert.rejects(
-    withRecords(["t4:after"], {}, async (recorded) => {
+    withRecords(["t4:after"], async (recorded) => {
       recorded();
       throw new Error("boom after");
     }),
@@ -114,59 +114,6 @@ test("a write that fails releases its locks, and keeps its ledger line only when
   );
   assert.equal(existsSync(lockPath("t4:after")), false);
   assert.equal(ledger("t4:after").length, 1);
-});
-
-test("--job is read as --job <file> or --job=<file> in any position, and a --job with no file refuses", () => {
-  assert.equal(jobFlag(["post", "d.md"]), undefined);
-  assert.equal(jobFlag(["post", undefined]), undefined);
-  assert.equal(jobFlag(["post", "--job", "plans/jobs/a.md", "d.md"]), "plans/jobs/a.md");
-  assert.equal(jobFlag(["post", "d.md", "--job=plans/jobs/a.md"]), "plans/jobs/a.md");
-  for (const args of [["post", "d.md", "--job"], ["post", "--job", "--doc", "D"], ["post", "--job="], ["post", "--job", " "]]) {
-    assert.throws(() => jobFlag(args), { message: "--job needs a job file path; nothing was written" }, args.join(" "));
-  }
-});
-
-test("splitJob takes --job and its file out of the arguments, so a --job before the positionals is not read as one", () => {
-  assert.deepEqual(splitJob(["post", "--job", "plans/jobs/a.md", "1:2", "--file", "F"]), { job: "plans/jobs/a.md", argv: ["post", "1:2", "--file", "F"] });
-  assert.deepEqual(splitJob(["set", "--job=plans/jobs/a.md", "21", "--apply"]), { job: "plans/jobs/a.md", argv: ["set", "21", "--apply"] });
-  assert.deepEqual(splitJob(["post", "d.md"]), { job: undefined, argv: ["post", "d.md"] });
-  assert.throws(() => splitJob(["post", "--job", "--doc", "D"]), { message: "--job needs a job file path; nothing was written" });
-  assert.deepEqual(splitJob(["--job", "plans/jobs/a.md", "post", "1:2"]), { job: undefined, argv: ["--job", "plans/jobs/a.md", "post", "1:2"] });
-});
-
-test("a --job before the verb is not a write, since the publish gates read the verb right after the script", async () => {
-  const w = world({ web: { figma: [] } });
-  w.file("f.md", "@lam Màn này thiếu trạng thái rỗng.\n");
-  const posted = await w.run("figma-comments", ["--job", "plans/jobs/one.md", "post", "1:2", "--body-file", "f.md", "--file", "F"]);
-  assert.equal(posted.code, 2, posted.out);
-  assert.deepEqual(w.writes(), []);
-  for (const [script, args, options] of [
-    ["gdoc-comments", ["reply", "c1", "--body-file", "f.md", "--doc", "D"]],
-    ["openproject", ["comment", "21298", "--body-file", "f.md"], { opUrl: "http://op.test" }],
-    ["github-write", ["post", "f.md", "--repo", "o/r"]],
-    ["doc-comment-file", ["post", "items.json", "--html", "c.html", "--apply", "--doc", "D"]],
-  ]) {
-    const other = world(options);
-    other.file("f.md", "@lam Màn này thiếu trạng thái rỗng.\n");
-    const result = await other.run(script, ["--job", "plans/jobs/one.md", ...args]);
-    assert.equal(result.code, 2, `${script}: ${result.out}`);
-    assert.match(result.out, /usage:/, script);
-    assert.deepEqual(other.writes(), [], script);
-  }
-});
-
-test("a Figma post with --job before its node id posts to that node and records the job", async () => {
-  const w = world({ web: { figma: [] } });
-  const body = "@lam Màn này thiếu trạng thái rỗng.\n";
-  w.file("f.md", body);
-  const lint = await w.run("draft-lint", ["figma-comment", "f.md", "--file", "F"]);
-  assert.equal(lint.code, 0, lint.out);
-  const warnings = lint.out.split("\n").filter((text) => text.startsWith("warning: ")).map((text) => `${text}\n`).join("");
-  const args = ["post", "--job", "plans/jobs/one.md", "1:2", "--body-file", "f.md", "--file", "F"];
-  const posted = await w.run("figma-comments", args);
-  assert.equal(posted.code, 0, posted.out);
-  assert.equal(w.writes().length, 1);
-  assert.deepEqual(ledger("figma:F", join(w.dir, "state")).map((entry) => entry.job), ["one.md"]);
 });
 
 async function captured(fn) {
@@ -190,7 +137,7 @@ test("a lock that cannot be released still lets the other locks go, keeps the wr
     mkdirSync(lockPath(key));
   };
   const failed = await captured(() =>
-    withRecords(["t11:a", "t11:b"], {}, async () => {
+    withRecords(["t11:a", "t11:b"], async () => {
       breakLock("t11:a");
       throw new Error("the write failed");
     }),
@@ -199,7 +146,7 @@ test("a lock that cannot be released still lets the other locks go, keeps the wr
   assert.equal(existsSync(lockPath("t11:b")), false);
   assert.match(failed.stderr, /^warning: the lock for t11:a could not be released \(EISDIR[^\n]*\); remove [^\n]+\.lock if the next write on t11:a refuses$/m);
   const passed = await captured(() =>
-    withRecords(["t12:a", "t12:b"], {}, async () => {
+    withRecords(["t12:a", "t12:b"], async () => {
       breakLock("t12:a");
       return 5;
     }),
@@ -216,7 +163,7 @@ test("a lock that cannot be released still lets the other locks go, keeps the wr
 test("a ledger line that cannot be appended after the write warns on stderr and in the gate log, and the write still succeeds", async () => {
   mkdirSync(ledgerPath("t10:a"), { recursive: true });
   const { value, error, stderr } = await captured(() =>
-    withRecords(["t10:a", "t10:b"], {}, async (recorded) => {
+    withRecords(["t10:a", "t10:b"], async (recorded) => {
       recorded();
       recorded();
       return 3;
@@ -228,7 +175,7 @@ test("a ledger line that cannot be appended after the write warns on stderr and 
   assert.equal(existsSync(lockPath("t10:b")), false);
   assert.equal(ledger("t10:b").length, 1);
   assert.equal(stderr.split("\n").filter((line) => line.includes("t10:a")).length, 1, stderr);
-  assert.match(stderr, /^warning: written, but the ledger line for t10:a could not be appended \(EISDIR[^\n]*\); a later job's conflict check will not see this write$/m);
+  assert.match(stderr, /^warning: written, but the ledger line for t10:a could not be appended \(EISDIR[^\n]*\)$/m);
   assert.ok(gateLog().some((entry) => entry.hook === "record-lock" && entry.decision === "ledger-append-failed" && entry.key === "t10:a"));
 });
 
@@ -238,7 +185,7 @@ test("two processes racing on one record: one writes, the other refuses with the
   const script = `import { existsSync } from "node:fs";
 import { withRecords } from ${JSON.stringify(MODULE)};
 try {
-  await withRecords(["t5:k"], {}, async (recorded) => {
+  await withRecords(["t5:k"], async (recorded) => {
     recorded();
     while (!existsSync(process.env.BARRIER)) await new Promise((done) => setTimeout(done, 20));
   });
@@ -265,78 +212,29 @@ try {
   assert.equal(ledger("t5:k", state).length, 1);
 });
 
-test("the ledger refuses only another job's write after the draft's sources were pinned", async () => {
-  const since = "2026-11-05T02:00:00.000Z";
-  const line = (key, job, at) => {
-    mkdirSync(dirname(ledgerPath(key)), { recursive: true });
-    appendFileSync(ledgerPath(key), `${JSON.stringify({ at, key, job, command: "figma-comments.mjs post", pid: 1 })}\n`);
-  };
-  line("t6:other", "b.md", "2026-11-05T03:00:00.000Z");
-  assert.deepEqual(ledgerConflicts(["t6:other"], { job: "/home/x/plans/jobs/a.md", since }), [{ key: "t6:other", job: "b.md", at: "2026-11-05T03:00:00.000Z" }]);
-  let ran = false;
-  await assert.rejects(
-    withRecords(["t6:other"], { job: "plans/jobs/a.md", since }, async () => {
-      ran = true;
-    }),
-    { message: "refused: t6:other got a kit write from job b.md at 2026-11-05T03:00:00.000Z, after this draft's sources were pinned at 2026-11-05T02:00:00.000Z; read the record again, update the draft, lint it and ask the user again." },
-  );
-  assert.equal(ran, false);
-  assert.equal(existsSync(lockPath("t6:other")), false);
-  assert.equal(ledger("t6:other").length, 1);
-  line("t6:same", "plans/jobs/a.md", "2026-11-05T03:00:00.000Z");
-  assert.deepEqual(ledgerConflicts(["t6:same"], { job: "/home/x/plans/jobs/a.md", since }), []);
-  assert.deepEqual(ledgerConflicts(["t6:same"], { job: "./plans/jobs/a.md", since }), []);
-  line("t6:nojob", null, "2026-11-05T03:00:00.000Z");
-  assert.deepEqual(ledgerConflicts(["t6:nojob"], { job: "a.md", since }), []);
-  assert.deepEqual(ledgerConflicts(["t6:other"], { since }), []);
-  assert.deepEqual(ledgerConflicts(["t6:other"], { job: "a.md", since: null }), []);
-  line("t6:before", "b.md", "2026-11-05T01:00:00.000Z");
-  assert.deepEqual(ledgerConflicts(["t6:before"], { job: "a.md", since }), []);
-  assert.deepEqual(ledgerConflicts(["t6:missing"], { job: "a.md", since }), []);
-  await withRecords(["t6:same"], { job: "/abs/plans/jobs/a.md", since }, async (recorded) => recorded());
-  assert.equal(ledger("t6:same").at(-1).job, "a.md");
-  await assert.rejects(withRecords(["t6:x"], { job: true }, async () => {}), /--job needs a job file/);
-});
-
 test("several keys are taken in sorted order, and a refusal on a later key releases the earlier ones", async () => {
   hold("t7:a", { pid: process.pid, command: "first" });
   hold("t7:b", { pid: process.pid, command: "second" });
-  await assert.rejects(withRecords(["t7:b", "t7:a"], {}, async () => {}), /refused: t7:a is being written by pid \d+ \(first\)/);
+  await assert.rejects(withRecords(["t7:b", "t7:a"], async () => {}), /refused: t7:a is being written by pid \d+ \(first\)/);
   hold("t7:c");
-  await assert.rejects(withRecords(["t7:c", "t7:0"], {}, async () => {}), /refused: t7:c /);
+  await assert.rejects(withRecords(["t7:c", "t7:0"], async () => {}), /refused: t7:c /);
   assert.equal(existsSync(lockPath("t7:0")), false);
-  await withRecords(["t7:0"], {}, async (recorded) => recorded());
+  await withRecords(["t7:0"], async (recorded) => recorded());
   assert.equal(ledger("t7:0").length, 1);
 });
 
-test("two drafts on one Figma file post one after the other, with no job and with one job for both", async () => {
-  for (const job of [[], ["--job", "plans/jobs/one.md"]]) {
-    const w = world({ web: { figma: [] } });
-    const bodies = ["@lam Màn này thiếu trạng thái rỗng.\n", "@lam Màn này thiếu trạng thái lỗi.\n"];
-    const warnings = [];
-    for (const [index, body] of bodies.entries()) {
-      w.file(`f${index}.md`, body);
-      const lint = await w.run("draft-lint", ["figma-comment", `f${index}.md`, "--file", "F"]);
-      assert.equal(lint.code, 0, lint.out);
-      warnings.push(lint.out.split("\n").filter((text) => text.startsWith("warning: ")).map((text) => `${text}\n`).join(""));
-    }
-    for (const [index, body] of bodies.entries()) {
-      const args = ["post", "1:2", "--body-file", `f${index}.md`, "--file", "F", ...job];
-      const posted = await w.run("figma-comments", args);
-      assert.equal(posted.code, 0, posted.out);
-    }
-    assert.equal(w.writes().length, 2);
-    const lines = ledger("figma:F", join(w.dir, "state"));
-    assert.equal(lines.length, 2, JSON.stringify(lines));
-    assert.deepEqual(lines.map((entry) => entry.job), job.length ? ["one.md", "one.md"] : [null, null]);
+test("two drafts on one Figma file post one after the other, and each appends its ledger line", async () => {
+  const w = world({ web: { figma: [] } });
+  const bodies = ["@lam Màn này thiếu trạng thái rỗng.\n", "@lam Màn này thiếu trạng thái lỗi.\n"];
+  for (const [index, body] of bodies.entries()) {
+    w.file(`f${index}.md`, body);
+    const lint = await w.run("draft-lint", ["figma-comment", `f${index}.md`, "--file", "F"]);
+    assert.equal(lint.code, 0, lint.out);
   }
-});
-
-test("withLockSync waits for a held lock, refuses after its wait with the holder named, and releases the lock when its function returns or throws", () => {
-  const state = tempDir("tedy-sync-lock-");
-  const inner = withLockSync("launch-record:x", () => assert.throws(() => withLockSync("launch-record:x", () => "never", { state, waitMs: 60 }), new RegExp(`^Error: launch-record:x is locked by pid ${process.pid} \\(.*\\) for more than 60 ms; nothing was written$`)), { state });
-  assert.equal(inner, undefined);
-  assert.equal(existsSync(lockPath("launch-record:x", state)), false);
-  assert.throws(() => withLockSync("launch-record:x", () => { throw new Error("boom"); }, { state }), /boom/);
-  assert.equal(withLockSync("launch-record:x", () => "ran", { state }), "ran");
+  for (const index of bodies.keys()) {
+    const posted = await w.run("figma-comments", ["post", "1:2", "--body-file", `f${index}.md`, "--file", "F"]);
+    assert.equal(posted.code, 0, posted.out);
+  }
+  assert.equal(w.writes().length, 2);
+  assert.equal(ledger("figma:F", join(w.dir, "state")).length, 2);
 });

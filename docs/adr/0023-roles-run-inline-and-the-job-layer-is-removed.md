@@ -41,7 +41,7 @@ position: role-coordination deviates: the page ranks one short-lived agent per j
 ## Consequences
 - The user answers each question where the role runs, and a publish is shown and approved in the same session; nothing waits on a card.
 - Two roles no longer run in parallel. A second request waits for the first, or runs in another session the user opens.
-- A dev task no longer gets its own worktree from the kit; `/tedy:dev` branches in the repository as its skill says.
+- A dev task's worktree comes from `/tedy:dev` step 3, as on every inline run; the job's core worktree and its prune are gone.
 - Without the role gate, nothing asks before a session writes for another role; the skills' "name it and ask" line and the publish gates are the guard.
 - Without the write ledger's job check, two sessions commenting on one Doc or PR are not stopped by it; the record lock still stops two writes to one record at the same time.
 - Removed files in the archive tag are not maintained; restoring one needs the modules it imported.

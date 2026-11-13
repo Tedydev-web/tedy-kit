@@ -8,12 +8,6 @@
         ]
       },
       {
-        "matcher": "^(Edit|Write|MultiEdit|NotebookEdit|Bash|Monitor|Agent)$|^mcp__.*__ctx_(execute|execute_file|batch_execute)$",
-        "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/role-gate.mjs\"", "timeout": 20, "onFailure": "block" }
-        ]
-      },
-      {
         "matcher": "^(Bash|Monitor)$|^mcp__.*__ctx_(execute|execute_file|batch_execute)$",
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/git-gate.mjs\"", "timeout": 60, "onFailure": "block" }
@@ -56,19 +50,6 @@
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/review-run-approval.mjs\"", "timeout": 15 }
         ]
-      },
-      {
-        "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/job-session-hooks.mjs\"", "timeout": 10 }
-        ]
-      }
-    ],
-    "Notification": [
-      {
-        "matcher": "permission_prompt",
-        "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/job-session-hooks.mjs\"", "timeout": 10 }
-        ]
       }
     ],
     "SessionStart": [
@@ -85,25 +66,10 @@
         ]
       }
     ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-hooks.mjs\" ask-cards", "timeout": 10 }
-        ]
-      }
-    ],
     "Stop": [
       {
         "hooks": [
           { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/session-hooks.mjs\" decision-nudge", "timeout": 15 }
-        ]
-      }
-    ],
-    "SubagentStop": [
-      {
-        "matcher": "^tedy:(pm|dev|review|devops)$",
-        "hooks": [
-          { "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/job-session-hooks.mjs\"", "timeout": 10 }
         ]
       }
     ]

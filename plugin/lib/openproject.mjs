@@ -11,8 +11,8 @@ import { approvalLines, renderRollbackItem, renderWorkPackageDraft } from "./pub
 import { snapshotOnce, snapshotPath } from "./draft-lint.mjs";
 import { appendEditLog, frozenOriginal, labelText } from "./edit-log.mjs";
 import { chatLanguage } from "./labels.mjs";
-import { splitJob, withRecords } from "./record-lock.mjs";
-import { describePin, pinnedSince, pinSourcesOf, recheckPinned, recordPins, sayNotices } from "./source-pins.mjs";
+import { withRecords } from "./record-lock.mjs";
+import { describePin, pinSourcesOf, recheckPinned, recordPins, sayNotices } from "./source-pins.mjs";
 import { countWords, lintDrafts, lintWorkPackage, readiness, readinessLine } from "./task-lint.mjs";
 import { bareWorkPackageRefs, foreignRefsAdvice, foreignWorkPackageRefs } from "./work-package-refs.mjs";
 
@@ -387,9 +387,9 @@ async function rollback(client, project, flags, recorded) {
 }
 
 async function main(input) {
-  const { job, argv: [command, target, ...rest] } = splitJob(input);
+  const [command, target, ...rest] = input;
   const args = command === "rollback" || command === "list" ? [target, ...rest].filter((arg) => arg !== undefined) : rest;
-  const flags = { ...Object.fromEntries(args.flatMap((arg, index) => (arg.startsWith("--") ? [[arg.slice(2), args[index + 1] === undefined || args[index + 1].startsWith("--") ? true : args[index + 1]]] : []))), job };
+  const flags = { ...Object.fromEntries(args.flatMap((arg, index) => (arg.startsWith("--") ? [[arg.slice(2), args[index + 1] === undefined || args[index + 1].startsWith("--") ? true : args[index + 1]]] : []))) };
   const client = loadConfig();
   if (command === "get" && target) {
     for (const path of getPaths(target, flags)) console.log(JSON.stringify(await client.request(path), null, 1));
@@ -397,12 +397,12 @@ async function main(input) {
   }
   if (command === "list") return list(client, flags);
   const record = (kind, id) => `op:${client.host}:${kind}:${id}`;
-  const writing = (keys, since, write) => withRecords(flags.apply === undefined ? [] : keys, { job: flags.job, since }, write);
-  if (command === "set" && /^\d+$/.test(target ?? "")) return writing([record("wp", target)], null, (recorded) => quickSet(client, Number(target), flags, recorded));
-  if (command === "comment" && /^\d+$/.test(target ?? "")) return writing([record("wp", target)], pinnedSince(flags["body-file"]), (recorded) => comment(client, Number(target), flags, recorded));
-  if (command === "comment-edit" && /^\d+$/.test(target ?? "")) return writing([record("activity", target)], pinnedSince(flags["body-file"]), (recorded) => commentEdit(client, Number(target), flags, recorded));
-  if (command === "relation" && /^\d+$/.test(target ?? "") && /^\d+$/.test(rest[0] ?? "")) return writing([record("wp", target), record("wp", rest[0])], null, (recorded) => setRelation(client, Number(target), Number(rest[0]), flags, recorded));
-  if (command === "relation-delete" && /^\d+$/.test(target ?? "")) return writing([record("relation", target)], null, (recorded) => deleteRelation(client, Number(target), flags, recorded));
+  const writing = (keys, write) => withRecords(flags.apply === undefined ? [] : keys, write);
+  if (command === "set" && /^\d+$/.test(target ?? "")) return writing([record("wp", target)], (recorded) => quickSet(client, Number(target), flags, recorded));
+  if (command === "comment" && /^\d+$/.test(target ?? "")) return writing([record("wp", target)], (recorded) => comment(client, Number(target), flags, recorded));
+  if (command === "comment-edit" && /^\d+$/.test(target ?? "")) return writing([record("activity", target)], (recorded) => commentEdit(client, Number(target), flags, recorded));
+  if (command === "relation" && /^\d+$/.test(target ?? "") && /^\d+$/.test(rest[0] ?? "")) return writing([record("wp", target), record("wp", rest[0])], (recorded) => setRelation(client, Number(target), Number(rest[0]), flags, recorded));
+  if (command === "relation-delete" && /^\d+$/.test(target ?? "")) return writing([record("relation", target)], (recorded) => deleteRelation(client, Number(target), flags, recorded));
   if (command === "pr-body" && /^\d+$/.test(target ?? "")) {
     const body = prBodyFrom(await client.request(`/api/v3/work_packages/${target}`));
     recordPrBody(body);
@@ -412,7 +412,7 @@ async function main(input) {
   if (command === "rollback") {
     const project = projectOf(flags);
     const created = JSON.parse(readSidecar(sidecarPath(client.host, project)))._last_apply?.created ?? [];
-    return writing([record("project", project), ...created.map((id) => record("wp", id))], null, (recorded) => rollback(client, project, flags, recorded));
+    return writing([record("project", project), ...created.map((id) => record("wp", id))], (recorded) => rollback(client, project, flags, recorded));
   }
   if ((command === "preview" || command === "apply") && target) {
     const drafts = JSON.parse(readFileSync(target, "utf8"));
@@ -432,7 +432,7 @@ async function main(input) {
     const original = frozenOriginal(target);
     const originals = original ? Object.fromEntries(JSON.parse(original).map((draft) => [draft.slug, draft])) : {};
     const updated = planWrites(drafts, JSON.parse(readSidecar(sidecarPath(client.host, project)))).flatMap((step) => (step.id ? [record("wp", step.id)] : []));
-    const code = await withRecords([record("project", project), ...updated], { job: flags.job, since: pinnedSince(target) }, (recorded) => apply(client, project, drafts, target, recorded));
+    const code = await withRecords([record("project", project), ...updated], (recorded) => apply(client, project, drafts, target, recorded));
     if (code !== 0) return code;
     const text = (item) => `${item.subject}\n${item.description}`;
     const kept = new Set(drafts.map((draft) => draft.slug));

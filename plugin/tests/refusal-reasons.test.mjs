@@ -1,9 +1,8 @@
 import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { card, cardCheck, cardStart } from "../lib/pending.mjs";
 import { runWithFakeGh } from "./fake-gh-for-tests.mjs";
 import { world } from "./fake-services-for-tests.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
@@ -52,17 +51,3 @@ test("a lock refusal is logged under the lock layer, for every writer that takes
   assert.match(entry.reason, /github:o\/r#701 is being written by pid/);
 });
 
-test("card-check and card-start refusals name their layer and are logged", () => {
-  const root = tempDir("tedy-refusal-cards-");
-  mkdirSync(join(root, "plans", "drafts"), { recursive: true });
-  const draft = join(root, "plans", "drafts", "reply.md");
-  writeFileSync(draft, "Fixed it.\n");
-  const map = { name: "shop", paths: [root], repos: [] };
-  const file = card(map, "publish", { title: "Reply", draft, preview: "ready", body: `### 1\nnode ${SCRIPTS}/github-write.mjs reply 1 2 --body-file ${draft} --repo o/r\n` });
-  writeFileSync(draft, "Fixed it, edited.\n");
-  assert.throws(() => cardCheck(file, map), /^Error: card refused by card-check: the draft changed since the card was written/);
-  assert.throws(() => cardStart(file, map), /^Error: card refused by card-start: the draft changed since the card was written/);
-  assert.throws(() => card(map, "publish", { title: "Bad", preview: "ready", body: "### 1\ncurl x\n" }), /^Error: card refused by card: block 1 does not start with node/);
-  const hooks = logged(process.env.TEDY_STATE_DIR).filter((line) => line.decision === "refused").map((line) => line.hook);
-  for (const layer of ["card-check", "card-start", "card"]) assert.ok(hooks.includes(layer), layer);
-});

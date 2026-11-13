@@ -480,7 +480,7 @@ test("pr-reply lints the body like a review comment and writes no pin when it fa
   assert.match(p.write(["reply", "701", "123", "--repo", "o/r", "--body-file", p.at("r.txt")]).out, /^refused: .*r\.txt has no pinned sources/m);
 });
 
-test("a Doc reply naming a job refuses when another job wrote the Doc after the draft's read pins, and one naming no job still posts", async () => {
+test("a Doc reply posts when another write landed in the Doc's ledger after the draft's read pins", async () => {
   const document = { tabs: [{ tabProperties: { tabId: "t.1" }, documentTab: { body: { content: [{ paragraph: { elements: [{ startIndex: 1, textRun: { content: "Crypto takes the price in USDT\n" } }] } }] } } }] };
   const thread = { id: "c1", content: "Which wallet?", resolved: false, author: { me: false, displayName: "PM" }, replies: [], createdTime: "2026-10-01T00:00:00Z" };
   const w = world({ web: { drive: [thread], document } });
@@ -495,19 +495,8 @@ test("a Doc reply naming a job refuses when another job wrote the Doc after the 
   const lint = await w.run("draft-lint", ["doc-comment", "g.md", "--doc", "D"]);
   assert.equal(lint.code, 0, lint.out);
   assert.ok(Date.parse(JSON.parse(readFileSync(`${drafts}.sources.json`, "utf8")).at) > Date.parse(otherAt));
-  const warnings = lint.out.split("\n").filter((line) => line.startsWith("warning: ")).map((line) => `${line}\n`).join("");
-  const withJob = ["reply", "c1", "--body-file", "g.md", "--doc", "D", "--job", "plans/jobs/a.md"];
-  const refused = await w.run("gdoc-comments", withJob);
-  assert.equal(refused.code, 1, refused.out);
-  assert.ok(refused.out.includes(`refused: gdoc:D got a kit write from job b.md at ${otherAt}, after this draft's sources were pinned at ${readAt}; read the record again, update the draft, lint it and ask the user again.`), refused.out);
-  assert.deepEqual(w.writes(), []);
-  const joined = ["reply", "c1", "--body-file", "g.md", "--doc", "D", "--job=plans/jobs/a.md"];
-  const refusedJoined = await w.run("gdoc-comments", joined);
-  assert.equal(refusedJoined.code, 1, refusedJoined.out);
-  assert.ok(refusedJoined.out.includes(`refused: gdoc:D got a kit write from job b.md at ${otherAt}`), refusedJoined.out);
-  assert.deepEqual(w.writes(), []);
   const plain = ["reply", "c1", "--body-file", "g.md", "--doc", "D"];
   const posted = await w.run("gdoc-comments", plain);
   assert.equal(posted.code, 0, posted.out);
-  assert.deepEqual(w.ledger("gdoc:D").map((entry) => entry.job), ["b.md", null]);
+  assert.deepEqual(w.ledger("gdoc:D").map((entry) => entry.command), ["gdoc-comments.mjs reply", "gdoc-comments.mjs reply"]);
 });

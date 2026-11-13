@@ -9,8 +9,8 @@ import { fetchTab, indexTab, quoteInText, UC_ID } from "./prd-section.mjs";
 import { logGate, logRefusal, refusedLine } from "./hook-io.mjs";
 import { generatedPrBodyOp } from "./openproject.mjs";
 import { resolveMap } from "./project-map.mjs";
-import { splitJob, withRecords } from "./record-lock.mjs";
-import { pinnedSince, pinnedSources, recheckPinned } from "./source-pins.mjs";
+import { withRecords } from "./record-lock.mjs";
+import { pinnedSources, recheckPinned } from "./source-pins.mjs";
 
 const normalise = (text) => text.replace(/\s+/g, " ").trim();
 
@@ -171,11 +171,11 @@ const prKey = (repo, pr) => `github:${repo.toLowerCase()}#${pr}`;
 
 const nodeKey = (id) => `github:node:${id}`;
 
-const writing = (flags, keys, file, write) => withRecords(flags["dry-run"] ? [] : keys, { job: flags.job, since: pinnedSince(file) }, write);
+const writing = (flags, keys, write) => withRecords(flags["dry-run"] ? [] : keys, write);
 
 async function post(file, flags) {
   const repo = currentRepo(flags, "post");
-  return writing(flags, [prKey(repo, parseDraft(readFileSync(file, "utf8")).pr)], file, (recorded) => postDraft(file, flags, repo, recorded));
+  return writing(flags, [prKey(repo, parseDraft(readFileSync(file, "utf8")).pr)], (recorded) => postDraft(file, flags, repo, recorded));
 }
 
 async function postDraft(file, flags, repo, recorded) {
@@ -236,7 +236,7 @@ async function edit(id, flags) {
   const body = readBody(flags);
   const pr = JSON.parse(gh(["api", `repos/${repo}/pulls/comments/${id}`])).pull_request_url?.match(/\/pulls\/(\d+)$/)?.[1];
   if (!pr) return refuse("github-write", [`refused: review comment ${id} in ${repo} names no pull request; nothing edited`]);
-  return writing(flags, [prKey(repo, pr)], flags["body-file"], async (recorded) => {
+  return writing(flags, [prKey(repo, pr)], async (recorded) => {
     const relint = `draft-lint.mjs pr-reply ${flags["body-file"]} --pr ${pr} --repo ${repo}`;
     const fresh = await recheckSources(flags["body-file"], relint, [body]);
     if (!fresh) return 1;
@@ -254,7 +254,7 @@ async function edit(id, flags) {
 }
 
 function minimize(nodeId, flags) {
-  return writing(flags, [nodeKey(nodeId)], undefined, async (recorded) => {
+  return writing(flags, [nodeKey(nodeId)], async (recorded) => {
     console.log(`WRITE → minimize ${nodeId} as OUTDATED`);
     const query = "mutation($id: ID!) { minimizeComment(input: {subjectId: $id, classifier: OUTDATED}) { minimizedComment { isMinimized } } }";
     const result = JSON.parse(send(["api", "graphql", "-f", `query=${query}`, "-f", `id=${nodeId}`]));
@@ -272,7 +272,7 @@ export function threadMutation(resolved) {
 
 function setThreadsResolved(threadIds, resolved, flags) {
   const { name, verb, query } = threadMutation(resolved);
-  return writing(flags, threadIds.map(nodeKey), undefined, async (recorded) => {
+  return writing(flags, threadIds.map(nodeKey), async (recorded) => {
     for (const threadId of threadIds) {
       console.log(`WRITE → ${verb} review thread ${threadId}`);
       const result = JSON.parse(send(["api", "graphql", "-f", `query=${query}`, "-f", `id=${threadId}`]));
@@ -287,7 +287,7 @@ function setThreadsResolved(threadIds, resolved, flags) {
 async function reply(pr, id, flags) {
   const repo = currentRepo(flags, "reply");
   const body = readBody(flags);
-  return writing(flags, [prKey(repo, pr)], flags["body-file"], async (recorded) => {
+  return writing(flags, [prKey(repo, pr)], async (recorded) => {
     const twin = replyExists(prComments(repo, pr), id, body);
     if (twin) return refuse("github-write", [`refused: reply ${twin} under ${id} already says this; nothing posted`]);
     const relint = `draft-lint.mjs pr-reply ${flags["body-file"]} --pr ${pr} --repo ${repo}`;
@@ -323,7 +323,7 @@ function prBody(number, flags) {
   const repo = currentRepo(flags, "pr-body");
   const body = readFileSync(flags["body-file"], "utf8").trim();
   const view = () => JSON.parse(gh(["pr", "view", String(number), "--repo", repo, "--json", "number,isDraft,author,body"]));
-  return writing(flags, [prKey(repo, number)], undefined, async (recorded) => {
+  return writing(flags, [prKey(repo, number)], async (recorded) => {
     const pr = view();
     const refusal = prBodyRefusal(pr, gh(["api", "user", "-q", ".login"]).trim(), body, generatedPrBodyOp(body));
     if (refusal) return refuse("github-write", [`refused: ${refusal}`]);
@@ -351,9 +351,8 @@ const USAGE = `usage:
   github-write.mjs pr-body <pr> --body-file <file> [--repo <owner/repo>] [--dry-run]`;
 
 async function main(input) {
-  const { job, argv: [command, ...args] } = splitJob(input);
+  const [command, ...args] = input;
   const { positional, flags } = parseFlags(args);
-  flags.job = job;
   if ("dry-run" in flags && !githubWriteDryRun(command, flags)) {
     console.error(`github-write: --dry-run is a bare flag of ${GITHUB_WRITE_DRY_RUN_VERBS.join(" and ")} only; nothing written`);
     return 2;

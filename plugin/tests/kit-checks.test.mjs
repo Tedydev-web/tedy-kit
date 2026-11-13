@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { docReferenceErrors, hookEventErrors, kitHookEvents, kitHooks, skillModelErrors, kitDocFiles, kitRetiredNames, kitSkills, kitSourceFiles, kitTagVersions, retiredReferenceErrors, skillDescriptionErrors, skillSectionErrors, sourceCommentErrors, tagVersionErrors } from "../lib/kit-checks.mjs";
+import { docReferenceErrors, hookEventErrors, kitHookEvents, skillModelErrors, kitDocFiles, kitRetiredNames, kitSkills, kitSourceFiles, kitTagVersions, retiredReferenceErrors, skillDescriptionErrors, skillSectionErrors, sourceCommentErrors, tagVersionErrors } from "../lib/kit-checks.mjs";
 
 const REPO = fileURLToPath(new URL("../../", import.meta.url));
 
@@ -112,18 +112,11 @@ test("the kit's tracked JavaScript holds no comment other than a tool directive"
   assert.deepEqual(sourceCommentErrors(source), []);
 });
 
-test("a kit hook on an event that adds text to every prompt or every subagent spawn fails, except the cockpit's one ask-cards prompt hook", () => {
+test("a kit hook on an event that adds text to every prompt or every subagent spawn fails", () => {
   assert.deepEqual(hookEventErrors(["PreToolUse", "SessionStart", "Stop"]), []);
-  const askCards = { type: "command", command: 'node "${CLAUDE_PLUGIN_ROOT}/scripts/session-hooks.mjs" ask-cards', timeout: 10 };
-  const other = { type: "command", command: 'node "${CLAUDE_PLUGIN_ROOT}/scripts/session-hooks.mjs" pending-handoffs', timeout: 10 };
-  assert.deepEqual(hookEventErrors(["UserPromptSubmit"], { UserPromptSubmit: [{ hooks: [askCards] }] }), []);
-  const refused = ["hooks.json registers UserPromptSubmit, whose output enters the context on every prompt or every subagent spawn"];
-  assert.deepEqual(hookEventErrors(["UserPromptSubmit"], { UserPromptSubmit: [{ hooks: [other] }] }), refused);
-  assert.deepEqual(hookEventErrors(["UserPromptSubmit"], { UserPromptSubmit: [{ hooks: [askCards, other] }] }), refused);
-  assert.deepEqual(hookEventErrors(["UserPromptSubmit"], { UserPromptSubmit: [{ hooks: [askCards] }, { hooks: [askCards] }] }), refused);
-  assert.deepEqual(hookEventErrors(["UserPromptExpansion"], { UserPromptExpansion: [{ hooks: [askCards] }] }), ["hooks.json registers UserPromptExpansion, whose output enters the context on every prompt or every subagent spawn"]);
-  assert.deepEqual(hookEventErrors(["UserPromptSubmit", "SubagentStart", "Stop"]), [
+  assert.deepEqual(hookEventErrors(["UserPromptSubmit", "UserPromptExpansion", "SubagentStart", "Stop"]), [
     "hooks.json registers UserPromptSubmit, whose output enters the context on every prompt or every subagent spawn",
+    "hooks.json registers UserPromptExpansion, whose output enters the context on every prompt or every subagent spawn",
     "hooks.json registers SubagentStart, whose output enters the context on every prompt or every subagent spawn",
   ]);
 });
@@ -136,7 +129,7 @@ test("a skill that sets model: in its front matter fails", () => {
 });
 
 test("the kit's hook events and skill models stay within the quota rules", () => {
-  assert.deepEqual(hookEventErrors(kitHookEvents(REPO), kitHooks(REPO)), []);
+  assert.deepEqual(hookEventErrors(kitHookEvents(REPO)), []);
   assert.deepEqual(skillModelErrors(kitSkills(REPO)), []);
 });
 

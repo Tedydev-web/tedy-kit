@@ -37,13 +37,20 @@ test("the profile directory comes from TEDY_PROFILE_DIR, else ~/.config/tedy", (
 test("a missing config gives the defaults, with every personal gate off", () => {
   const config = loadConfig(profileWith({}));
   assert.deepEqual(config, DEFAULT_CONFIG);
-  assert.deepEqual(config.gates, { noComments: false, draftPrOnly: false, roleGate: false, ghWrites: false, publishQuote: false, pushExempt: [] });
+  assert.deepEqual(config.gates, { noComments: false, draftPrOnly: false, ghWrites: false, publishQuote: false, pushExempt: [] });
   assert.equal(config.language.chat, "en");
 });
 
 test("a partial config keeps the defaults it does not set and expands ~ in pushExempt", () => {
   const dir = profileWith({ "config.json": JSON.stringify({ gates: { noComments: true, pushExempt: ["~/work/kit", "/abs/profile"] }, language: { chat: "vi" } }) });
-  assert.deepEqual(loadConfig(dir), { gates: { noComments: true, draftPrOnly: false, roleGate: false, ghWrites: false, publishQuote: false, pushExempt: [join(homedir(), "work/kit"), "/abs/profile"] }, language: { chat: "vi" } });
+  assert.deepEqual(loadConfig(dir), { gates: { noComments: true, draftPrOnly: false, ghWrites: false, publishQuote: false, pushExempt: [join(homedir(), "work/kit"), "/abs/profile"] }, language: { chat: "vi" } });
+});
+
+test("a config that still holds gates.roleGate loads, the key is ignored whatever its value, and init no longer writes it", () => {
+  for (const value of [true, false, "on"]) assert.deepEqual(loadConfig(profileWith({ "config.json": JSON.stringify({ gates: { roleGate: value, ghWrites: true } }) })).gates, { ...DEFAULT_CONFIG.gates, ghWrites: true });
+  const dir = join(tempDir("tedy-profile-no-role-gate-"), "profile");
+  initProfile(dir);
+  assert.equal("roleGate" in JSON.parse(readFileSync(join(dir, "config.json"), "utf8")).gates, false);
 });
 
 test("an invalid config fails loudly, naming the file and the field", () => {
@@ -70,7 +77,7 @@ test("an invalid config fails loudly, naming the file and the field", () => {
 test("a profile file overrides the engine file of the same relative path, and paths cannot leave either root", () => {
   const dir = profileWith({ "style/pr-comment.md": "mine\n" });
   assert.equal(resolveShared("style/pr-comment.md", dir), join(dir, "style/pr-comment.md"));
-  assert.equal(resolveShared("jobs.md", dir), join(SHARED, "jobs.md"));
+  assert.equal(resolveShared("status-flow.md", dir), join(SHARED, "status-flow.md"));
   assert.deepEqual(overrides(dir), ["style/pr-comment.md"]);
   assert.throws(() => resolveShared("../rules/working-style.md", dir), /relative path inside/);
   assert.throws(() => resolveShared("/etc/passwd", dir), /relative path inside/);
@@ -82,7 +89,7 @@ test("init creates the config and rules from the template, and never overwrites 
   assert.deepEqual(initProfile(dir), { created: ["config.json", "rules.md", "projects/"], kept: [] });
   const written = JSON.parse(readFileSync(join(dir, "config.json"), "utf8"));
   assert.equal("publishApproval" in written.gates, false);
-  assert.deepEqual(loadConfig(dir).gates, { ...DEFAULT_CONFIG.gates, roleGate: true, ghWrites: true, publishQuote: true });
+  assert.deepEqual(loadConfig(dir).gates, { ...DEFAULT_CONFIG.gates, ghWrites: true, publishQuote: true });
   assert.equal(readFileSync(join(dir, "rules.md"), "utf8"), readFileSync(join(SHARED, "rules-template.md"), "utf8"));
   writeFileSync(join(dir, "rules.md"), "edited\n");
   assert.deepEqual(initProfile(dir), { created: [], kept: ["config.json", "rules.md", "projects/"] });
@@ -92,7 +99,7 @@ test("init creates the config and rules from the template, and never overwrites 
 test("init turns on the team conventions it is given, and the command refuses any other argument", () => {
   const dir = join(tempDir("tedy-profile-conventions-"), "profile");
   initProfile(dir, ["noComments", "draftPrOnly"]);
-  assert.deepEqual(loadConfig(dir).gates, { ...DEFAULT_CONFIG.gates, noComments: true, draftPrOnly: true, roleGate: true, ghWrites: true, publishQuote: true });
+  assert.deepEqual(loadConfig(dir).gates, { ...DEFAULT_CONFIG.gates, noComments: true, draftPrOnly: true, ghWrites: true, publishQuote: true });
   assert.throws(() => initProfile(join(tempDir("tedy-profile-bad-"), "profile"), ["ghWrites"]), /noComments.*draftPrOnly/);
   const cli = join(tempDir("tedy-profile-cli-"), "profile");
   const ok = spawnSync("node", [SCRIPT, "init", "draftPrOnly"], { encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: cli } });
@@ -104,11 +111,11 @@ test("init turns on the team conventions it is given, and the command refuses an
 });
 
 test("doctor reports the profile, config, rules, overrides and maps, and exits 1 on an invalid config", () => {
-  const dir = profileWith({ "config.json": JSON.stringify({ gates: { roleGate: true, ghWrites: true } }), "rules.md": "r\n", "style/pr-comment.md": "mine\n", "projects/a.md": "x\n" });
+  const dir = profileWith({ "config.json": JSON.stringify({ gates: { noComments: true, ghWrites: true } }), "rules.md": "r\n", "style/pr-comment.md": "mine\n", "projects/a.md": "x\n" });
   const ok = runDoctor({ TEDY_PROFILE_DIR: dir });
   assert.equal(ok.status, 0, ok.stdout);
   assert.match(ok.stdout, new RegExp(`^ok profile-dir: ${dir}$`, "m"));
-  assert.match(ok.stdout, /^ok config: personal gates on: roleGate, ghWrites$/m);
+  assert.match(ok.stdout, /^ok config: personal gates on: noComments, ghWrites$/m);
   assert.match(ok.stdout, /^rules: present$/m);
   assert.match(ok.stdout, /^overrides: style\/pr-comment\.md$/m);
   assert.match(ok.stdout, /^projects: 1 map$/m);
@@ -117,10 +124,10 @@ test("doctor reports the profile, config, rules, overrides and maps, and exits 1
   assert.equal(empty.status, 0);
   assert.match(empty.stdout, /^ok config: missing, defaults apply \(personal gates off\)$/m);
   assert.match(empty.stdout, /^rules: missing; run profile\.mjs init$/m);
-  const bad = profileWith({ "config.json": JSON.stringify({ gates: { roleGate: 1 } }) });
+  const bad = profileWith({ "config.json": JSON.stringify({ gates: { ghWrites: 1 } }) });
   const invalid = runDoctor({ TEDY_PROFILE_DIR: bad });
   assert.equal(invalid.status, 1);
-  assert.match(invalid.stdout, /^fail config: invalid: .*gates\.roleGate must be a boolean/m);
+  assert.match(invalid.stdout, /^fail config: invalid: .*gates\.ghWrites must be a boolean/m);
 });
 
 test("doctor counts the kit's 23 publish ask rules in the settings and fails under 23, naming publish-approval ask", () => {

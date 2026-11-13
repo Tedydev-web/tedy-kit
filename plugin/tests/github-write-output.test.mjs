@@ -1,13 +1,11 @@
 import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { runWithFakeGh } from "./fake-gh-for-tests.mjs";
 import { world } from "./fake-services-for-tests.mjs";
-import { mappedProfile, tempDir } from "./temp-dir-for-tests.mjs";
+import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const GITHUB_WRITE = new URL("../lib/github-write.mjs", import.meta.url).pathname;
-const JOB = new URL("../scripts/job.mjs", import.meta.url).pathname;
 const DIFF = "diff --git a/src/a.ts b/src/a.ts\n--- a/src/a.ts\n+++ b/src/a.ts\n@@ -9,2 +10,2 @@\n context line\n+added line\n";
 const BODY = "The label is wrong.";
 
@@ -49,10 +47,3 @@ test("every github-write write that has a target repository names it with --repo
   }
 });
 
-test("job.mjs run outside every mapped folder names the mapped project roots", () => {
-  const root = tempDir("tedy-job-root-");
-  const outside = tempDir("tedy-job-outside-");
-  const result = spawnSync("node", [JOB, "list"], { cwd: outside, encoding: "utf8", env: { ...process.env, TEDY_PROFILE_DIR: mappedProfile(root) } });
-  assert.equal(result.status, 1);
-  assert.equal(result.stderr.trim(), `job: no project map covers ${outside}; run job.mjs from the root of a mapped project: ${root} (w)`);
-});

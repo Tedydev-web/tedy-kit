@@ -275,30 +275,6 @@ test("the publish verbs are exported and the ask rules built from them stay as t
   assert.ok(Object.isFrozen(KIT_PUBLISH_WRITE_VERBS["github-write.mjs"]) && Object.isFrozen(KIT_PUBLISH_APPLY_VERBS));
 });
 
-test("the waiting list has a Jobs group of every job that is not closed, with its age, read from the job files and launch records without running claude", async () => {
-  const { chmodSync } = await import("node:fs");
-  const { root, map } = project();
-  const jobs = join(root, "plans", "jobs");
-  mkdirSync(jobs, { recursive: true });
-  const job = (name, status, minutes) => writeFileSync(join(jobs, `${name}.md`), `to: tedy:review\nfrom: cockpit\nstatus: ${status}\ncreated: ${new Date(Date.now() - minutes * 60_000).toISOString()}\ntitle: ${name}\n\nbody\n`);
-  job("review-12", "running", 7);
-  job("review-13", "done", 61);
-  job("review-11", "closed", 600);
-  writeFileSync(join(jobs, "notes.md"), "not a job\n");
-  const bin = tempDir("tedy-pending-bin-");
-  const called = join(bin, "called");
-  writeFileSync(join(bin, "claude"), `#!/bin/sh\ntouch "${called}"\nexit 1\n`);
-  chmodSync(join(bin, "claude"), 0o755);
-  const path = process.env.PATH;
-  process.env.PATH = `${bin}:${path}`;
-  try {
-    assert.match(waitingText(map, { offline: true }), new RegExp(`^Jobs:\n- review: review-12 \\(running, 7m\\) ${join(jobs, "review-12.md")}\n- review: review-13 \\(done, 1h 1m\\) ${join(jobs, "review-13.md")}$`, "m"));
-  } finally {
-    process.env.PATH = path;
-  }
-  assert.equal(existsSync(called), false);
-});
-
 test("the same folder reached two ways is listed once", async () => {
   const { symlinkSync } = await import("node:fs");
   const { root, map } = project();

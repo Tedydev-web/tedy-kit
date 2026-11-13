@@ -91,7 +91,7 @@ test("doctor names the sessions and jobs keys an older kit used as ignored in on
   const legacy = doctor({ sessions: [{ name: "PM - Shop", role: "pm" }], jobs: true });
   assert.equal(legacy.status, 0, legacy.stdout);
   assert.match(legacy.stdout, /^READY$/m);
-  assert.deepEqual(legacy.stdout.split("\n").filter((line) => /sessions|jobs/.test(line)), ["warn obsolete fields: sessions, jobs are ignored: every session is the cockpit and role work runs as jobs (plugin/shared/jobs.md); remove them with /tedy:setup update"]);
+  assert.deepEqual(legacy.stdout.split("\n").filter((line) => /sessions|jobs/.test(line)), ["warn obsolete fields: sessions, jobs are ignored: each role skill runs inline in the session the user types into; remove them with /tedy:setup update"]);
   assert.match(doctor({ jobs: false }).stdout, /^warn obsolete fields: jobs is ignored: /m);
   const current = doctor({});
   assert.equal(current.status, 0, current.stdout);

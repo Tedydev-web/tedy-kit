@@ -67,7 +67,7 @@ test("every kit write a skill runs is approved at its own permission prompt afte
   assert.doesNotMatch(merge, /approved those lines/);
   assert.match(merge, /`merge\.yes` approves the merge alone/);
   const menu = /`(?:approve|post)\.[a-zA-Z]+`/;
-  for (const path of ["shared/decision-points.md", "shared/status-flow.md", "shared/jobs.md", "skills/dev/references/rebut.md", "skills/dev/references/pr-body-refresh.md", "skills/review-pr/SKILL.md", "skills/review-pr/references/follow-up.md", "skills/review-pr/references/draft-format.md", "skills/review-pr/references/status-after-merge.md", "skills/pm/SKILL.md", "skills/pm/references/tracker-openproject.md", "skills/pm/references/comment-channels.md", "skills/pending/SKILL.md"]) assert.doesNotMatch(read(path), menu, path);
+  for (const path of ["shared/decision-points.md", "shared/status-flow.md", "skills/dev/references/rebut.md", "skills/dev/references/pr-body-refresh.md", "skills/review-pr/SKILL.md", "skills/review-pr/references/follow-up.md", "skills/review-pr/references/draft-format.md", "skills/review-pr/references/status-after-merge.md", "skills/pm/SKILL.md", "skills/pm/references/tracker-openproject.md", "skills/pm/references/comment-channels.md", "skills/pending/SKILL.md"]) assert.doesNotMatch(read(path), menu, path);
 });
 
 test("every role that moves a work package's status follows one status procedure, and review merges only on the user's yes", () => {
@@ -165,7 +165,7 @@ test("every github-write command line in the skills that writes to a repository 
 
 test("a refused write is fixed by what its refusal names, and the kit's approval settings are never the remedy", () => {
   const rules = read("shared/decision-points.md");
-  assert.match(rules, /^- When a kit write is refused, fix what its refusal names \(its last line names the check that refused: `refused by github-write`, `refused by pins`, `card refused by card-check`\), quote the text again and run the command again\. Never change the kit's approval settings \(`profile\.mjs publish-approval`\) to get past a refusal\.$/m);
+  assert.match(rules, /^- When a kit write is refused, fix what its refusal names \(its last line names the check that refused: `refused by github-write`, `refused by pins`, `refused by publish-batch`\), quote the text again and run the command again\. Never change the kit's approval settings \(`profile\.mjs publish-approval`\) to get past a refusal\.$/m);
 });
 
 test("no file in the plugin uses the retired publish menus or answer-mode tickets", () => {

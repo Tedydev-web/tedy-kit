@@ -25,14 +25,14 @@ Runtime state (gate log, edit log, draft snapshots, last check times) lives in `
 |---|---|---|---|
 | `gates.noComments` | boolean | `false` | Block edits that add code comments; report comments a push carries |
 | `gates.draftPrOnly` | boolean | `false` | Refuse a pull request that is not a draft |
-| `gates.roleGate` | boolean | `false` | Ask before a session writes for another role: a `tedy:<role>` job agent a kit launch record names (bound to that agent, to another or to none), or a `claude --agent tedy:<role>` session and its subagents, by the hook input's `agent_type` (a `tedy:reviewer` subagent of such a session asks on every write; one under the cockpit or any job is judged as the cockpit, and the read-only reviewer gate still refuses its Bash commands other than reads); every other session is the cockpit, asked only before product code changes |
+| `gates.roleGate` | boolean | none | Obsolete (ADR 0023): the role gate is removed with the job layer. The key loads and is ignored |
 | `gates.publishQuote` | boolean | `false` | Refuse a `github-write.mjs` post, reply or edit until the exact body was quoted to the user after its last change |
 | `gates.ghWrites` | boolean | `false` | Block direct `gh` writes (close, edit, comment, API POST) so everything published to GitHub goes through `github-write.mjs` after the user approves the draft |
 | `gates.publishApproval` | `"ask"` or `"answer"` | none | Obsolete (ADR 0022): a publish is approved once, at the `permissions.ask` prompt. Either value loads and is read as ask; `profile.mjs doctor` prints one obsolete line for `"answer"`, and `profile.mjs publish-approval ask` drops the key, restores the kit's 22 ask rules in `~/.claude/settings.json` and removes the retired deny rule on the approval tickets |
 | `gates.pushExempt` | string[] | `[]` | Repositories whose pushes to an integration branch need no prompt; `~/` expands to the home directory |
 | `language.chat` | string | `"en"` | Language of replies and question labels, and of the comment rules in a directory no project map covers |
 
-The defaults apply when no profile exists. `profile.mjs init [noComments] [draftPrOnly]` writes a `config.json` with `roleGate`, `ghWrites` and `publishQuote` on, plus each team convention named on the command line.
+The defaults apply when no profile exists. `profile.mjs init [noComments] [draftPrOnly]` writes a `config.json` with `ghWrites` and `publishQuote` on, plus each team convention named on the command line.
 
 Gates that protect every user stay on regardless of the config:
 - a prompt before a push to an integration branch, before a push that rewrites history, and before `gh pr merge`, `gh pr ready` or the equivalent `gh api` calls;

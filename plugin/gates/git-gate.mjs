@@ -473,7 +473,7 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
         return null;
       }
       if (found?.map?.tracker && !/\bOP#\d+\b/.test(prBody(args, dir) ?? "")) {
-        return { allow: false, reason: `tedy gate: this project tracks work in OpenProject, so every PR body carries its work package as \`OP#<id>\`, and this ${verb} would leave it out. No work package yet: stop, write a question card to start a pm job for it (shared/jobs.md, Job 4), and open or edit the PR once it exists. A body file must already exist when the command runs.` };
+        return { allow: false, reason: `tedy gate: this project tracks work in OpenProject, so every PR body carries its work package as \`OP#<id>\`, and this ${verb} would leave it out. No work package yet: stop, ask the user whether to run /tedy:pm for one, and open or edit the PR once it exists. A body file must already exist when the command runs.` };
       }
       return null;
     };

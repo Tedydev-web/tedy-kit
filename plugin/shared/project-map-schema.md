@@ -20,7 +20,6 @@ A map keeps only what cannot be looked up. Repository remotes, default branches,
 | `truth_overrides` | no | Sentences that change the default truth order, each with its date and source |
 | `team` | no | `{ "<area>": "<person>" }` assignment split |
 | `open_questions[]` | no | `{ q, tried }`: what is unknown and what was already searched |
-| `worktree_root` | no | Folder, absolute or relative to `paths[0]`, where `job.mjs start` makes a dev job's core worktree (`<worktree_root>/<repo name>-<job slug>`). Absent means `<repo parent>/.worktrees` |
 | `glossary` | no | `{ "<preferred term>": ["<term to avoid>", …] }`: one concept, one word in tracker tasks. `task-lint` and `openproject.mjs preview` warn on an avoided term in a subject or description, outside code spans, quoted copy and `{placeholders}` |
 
 Each role skill runs inline in the session the user types into; no key changes that. A map an older kit wrote may still hold `sessions` or `jobs`: both are ignored, and `project-map.mjs doctor` names them in one `warn` line.

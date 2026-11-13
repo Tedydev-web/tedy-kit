@@ -64,7 +64,7 @@ export function trackerCheck(map) {
 export function obsoleteCheck(map) {
   const keys = ["sessions", "jobs"].filter((key) => Object.hasOwn(map, key));
   if (!keys.length) return null;
-  return { check: "obsolete fields", status: "warn", detail: `${keys.join(", ")} ${keys.length === 1 ? "is" : "are"} ignored: every session is the cockpit and role work runs as jobs (plugin/shared/jobs.md); remove them with /tedy:setup update` };
+  return { check: "obsolete fields", status: "warn", detail: `${keys.join(", ")} ${keys.length === 1 ? "is" : "are"} ignored: each role skill runs inline in the session the user types into; remove them with /tedy:setup update` };
 }
 
 function git(dir, ...args) {

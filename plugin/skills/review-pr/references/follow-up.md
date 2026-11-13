@@ -2,7 +2,7 @@
 
 Use when the user asks to check replies, when a teammate says a thread is fixed, or when the next-step menu picks `replies.header`. Writes still go through `github-write.mjs`, with no `AskUserQuestion` (ADR 0022): show each write as `shared/decision-points.md` says, a line naming the PR and the thread or comment it goes to, then the reply or edit body verbatim, then the lint's `warning:` lines, with no command line, and run the commands in the same turn; each command's permission prompt is its one approval.
 
-Start with the status-after-merge sweep of step 1a in the skill; a merged PR of the user's own work package becomes a status card there.
+Start with the status-after-merge sweep of step 1a in the skill; a merged PR of the user's own work package becomes a status batch there.
 
 ## Check threads at the new head
 

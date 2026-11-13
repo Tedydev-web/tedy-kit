@@ -156,13 +156,6 @@ export function carrySources(file, text, pin, head) {
   writeFileSync(reads, `${JSON.stringify({ ...read, sources: moved(read.sources) }, null, 1)}\n`);
 }
 
-export function pinnedSince(file) {
-  if (typeof file !== "string") return null;
-  const { at, sources } = pinnedSources(file, "");
-  if (typeof at !== "string") return null;
-  return sources.filter((pin) => pin?.stage === "read" && typeof pin.at === "string").reduce((earliest, pin) => (Date.parse(pin.at) < Date.parse(earliest) ? pin.at : earliest), at);
-}
-
 export async function recheckPinned(file, relint, { texts, covers, what } = {}) {
   const result = await recheckSourcesOf(file, relint, { texts, covers, what });
   if (result.refusals.length) logRefusal("pins", result.refusals.join("\n"), { file: resolve(file) });

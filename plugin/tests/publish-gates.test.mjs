@@ -6,7 +6,6 @@ import { join } from "node:path";
 import { evaluate } from "../gates/git-gate.mjs";
 import { prBodyRefusal } from "../lib/github-write.mjs";
 import { prBodyFrom, sameComment } from "../lib/openproject.mjs";
-import { agentReason, classifyAction } from "../gates/role-gate.mjs";
 import { check, publishes, reasonFor, unshown } from "../gates/publish-quote-gate.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 import { ALL_GATES_ON } from "../lib/hook-io.mjs";
@@ -28,7 +27,7 @@ test("a PR in a tracked project must carry OP#<id> in its body", () => {
   assert.equal(create("--body=OP#21453").allow, true);
   assert.equal(create('--body ""').allow, false);
   assert.match(create('--body ""').reason, /OP#<id>/);
-  assert.match(create('--body ""').reason, /No work package yet: stop, write a question card to start a pm job for it \(shared\/jobs\.md, Job 4\), and open or edit the PR once it exists\./);
+  assert.match(create('--body ""').reason, /No work package yet: stop, ask the user whether to run \/tedy:pm for one, and open or edit the PR once it exists\./);
   assert.doesNotMatch(create('--body ""').reason, /PM session|hand-?off/i);
   assert.equal(create("--fill").allow, false);
   assert.equal(create('--body "#21372"').allow, false);
@@ -127,7 +126,7 @@ test("the quote check asks when there is no transcript path to confirm what the 
   assert.match(result.reason, /cannot read this session's transcript/);
 });
 
-test("a subagent's publish is checked against the cockpit's main transcript, so a body quoted only in a job's own transcript does not pass", () => {
+test("a subagent's publish is checked against the main session's transcript, so a body quoted only in the subagent's own transcript does not pass", () => {
   const root = tempDir("tedy-quote-subagent-");
   const main = join(root, "projects", "s-cockpit.jsonl");
   const own = join(root, "projects", "s-cockpit", "subagents", "agent-a1job.jsonl");
@@ -189,11 +188,3 @@ test("openproject pr-body records what it generated, so a hand-edited body is to
   assert.equal(generatedPrBodyOp(body.replace("goal", "goal, edited")), null);
 });
 
-test("pr-body is the dev job's write; review and pm jobs are asked first", () => {
-  const map = { name: "w", paths: ["/w"], repos: [] };
-  const action = classifyAction({ tool_name: "Bash", cwd: "/w", tool_input: { command: "node /k/github-write.mjs pr-body 744 --body-file b.md" } }, map);
-  assert.equal(action.kind, "code");
-  assert.equal(agentReason({ role: "dev", label: "tedy:dev" }, action, map), null);
-  assert.match(agentReason({ role: "review", label: "tedy:review" }, action, map), /belongs to the dev role/);
-  assert.match(agentReason({ role: "pm", label: "tedy:pm" }, action, map), /belongs to the dev role/);
-});

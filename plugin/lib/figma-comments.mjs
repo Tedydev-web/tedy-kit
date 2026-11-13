@@ -10,8 +10,8 @@ import { resolveMap } from "./project-map.mjs";
 import { notBefore, sinceTime } from "./since.mjs";
 import { RECHECK } from "./source-pin-git.mjs";
 import { nodeId } from "./source-pin-links.mjs";
-import { splitJob, withRecords } from "./record-lock.mjs";
-import { pinnedSince, pinnedSources, requireFresh, sayNotices, versionCheck } from "./source-pins.mjs";
+import { withRecords } from "./record-lock.mjs";
+import { pinnedSources, requireFresh, sayNotices, versionCheck } from "./source-pins.mjs";
 
 const API = "https://api.figma.com/v1";
 
@@ -144,9 +144,9 @@ async function verify(figma, id, body) {
 }
 
 async function main(input) {
-  const { job, argv: [command, target, ...rest] } = splitJob(input);
+  const [command, target, ...rest] = input;
   const args = target?.startsWith("--") ? [target, ...rest] : rest;
-  const flags = { ...Object.fromEntries(args.flatMap((arg, index) => (arg.startsWith("--") ? [[arg.slice(2), args[index + 1]]] : []))), job };
+  const flags = Object.fromEntries(args.flatMap((arg, index) => (arg.startsWith("--") ? [[arg.slice(2), args[index + 1]]] : [])));
   if (flags.since !== undefined) sinceTime(flags.since);
   const figma = client(flags);
   if (command === "list") {
@@ -158,7 +158,7 @@ async function main(input) {
     }
     return 0;
   }
-  if (["post", "reply", "delete"].includes(command) && target) return withRecords([`figma:${figma.file}`], { job: flags.job, since: command === "delete" ? null : pinnedSince(flags["body-file"]) }, (recorded) => write(figma, command, target, flags, recorded));
+  if (["post", "reply", "delete"].includes(command) && target) return withRecords([`figma:${figma.file}`], (recorded) => write(figma, command, target, flags, recorded));
   console.error("usage: figma-comments.mjs list [--since <ISO>] [--file <key>] | post <node-id> --body-file <f> --file <key> | reply <comment-id> --body-file <f> --file <key> | delete <comment-id> --file <key>");
   return 2;
 }

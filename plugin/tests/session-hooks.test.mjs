@@ -1,7 +1,8 @@
 import "./test-isolation.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { activeRole, decideNudge, hooksLoadedSince, reloadHint } from "../lib/session-hooks.mjs";
 import { profileWith, tempDir } from "./temp-dir-for-tests.mjs";
@@ -118,167 +119,36 @@ test("a broken profile config is announced at session start, a valid or missing 
   assert.match(configWarning(profileWith({ gates: { noComments: "on" } })), /config\.json.*gates\.noComments must be a boolean.*every personal gate stays on/s);
 });
 
-test("the learn line appears on an interactive startup once enough feedback waits, at most once a day and not on a held day", async () => {
-  const { learnNotice, LEARN_THRESHOLD } = await import("../lib/session-hooks.mjs");
-  const base = { feedbackNewer: LEARN_THRESHOLD, since: "2026-10-07", source: "startup", entrypoint: "cli", today: "2026-10-18", nudged: undefined, held: undefined };
-  assert.match(learnNotice(base), /^5 feedback memories since the last \/tedy:learn \(2026-10-07\)\. Tell the user in this reply: run \/tedy:learn/);
-  assert.equal(learnNotice({ ...base, feedbackNewer: LEARN_THRESHOLD - 1 }), "");
-  assert.equal(learnNotice({ ...base, source: "resume" }), "");
-  assert.equal(learnNotice({ ...base, entrypoint: "sdk-cli" }), "");
-  assert.notEqual(learnNotice({ ...base, entrypoint: undefined }), "");
-  assert.equal(learnNotice({ ...base, nudged: "2026-10-18" }), "");
-  assert.equal(learnNotice({ ...base, held: "2026-10-18" }), "");
-  assert.notEqual(learnNotice({ ...base, nudged: "2026-10-17", held: "2026-10-17" }), "");
-  assert.match(learnNotice({ ...base, since: "" }), /\(never\)/);
-});
-
-async function learnHookFixture({ memories = 5, type = "feedback", map = {} } = {}) {
-  const { spawnSync } = await import("node:child_process");
-  const { chmodSync, mkdirSync, readFileSync, existsSync } = await import("node:fs");
-  const { projectSlug } = await import("../lib/memory-stats.mjs");
-  const scratch = tempDir("tedy-learn-hook-");
-  const home = join(scratch, "home");
+function sessionStartFixture(map = {}) {
+  const scratch = tempDir("tedy-session-start-");
   const profile = join(scratch, "profile");
-  const state = join(scratch, "state");
   const work = join(scratch, "work");
-  const bin = join(scratch, "bin");
-  const memory = join(home, ".claude", "projects", projectSlug(work), "memory");
-  for (const dir of [join(profile, "projects"), work, bin, memory]) mkdirSync(dir, { recursive: true });
+  for (const dir of [join(profile, "projects"), join(work, "plans", "drafts")]) mkdirSync(dir, { recursive: true });
   writeFileSync(join(profile, "config.json"), "{}");
   writeFileSync(join(profile, "projects", "shop.md"), `# map\n\n\`\`\`json\n${JSON.stringify({ name: "shop", paths: [work], ...map })}\n\`\`\`\n`);
-  for (let index = 0; index < memories; index += 1) writeFileSync(join(memory, `f${index}.md`), type ? `---\nname: f\nmetadata:\n  type: ${type}\n---\n\nx\n` : "no frontmatter\n");
-  writeFileSync(join(bin, "claude"), "#!/bin/sh\necho '[]'\n");
-  chmodSync(join(bin, "claude"), 0o755);
-  const hook = (source, env = {}, extra = {}) => spawnSync("node", [new URL("../scripts/session-hooks.mjs", import.meta.url).pathname, "pending-handoffs"], {
-    input: JSON.stringify({ cwd: work, source, session_id: "s-1", ...extra }),
+  const hook = (extra = {}) => spawnSync("node", [new URL("../scripts/session-hooks.mjs", import.meta.url).pathname, "pending-handoffs"], {
+    input: JSON.stringify({ cwd: work, source: "startup", session_id: "s-1", ...extra }),
     encoding: "utf8",
-    env: { ...process.env, HOME: home, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: state, PATH: `${bin}:${process.env.PATH}`, CLAUDE_CODE_ENTRYPOINT: "cli", CLAUDE_CODE_PROJECT_DIR_NAME: "", ...env },
+    env: { ...process.env, TEDY_PROFILE_DIR: profile, TEDY_STATE_DIR: join(scratch, "state"), CLAUDE_CODE_ENTRYPOINT: "cli" },
   });
-  const stateFile = join(state, "projects", "shop.json");
-  return {
-    work,
-    state,
-    stateFile,
-    hook,
-    nudged: () => (existsSync(stateFile) ? JSON.parse(readFileSync(stateFile, "utf8")).learn_nudged : undefined),
-    log: () => (existsSync(join(state, "gate-log.jsonl")) ? readFileSync(join(state, "gate-log.jsonl"), "utf8") : ""),
-  };
+  return { work, hook };
 }
 
-test("the session-start hook shows the learn line to the user, records the day, and stays quiet for a resume", async () => {
-  const fixture = await learnHookFixture();
-  assert.doesNotMatch(fixture.hook("resume").stdout, /feedback memories/);
-  const started = JSON.parse(fixture.hook("startup").stdout);
-  assert.match(started.systemMessage, /5 feedback memories since the last \/tedy:learn \(never\)/);
-  assert.match(started.hookSpecificOutput.additionalContext, /Tell the user in this reply: run \/tedy:learn/);
-  assert.match(fixture.nudged(), /^\d{4}-\d{2}-\d{2}$/);
-  assert.doesNotMatch(fixture.hook("startup").stdout, /feedback memories/);
-});
-
-test("the day is recorded only after the notice was written, so a hook whose write fails does not use up the nudge", async () => {
-  const fixture = await learnHookFixture();
-  const failingWrite = join(tempDir("tedy-learn-write-"), "failing-stdout.mjs");
-  writeFileSync(failingWrite, 'process.stdout.write = () => { throw new Error("stdout closed"); };\n');
-  const failed = fixture.hook("startup", { NODE_OPTIONS: `--import ${failingWrite}` });
-  assert.equal(failed.stdout, "");
-  assert.equal(fixture.nudged(), undefined);
-  assert.match(fixture.log(), /"hook":"pending-handoffs","decision":"skip-on-error","error":"stdout closed"/);
-  assert.match(JSON.parse(fixture.hook("startup").stdout).systemMessage, /5 feedback memories/);
-  assert.match(fixture.nudged(), /^\d{4}-\d{2}-\d{2}$/);
-});
-
-test("a broken learn state is logged and the other notices still print", async () => {
-  const { mkdirSync } = await import("node:fs");
-  const fixture = await learnHookFixture();
-  mkdirSync(join(fixture.stateFile, ".."), { recursive: true });
-  writeFileSync(fixture.stateFile, "{ not json");
-  mkdirSync(join(fixture.work, "plans", "drafts"), { recursive: true });
-  writeFileSync(join(fixture.work, "plans", "drafts", "reply.md"), "draft\n");
-  const output = JSON.parse(fixture.hook("startup").stdout);
-  assert.match(output.hookSpecificOutput.additionalContext, /Waiting on the user in this project/);
-  assert.equal(output.systemMessage, undefined);
-  assert.match(fixture.log(), /"decision":"learn-notice-skipped"/);
-});
-
-test("a job's session start prints its role card from agent_type, records the role for its subagents, and reads no fleet list", async () => {
-  const { chmodSync, existsSync, readFileSync } = await import("node:fs");
-  const fixture = await learnHookFixture({ memories: 0 });
-  const bin = tempDir("tedy-no-fleet-");
-  const called = join(bin, "called");
-  writeFileSync(join(bin, "claude"), `#!/bin/sh\ntouch "${called}"\nexit 1\n`);
-  chmodSync(join(bin, "claude"), 0o755);
-  const output = JSON.parse(fixture.hook("startup", { PATH: `${bin}:${process.env.PATH}` }, { agent_type: "tedy:pm" }).stdout);
-  assert.match(output.hookSpecificOutput.additionalContext, /^Role: this session is a pm job \(tedy:pm\) of shop\. Work it per \S+\/shared\/jobs\.md, section "Job": /m);
-  assert.equal(existsSync(called), false);
-  assert.equal(readFileSync(join(fixture.state, "session-roles", "s-1"), "utf8"), "pm");
-  assert.doesNotMatch(fixture.log(), /role-card/);
-});
-
-const JOBS_DOC = new URL("../shared/jobs.md", import.meta.url).pathname;
-
-async function jobsFixture(map = {}) {
-  const { chmodSync, mkdirSync } = await import("node:fs");
-  const fixture = await learnHookFixture({ memories: 0, map });
-  const bin = tempDir("tedy-no-fleet-");
-  const called = join(bin, "called");
-  writeFileSync(join(bin, "claude"), `#!/bin/sh\ntouch "${called}"\necho '[]'\n`);
-  chmodSync(join(bin, "claude"), 0o755);
-  mkdirSync(join(fixture.work, "plans", "jobs"), { recursive: true });
-  mkdirSync(join(fixture.work, "plans", "drafts"), { recursive: true });
-  const created = new Date(Date.now() - 125 * 60_000).toISOString();
-  writeFileSync(join(fixture.work, "plans", "jobs", "261106-0900-dev-add-hello.md"), `to: tedy:dev\nfrom: cockpit\nstatus: running\ncreated: ${created}\ntitle: Add hello\n\nbody\n`);
-  writeFileSync(join(fixture.work, "plans", "drafts", "261106-0910-notify-ci.md"), "kind: notify\ntitle: CI is green\njob: none\n\nAll checks passed.\n");
-  const start = (extra = {}) => {
-    const out = fixture.hook("startup", { PATH: `${bin}:${process.env.PATH}` }, extra).stdout;
-    return out ? JSON.parse(out).hookSpecificOutput.additionalContext : "";
-  };
-  return { ...fixture, start, called };
-}
-
-test("the cockpit's session start lists cards and jobs with their age and prints the cockpit card, without the hand-off notice or a fleet lookup", async () => {
-  const { existsSync } = await import("node:fs");
-  const fixture = await jobsFixture();
-  const text = fixture.start();
-  assert.match(text, new RegExp(`^This is the cockpit of shop: start jobs and ask their open cards per ${JOBS_DOC.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}, section "Cockpit"\\.$`, "m"));
-  assert.match(text, /^Jobs:\n- dev: Add hello \(running, 2h 5m\) .*261106-0900-dev-add-hello\.md$/m);
-  assert.match(text, /^For your information:\n- CI is green /m);
-  assert.doesNotMatch(text, /Pending hand-offs|ListAgents/);
-  assert.equal(existsSync(fixture.called), false);
-});
-
-test("a job's session start prints only its job card, naming jobs.md", async () => {
-  const fixture = await jobsFixture();
-  const text = fixture.start({ agent_type: "tedy:dev" });
-  assert.equal(text, `Role: this session is a dev job (tedy:dev) of shop. Work it per ${JOBS_DOC}, section "Job": read the job file your prompt names, decide each local, reversible choice yourself and record it with its reason in the outcome, turn each decision the user must make into a question card and each write that needs approval into a publish card, and end with job.mjs done or stop.`);
-});
-
-test("a session start in a map that still holds sessions, a jobs key and hand-off files gives every session the cockpit card without a fleet lookup and lists no hand-off", async () => {
-  const { existsSync, mkdirSync } = await import("node:fs");
-  const fixture = await jobsFixture({ jobs: false, sessions: [{ name: "PM - Shop", role: "pm" }, { name: "Dev - Shop", role: "dev" }] });
-  mkdirSync(join(fixture.work, "plans", "reports"), { recursive: true });
-  writeFileSync(join(fixture.work, "plans", "reports", "handoff-261012-0900-to-dev-shop-fix-toast.md"), "to: Dev - Shop\nfrom: PM - Shop\nstatus: pending\ncreated: 2026-10-12T02:00:00.000Z\ntitle: Fix toast\n\nbody\n");
-  for (const session_id of ["s-1", "s-2"]) {
-    const text = fixture.start({ session_id });
-    assert.match(text, /^This is the cockpit of shop:/m, session_id);
-    assert.match(text, /^Jobs:\n- dev: Add hello /m, session_id);
-    assert.doesNotMatch(text, /hand-off|handoff|Fix toast|PM - Shop|ListAgents/i, session_id);
+test("the session start lists the drafts waiting on the user and prints no role card, job list or learn line, also for a tedy:<role> agent type and a map that still holds sessions and jobs", () => {
+  const fixture = sessionStartFixture({ jobs: true, sessions: [{ name: "PM - Shop", role: "pm" }] });
+  const draft = join(fixture.work, "plans", "drafts", "261113-0900-reply.md");
+  writeFileSync(draft, "draft\n");
+  for (const extra of [{}, { agent_type: "tedy:pm" }]) {
+    const out = fixture.hook(extra);
+    assert.equal(out.status, 0, out.stderr);
+    const notice = JSON.parse(out.stdout).hookSpecificOutput.additionalContext;
+    assert.match(notice, /^Waiting on the user in this project/m);
+    assert.ok(notice.includes(`Drafts waiting on the user:\n- ${draft}`), notice);
+    assert.doesNotMatch(notice, /cockpit|Role:|Jobs:|card|learn/i);
   }
-  assert.equal(existsSync(fixture.called), false);
 });
 
 test("the Stop nudge pushes a session that asks in prose toward AskUserQuestion", () => {
   const entries = [prompt("x"), say("Anh muốn em đăng các góp ý này không?")];
   assert.equal(decideNudge(entries, false, undefined).nudge, true);
-});
-
-test("memories with no recognised type are logged as format drift, project-only memories are not, and a moved memory folder is reported", async () => {
-  const drift = await learnHookFixture({ type: null });
-  drift.hook("startup");
-  assert.match(drift.log(), /"decision":"learn-notice-format-drift"/);
-  const projectOnly = await learnHookFixture({ type: "project" });
-  projectOnly.hook("startup");
-  assert.doesNotMatch(projectOnly.log(), /format-drift/);
-  const moved = await learnHookFixture();
-  assert.doesNotMatch(moved.hook("startup", { CLAUDE_CODE_PROJECT_DIR_NAME: "elsewhere" }).stdout, /feedback memories/);
-  assert.match(moved.log(), /"decision":"learn-notice-unsupported-layout"/);
 });

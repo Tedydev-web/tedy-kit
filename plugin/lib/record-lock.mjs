@@ -6,11 +6,6 @@ import { STATE_DIR } from "./state-dir.mjs";
 
 const FOREIGN_LOCK_MS = 30 * 60 * 1000;
 
-function ledgerRefusal(reason) {
-  logRefusal("ledger", reason);
-  return new Error(reason);
-}
-
 const digest = (key) => createHash("sha256").update(key).digest("hex").slice(0, 16);
 
 export const lockPath = (key, state = STATE_DIR) => join(state, "locks", `${digest(key)}.lock`);
@@ -103,8 +98,8 @@ function unlinkIfSame(path, text) {
 const heldRefusal = (key, held) =>
   `refused: ${key} is being written by pid ${held?.lock?.pid ?? "unknown"} (${held?.lock?.command ?? "unknown command"}) since ${held?.lock?.at ?? (held ? new Date(held.mtimeMs).toISOString() : "a moment ago")}; nothing was written. Run this command again when it finishes.`;
 
-function tryAcquire(key, state) {
-  const path = lockPath(key, state);
+function tryAcquire(key) {
+  const path = lockPath(key);
   mkdirSync(dirname(path), { recursive: true });
   const content = JSON.stringify({ key, pid: process.pid, ns: OWN_NS, start: OWN_START, at: new Date().toISOString(), command: COMMAND });
   if (create(path, content)) return { path, content };
@@ -121,78 +116,11 @@ function acquire(key) {
   throw new Error(reason);
 }
 
-const sleep = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-
-export function withLockSync(key, fn, { state = STATE_DIR, waitMs = 2000 } = {}) {
-  const until = Date.now() + waitMs;
-  let got = tryAcquire(key, state);
-  for (; !got.path && Date.now() < until; got = tryAcquire(key, state)) sleep(20);
-  if (!got.path) throw new Error(`${key} is locked by pid ${got.held?.lock?.pid ?? "unknown"} (${got.held?.lock?.command ?? "unknown command"}) for more than ${waitMs} ms; nothing was written`);
-  try {
-    return fn();
-  } finally {
-    unlinkIfSame(got.path, got.content);
-  }
-}
-
-function readLedger(key) {
-  const path = ledgerPath(key);
-  let text;
-  try {
-    text = readFileSync(path, "utf8");
-  } catch (error) {
-    if (error.code === "ENOENT") return [];
-    throw error;
-  }
-  return text
-    .split("\n")
-    .filter(Boolean)
-    .map((line, index) => {
-      try {
-        return JSON.parse(line);
-      } catch (error) {
-        throw new Error(`the write ledger ${path} line ${index + 1} cannot be read (${error.message}); nothing was written`);
-      }
-    });
-}
-
-export function ledgerConflicts(keys, { job, since } = {}) {
-  if (typeof job !== "string" || !job || typeof since !== "string") return [];
-  const name = basename(job);
-  const pinned = Date.parse(since);
-  return keys.flatMap((key) => {
-    const later = readLedger(key).filter((entry) => typeof entry?.job === "string" && entry.job && basename(entry.job) !== name && Date.parse(entry.at) > pinned);
-    return later.length ? [{ key, job: later.at(-1).job, at: later.at(-1).at }] : [];
-  });
-}
-
-const NO_JOB_FILE = "--job needs a job file path; nothing was written";
-
-export function jobFlag(args) {
-  let job;
-  for (const [index, arg] of args.entries()) {
-    if (arg === "--job") job = args[index + 1];
-    else if (typeof arg === "string" && arg.startsWith("--job=")) job = arg.slice("--job=".length);
-    else continue;
-    if (typeof job !== "string" || !job.trim() || job.startsWith("--")) throw new Error(NO_JOB_FILE);
-  }
-  return job;
-}
-
-export function splitJob([verb, ...rest]) {
-  const job = jobFlag(rest);
-  return { job, argv: [verb, ...rest.filter((arg, index) => arg !== "--job" && !(typeof arg === "string" && arg.startsWith("--job=")) && rest[index - 1] !== "--job")] };
-}
-
-export async function withRecords(keys, { job, since } = {}, fn) {
-  if (job !== undefined && job !== null && (typeof job !== "string" || !job.trim())) throw new Error(NO_JOB_FILE);
-  const name = job ? basename(job) : null;
+export async function withRecords(keys, fn) {
   const sorted = [...new Set(keys)].sort();
   const held = [];
   try {
     for (const key of sorted) held.push({ key, ...acquire(key) });
-    const conflicts = ledgerConflicts(sorted, { job: name, since });
-    if (conflicts.length) throw ledgerRefusal(conflicts.map((entry) => `refused: ${entry.key} got a kit write from job ${entry.job} at ${entry.at}, after this draft's sources were pinned at ${since}; read the record again, update the draft, lint it and ask the user again.`).join("\n"));
     let done = false;
     const recorded = () => {
       if (done) return;
@@ -201,9 +129,9 @@ export async function withRecords(keys, { job, since } = {}, fn) {
       for (const key of sorted) {
         try {
           mkdirSync(dirname(ledgerPath(key)), { recursive: true });
-          appendFileSync(ledgerPath(key), `${JSON.stringify({ at, key, job: name, command: COMMAND, pid: process.pid })}\n`);
+          appendFileSync(ledgerPath(key), `${JSON.stringify({ at, key, command: COMMAND, pid: process.pid })}\n`);
         } catch (error) {
-          process.stderr.write(`warning: written, but the ledger line for ${key} could not be appended (${error.message}); a later job's conflict check will not see this write\n`);
+          process.stderr.write(`warning: written, but the ledger line for ${key} could not be appended (${error.message})\n`);
           logGate({ hook: "record-lock", decision: "ledger-append-failed", key, command: COMMAND, error: error.message });
         }
       }
