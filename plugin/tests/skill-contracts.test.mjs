@@ -18,6 +18,13 @@ test("every numbered list in a skill's sections starts at 1 and runs on without 
   }
 });
 
+test("no skill or shared procedure promises an approval menu, because a publish is approved once at the command prompt after the text is quoted", () => {
+  const dirs = ["skills", "shared"].map((dir) => new URL(`../${dir}/`, import.meta.url));
+  const files = dirs.flatMap((dir) => readdirSync(dir, { recursive: true }).filter((name) => name.endsWith(".md")).map((name) => new URL(name, dir)));
+  for (const file of files) assert.doesNotMatch(readFileSync(file, "utf8"), /approval menu|publish option/i, file.pathname);
+  for (const name of ["review-pr", "pm"]) assert.match(read(`skills/${name}/SKILL.md`), /^1\. .*approves? .*once, at the command prompt/m, name);
+});
+
 test("a review job asks to run PR code on a question card that the cockpit asks with the run header, and the answer goes back through SendMessage", () => {
   const checkout = read("skills/review-pr/references/checkout.md");
   assert.doesNotMatch(checkout, /own window/);
