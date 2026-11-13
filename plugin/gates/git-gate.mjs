@@ -472,7 +472,8 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
         askFor(`tedy gate: a project map could not be read, so the work-package check for this PR ${verb} did not run. Allow it only if this PR needs no work package, then fix the map.`);
         return null;
       }
-      if (found?.map?.tracker && !/\bOP#\d+\b|^OP#none:[ \t]*\S/m.test(prBody(args, dir) ?? "")) {
+      const body = found?.map?.tracker ? (prBody(args, dir) ?? "") : "";
+      if (found?.map?.tracker && !/\bOP#\d+\b/.test(body) && !/^OP#none:[ \t]*\S/.test(body)) {
         return { allow: false, reason: `tedy gate: this project tracks work in OpenProject, so every PR body carries its work package as \`OP#<id>\`, and this ${verb} would leave it out. No work package yet: stop, ask the user whether to run /tedy:pm for one, and open or edit the PR once it exists. When the user chooses no work package, the body's first line is \`OP#none: <reason>\`. A body file must already exist when the command runs.` };
       }
       return null;

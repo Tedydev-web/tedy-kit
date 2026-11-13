@@ -46,6 +46,8 @@ test("a PR the user chose to open without a work package says so with OP#none an
   assert.equal(create("--body-file bare.md").allow, false);
   writeFileSync(join(repo, "inline.md"), "Fixes the build, see OP#none: later\n");
   assert.equal(create("--body-file inline.md").allow, false);
+  writeFileSync(join(repo, "later.md"), "## Goal\nX.\n\nOP#none: CI hotfix\n");
+  assert.equal(create("--body-file later.md").allow, false);
   assert.match(create('--body ""').reason, /OP#none: <reason>/);
 });
 
