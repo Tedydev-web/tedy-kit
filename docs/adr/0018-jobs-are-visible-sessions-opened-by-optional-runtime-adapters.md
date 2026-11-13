@@ -1,6 +1,6 @@
 # 0018: Jobs are visible sessions opened by optional runtime adapters
 
-Status: superseded in its launch adapters by [ADR 0019](0019-jobs-run-as-native-background-subagents.md) (2026-11-11); accepted (2026-11-09, user decisions; built and probed 2026-11-09 to 2026-11-10); amends ADR 0015
+Status: superseded by [ADR 0023](0023-roles-run-inline-and-the-job-layer-is-removed.md) (2026-11-13): the roles run inline and the job and card layer is removed (tag `archive/jobs-v0.4.2`); superseded in its launch adapters by [ADR 0019](0019-jobs-run-as-native-background-subagents.md) (2026-11-11); accepted (2026-11-09, user decisions; built and probed 2026-11-09 to 2026-11-10); amends ADR 0015
 
 ## Context
 - ADR 0015 runs each job as `claude --agent tedy:<role> --bg`, started from the cockpit's own Bash call. On 2026-11-09 two of four jobs on a mapped project ended `lost` and nobody noticed. The transcripts and the user journal, read that day, show why:
