@@ -1,6 +1,6 @@
 # Follow-up on a posted review
 
-Use when the user asks to check replies, when a teammate says a thread is fixed, or when the next-step menu picks `replies.header`. Writes still go through `github-write.mjs`, with no `AskUserQuestion` (ADR 0022): quote each reply or edit body and, on a line of its own, the exact command line that posts it verbatim, each write in its own fenced block of the reply, then run the commands in the same turn; each command's permission prompt is its one approval (`shared/decision-points.md`).
+Use when the user asks to check replies, when a teammate says a thread is fixed, or when the next-step menu picks `replies.header`. Writes still go through `github-write.mjs`, with no `AskUserQuestion` (ADR 0022): show each write as `shared/decision-points.md` says, a line naming the PR and the thread or comment it goes to, then the reply or edit body verbatim, then the lint's `warning:` lines, with no command line, and run the commands in the same turn; each command's permission prompt is its one approval.
 
 Start with the status-after-merge sweep of step 1a in the skill; a merged PR of the user's own work package becomes a status card there.
 
@@ -29,7 +29,7 @@ node <plugin>/scripts/github-write.mjs resolve <thread-node-id>...
 node <plugin>/scripts/github-write.mjs unresolve <thread-node-id>...
 ```
 
-- Before the quote, write each reply or edit body after the step 2 read and lint it with `node <plugin>/scripts/draft-lint.mjs pr-reply <file> --pr <n> --repo <owner/repo> --pinned-at <the step 2 key>`, which checks those read pins (draft-format.md, Pinned sources); put its `pinned:`, `warning:` and `notice:` lines in the quote with the body. `reply` and `edit` refuse a body that was not linted or changed since, one linted for another repo or PR, and a PR whose head GitHub shows moved off the pin, and recheck the pins as `draft-format.md` (Pinned sources) describes.
+- Before the quote, write each reply or edit body after the step 2 read and lint it with `node <plugin>/scripts/draft-lint.mjs pr-reply <file> --pr <n> --repo <owner/repo> --pinned-at <the step 2 key>`, which checks those read pins (draft-format.md, Pinned sources); put its `warning:` lines in the reply with the body. `reply` and `edit` refuse a body that was not linted or changed since, one linted for another repo or PR, and a PR whose head GitHub shows moved off the pin, and recheck the pins as `draft-format.md` (Pinned sources) describes.
 - `reply`: one sentence in the map's `language.pr_review`, same lint as a review comment; for "not fixed yet" or a rebuttal.
 - One reply per thread: if the user already replied on the thread, `edit` that reply into one sentence covering everything still open instead of adding another; if extra replies exist, merge them and `minimize` the rest (overlapping replies are hard for the author to follow).
 - `edit`: rewording a comment the user asked to change; the old text stays in the edit log.

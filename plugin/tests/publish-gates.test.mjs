@@ -113,7 +113,8 @@ test("only reply text counts as shown, never an AskUserQuestion string, and the 
   assert.deepEqual(missing, [`comment 1 of ${file}`, `comment 2 of ${file}`]);
   const reason = reasonFor(missing);
   assert.ok(reason.includes(`comment 1 of ${file}, comment 2 of ${file}`), reason);
-  for (const phrase of ["(publishQuote)", "nothing was written", "missing from the chat", "Only a text block of the reply", "thinking, AskUserQuestion", "verbatim", "permission prompt is the approval"]) assert.ok(reason.includes(phrase), phrase);
+  for (const phrase of ["(publishQuote)", "nothing was written", "missing from the chat", "Only a text block of the reply", "thinking, AskUserQuestion", "verbatim", "where it goes", "permission prompt is the approval"]) assert.ok(reason.includes(phrase), phrase);
+  assert.doesNotMatch(reason, /fenced block|pinned:|notice:|and the command/);
   assert.equal(unshown(found, [ask({ preview: draft })], mtime).length, 2);
   const written = block({ type: "tool_use", name: "Write", input: { file_path: file, content: draft } });
   assert.equal(unshown(found, [written, ask({})], mtime).length, 2);

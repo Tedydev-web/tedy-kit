@@ -74,7 +74,7 @@ export function unshown(found, entries, mtime) {
 }
 
 export const reasonFor = (missing) =>
-  `tedy gate (publishQuote): refused, nothing was written. The user has not seen the exact text being published under their name since its last change; missing from the chat: ${missing.join(", ")}. Only a text block of the reply counts as shown; thinking, AskUserQuestion and every tool's input do not. Quote the whole body verbatim in one fenced block of the reply, with the lint's pinned:, warning: and notice: lines and the command, then run the command; its permission prompt is the approval.`;
+  `tedy gate (publishQuote): refused, nothing was written. The user has not seen the exact text being published under their name since its last change; missing from the chat: ${missing.join(", ")}. Only a text block of the reply counts as shown; thinking, AskUserQuestion and every tool's input do not. Show in the reply where it goes and the whole body verbatim, with the lint's warning: lines, then run the command; its permission prompt is the approval.`;
 
 function transcriptSince(path, sinceMs) {
   let size = 0;

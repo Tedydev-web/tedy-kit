@@ -55,7 +55,7 @@ test("the cockpit asks each job's open cards by the pending skill's steps, a job
   const pending = read("skills/pending/SKILL.md");
   assert.match(pending, /^description: Manual and recovery view of what waits on the user/m);
   const approve = pending.match(/^2\. \*\*Approve\.\*\*[\s\S]*?(?=^3\. )/m)?.[0] ?? "";
-  for (const phrase of ["no `AskUserQuestion`", "verbatim", "fenced block", "pending.mjs card-start <card>", "permission prompt is the approval", "Stop at the first block that fails or is refused", "never run a later block", "which blocks already wrote"]) assert.ok(approve.includes(phrase), phrase);
+  for (const phrase of ["no `AskUserQuestion`", "verbatim", "decision-points.md", "pending.mjs card-start <card>", "permission prompt is the approval", "Stop at the first block that fails or is refused", "never run a later block", "which blocks already wrote"]) assert.ok(approve.includes(phrase), phrase);
   assert.doesNotMatch(approve, /--approved/);
 });
 
@@ -133,7 +133,7 @@ test("the cockpit branches on resume's busy: or refused: prefix, settles a start
 test("every kit write a skill runs is approved at its own permission prompt after the reply quoted it, never by a menu answer", () => {
   const flow = read("shared/status-flow.md");
   assert.doesNotMatch(flow, /ride in the|yes there approves/);
-  assert.match(flow, /quote both in one fenced block of the reply, then run that command through `publish-batch\.mjs`; its permission prompt is the approval/);
+  assert.match(flow, /show its preview line as the item \(`<plugin>\/shared\/decision-points\.md`\), then run the same command with `--apply --lock <n>` through `publish-batch\.mjs`; its permission prompt is the approval/);
   const merge = read("skills/review-pr/references/status-after-merge.md");
   assert.doesNotMatch(merge, /approved those lines/);
   assert.match(merge, /`merge\.yes` approves the merge alone/);
@@ -209,12 +209,16 @@ test("the standards lens reads the repository's rule files from the PR base, nev
   assert.ok(read("skills/review-pr/references/checkout.md").includes("--branch <repo path>:<baseRefName>"));
 });
 
-test("every publish quotes the verbatim text in one fenced block of the reply before its command runs", () => {
+test("every publish shows where each item goes and its full text, with the lint's warning lines and without the command, pinned or notice lines", () => {
+  const publishing = read("shared/decision-points.md").match(/^- Publishing is never asked with `AskUserQuestion`\..*$/m)?.[0] ?? "";
+  for (const phrase of ["`PR #965 · 3 comments (head 788ac98f)`", "`` **1.** `path:line` ``", "full text verbatim", "the lint's `warning:` lines", "Leave out the command line, the `pinned:` and `notice:` lines and any job or card path", "the permission prompt shows the command"]) assert.ok(publishing.includes(phrase), phrase);
   const review = read("skills/review-pr/SKILL.md");
   const approval = review.slice(review.indexOf("10. **Approval.**"), review.indexOf("12. **Next step.**"));
-  for (const phrase of ["verbatim", "fenced block", "permission prompt"]) assert.ok(approval.includes(phrase), `review-pr steps 10 and 11: ${phrase}`);
-  for (const path of ["skills/review-pr/references/draft-format.md", "skills/review-pr/references/follow-up.md", "skills/dev/references/rebut.md", "skills/pm/SKILL.md"]) assert.ok(read(path).includes("fenced block"), path);
-  assert.match(read("shared/decision-points.md"), /^- Publishing is never asked with `AskUserQuestion`\./m);
+  for (const phrase of ["verbatim", "decision-points.md", "permission prompt"]) assert.ok(approval.includes(phrase), `review-pr steps 10 and 11: ${phrase}`);
+  for (const path of ["skills/review-pr/references/draft-format.md", "skills/review-pr/references/follow-up.md", "skills/dev/references/rebut.md", "skills/dev/references/pr-body-refresh.md", "skills/pm/SKILL.md", "skills/pm/references/comment-channels.md", "skills/pm/references/tracker-openproject.md", "shared/status-flow.md"]) assert.ok(read(path).includes("decision-points.md"), path);
+  const old = /fenced block|`pinned:`, `warning:` and `notice:` lines|on a line of its own|quote both/;
+  const dirs = ["skills", "shared"].map((dir) => new URL(`../${dir}/`, import.meta.url));
+  for (const file of dirs.flatMap((dir) => readdirSync(dir, { recursive: true }).filter((name) => name.endsWith(".md")).map((name) => new URL(name, dir)))) assert.doesNotMatch(readFileSync(file, "utf8"), old, file.pathname);
 });
 
 test("every github-write command line in the skills that writes to a repository names --repo", async () => {
