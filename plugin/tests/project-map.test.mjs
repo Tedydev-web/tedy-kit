@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { checkRepos, missingFields, parseMap, resolveMap } from "../lib/project-map.mjs";
+import { checkRepos, missingFields, parseMap, prdFiles, resolveMap } from "../lib/project-map.mjs";
 import { tempDir } from "./temp-dir-for-tests.mjs";
 
 const mapFile = (data) => `# Project map\n\nNotes for people.\n\n\`\`\`json\n${JSON.stringify(data, null, 2)}\n\`\`\`\n`;
@@ -37,6 +37,31 @@ test("missingFields separates required gaps from optional ones", () => {
   assert.deepEqual(gaps.required, ["paths", "repos[0].role", "language.pr_review"]);
   assert.ok(gaps.optional.includes("prd"));
   assert.equal(missingFields({ prd: { files: ["docs/prd/a.md"] } }).optional.includes("prd"), false);
+});
+
+test("prd: false and figma: false record a project without them, so neither is reported unset", () => {
+  const gaps = missingFields({ name: "a", paths: ["/w"], repos: [{ path: ".", role: "engine" }], language: { pr_review: "en" }, prd: false, figma: false });
+  assert.deepEqual(gaps.required, []);
+  assert.deepEqual(gaps.optional, ["tracker.type"]);
+});
+
+test("a prd.files directory stands for every markdown file under it, in path order", () => {
+  const root = tempDir("tedy-prd-files-");
+  mkdirSync(join(root, "research", "docs", "adr", "old"), { recursive: true });
+  writeFileSync(join(root, "research", "docs", "adr", "0002-b.md"), "B");
+  writeFileSync(join(root, "research", "docs", "adr", "0001-a.md"), "A");
+  writeFileSync(join(root, "research", "docs", "adr", "old", "0000-z.md"), "Z");
+  writeFileSync(join(root, "research", "docs", "adr", "notes.txt"), "no");
+  writeFileSync(join(root, "research", "docs", "system-architecture.md"), "S");
+  const map = { paths: [root], prd: { files: ["research/docs/adr", "research/docs/system-architecture.md"] } };
+  assert.deepEqual(prdFiles(map).map((file) => file.slice(root.length + 1)), [
+    "research/docs/adr/0001-a.md",
+    "research/docs/adr/0002-b.md",
+    "research/docs/adr/old/0000-z.md",
+    "research/docs/system-architecture.md",
+  ]);
+  assert.deepEqual(prdFiles({ paths: [root], prd: false }), []);
+  assert.throws(() => prdFiles({ paths: [root], prd: { files: ["research/missing"] } }), /research\/missing/);
 });
 
 test("checkRepos reports a missing directory and a missing integration branch", () => {

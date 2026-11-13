@@ -1,13 +1,12 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { GITHUB_WRITE_DRY_RUN_VERBS, githubWriteDryRun, parseFlags } from "./cli-flags.mjs";
 import { lintComment, lintDraft, mapLanguage, parseDraft, readDiff, snapshotPath } from "./draft-lint.mjs";
 import { fetchTab, indexTab, quoteInText, UC_ID } from "./prd-section.mjs";
 import { logGate, logRefusal, refusedLine } from "./hook-io.mjs";
 import { generatedPrBodyOp } from "./openproject.mjs";
-import { resolveMap } from "./project-map.mjs";
+import { prdFiles, resolveMap } from "./project-map.mjs";
 import { withRecords } from "./record-lock.mjs";
 import { pinnedSources, recheckPinned } from "./source-pins.mjs";
 
@@ -94,7 +93,7 @@ async function loadPrd(comments) {
   const map = resolveMap(process.cwd())?.map;
   const prd = {};
   if (!map?.prd) return prd;
-  if (map.prd.files?.length) prd["*"] = map.prd.files.map((file) => readFileSync(resolve(map.paths[0], file), "utf8")).join("\n");
+  if (map.prd.files?.length) prd["*"] = prdFiles(map).map((file) => readFileSync(file, "utf8")).join("\n");
   const epics = new Set(comments.flatMap((comment) => [...comment.body.matchAll(/^PRD EPIC (\d{2}) · /gm)].map((match) => match[1])));
   for (const epic of epics) {
     const tab = map.prd.tabs?.[epic]?.tab;

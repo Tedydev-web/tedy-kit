@@ -120,6 +120,11 @@ export function discover(root, { mergedBases = githubMergedBases, memoryDir = jo
   const readmes = instructionDirs.map((dir) => join(dir, "README.md")).filter(existsSync);
   const docs = markdownFiles(join(root, "docs"));
   const prdFiles = docs.filter((path) => /\/prd\/|product requirements/i.test(relative(root, path))).map((path) => relative(root, path));
+  const specDirs = instructionDirs
+    .flatMap((dir) => ["docs/adr", "docs/decisions", "adr"].map((name) => join(dir, name)))
+    .filter((dir) => existsSync(dir) && statSync(dir).isDirectory() && markdownFiles(dir).length)
+    .map((dir) => relative(root, dir))
+    .sort();
   const memory = existsSync(memoryDir) ? readdirSync(memoryDir).filter((name) => name.endsWith(".md")).map((name) => join(memoryDir, name)) : [];
   const links = { docs: new Map(), figma: new Map() };
   for (const path of [...instructions, ...readmes, ...docs, ...memory]) {
@@ -138,6 +143,7 @@ export function discover(root, { mergedBases = githubMergedBases, memoryDir = jo
     repos,
     instructions: instructions.map((path) => relative(root, path)),
     prdFiles,
+    specDirs,
     links: { docs: [...links.docs.values()], figma: [...links.figma.values()] },
   };
 }

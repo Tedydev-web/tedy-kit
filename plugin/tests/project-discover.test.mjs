@@ -61,4 +61,18 @@ test("discover lists repositories, instruction files, PRD markdown and links wit
   assert.deepEqual(found.instructions, ["AGENTS.md"]);
   assert.deepEqual(found.prdFiles, ["docs/prd/spec.md"]);
   assert.deepEqual(found.links.figma, [{ file: "AbC123", node: "1:2", sources: ["AGENTS.md"] }]);
+  assert.deepEqual(found.specDirs, []);
+});
+
+test("discover lists ADR folders in the workspace and its repositories as written-spec candidates", () => {
+  const root = tempDir("tedy-discover-adr-");
+  const research = join(root, "research");
+  execFileSync("git", ["init", "-q", "-b", "main", research]);
+  mkdirSync(join(research, "docs", "adr"), { recursive: true });
+  writeFileSync(join(research, "docs", "adr", "0001-ledger.md"), "# ADR 0001\n");
+  mkdirSync(join(root, "docs", "decisions"), { recursive: true });
+  writeFileSync(join(root, "docs", "decisions", "0001-x.md"), "# x\n");
+  mkdirSync(join(research, "adr"));
+  const found = discover(root, { mergedBases: () => [], memoryDir: join(root, "no-memory") });
+  assert.deepEqual(found.specDirs, ["docs/decisions", "research/docs/adr"]);
 });

@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { isAbsolute, join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { fetchTab } from "./prd-section.mjs";
@@ -48,10 +48,24 @@ export function missingFields(map) {
     if (!repo.role) required.push(`repos[${index}].role`);
   });
   if (!map.language?.pr_review) required.push("language.pr_review");
-  const optional = [["prd", map.prd?.doc || map.prd?.files?.length], ["figma.file", map.figma?.file], ["tracker.type", map.tracker?.type]]
+  const optional = [["prd", map.prd === false || map.prd?.doc || map.prd?.files?.length], ["figma.file", map.figma === false || map.figma?.file], ["tracker.type", map.tracker?.type]]
     .filter(([, value]) => !value)
     .map(([field]) => field);
   return { required, optional };
+}
+
+const markdownUnder = (dir) =>
+  readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".md"))
+    .map((entry) => join(entry.parentPath, entry.name))
+    .sort();
+
+export function prdFiles(map) {
+  return (map.prd?.files ?? []).flatMap((entry) => {
+    const path = resolve(map.paths[0], entry);
+    if (!existsSync(path)) throw new Error(`prd.files entry ${entry} does not exist under ${map.paths[0]}`);
+    return statSync(path).isDirectory() ? markdownUnder(path) : [path];
+  });
 }
 
 export function trackerCheck(map) {

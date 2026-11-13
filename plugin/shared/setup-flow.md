@@ -34,9 +34,10 @@ Any other `fail` line in the `profile.mjs doctor` output (`release-worktree`, `r
    - `repos[]`: remote, `origin/HEAD`, the integration branch with its evidence (base of the last 30 merged PRs, else `dev`/`develop`/`staging`), stack markers, and the package scripts that check code.
    - `instructions[]`: `AGENTS.md` and `CLAUDE.md` at the root and in each repository.
    - `prdFiles[]`: PRD markdown under `docs/`.
+   - `specDirs[]`: ADR folders, named docs/adr, docs/decisions or adr, in the workspace and each repository, candidates for `prd.files` when the project has no PRD.
    - `links`: Google Doc ids with tabs and Figma files with nodes, each with the files it came from (instruction files, READMEs, `docs/`, the project's auto memory).
    Then, for each Doc tab found, `prd-section.mjs index <doc> <tab>` to learn its epic and use case prefix. When `links` lacks a Doc or Figma the map needs, one `AskUserQuestion` asks whether to read old session transcripts for links, with `setup.skip`; read them only on yes.
-4. Ask the tier-3 gaps, one topic per call, grouped: repositories (role, readonly), languages, PRD and Figma per epic, tracker, then optional team, gotchas and truth overrides. Offer `setup.skip` for optional groups.
+4. Ask the tier-3 gaps, one topic per call, grouped: repositories (role, readonly; a role outside the schema's list is fine), languages, the written spec and Figma, tracker, then optional team, gotchas and truth overrides. Offer `setup.skip` for optional groups. For the spec and Figma, first ask whether the project has them at all: a no writes `prd: false` or `figma: false` and ends that topic; a project whose spec is its ADRs or architecture docs gets their folder in `prd.files`; only a Google Doc or a Figma file is asked per epic.
 5. Write `<profile>/projects/<name>.md` with Write (`node <plugin>/scripts/profile.mjs doctor` prints the profile directory): a two-line note for people, then the ```json block. Run `doctor` again until `READY`.
 6. When the profile is a git repository, commit the map there (`git -C <profile> add projects/<name>.md`, then commit with `feat: add <name> project map` or `feat: update <name> project map`); otherwise the written file is enough. Before any push, one `AskUserQuestion` names the remote and branch; push only on yes.
 
@@ -44,7 +45,7 @@ Any other `fail` line in the `profile.mjs doctor` output (`release-worktree`, `r
 
 Two `AskUserQuestion` steps, because one question holds at most four options. First: sources, repositories, tracker, or people and language. Then the matching question:
 
-- Sources: add an epic, a PRD tab or a Figma node; repoint a source that moved (new tracker host, new doc, new Figma file).
+- Sources: add an epic, a PRD tab, a spec folder or a Figma node; repoint a source that moved (new tracker host, new doc, new Figma file); mark a source the project does not have (`prd: false`, `figma: false`).
 - Repositories: change an integration branch or a readonly flag.
 - Tracker: change tracker rules.
 - People and language: change the team split; change review or tracker language.
@@ -53,4 +54,4 @@ Apply the answer, run `doctor`, commit as in step 6.
 
 ## Filling a gap mid-task
 
-When a role skill needs a field the map lacks (a Figma node for epic 07, the tracker project), it gathers candidates as in step 3, asks once, writes the field into the map, commits it, and carries on with the task in the same turn.
+When a role skill needs a field the map lacks (a Figma node for epic 07, the tracker project), it gathers candidates as in step 3, asks once, writes the field into the map, commits it, and carries on with the task in the same turn. A field set to `false` is not a gap: the skill works without that source and never asks for it.
