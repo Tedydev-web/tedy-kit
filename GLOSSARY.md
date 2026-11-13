@@ -29,7 +29,7 @@ Surface a conflict between sources in the same turn, quoting both sides, so the 
 _Avoid_: flag, escalate, mention
 
 **Truth ladder**:
-The order sources are checked against each other: the frontend matches the backend and the contract; the backend and the contract match the PRD and Figma.
+The order sources are checked against each other: the frontend matches the backend and the contract; the backend and the contract match the PRD and Figma. A project without them falls back to the written spec in `prd.files` (ADRs, architecture docs), then the work package or the user's words, then the code.
 _Avoid_: source hierarchy, priority order
 
 **Write-guard**:

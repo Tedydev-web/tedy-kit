@@ -17,7 +17,7 @@ node <plugin>/scripts/prd-section.mjs find <doc> <tab> "UC_SW_08 BR3"
 - Quote the PRD from `find` output character for character. `github-write.mjs` re-fetches the full tab at post time and refuses a quote that is not in it after whitespace normalisation, so a paraphrase or a straightened apostrophe fails.
 - The Doc's comment threads appear at the end of the export; `prd-section.mjs` drops them because they are discussion, not PRD. Read them only when the task is about those threads.
 - A private doc makes the script stop with "not readable without login". Tell the user; do not guess the content.
-- A map with `prd.files` keeps the PRD as markdown in a repository: `rg -n --no-ignore-global` the feature or rule there and quote the line with `path:line`.
+- A map with `prd.files` keeps the written spec as markdown in a repository (a PRD, or ADRs and architecture docs): `rg -n --no-ignore-global` the feature or rule there and quote the line with `path:line`. A directory entry covers every `.md` file under it. Read an ADR's status line before relying on it: an accepted decision binds, a proposed one is a claim to raise, and a superseded one points to the ADR that replaced it.
 
 ## Figma
 

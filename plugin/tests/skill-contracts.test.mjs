@@ -172,3 +172,16 @@ test("no file in the plugin uses the retired publish menus or answer-mode ticket
   assert.ok(files.length > 100, String(files.length));
   assert.deepEqual(files.filter((path) => retired.test(readFileSync(new URL(path, root), "utf8"))), []);
 });
+
+test("a project without a PRD or Figma still reconciles and reviews: the truth ladder falls back and a missing source never stops the run", () => {
+  const reconcile = read("shared/reconcile-flow.md");
+  assert.match(reconcile, /falls back, for behaviour and copy, to the written spec in `prd\.files`.*then the work package's checklist and acceptance criteria or the user's words, then the code/);
+  assert.match(reconcile, /Without a PRD, items come from the work package's checklist and acceptance criteria/);
+  assert.match(reconcile, /fills its column with `match\.nosource` and never stops the run/);
+  assert.match(read("shared/source-access.md"), /an accepted decision binds, a proposed one is a claim to raise/);
+  assert.match(read("skills/review-pr/SKILL.md"), /^5\. \*\*Compare\.\*\* .*the `prd\.files` line.*the Figma node when the map has one/m);
+  const spec = read("agents/reviewer.md").split("\n").find((line) => line.startsWith("- **spec**"));
+  assert.match(spec, /`prd\.files`/);
+  assert.match(spec, /a missing source is never a finding by itself/);
+  assert.match(read("shared/setup-flow.md"), /A field set to `false` is not a gap/);
+});

@@ -6,6 +6,7 @@ How to cross-check one scope across the PRD, Figma, the backend and contract, th
 
 - In form (fields, endpoints, states, errors), the frontend follows the backend and contract.
 - In behaviour and copy, the backend and contract follow the PRD and Figma.
+- A project the map gives no PRD or Figma (absent or `false`) falls back, for behaviour and copy, to the written spec in `prd.files` (ADRs and architecture docs, where an accepted decision beats a proposed one), then the work package's checklist and acceptance criteria or the user's words, then the code as it stands. Name the rung each conclusion rests on.
 - The map's `truth_overrides` adjust this per project; cite the override a conclusion relies on.
 - PRD against Figma is never settled by guessing which is newer. Put both sides in the table, quoted, with any override that applies, and raise it; the user picks.
 
@@ -24,14 +25,14 @@ A statement taken from prose (README, AGENTS.md, a PR description, a memory note
 ## Steps
 
 1. **Map.** `node <plugin>/scripts/project-map.mjs resolve` and read the map. A field the scope needs and the map lacks (a tab for the epic, a Figma node) goes through "Filling a gap mid-task" in `setup-flow.md`. Links and ids the map already holds are never asked again.
-2. **Items.** Turn the scope (an epic, a use case, a rule in words, or a PR) into items: one behaviour each, with its PRD locator. Find the locators with `prd-section.mjs index` and `find`. Write the item list into the report before reading code.
+2. **Items.** Turn the scope (an epic, a use case, a rule in words, or a PR) into items: one behaviour each, with its PRD locator. Find the locators with `prd-section.mjs index` and `find`; with `prd.files`, the `path:line` of the rule. Without a PRD, items come from the work package's checklist and acceptance criteria, else from the user's words, each with that source. Write the item list into the report before reading code.
 3. **Read, per item and per source.**
-   - PRD: the `find` output for the locator, quoted as printed.
+   - PRD: the `find` output for the locator, quoted as printed; with `prd.files`, the line quoted with its `path:line`.
    - Figma: the epic's node from the map; the frame and the exact copy on it.
    - Backend and contract: `git -C <repo> fetch -q origin`, then `git grep` and `git show origin/<branch>:<path>`; the writer that saves the field, not only its schema.
    - Frontend: the integration branch, or the current checkout when the user names one; say which.
    - Demo: when the map lists one.
-   - A source that does not exist or cannot be read is written down as skipped, with the reason.
+   - A source that does not exist or cannot be read is written down as skipped, with the reason. A source the project does not have (missing from the map or set to `false`) fills its column with `match.nosource` and never stops the run.
 4. **Compare** along the truth ladder, item by item.
 5. **Table.** One row per item and side that disagrees, in this shape:
 
@@ -41,7 +42,7 @@ A statement taken from prose (README, AGENTS.md, a PR description, a memory note
    Conclusion is `match.ok`, `match.diff`, or `match.nosource`. Owner is the PM, the designer, the backend team, the blockchain team or the frontend. When the map has a tracker, the work package column names the package that carries the item, found with `node <plugin>/scripts/openproject.mjs get /api/v3/work_packages/<id>` for the ids the task or PR names, otherwise by subject or use-case id among the project's packages; a package whose text disagrees with the PRD or Figma is itself a `match.diff` row with the PM as owner.
 6. **Raise list.** Every `match.diff` without a documented reason and every `evidence.guess` row, each with both sides quoted and the owner named; a row owned by the PM names the work package to fix or says a new one is needed. Name the side the truth ladder favours when it does; when it does not (PRD against Figma), say so.
 7. **Independent lens.** When the scope has more than 8 items, spawn the `tedy:reviewer` agent with lens `spec` on the frontend repository, wait for its completion notice, and add its findings to the table and the raise list before writing the report. One rule or one use case needs no lens.
-8. **Report.** `<paths[0]>/plans/reports/reconcile-<yymmdd-hhmm>-<slug>.md`: scope, item list, coverage (how many of the requirements in the scoped PRD sections, counting steps, BRs, AFs, EFs and UI rules, have a row or a stated reason to skip), sources read and skipped, the table, the raise list. Quote the coverage, the table and the raise list in the reply.
+8. **Report.** `<paths[0]>/plans/reports/reconcile-<yymmdd-hhmm>-<slug>.md`: scope, item list, coverage (how many of the requirements in the scoped PRD sections, counting steps, BRs, AFs, EFs and UI rules, or, without a PRD, of the items from step 2, have a row or a stated reason to skip), sources read and skipped, the table, the raise list. Quote the coverage, the table and the raise list in the reply.
 
 ## Done
 
