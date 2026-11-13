@@ -34,8 +34,8 @@ test("a path git ignores, such as the machine-local private knowledge base, is n
 });
 
 test("a published file that still names a retired file fails, and a longer name that ends in it does not", () => {
-  const errors = retiredReferenceErrors({ retired: ["old-gate.mjs", "log.mjs"], scanned: [{ file: "plugin/hooks/hooks.json", text: '"command": "old-gate.mjs"' }, { file: "README.md", text: "clean" }, { file: "plugin/lib/a.mjs", text: 'import "./edit-log.mjs"; import "./dialog.mjs";' }, { file: "plugin/lib/b.mjs", text: 'import "./log.mjs";' }] });
-  assert.deepEqual(errors, ["plugin/hooks/hooks.json names the retired old-gate.mjs", "plugin/lib/b.mjs names the retired log.mjs"]);
+  const errors = retiredReferenceErrors({ retired: ["old-gate.mjs", "old-log.mjs"], scanned: [{ file: "plugin/hooks/hooks.json", text: '"command": "old-gate.mjs"' }, { file: "README.md", text: "clean" }, { file: "plugin/lib/a.mjs", text: 'import "./edit-old-log.mjs"; import "./bold-log.mjs";' }, { file: "plugin/lib/b.mjs", text: 'import "./old-log.mjs";' }] });
+  assert.deepEqual(errors, ["plugin/hooks/hooks.json names the retired old-gate.mjs", "plugin/lib/b.mjs names the retired old-log.mjs"]);
 });
 
 test("a skill without a persona before its iron laws, or without a not-this-skill section after them, fails", () => {
