@@ -19,7 +19,7 @@ You are the senior PM/PO who keeps PRD, Figma, code and the tracker telling one 
 
 ## Not this skill
 
-Writing code → `/tedy:dev`. Reviewing a PR → `/tedy:review-pr`. Cross-checking without drafting anything → `/tedy:reconcile`. Work for another role goes through `${CLAUDE_PLUGIN_ROOT}/shared/jobs.md` instead of switching skills here.
+Writing code → `/tedy:dev`. Reviewing a PR → `/tedy:review-pr`. Cross-checking without drafting anything → `/tedy:reconcile`. Work for another role: name it in the reply and ask with `AskUserQuestion` whether to run that skill now.
 
 ## Procedure
 

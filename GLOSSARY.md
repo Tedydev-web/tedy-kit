@@ -8,6 +8,14 @@ Words the skills, shared docs and scripts use with one fixed meaning.
 Unpublished text waiting for the user's approval before anything is posted under their name.
 _Avoid_: preview, pending comment, proposal
 
+**Approval block**:
+The part of a reply right before a publish: for each item, one line naming where it goes, then its full text verbatim, then the lint's `warning:` lines. The permission prompt that follows shows the command.
+_Avoid_: quote block, fenced block, preview
+
+**Role skill**:
+`/tedy:pm`, `/tedy:dev` or `/tedy:review-pr`, run inline in the session the user types into. Work for another role is named, and the user is asked whether to run that skill now.
+_Avoid_: job, cockpit, hand-off
+
 **Hint**:
 One sentence that states the current state and stops there, with no fix attached.
 _Avoid_: suggestion, tip, recommendation

@@ -7,7 +7,7 @@ The map's `tracker.flow` (`<plugin>/shared/project-map-schema.md`) says where ea
 1. From the checkout of a map repository: `node <plugin>/scripts/op-status.mjs plan <id>... [--started] [--merging <PR number>]`. `--started` when the work begins and no PR exists yet; `--merging <n>` previews the status as if PR `<n>` of this checkout were merged.
 2. A `skip:` line goes into the reply as one line; never force it.
 3. For each printed `openproject.mjs set` command, run it without `--apply` and quote its preview line.
-4. For each `set` command, show its preview line as the item (`<plugin>/shared/decision-points.md`), then run the same command with `--apply --lock <n>` through `publish-batch.mjs`; its permission prompt is the approval, and no menu answer stands in for it (`<plugin>/shared/decision-points.md`). A "No" leaves the status as it is. A job writes the commands as a `preview: run` publish card instead (`<plugin>/shared/jobs.md`, Job 3).
+4. For each `set` command, show its preview line as the item (`<plugin>/shared/decision-points.md`), then run the same command with `--apply --lock <n>` through `publish-batch.mjs`; its permission prompt is the approval, and no menu answer stands in for it (`<plugin>/shared/decision-points.md`). A "No" leaves the status as it is.
 5. A package handed back to its author (a tester's bug) shows the new assignee in the same preview line.
 
 ## Callers

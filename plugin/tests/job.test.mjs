@@ -125,24 +125,6 @@ test("two concurrent identical starts write two job files with a record each and
   assert.deepEqual(outs.map((o) => JSON.parse(o.stdout).name).sort(), [`pm-${day}${time}-gaps-in-epic-3`, `pm-${day}${time}-gaps-in-epic-3-2`]);
 });
 
-test("decision-points.md tells a job it never asks the user and writes a card instead, as jobs.md Job 2 says", () => {
-  const text = readFileSync(join(PLUGIN, "shared", "decision-points.md"), "utf8");
-  assert.doesNotMatch(text, /A job asks in its own window/);
-  assert.match(text, /A job never asks the user \(`shared\/jobs\.md`, Job 2\)\./);
-  assert.match(text, /only a decision the user must make \(`shared\/jobs\.md`, Job 2\) becomes a `question` card, which the cockpit asks\./);
-});
-
-test("jobs.md has the Job section every prompt names, and the skills send work for another role to it, never to a role session", () => {
-  const headings = readFileSync(JOBS_DOC, "utf8").split("\n").filter((line) => line.startsWith("## "));
-  assert.deepEqual(headings, ["## Which agent this is", "## Cockpit", "## Job", "## Permissions"]);
-  assert.doesNotMatch(readFileSync(JOBS_DOC, "utf8"), /hand-?off|jobs: true|`sessions`/i);
-  for (const skill of ["pm", "dev", "review-pr"]) {
-    const text = readFileSync(join(PLUGIN, "skills", skill, "SKILL.md"), "utf8");
-    assert.match(text, /Work for another role goes through `\$\{CLAUDE_PLUGIN_ROOT\}\/shared\/jobs\.md` instead of switching skills here\./, skill);
-    assert.doesNotMatch(text, /`sessions`|hand-?off|PM session/i, skill);
-  }
-});
-
 test("every job agent keeps the Agent tool, so review and pm jobs can spawn the tedy:reviewer lenses their skills call for", () => {
   const front = (role) => readFileSync(join(PLUGIN, "agents", `${role}.md`), "utf8").split("---")[1];
   for (const role of ["pm", "dev", "review", "devops"]) assert.doesNotMatch(front(role), /^(tools|disallowedTools):/m, role);
