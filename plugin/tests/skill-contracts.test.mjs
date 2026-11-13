@@ -25,11 +25,12 @@ test("no skill or shared procedure promises an approval menu, because a publish 
   for (const name of ["review-pr", "pm"]) assert.match(read(`skills/${name}/SKILL.md`), /^1\. .*approves? .*once, at the command prompt/m, name);
 });
 
-test("several comment writes of one turn go out as one publish-batch run, so the user approves the turn once", () => {
+test("every kit write of a turn goes out as one publish-batch run whose command carries its summary, so any client's prompt shows what is published", () => {
   const rules = read("shared/decision-points.md");
-  assert.match(rules, /^- Two or more comment writes of one turn go out as one `publish-batch\.mjs <batch\.json>` run/m);
-  assert.match(read("skills/pm/SKILL.md"), /publish-batch\.mjs/);
-  assert.match(read("skills/review-pr/references/follow-up.md"), /publish-batch\.mjs/);
+  assert.match(rules, /^- Every kit write goes out through `publish-batch\.mjs`, all writes of one turn in one batch/m);
+  assert.match(rules, /--summary/);
+  assert.match(rules, /--shows/);
+  for (const path of ["skills/pm/SKILL.md", "skills/review-pr/SKILL.md", "skills/review-pr/references/follow-up.md", "skills/dev/references/pr-body-refresh.md"]) assert.match(read(path), /publish-batch\.mjs/, path);
 });
 
 test("a review job asks to run PR code on a question card that the cockpit asks with the run header, and the answer goes back through SendMessage", () => {
@@ -132,7 +133,7 @@ test("the cockpit branches on resume's busy: or refused: prefix, settles a start
 test("every kit write a skill runs is approved at its own permission prompt after the reply quoted it, never by a menu answer", () => {
   const flow = read("shared/status-flow.md");
   assert.doesNotMatch(flow, /ride in the|yes there approves/);
-  assert.match(flow, /quote both in one fenced block of the reply, then run that command; its permission prompt is the approval/);
+  assert.match(flow, /quote both in one fenced block of the reply, then run that command through `publish-batch\.mjs`; its permission prompt is the approval/);
   const merge = read("skills/review-pr/references/status-after-merge.md");
   assert.doesNotMatch(merge, /approved those lines/);
   assert.match(merge, /`merge\.yes` approves the merge alone/);

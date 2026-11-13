@@ -5,8 +5,7 @@ import { basename, isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ALL_GATES_ON, ask, deny, gateSwitches, logGate, readHookInput } from "../lib/hook-io.mjs";
 import { CLAUDE_SETTINGS, KIT_PUBLISH_APPLY_VERBS, KIT_PUBLISH_WRITE_VERBS } from "../lib/publish-approval-settings.mjs";
-import { itemCommand, itemSummary, readBatch } from "../lib/publish-batch.mjs";
-import { chatLanguage, fill, labels } from "../lib/labels.mjs";
+import { batchSummary, itemCommand, parseArgs, readBatch, shownSummary, SHOWS_REFUSAL } from "../lib/publish-batch.mjs";
 import { resolveMap } from "../lib/project-map.mjs";
 import { shellWords, splitSegments, substitutions, tokenize, walkCommands } from "../lib/shell-segments.mjs";
 import { INTERPRETER, SHELLS, readsUnreadableCode, redirectLength, scriptOperand, variableScriptArguments, withoutRedirects } from "../lib/shell-program-arguments.mjs";
@@ -65,7 +64,7 @@ const MAX_COMMAND = 10_000;
 const REWRITE = "Rewrite it so every command word is literal: split it into plain commands, or put the code in a script file in the system temp directory (never inside the repository) with the Write tool and run it as `python3 <file>` or `node <file>`, with no eval, no `bash -c`, no heredoc code and no command word in a variable. Never put a git push, a merge or a GitHub write inside a script: run it as a plain command of its own so the gate can check it. The user is not asked, because they cannot check this form either.";
 const UNREADABLE_REASON = `tedy gate: this command runs code the gate cannot read (a command word built at run time, eval, a shell or interpreter reading code from stdin, a heredoc, a pipe or a process substitution, a shell given -c, an interpreter one-liner that mentions gh, or git -c alias/core). ${REWRITE}`;
 const MERGE_REASON = "tedy gate: merging or marking a PR ready belongs to the user. Allow it only if the user asked for this exact PR in this turn.";
-const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve|unresolve|pr-body)|openproject\.mjs["']?\s+apply|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor|edit|delete))\b|^(?=[\s\S]*--apply\b)[\s\S]*?(?:openproject\.mjs["']?\s+(?:set|comment|comment-edit|relation|relation-delete|rollback)|doc-comment-file\.mjs["']?\s+post)\b|publish-batch\.mjs["']?\s+\S*\.json\b/;
+const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve|unresolve|pr-body)|openproject\.mjs["']?\s+apply|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor|edit|delete))\b|^(?=[\s\S]*--apply\b)[\s\S]*?(?:openproject\.mjs["']?\s+(?:set|comment|comment-edit|relation|relation-delete|rollback)|doc-comment-file\.mjs["']?\s+post)\b|publish-batch\.mjs["']?\s[\s\S]*?--shows\b/;
 export { CLAUDE_SETTINGS };
 const REWRITING_PUSH = /^(-f|--force|--force-with-lease(=.*)?|--force-if-includes|--mirror|--all|--prune|-d|--delete)$/;
 export const CTX_TOOL = /__ctx_(execute|execute_file|batch_execute)$/;
@@ -454,7 +453,8 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
     if (unreadable(segment, piped)) rewriteFor(UNREADABLE_REASON);
     const call = BATCH_SCRIPT.test(segment) ? kitScriptCall(segment) : null;
     if (call?.words[0] === "publish-batch.mjs") {
-      const batch = batchVerdict(call.words[1], dir, { gates, projectsDir, settingsFile });
+      const batch = batchVerdict(call.words.slice(1), dir, { gates, projectsDir, settingsFile });
+      if (batch.allow) continue;
       if (!batch.ask) return batch;
       asked = { allow: false, ask: true, reason: asked ? `${batch.reason}\n${asked.reason}` : batch.reason };
       continue;
@@ -518,15 +518,11 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
   return rewrite ?? asked ?? { allow: true };
 }
 
-function askLanguage() {
-  try {
-    return chatLanguage();
-  } catch {
-    return "en";
-  }
-}
-
-function batchVerdict(file, dir, options) {
+function batchVerdict(words, dir, options) {
+  const { positional, flags } = parseArgs(words);
+  const shows = shownSummary(words);
+  const [file] = positional;
+  if (shows === null && flags.summary === true) return { allow: true };
   let items;
   try {
     if (!file) throw new Error("no batch file was named");
@@ -538,8 +534,9 @@ function batchVerdict(file, dir, options) {
     const verdict = evaluate(itemCommand(item), dir, options);
     if (!verdict.allow && !verdict.ask) return { allow: false, reason: `tedy gate: refused by publish-batch: item ${index + 1}: ${verdict.reason}` };
   }
-  const list = items.map((item, index) => `${index + 1}) ${itemSummary(item, dir)}`).join("; ");
-  return { allow: false, ask: true, reason: fill(labels(askLanguage())["batch.ask"], { count: items.length, items: list }) };
+  const summary = batchSummary(items, dir);
+  if (shows !== summary) return { allow: false, reason: `tedy gate: refused by publish-batch: ${SHOWS_REFUSAL}; nothing was written.` };
+  return { allow: false, ask: true, reason: summary };
 }
 
 function batchCommands(commands) {

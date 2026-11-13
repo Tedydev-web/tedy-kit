@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameS
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { bashInputs, classify, kitScriptCall, publishingSegments } from "./git-gate.mjs";
-import { itemCommand, readBatch } from "../lib/publish-batch.mjs";
+import { itemCommand, parseArgs, readBatch, shownSummary } from "../lib/publish-batch.mjs";
 import { jobsDir } from "../lib/job-files.mjs";
 import { jobOfAgent } from "../lib/job-session-hooks.mjs";
 import { profileDir } from "../lib/profile.mjs";
@@ -139,7 +139,7 @@ export function classifyActions(input, map) {
       if (action.kind === "cd") continue;
       const batch = /publish-batch\.mjs/.test(segment) ? kitScriptCall(segment)?.words : null;
       if (batch?.[0] === "publish-batch.mjs") {
-        for (const command of batchItems(batch[1], dir)) {
+        for (const command of shownSummary(batch) === null ? [] : batchItems(parseArgs(batch.slice(1)).positional[0], dir)) {
           const write = SCRIPT_WRITES.find((entry) => entry.pattern.test(command));
           if (write) actions.push({ kind: write.kind, repo: null, script: true });
         }

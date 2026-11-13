@@ -27,10 +27,12 @@ export const KIT_PUBLISH_ASK_RULES = Object.freeze([
   ...writeRules("figma-comments.mjs"),
   ...writeRules("gdoc-comments.mjs"),
   ...applyRules("doc-comment-file.mjs"),
-  "Bash(*publish-batch.mjs*)",
+  "Bash(*publish-batch.mjs*--shows*)",
 ]);
 
 export const retiredDenyRules = (state = STATE_DIR) => [`Edit(/${resolve(state, "approvals")}/**)`];
+
+export const RETIRED_ASK_RULES = Object.freeze(["Bash(*publish-batch.mjs*)"]);
 
 export function readSettings(file) {
   let data;
@@ -49,7 +51,8 @@ export function readSettings(file) {
 
 export function plannedPermissions({ ask, deny }) {
   const retired = retiredDenyRules();
-  return { ask: [...ask, ...KIT_PUBLISH_ASK_RULES.filter((rule) => !ask.includes(rule))], deny: deny.filter((rule) => !retired.includes(rule)) };
+  const kept = ask.filter((rule) => !RETIRED_ASK_RULES.includes(rule));
+  return { ask: [...kept, ...KIT_PUBLISH_ASK_RULES.filter((rule) => !kept.includes(rule))], deny: deny.filter((rule) => !retired.includes(rule)) };
 }
 
 const sameRules = (a, b) => a.length === b.length && a.every((rule, index) => rule === b[index]);
@@ -70,5 +73,6 @@ export function writePermissions(file, { data, ask, deny }, next) {
   writeFileSync(temporary, `${JSON.stringify({ ...data, permissions }, null, 2)}\n`, { mode });
   chmodSync(temporary, mode);
   renameSync(temporary, target);
-  return { backup, removed: deny.length - next.deny.length, added: next.ask.length - ask.length };
+  const retiredAsk = ask.filter((rule) => RETIRED_ASK_RULES.includes(rule)).length;
+  return { backup, removed: deny.length - next.deny.length + retiredAsk, added: next.ask.length - ask.length + retiredAsk };
 }

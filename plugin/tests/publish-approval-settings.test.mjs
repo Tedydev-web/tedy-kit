@@ -46,8 +46,19 @@ test("ask restores the kit's 23 publish ask rules after a 600 backup, keeps ever
   assert.deepEqual(read(join(place.profile, "config.json")).gates, { noComments: true });
   assert.equal(read(join(place.profile, "config.json")).language.chat, "vi");
   assert.doesNotMatch(run.stdout + run.stderr, new RegExp(MARKER));
-  assert.match(run.stdout, /restored 23 kit publish ask rules, removed 0 retired deny rules/);
+  assert.match(run.stdout, /restored 23 kit publish ask rules, removed 0 retired rules/);
   assert.match(run.stdout, /removed the obsolete gates\.publishApproval "answer"/);
+});
+
+test("ask replaces the retired catch-all batch rule, which asked even for a batch's --summary, with the --shows rule", () => {
+  const place = places({ rules: [...OTHER, "Bash(*publish-batch.mjs*)", ...KIT_PUBLISH_ASK_RULES.filter((rule) => !rule.includes("publish-batch"))] });
+  const run = toggle(place, "ask");
+  assert.equal(run.status, 0, run.stderr);
+  const ask = read(place.settings).permissions.ask;
+  assert.ok(!ask.includes("Bash(*publish-batch.mjs*)"));
+  assert.ok(ask.includes("Bash(*publish-batch.mjs*--shows*)"));
+  assert.match(run.stdout, /restored 1 kit publish ask rules, removed 1 retired rules/);
+  assert.match(toggle(place, "ask").stdout, /not written/);
 });
 
 test("ask removes only the retired deny rule on the approval tickets, keeps the deny rules that guard the kit's records, is idempotent and writes only on a change", () => {

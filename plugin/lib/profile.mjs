@@ -229,7 +229,7 @@ function publishApproval(dir, restore, settingsFile = CLAUDE_SETTINGS) {
   if (unchanged(current, next)) lines.push(`${settingsFile}: every kit publish ask rule is present and no retired deny rule is left, not written`);
   else {
     const { backup, removed, added } = writePermissions(settingsFile, current, next);
-    lines.push(`${settingsFile}: restored ${added} kit publish ask rules, removed ${removed} retired deny rules; backup ${backup}`);
+    lines.push(`${settingsFile}: restored ${added} kit publish ask rules, removed ${removed} retired rules; backup ${backup}`);
   }
   if (raw.gates && "publishApproval" in raw.gates) {
     const { publishApproval: dropped, ...gates } = raw.gates;

@@ -4,7 +4,7 @@ import { githubWriteDryRun, parseFlags } from "../lib/cli-flags.mjs";
 import { parseDraft } from "../lib/draft-lint.mjs";
 import { classify, dataOnlyCommand, kitScriptCall, splitSegments, tokenize } from "./git-gate.mjs";
 import { readTranscriptTail } from "../lib/hook-io.mjs";
-import { itemCommand, readBatch } from "../lib/publish-batch.mjs";
+import { itemCommand, parseArgs, readBatch, shownSummary } from "../lib/publish-batch.mjs";
 
 const SCRIPT = /github-write\.mjs$/;
 const PUBLISH_COMMANDS = new Set(["post", "reply", "edit"]);
@@ -30,8 +30,9 @@ export function publishes(command, cwd, read) {
     const tokens = tokenize(segment);
     const at = tokens.findIndex((token) => SCRIPT.test(token));
     const words = kitScriptCall(segment)?.words ?? (!data && at !== -1 ? tokens.slice(at) : null);
-    if (words?.[0] === "publish-batch.mjs" && words[1]) {
-      for (const item of readBatch(resolve(dir, words[1]))) found.push(...publishes(itemCommand(item), dir, read));
+    if (words?.[0] === "publish-batch.mjs") {
+      const [file] = parseArgs(words.slice(1)).positional;
+      if (file && shownSummary(words) !== null) for (const item of readBatch(resolve(dir, file))) found.push(...publishes(itemCommand(item), dir, read));
       continue;
     }
     if (!words || !SCRIPT.test(words[0])) continue;

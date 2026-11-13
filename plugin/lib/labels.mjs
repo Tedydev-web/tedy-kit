@@ -66,7 +66,7 @@ export const LABELS = {
     "doc.copy": "Copy",
     "doc.copied": "Copied",
     "doc.locale": "en-GB",
-    "batch.ask": "Publish {count} items under your name: {items}. The full text of each is quoted in the chat above; approve only if you have read it.",
+    "batch.summary": "Publish {count} items under your name: {items}",
   },
   vi: {
     "next.header": "Bước tiếp",
@@ -132,7 +132,7 @@ export const LABELS = {
     "doc.copy": "Copy",
     "doc.copied": "Đã copy",
     "doc.locale": "vi-VN",
-    "batch.ask": "Đăng {count} mục dưới tên anh: {items}. Toàn văn từng mục đã trích trong chat phía trên; chỉ duyệt khi anh đã đọc.",
+    "batch.summary": "Đăng {count} mục dưới tên anh: {items}",
   },
 };
 
