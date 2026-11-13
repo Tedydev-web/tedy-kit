@@ -25,6 +25,13 @@ test("no skill or shared procedure promises an approval menu, because a publish 
   for (const name of ["review-pr", "pm"]) assert.match(read(`skills/${name}/SKILL.md`), /^1\. .*approves? .*once, at the command prompt/m, name);
 });
 
+test("several comment writes of one turn go out as one publish-batch run, so the user approves the turn once", () => {
+  const rules = read("shared/decision-points.md");
+  assert.match(rules, /^- Two or more comment writes of one turn go out as one `publish-batch\.mjs <batch\.json>` run/m);
+  assert.match(read("skills/pm/SKILL.md"), /publish-batch\.mjs/);
+  assert.match(read("skills/review-pr/references/follow-up.md"), /publish-batch\.mjs/);
+});
+
 test("a review job asks to run PR code on a question card that the cockpit asks with the run header, and the answer goes back through SendMessage", () => {
   const checkout = read("skills/review-pr/references/checkout.md");
   assert.doesNotMatch(checkout, /own window/);

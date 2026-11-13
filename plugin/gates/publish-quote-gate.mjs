@@ -4,6 +4,7 @@ import { githubWriteDryRun, parseFlags } from "../lib/cli-flags.mjs";
 import { parseDraft } from "../lib/draft-lint.mjs";
 import { classify, dataOnlyCommand, kitScriptCall, splitSegments, tokenize } from "./git-gate.mjs";
 import { readTranscriptTail } from "../lib/hook-io.mjs";
+import { itemCommand, readBatch } from "../lib/publish-batch.mjs";
 
 const SCRIPT = /github-write\.mjs$/;
 const PUBLISH_COMMANDS = new Set(["post", "reply", "edit"]);
@@ -29,6 +30,10 @@ export function publishes(command, cwd, read) {
     const tokens = tokenize(segment);
     const at = tokens.findIndex((token) => SCRIPT.test(token));
     const words = kitScriptCall(segment)?.words ?? (!data && at !== -1 ? tokens.slice(at) : null);
+    if (words?.[0] === "publish-batch.mjs" && words[1]) {
+      for (const item of readBatch(resolve(dir, words[1]))) found.push(...publishes(itemCommand(item), dir, read));
+      continue;
+    }
     if (!words || !SCRIPT.test(words[0])) continue;
     const { positional, flags } = parseFlags(words.slice(1));
     const [name] = positional;
@@ -97,7 +102,7 @@ function mainTranscript({ transcript_path: path, agent_id: agent }) {
 
 export function check(input) {
   const command = input.tool_input?.command ?? "";
-  if (!/github-write\.mjs/.test(command)) return null;
+  if (!/github-write\.mjs|publish-batch\.mjs/.test(command)) return null;
   const read = (file) => readFileSync(file, "utf8");
   const found = publishes(command, input.cwd ?? process.cwd(), read);
   if (!found.length) return null;

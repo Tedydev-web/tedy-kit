@@ -19,7 +19,7 @@ For every thread you opened:
 3. Classify: fixed in code, not fixed, fixed differently (raise it if it breaks the PRD), or the reply argues the point. When the reply argues, weigh it against the sources; if it holds, say so to the user plainly.
 4. Report a table to the user: thread, status, evidence at `<sha8>`. Leave resolving to the user unless they ask for it in that turn (`resolve` below).
 
-## Writes (each approved at its own prompt)
+## Writes (each approved at its own prompt; two or more replies or resolves of one turn go out as one `publish-batch.mjs` run, `shared/decision-points.md`)
 
 ```bash
 node <plugin>/scripts/github-write.mjs reply <pr> <comment-databaseId> --body-file <file> --repo <owner/repo>

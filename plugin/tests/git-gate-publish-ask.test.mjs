@@ -21,8 +21,8 @@ function gate(command, { mode, rules = [], tool = "Bash", toolInput = { command 
   return out ? JSON.parse(out).hookSpecificOutput : null;
 }
 
-test("the kit keeps exactly 22 publish ask rules, the one approval of every kit publish", () => {
-  assert.equal(KIT_PUBLISH_ASK_RULES.length, 22);
+test("the kit keeps exactly 23 publish ask rules, the one approval of every kit publish", () => {
+  assert.equal(KIT_PUBLISH_ASK_RULES.length, 23);
 });
 
 test("an uncovered kit publish asks and a covered one passes to the ask rule, also for a profile that still says answer", () => {

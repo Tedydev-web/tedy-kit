@@ -267,6 +267,7 @@ test("the publish verbs are exported and the ask rules built from them stay as t
     "Bash(*figma-comments.mjs*post*)", "Bash(*figma-comments.mjs*reply*)", "Bash(*figma-comments.mjs*delete*)",
     "Bash(*gdoc-comments.mjs*reply*)", "Bash(*gdoc-comments.mjs*anchor*)", "Bash(*gdoc-comments.mjs*edit*)", "Bash(*gdoc-comments.mjs*delete*)",
     "Bash(*doc-comment-file.mjs*post*--apply*)",
+    "Bash(*publish-batch.mjs*)",
   ]);
   assert.deepEqual(Object.keys(KIT_PUBLISH_WRITE_VERBS), ["github-write.mjs", "openproject.mjs", "figma-comments.mjs", "gdoc-comments.mjs"]);
   assert.deepEqual(KIT_PUBLISH_WRITE_VERBS["openproject.mjs"], ["apply"]);

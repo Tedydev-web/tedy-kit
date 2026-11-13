@@ -30,7 +30,7 @@ const toggle = ({ profile, settings }, ...args) => spawnSync("node", [SCRIPT, "p
 const backups = ({ home }) => readdirSync(home).filter((name) => name !== "settings.json");
 const read = (file) => JSON.parse(readFileSync(file, "utf8"));
 
-test("ask restores the kit's 22 publish ask rules after a 600 backup, keeps every other key and drops an obsolete answer mode from the config", () => {
+test("ask restores the kit's 23 publish ask rules after a 600 backup, keeps every other key and drops an obsolete answer mode from the config", () => {
   const place = places({ config: { gates: { noComments: true, publishApproval: "answer" }, language: { chat: "vi" } }, rules: OTHER });
   const before = readFileSync(place.settings, "utf8");
   const run = toggle(place, "ask");
@@ -46,7 +46,7 @@ test("ask restores the kit's 22 publish ask rules after a 600 backup, keeps ever
   assert.deepEqual(read(join(place.profile, "config.json")).gates, { noComments: true });
   assert.equal(read(join(place.profile, "config.json")).language.chat, "vi");
   assert.doesNotMatch(run.stdout + run.stderr, new RegExp(MARKER));
-  assert.match(run.stdout, /restored 22 kit publish ask rules, removed 0 retired deny rules/);
+  assert.match(run.stdout, /restored 23 kit publish ask rules, removed 0 retired deny rules/);
   assert.match(run.stdout, /removed the obsolete gates\.publishApproval "answer"/);
 });
 
@@ -62,7 +62,7 @@ test("ask removes only the retired deny rule on the approval tickets, keeps the 
   const again = toggle(place, "ask");
   assert.match(again.stdout, /every kit publish ask rule is present and no retired deny rule is left, not written/);
   assert.equal(backups(place).length, 1);
-  assert.match(toggle(place).stdout, /kit publish ask rules in .*: 22\/22\nretired deny rules in .*: 0/);
+  assert.match(toggle(place).stdout, /kit publish ask rules in .*: 23\/23\nretired deny rules in .*: 0/);
   const only = places({ deny: [RETIRED[0]] });
   toggle(only, "ask");
   assert.equal("deny" in read(only.settings).permissions, false);

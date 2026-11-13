@@ -1,7 +1,8 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { bashInputs, classify, publishingSegments } from "./git-gate.mjs";
+import { bashInputs, classify, kitScriptCall, publishingSegments } from "./git-gate.mjs";
+import { itemCommand, readBatch } from "../lib/publish-batch.mjs";
 import { jobsDir } from "../lib/job-files.mjs";
 import { jobOfAgent } from "../lib/job-session-hooks.mjs";
 import { profileDir } from "../lib/profile.mjs";
@@ -115,6 +116,14 @@ function repoOf(map, path) {
 
 const isCode = (hit) => hit && !hit.inside.split("/").includes("plans") && !hit.inside.endsWith(".md");
 
+function batchItems(file, dir) {
+  try {
+    return file ? readBatch(resolve(dir, file)).map(itemCommand) : [];
+  } catch {
+    return [];
+  }
+}
+
 export function classifyActions(input, map) {
   const cwd = input.cwd ?? process.cwd();
   if (EDIT_TOOLS.has(input.tool_name)) {
@@ -128,6 +137,14 @@ export function classifyActions(input, map) {
     for (const { text: segment, dir } of walkCommands(item.tool_input?.command ?? "", item.cwd ?? cwd).parts) {
       const action = classify(segment, dir);
       if (action.kind === "cd") continue;
+      const batch = /publish-batch\.mjs/.test(segment) ? kitScriptCall(segment)?.words : null;
+      if (batch?.[0] === "publish-batch.mjs") {
+        for (const command of batchItems(batch[1], dir)) {
+          const write = SCRIPT_WRITES.find((entry) => entry.pattern.test(command));
+          if (write) actions.push({ kind: write.kind, repo: null, script: true });
+        }
+        continue;
+      }
       const script = SCRIPT_WRITES.find((write) => write.pattern.test(shellWords(segment)));
       if (script) actions.push({ kind: script.kind, repo: null, script: true });
       else if (action.kind === "commit" || action.kind === "push") {

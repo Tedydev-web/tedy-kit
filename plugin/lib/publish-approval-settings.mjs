@@ -27,6 +27,7 @@ export const KIT_PUBLISH_ASK_RULES = Object.freeze([
   ...writeRules("figma-comments.mjs"),
   ...writeRules("gdoc-comments.mjs"),
   ...applyRules("doc-comment-file.mjs"),
+  "Bash(*publish-batch.mjs*)",
 ]);
 
 export const retiredDenyRules = (state = STATE_DIR) => [`Edit(/${resolve(state, "approvals")}/**)`];

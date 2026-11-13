@@ -5,6 +5,8 @@ import { basename, isAbsolute, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { ALL_GATES_ON, ask, deny, gateSwitches, logGate, readHookInput } from "../lib/hook-io.mjs";
 import { CLAUDE_SETTINGS, KIT_PUBLISH_APPLY_VERBS, KIT_PUBLISH_WRITE_VERBS } from "../lib/publish-approval-settings.mjs";
+import { itemCommand, itemSummary, readBatch } from "../lib/publish-batch.mjs";
+import { chatLanguage, fill, labels } from "../lib/labels.mjs";
 import { resolveMap } from "../lib/project-map.mjs";
 import { shellWords, splitSegments, substitutions, tokenize, walkCommands } from "../lib/shell-segments.mjs";
 import { INTERPRETER, SHELLS, readsUnreadableCode, redirectLength, scriptOperand, variableScriptArguments, withoutRedirects } from "../lib/shell-program-arguments.mjs";
@@ -48,7 +50,7 @@ const WRAPPERS = new Map([
 ]);
 const WRAPPER_ARGUMENTS = new Map([["timeout", 1], ["flock", 1]]);
 const LOCAL_RUNNERS = new Set(["find", "script", "busybox"]);
-const KIT_SCRIPTS = ["github-write.mjs", "openproject.mjs", "figma-comments.mjs", "gdoc-comments.mjs", "doc-comment-file.mjs"];
+const KIT_SCRIPTS = ["github-write.mjs", "openproject.mjs", "figma-comments.mjs", "gdoc-comments.mjs", "doc-comment-file.mjs", "publish-batch.mjs"];
 const SEARCH_TOOLS = new Set(["rg", "grep", "egrep", "fgrep", "fd", "fdfind", "ag", "ack"]);
 const SEARCH_EXEC = /^(?:-x|-X|--exec|--exec-batch|--pre|--pre-glob)(?:=|$)/;
 export const DATA_PROGRAMS = new Set(["printf", "echo", "cat", "tee", "mkdir", "cp", "mv", "rm", "touch", "chmod", "cd", "true"]);
@@ -63,12 +65,13 @@ const MAX_COMMAND = 10_000;
 const REWRITE = "Rewrite it so every command word is literal: split it into plain commands, or put the code in a script file in the system temp directory (never inside the repository) with the Write tool and run it as `python3 <file>` or `node <file>`, with no eval, no `bash -c`, no heredoc code and no command word in a variable. Never put a git push, a merge or a GitHub write inside a script: run it as a plain command of its own so the gate can check it. The user is not asked, because they cannot check this form either.";
 const UNREADABLE_REASON = `tedy gate: this command runs code the gate cannot read (a command word built at run time, eval, a shell or interpreter reading code from stdin, a heredoc, a pipe or a process substitution, a shell given -c, an interpreter one-liner that mentions gh, or git -c alias/core). ${REWRITE}`;
 const MERGE_REASON = "tedy gate: merging or marking a PR ready belongs to the user. Allow it only if the user asked for this exact PR in this turn.";
-const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve|unresolve|pr-body)|openproject\.mjs["']?\s+apply|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor|edit|delete))\b|^(?=[\s\S]*--apply\b)[\s\S]*?(?:openproject\.mjs["']?\s+(?:set|comment|comment-edit|relation|relation-delete|rollback)|doc-comment-file\.mjs["']?\s+post)\b/;
+const PUBLISH = /(?:github-write\.mjs["']?\s+(?:post|reply|edit|minimize|resolve|unresolve|pr-body)|openproject\.mjs["']?\s+apply|figma-comments\.mjs["']?\s+(?:post|reply|delete)|gdoc-comments\.mjs["']?\s+(?:reply|anchor|edit|delete))\b|^(?=[\s\S]*--apply\b)[\s\S]*?(?:openproject\.mjs["']?\s+(?:set|comment|comment-edit|relation|relation-delete|rollback)|doc-comment-file\.mjs["']?\s+post)\b|publish-batch\.mjs["']?\s+\S*\.json\b/;
 export { CLAUDE_SETTINGS };
 const REWRITING_PUSH = /^(-f|--force|--force-with-lease(=.*)?|--force-if-includes|--mirror|--all|--prune|-d|--delete)$/;
 export const CTX_TOOL = /__ctx_(execute|execute_file|batch_execute)$/;
 const CTX_PUBLISH_REASON = "tedy gate: this publishes through a kit script from a context-mode tool, where the user's permission rules never ask. Run the publish as a plain Bash command of its own, so the permission rule asks the user before it goes out.";
 const KIT_WRITER = /(?:github-write|openproject|figma-comments|gdoc-comments|doc-comment-file)\.mjs/;
+const BATCH_SCRIPT = /publish-batch\.mjs/;
 const KIT_VERB = new RegExp(`(?<![\\w-])(?:${[...new Set([...Object.values(KIT_PUBLISH_WRITE_VERBS), ...Object.values(KIT_PUBLISH_APPLY_VERBS)].flat())].join("|")})(?![\\w-])`);
 const CTX_CODE_PUBLISH_REASON = "tedy gate: this context-mode code names a kit publish script with a write verb, and code in a language other than shell is not something the gate or the user's permission rules can read, so it would write with no prompt. It is refused. Run the publish as a plain Bash command of its own, `node <plugin>/scripts/<script>.mjs <verb> …`, so the permission rule asks the user before it writes.";
 const CTX_LANGUAGES = new Set(["javascript", "typescript", "python", "ruby", "go", "rust", "php", "perl", "r", "elixir", "csharp"]);
@@ -449,6 +452,13 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
     const action = classify(segment, dir);
     if (action.kind === "cd") continue;
     if (unreadable(segment, piped)) rewriteFor(UNREADABLE_REASON);
+    const call = BATCH_SCRIPT.test(segment) ? kitScriptCall(segment) : null;
+    if (call?.words[0] === "publish-batch.mjs") {
+      const batch = batchVerdict(call.words[1], dir, { gates, projectsDir, settingsFile });
+      if (!batch.ask) return batch;
+      asked = { allow: false, ask: true, reason: asked ? `${batch.reason}\n${asked.reason}` : batch.reason };
+      continue;
+    }
     if (action.kind === "push") {
       const risk = pushRisk(action.args, action.dir, gates.pushExempt);
       if (risk) askFor(`tedy gate: ${risk}, which belongs to the user. Allow it only if the user asked for this push.`);
@@ -508,6 +518,30 @@ export function evaluate(command, cwd, { gates = ALL_GATES_ON, projectsDir, sett
   return rewrite ?? asked ?? { allow: true };
 }
 
+function askLanguage() {
+  try {
+    return chatLanguage();
+  } catch {
+    return "en";
+  }
+}
+
+function batchVerdict(file, dir, options) {
+  let items;
+  try {
+    if (!file) throw new Error("no batch file was named");
+    items = readBatch(resolve(dir, file));
+  } catch (error) {
+    return { allow: false, reason: `tedy gate: refused by publish-batch: ${error.message}; nothing was written.` };
+  }
+  for (const [index, item] of items.entries()) {
+    const verdict = evaluate(itemCommand(item), dir, options);
+    if (!verdict.allow && !verdict.ask) return { allow: false, reason: `tedy gate: refused by publish-batch: item ${index + 1}: ${verdict.reason}` };
+  }
+  const list = items.map((item, index) => `${index + 1}) ${itemSummary(item, dir)}`).join("; ");
+  return { allow: false, ask: true, reason: fill(labels(askLanguage())["batch.ask"], { count: items.length, items: list }) };
+}
+
 function batchCommands(commands) {
   let list = commands;
   if (typeof list === "string") {
@@ -541,7 +575,7 @@ export function bashInputs(input) {
   }
   if (typeof toolInput.language !== "string" || typeof toolInput.code !== "string") return { malformed: "`language` or `code` is not a string" };
   if (toolInput.language === "shell") return { inputs: [shell(toolInput.code)] };
-  if (KIT_WRITER.test(toolInput.code) && KIT_VERB.test(toolInput.code)) return { refused: CTX_CODE_PUBLISH_REASON };
+  if ((KIT_WRITER.test(toolInput.code) && KIT_VERB.test(toolInput.code)) || BATCH_SCRIPT.test(toolInput.code)) return { refused: CTX_CODE_PUBLISH_REASON };
   if (CTX_LANGUAGES.has(toolInput.language)) return { inputs: [] };
   return { malformed: `language \`${toolInput.language.slice(0, 40)}\` is not one the gate knows` };
 }
